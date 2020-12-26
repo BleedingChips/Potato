@@ -632,6 +632,45 @@ namespace Potato::Tmp
 	template<template<typename...> class Condition, typename Target> struct member_exist<Condition, Target, std::void_t<Condition<Target>>> : std::true_type {};
 
 	template<typename Type>
-	struct type_placeholder {};
+	struct type_placeholder {
+		using type = Type;
+	};
+
+	namespace Implement
+	{
+		/*
+		template<std::size_t S, std::size_t N, std::size_t>
+		struct const_str_equal;
+
+		template<std::size_t S, std::size_t N, std::size_t K>
+		struct const_str_equal<>
+		;
+		*/
+	}
+
+	template<std::size_t N>
+	struct const_string
+	{
+		char stroage[N];
+		constexpr const_string(const char(&str)[N]) : stroage{}
+		{
+			std::copy_n(str, N, stroage);
+		}
+		template<std::size_t N2>
+		constexpr bool operator==(const_string<N2> const& ref) const
+		{
+			if constexpr (N == N2)
+			{
+				for(std::size_t i = 0; i < N; ++i)
+					if(stroage[i] != ref.stroage[i])
+						return false;
+				return true;
+			}else
+				return false;
+		}
+	};
+
+	template<const_string str>
+	struct const_string_holder{};
 
 }

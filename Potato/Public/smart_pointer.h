@@ -17,6 +17,22 @@ namespace Potato::Tool
 
 		template<typename type, typename ...parameters>
 		decltype(auto) operator()(type*&, parameters&&... a);
+
+		//overwrite operator++(int);
+		decltype(auto) sub_add_pos(type*&) const;
+		decltype(auto) sub_add_pos(type*&);
+
+		//overwrite operator--(int);
+		decltype(auto) sub_sub_pos(type*&) const;
+		decltype(auto) sub_sub_pos(type*&);
+
+		//overwrite operator++();
+		decltype(auto) sub_add(type*&) const;
+		decltype(auto) sub_add(type*&);
+
+		//overwrite operator--();
+		decltype(auto) sub_sub(type*&) const;
+		decltype(auto) sub_sub(type*&);
 		*/
 	};
 
@@ -70,6 +86,15 @@ namespace Potato::Tool
 		{
 			return wrapper{}(m_ptr, std::forward<parameter_types>(i)...);
 		}
+
+		decltype(auto) operator++(int) { return wrapper{}.self_add_pos(m_ptr); }
+		decltype(auto) operator++(int) const { return wrapper{}.self_add_pos(m_ptr); }
+		decltype(auto) operator--(int) { return wrapper{}.self_sub_pos(m_ptr); }
+		decltype(auto) operator--(int) const { return wrapper{}.self_sub_pos(m_ptr); }
+		decltype(auto) operator++() { return wrapper{}.self_add(m_ptr); }
+		decltype(auto) operator++() const { return wrapper{}.self_add(m_ptr); }
+		decltype(auto) operator--() { return wrapper{}.self_sub(m_ptr); }
+		decltype(auto) operator--() const { return wrapper{}.self_sub(m_ptr); }
 
 		type& operator*() const noexcept { return *m_ptr; }
 		type* operator->() const noexcept { return m_ptr; }
