@@ -1,5 +1,4 @@
 #pragma once
-#include "tmpcall.h"
 #include <assert.h>
 #include <atomic>
 #include <mutex>
@@ -7,7 +6,8 @@
 #include <optional>
 #include <type_traits>
 #include <array>
-namespace Potato::Tool
+#include "Tmp.h"
+namespace Potato::Misc
 {
 	namespace Implement
 	{
@@ -38,7 +38,8 @@ namespace Potato::Tool
 		Implement::base_value_inherit<T>, T
 	>;
 
-	/* static_mapping */
+	/*
+	// static_mapping 
 	namespace Implement
 	{
 		template<typename equal_ope, typename less_ope, size_t s, size_t o, typename ...input>
@@ -85,6 +86,7 @@ namespace Potato::Tool
 
 	template<class equal_ope, class less_ope, typename ...input>
 	using static_mapping_t = Implement::static_mapping_implement<less_ope, equal_ope, 0, sizeof...(input), input...>;
+	*/
 
 	template<typename T> class aligned_class
 	{
@@ -225,8 +227,8 @@ namespace Potato::Tool
 		~atomic_reference_count() { assert(ref.load(std::memory_order_relaxed) == 0); }
 	};
 
-	template<typename T> struct replace_void { using type = T; };
-	template<> struct replace_void<void> { using type = Tmp::itself<void>; };
+	//template<typename T> struct replace_void { using type = T; };
+	//template<> struct replace_void<void> { using type = Tmp::itself<void>; };
 
 	template<typename T, typename mutex_t = std::mutex> class scope_lock
 	{

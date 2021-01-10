@@ -1,6 +1,6 @@
 #pragma once
 #include <functional>
-#include "tool.h"
+#include "Misc.h"
 namespace Potato::Tool
 {
 	class unorder_adapt

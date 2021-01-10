@@ -1,7 +1,7 @@
-#include "../Public/tool.h"
+#include "../Public/Misc.h"
 #include <iostream>
 
-namespace Potato::Tool
+namespace Potato::Misc
 {
 	bool atomic_reference_count::try_add_ref() noexcept
 	{
