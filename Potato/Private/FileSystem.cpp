@@ -34,7 +34,56 @@ $ := <Ste>
 namespace Potato::FileSystem
 {
 
-	void Path::Insert(std::u32string_view Table, StrTup ref)
+
+	bool Path::Insert(std::u32string_view ref, Element const* tup, size_t length)
+	{
+		std::vector<std::tuple<size_t, Element>> element_list;
+		element_list.reserve(Size() + length);
+		for(auto& ite : elements)
+			element_list.push_back({0, ite});
+		for(size_t i = 0; i < length; ++i)
+		{
+			
+		}
+
+
+		
+		size_t Min = (style == Style::Relative ? 0 : 1);
+		for (size_t i = 0; i < length; ++i)
+		{
+			auto ite = tup[i];
+			if (ite == StrTup::MakeSelf())
+			{
+				if (result.path_ite.size() == 0)
+					result.path_ite.push_back(ite);
+			}
+			else if (ite == StrTup::MakeUpper())
+			{
+				if (result.path_ite.size() > Min)
+				{
+					auto last = result.path_ite[result.path_ite.size() - 1];
+					if (last.IsStr())
+					{
+						result.path.resize(result.path.size() - last.size);
+						result.path_ite.pop_back();
+					}
+					else if (last == StrTup::MakeSelf())
+					{
+						result.path_ite.pop_back();
+						result.path_ite.push_back(ite);
+					}
+					else if (last == StrTup::MakeUpper())
+						result.path_ite.push_back(ite);
+				}
+				else
+					result.path_ite.push_back(ite);
+			}
+			else
+				result.Insert(ref, ite);
+		}
+	}
+	
+	void Path::Insert(std::u32string_view Table, Ele ref)
 	{
 		if (ref.IsStr())
 		{

@@ -25,7 +25,9 @@ namespace Potato::FileSystem
 
 		enum class ElementStyle : uint8_t
 		{
-			Root = 0,
+			DosRoot = 0,
+			UnixRoot,
+			MappingRoot,
 			File,
 			Self,
 			Upper,
@@ -58,11 +60,11 @@ namespace Potato::FileSystem
 			std::u32string_view operator()(std::u32string_view ref) const { return {ref.data() + start, size}; }
 		};
 
-		bool Insert(Path& pat, std::u32string_view ref, Element const* tup, size_t length);
+		bool Insert(std::u32string_view ref, Element const* tup, size_t length);
 		
 		Style style = Style::Unknow;
 		std::u32string path;
-		std::vector<Element> path_ite;
+		std::vector<Element> elements;
 		friend  struct PathMapping;
 	};
 
