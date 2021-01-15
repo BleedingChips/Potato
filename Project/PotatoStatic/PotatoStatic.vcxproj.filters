@@ -48,6 +48,9 @@
     <ClInclude Include="..\..\Potato\Public\Unfa.h">
       <Filter>Public</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Potato\Public\FileSystem.h">
+      <Filter>Public</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Potato\Private\Ebnf.cpp">
@@ -75,6 +78,9 @@
       <Filter>Private</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Potato\Private\Unfa.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Potato\Private\FileSystem.cpp">
       <Filter>Private</Filter>
     </ClCompile>
   </ItemGroup>

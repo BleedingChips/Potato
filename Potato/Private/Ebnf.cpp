@@ -167,17 +167,17 @@ namespace Potato::Ebnf
 			auto Steps = Lr0::Process(Tab.lr0_table, Symbols.data(), Symbols.size());
 			return Translate(Tab, Steps, Datas);
 		}
-		catch (Lr0::Error::UnaccableSymbol const& Symbol)
+		catch (Lr0::Exception::UnaccableSymbol const& Symbol)
 		{
 			auto his = Translate(Tab, Symbol.backup_step, Datas);
 			auto Str = Tab.FindSymbolString(Symbol.symbol.Index(), Symbol.symbol.IsTerminal());
 			if (Str.empty())
 			{
 				Section loc = (Symbol.index > 0) ? Datas[Symbol.index - 1].section : Section{};
-				throw Error::UnacceptableSyntax{ U"$_Eof", U"$_Eof", loc, his.Expand() };
+				throw MakeException(Exception::UnacceptableSyntax{ U"$_Eof", U"$_Eof", loc, his.Expand() });
 			}
 			auto loc = Datas[Symbol.symbol.Index()].section;
-			throw Error::UnacceptableSyntax{ std::u32string(Str), std::u32string(Datas[Symbol.index].capture),Datas[Symbol.index].section, his.Expand() };
+			throw MakeException(Exception::UnacceptableSyntax{ std::u32string(Str), std::u32string(Datas[Symbol.index].capture),Datas[Symbol.index].section, his.Expand() });
 		}
 	}
 
@@ -347,7 +347,7 @@ namespace Potato::Ebnf
 			}
 
 			if (used < 2)
-				throw Error::UncompleteEbnf{ used };
+				throw MakeException(Exception::UncompleteEbnf{ used });
 		}
 		
 		std::vector<uint32_t> state_to_mask;
@@ -433,11 +433,11 @@ namespace Potato::Ebnf
 					return {};
 				});
 			}
-			catch (Lr0::Error::UnaccableSymbol const& US)
+			catch (Lr0::Exception::UnaccableSymbol const& US)
 			{
 				assert(Elements.size() > US.index);
 				auto P = Elements[US.index];
-				throw Error::UnacceptableToken{ std::u32string(P.capture), P.section};
+				throw MakeException(Exception::UnacceptableToken{ std::u32string(P.capture), P.section});
 			}
 			
 		}
@@ -537,7 +537,7 @@ namespace Potato::Ebnf
 							if (Find != symbol_to_mask.end())
 								return Token{ Symbol(Find->second, Lr0::TerminalT{}), element };
 							else
-								throw Error::UndefinedTerminal{ string, element.section };
+								throw MakeException(Exception::UndefinedTerminal{ string, element.section });
 						}break;
 						case* T::NoTerminal: {
 							auto Find = noterminal_symbol_to_index.insert({ string, noterminal_symbol_to_index.size() });
@@ -586,7 +586,7 @@ namespace Potato::Ebnf
 							if (!start_symbol)
 								start_symbol = P1.sym;
 							else
-								throw Error::RedefinedStartSymbol{ P1.march.section };
+								throw MakeException(Exception::RedefinedStartSymbol{ P1.march.section });
 							return std::vector<Lr0::ProductionInput>{};
 						}break;
 						case 2: {
@@ -615,7 +615,7 @@ namespace Potato::Ebnf
 						}
 						case 7: {
 							if (!LastHead)
-								throw Error::UnsetDefaultProductionHead{};
+								throw MakeException(Exception::UnsetDefaultProductionHead{});
 							return Token{ *LastHead, {} };
 						}
 						case 8: {
@@ -686,10 +686,10 @@ namespace Potato::Ebnf
 					return {};
 				});
 			}
-			catch (Lr0::Error::UnaccableSymbol const& US)
+			catch (Lr0::Exception::UnaccableSymbol const& US)
 			{
 				auto P = Elements[US.index];
-				throw Error::UnacceptableToken{ std::u32string(P.capture), P.section };
+				throw MakeException(Exception::UnacceptableToken{ std::u32string(P.capture), P.section });
 			}
 
 		}
@@ -731,7 +731,7 @@ namespace Potato::Ebnf
 							if (Find != symbol_to_mask.end())
 								return Token{ Symbol(Find->second, Lr0::TerminalT{}) };
 							else
-								throw Error::UndefinedTerminal{std::u32string(element.capture), element.section };
+								throw MakeException(Exception::UndefinedTerminal{std::u32string(element.capture), element.section });
 						}
 					}
 					else {
@@ -768,15 +768,15 @@ namespace Potato::Ebnf
 					return {};
 				});
 			}
-			catch (Lr0::Error::UnaccableSymbol const& US)
+			catch (Lr0::Exception::UnaccableSymbol const& US)
 			{
 				auto P = Elements[US.index];
-				throw Error::UnacceptableToken{ std::u32string(P.capture), P.section };
+				throw MakeException(Exception::UnacceptableToken{ std::u32string(P.capture), P.section });
 			}
 		}
 
 		if (!start_symbol)
-			throw Error::MissingStartSymbol{};
+			throw MakeException(Exception::MissingStartSymbol{});
 
 		size_t DefineProduction_count = productions.size();
 		//productions.insert(productions.end(), std::move_iterator(productions_for_temporary.begin()), std::move_iterator(productions_for_temporary.end()));
@@ -814,16 +814,16 @@ namespace Potato::Ebnf
 				std::move(lexical_table),
 				std::move(symbol_map), TerminalCount, std::move(Lr0Table) };
 		}
-		catch (Unfa::Error::UnaccaptableRexgex const& ref)
+		catch (Unfa::Exception::UnaccaptableRexgex const& ref)
 		{
-			throw Error::UnacceptableRegex{ref.regex, ref.accepetable_mask};
+			throw MakeException(Exception::UnacceptableRegex{ref.regex, ref.accepetable_mask});
 		}
-		catch (Lr0::Error::NoterminalUndefined const NU)
+		catch (Lr0::Exception::NoterminalUndefined const NU)
 		{
 			for(auto& ite : noterminal_symbol_to_index)
 				if(ite.second == NU.value.Index())
-					throw Error::UndefinedNoterminal{std::u32string(ite.first)};
-			throw Error::UndefinedNoterminal{ std::u32string(U"$UnknowSymbol") };
+					throw MakeException(Exception::UndefinedNoterminal{std::u32string(ite.first)});
+			throw MakeException(Exception::UndefinedNoterminal{ std::u32string(U"$UnknowSymbol") });
 		}
 	}
 }

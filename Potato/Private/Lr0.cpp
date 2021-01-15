@@ -146,7 +146,7 @@ namespace Potato::Lr0
 				}
 			}
 		}
-		throw Error::UnaccableSymbol{ MaxTokenUsed, MaxTokenUsed < TokenLength ? TokenArray[MaxTokenUsed] : Symbol::EndOfFile(), std::move(BackupSteps) };
+		throw MakeException(Exception::UnaccableSymbol{ MaxTokenUsed, MaxTokenUsed < TokenLength ? TokenArray[MaxTokenUsed] : Symbol::EndOfFile(), std::move(BackupSteps) });
 	}
 
 	std::set<Symbol> CalNullableSet(const std::vector<ProductionInput>& production)
@@ -271,7 +271,7 @@ namespace Potato::Lr0
 							SearchStack.push_back({ Productions.size(), 1 });
 						}
 						if (!Finded)
-							throw Error::NoterminalUndefined{ TargetSymbol };
+							throw MakeException(Exception::NoterminalUndefined{ TargetSymbol });
 					}
 				}
 			}
@@ -304,7 +304,7 @@ namespace Potato::Lr0
 							Inserted.first->second.insert(ite2);
 					}
 				}else
-					throw Error::OperatorPriorityConflict{ ite, ite };
+					throw MakeException(Exception::OperatorPriorityConflict{ ite, ite });
 			}
 		}
 		return std::move(ope_priority);

@@ -191,7 +191,7 @@ namespace Potato::Unfa
 					break;
 				}
 			}else
-				throw Error::UnaccaptableRexgex{};
+				throw MakeException(Exception::UnaccaptableRexgex{});
 			break;
 		}
 		default:
@@ -431,9 +431,9 @@ namespace Potato::Unfa
 			temporary_node[result_node.out].emplace_back(Edge{ last_index, EAcception{acception_index, acception_mask} });
 			return {std::move(temporary_node)};
 		}
-		catch(Lr0::Error::UnaccableSymbol const& Symbol)
+		catch(Lr0::Exception::UnaccableSymbol const& Symbol)
 		{
-			throw Error::UnaccaptableRexgex{std::u32string(rex), acception_index, acception_mask, Symbol.index};
+			throw MakeException(Exception::UnaccaptableRexgex{ std::u32string(rex), acception_index, acception_mask, Symbol.index });
 		}
 	}
 

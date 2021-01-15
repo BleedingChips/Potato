@@ -21,6 +21,7 @@
   <ItemGroup>
     <ClInclude Include="..\..\Potato\Public\auto_adapter.h" />
     <ClInclude Include="..\..\Potato\Public\Ebnf.h" />
+    <ClInclude Include="..\..\Potato\Public\FileSystem.h" />
     <ClInclude Include="..\..\Potato\Public\Interval.h" />
     <ClInclude Include="..\..\Potato\Public\IntrusivePointer.h" />
     <ClInclude Include="..\..\Potato\Public\Lexical.h" />
@@ -35,6 +36,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Potato\Private\Ebnf.cpp" />
+    <ClCompile Include="..\..\Potato\Private\FileSystem.cpp" />
     <ClCompile Include="..\..\Potato\Private\Lexical.cpp" />
     <ClCompile Include="..\..\Potato\Private\Lr0.cpp" />
     <ClCompile Include="..\..\Potato\Private\Misc.cpp" />

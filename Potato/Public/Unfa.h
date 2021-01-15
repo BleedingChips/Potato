@@ -1,5 +1,6 @@
 #pragma once
 #include "Interval.h"
+#include "Misc.h"
 #include <string_view>
 #include <variant>
 #include <optional>
@@ -12,8 +13,14 @@ namespace Potato::Unfa
 	using IntervalWrapper = ::Potato::Misc::IntervalWrapper<char32_t>;
 	using Segment = typename Interval::Segment;
 
-	namespace Error
+	namespace Exception
 	{
+
+		struct Interface
+		{
+			virtual ~Interface() = default;
+		};
+		
 		struct UnaccaptableRexgex {
 			std::u32string regex;
 			uint32_t accepetable_state;
@@ -21,6 +28,9 @@ namespace Potato::Unfa
 			size_t Index;
 		};
 	}
+
+	template<typename StorageInfo>
+	auto MakeException(StorageInfo&& info) { return Potato::Misc::create_exception_tuple<Exception::Interface>(std::forward<StorageInfo>(info)); }
 
 	struct March
 	{

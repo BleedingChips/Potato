@@ -475,4 +475,25 @@ namespace Potato::Misc
 	};
 	*/
 
+	template<typename interface_t, typename storage_t>
+	struct exception_tuple: public interface_t, public storage_t
+	{
+		exception_tuple(storage_t Info) : storage_t(std::move(Info)) {}
+		exception_tuple(interface_t interface, storage_t Info) : interface_t(std::move(interface)), storage_t(std::move(Info)) {}
+		exception_tuple(exception_tuple const&) = default;
+		exception_tuple(exception_tuple&&) = default;
+	};
+
+	template<typename interface_t, typename storage_t>
+	auto create_exception_tuple(storage_t&& storage)->exception_tuple<std::remove_cvref_t<interface_t>, std::remove_cvref_t<storage_t>>
+	{
+		return {std::forward<storage_t>(storage)};
+	};
+
+	template<typename interface_t, typename storage_t>
+	auto create_exception_tuple(interface_t&& inter, storage_t&& storage)->exception_tuple<std::remove_cvref_t<interface_t>, std::remove_cvref_t<storage_t>>
+	{
+		return { std::forward<interface_t>(inter), std::forward<storage_t>(storage) };
+	};
+
 }

@@ -6,6 +6,7 @@
 #include <any>
 #include <functional>
 #include <limits>
+#include "Misc.h"
 #undef max
 namespace Potato::Lr0
 {
@@ -181,13 +182,21 @@ namespace Potato::Lr0
 
 	Table CreateTable(Symbol start_symbol, std::vector<ProductionInput> const& production, std::vector<OpePriority> const& priority);
 
-	namespace Error
+	namespace Exception
 	{
-		struct NoterminalUndefined {
+
+		struct Interface
+		{
+			virtual ~Interface() = default;
+		};
+		
+		struct NoterminalUndefined
+		{
 			Symbol value;
 		};
 
-		struct OperatorPriorityConflict {
+		struct OperatorPriorityConflict
+		{
 			Symbol target_symbol;
 			Symbol conflicted_symbol;
 		};
@@ -206,7 +215,11 @@ namespace Potato::Lr0
 			Symbol symbol;
 			History backup_step;
 		};
+		
 	}
+
+	template<typename StorageInfo>
+	auto MakeException(StorageInfo&& info) { return Potato::Misc::create_exception_tuple<Exception::Interface>(std::forward<StorageInfo>(info)); }
 }
 
 namespace PineApple::StrFormat

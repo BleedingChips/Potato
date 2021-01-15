@@ -93,9 +93,14 @@ namespace Potato::Ebnf
 	RequireType ProcessWrapper(History const& ref, RespondFunction&& Func) { return std::any_cast<RequireType>(ref(std::forward<RespondFunction>(Func))); }
 
 
-	namespace Error
+	namespace Exception
 	{
 
+		struct Interface
+		{
+			virtual ~Interface() = default;
+		};
+		
 		struct ExceptionStep
 		{
 			std::u32string name;
@@ -153,6 +158,9 @@ namespace Potato::Ebnf
 		};
 		*/
 	}
+
+	template<typename StorageInfo>
+	auto MakeException(StorageInfo&& info) { return Potato::Misc::create_exception_tuple<Exception::Interface>(std::forward<StorageInfo>(info)); }
 }
 
 namespace Potato::StrFormat
