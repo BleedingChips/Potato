@@ -5,8 +5,9 @@
 #include <thread>
 #include <future>
 #include <map>
-#include "../Public/Misc.h"
-#include "../Public/IntrusivePointer.h"
+#include "Misc.h"
+#include "IntrusivePointer.h"
+#include "StrEncode.h"
 
 namespace Potato::FileSystem
 {
@@ -44,10 +45,13 @@ namespace Potato::FileSystem
 		Path& operator=(Path const&) = default;
 		Path& operator=(Path&&) = default;
 		Path Append(Path const&) const;
-		
-		std::u32string ToU32String() const;
-		std::u16string ToU16String() const;
-		std::u8string ToU8String() const;
+
+		Path FindFileFromParent(std::u32string_view Target, size_t MaxStack = 0) const;
+		Path FindFileFromChild(std::u32string_view Target) const;
+
+		std::u32string ToU32String() const{ return path; }
+		std::u16string ToU16String() const { return StrEncode::AsWrapper(path.data(), path.size()).ToString<char16_t>(); }
+		std::u8string ToU8String() const { return StrEncode::AsWrapper(path.data(), path.size()).ToString<char8_t>(); }
 		
 	private:
 
@@ -79,7 +83,27 @@ namespace Potato::FileSystem
 
 	PathMapping& GobalPathMapping();
 
-	Path FindUpperFileName(std::u32string_view Target);
+	std::vector<std::byte> LoadEntireFile(Path const& ref);
+	bool SaveFile(Path const& ref, std::byte const* data, size_t size);
+
+	Path Current();
+
+	namespace Implement
+	{
+		struct FileInterface
+		{
+			virtual void AddRef() const = 0;
+			virtual bool SubRef() const = 0;
+			virtual ~FileInterface() = default;
+		};
+	}
+
+	struct File
+	{
+		static File OpenFile(Path const&);
+	private:
+		Potato::SmartPtr::IntrusivePtr<Implement::FileInterface> ptr;
+	};
 
 	
 

@@ -1,6 +1,7 @@
 #include "../Public/FileSystem.h"
 #include "../Public/Ebnf.h"
-#include "../Public/StrEncode.h"
+#include <filesystem>
+#include <fstream>
 
 namespace
 {
@@ -263,5 +264,94 @@ namespace Potato::FileSystem
 		static PathMapping instance;
 		return instance;
 	}
+
+	Path Current()
+	{
+		auto CurPath = std::filesystem::current_path().u32string();
+		std::replace(CurPath.begin(), CurPath.end(), U'\\', U'/');
+		return Path(CurPath);
+	}
+
+	Path Path::FindFileFromParent(std::u32string_view Target, size_t MaxStack) const
+	{
+		if (GetType() == Path::Style::DosAbsolute || GetType() == Path::Style::UnixAbsolute)
+		{
+			std::filesystem::path tar(Target);
+			size_t SearchingStack = 0;
+			while (SearchingStack < MaxStack && Size() > SearchingStack)
+			{
+				auto Last = elements[Size() - SearchingStack - 1];
+				std::u32string_view cur(path.data(), Last.start + Last.size);
+				for (auto& ite : std::filesystem::directory_iterator(cur))
+				{
+					if (ite.path().filename() == tar)
+					{
+						auto CurPath = ite.path().u32string();
+						std::replace(CurPath.begin(), CurPath.end(), U'\\', U'/');
+						return Path(CurPath);
+					}
+				}
+				++SearchingStack;
+			}
+		}
+		return {};
+	}
+
+	Path Path::FindFileFromChild(std::u32string_view Target) const
+	{
+		if (GetType() == Path::Style::DosAbsolute || GetType() == Path::Style::UnixAbsolute)
+		{
+			std::filesystem::path tar(Target);
+			for (auto& ite : std::filesystem::recursive_directory_iterator(path))
+			{
+				if (ite.path().filename() == tar)
+				{
+					auto CurPath = ite.path().u32string();
+					std::replace(CurPath.begin(), CurPath.end(), U'\\', U'/');
+					return Path(CurPath);
+				}
+			}
+		}
+		return {};
+	}
+
+	std::vector<std::byte> LoadEntireFile(Path const& ref)
+	{
+		if (ref.GetType() == Path::Style::DosAbsolute || ref.GetType() == Path::Style::UnixAbsolute)
+		{
+			std::filesystem::path tar(ref.ToU32String());
+			std::ifstream file(tar, std::ios::binary);
+			if (file.good()) 
+			{
+				size_t require_size = std::filesystem::file_size(tar);
+				std::vector<std::byte> datas;
+				datas.resize(require_size);
+				file.read(reinterpret_cast<char*>(datas.data()), require_size);
+				return std::move(datas);
+			}
+		}
+		return {};
+	}
+
+	bool SaveFile(Path const& ref, std::byte const* data, size_t size)
+	{
+		if (ref.GetType() == Path::Style::DosAbsolute || ref.GetType() == Path::Style::UnixAbsolute)
+		{
+			std::filesystem::path tar(ref.ToU32String());
+			std::ofstream file(tar, std::ios::binary);
+			if (file.good())
+			{
+				file.write(reinterpret_cast<char const*>(data), size);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	struct LocalFile : Implement::FileInterface
+	{
+		Potato::Misc::atomic_reference_count ref;
+
+	};
 
 }
