@@ -8,12 +8,12 @@ namespace
 	{
 		static Potato::Ebnf::Table fs_ebnf = Potato::Ebnf::CreateTable(
 UR"(
-NormalPath := '[^/\:]*' : [0]
-DosRoot := '[a-zA-Z\-0-9_]*:' : [0]
+NormalPath := '[^/]*' : [0]
+DosRoot := '[a-zA-Z\-0-9_]*:' : [1]
 Delimiter := '/'
-SelfPath := '\.' : [1]
-UpperPath := '\.\.' : [2]
-MappingRoot := '$[a-zA-Z\-0-9_ ]+:' : [0]
+SelfPath := '\.' : [2]
+UpperPath := '\.\.' : [3]
+MappingRoot := '$[a-zA-Z\-0-9_ ]+:' : [4]
 %%%
 $ := <Ste>
 <File> := (NormalPath | SelfPath | UpperPath) : [0]
@@ -43,65 +43,64 @@ namespace Potato::FileSystem
 			element_list.push_back({0, ite});
 		for(size_t i = 0; i < length; ++i)
 		{
-			
-		}
-
-
-		
-		size_t Min = (style == Style::Relative ? 0 : 1);
-		for (size_t i = 0; i < length; ++i)
-		{
-			auto ite = tup[i];
-			if (ite == StrTup::MakeSelf())
-			{
-				if (result.path_ite.size() == 0)
-					result.path_ite.push_back(ite);
-			}
-			else if (ite == StrTup::MakeUpper())
-			{
-				if (result.path_ite.size() > Min)
+			if (element_list.size() == 0)
+				element_list.push_back({1, tup[i]});
+			else {
+				auto Cur = tup[i];
+				if (Cur.type == ElementStyle::Upper)
 				{
-					auto last = result.path_ite[result.path_ite.size() - 1];
-					if (last.IsStr())
+					auto [Index, Last] = element_list[element_list.size() - 1];
+					switch (Last.type)
 					{
-						result.path.resize(result.path.size() - last.size);
-						result.path_ite.pop_back();
+					case ElementStyle::File:
+						element_list.pop_back();
+						break;
+					case ElementStyle::Root:
+						return false;
+					case ElementStyle::Self:
+						element_list.pop_back();
+					default:
+						element_list.push_back({1, Last});
 					}
-					else if (last == StrTup::MakeSelf())
-					{
-						result.path_ite.pop_back();
-						result.path_ite.push_back(ite);
-					}
-					else if (last == StrTup::MakeUpper())
-						result.path_ite.push_back(ite);
 				}
-				else
-					result.path_ite.push_back(ite);
+				else if (Cur.type == ElementStyle::Self)
+				{
+					if(element_list.size() == 0)
+						element_list.push_back({1, Cur});
+				}
+				else if (Cur.type == ElementStyle::File)
+				{
+					auto [Index, Last] = element_list[element_list.size() - 1];
+					if (Last.type == ElementStyle::Self)
+						element_list.pop_back();
+					element_list.push_back({ 1, Cur });
+				}
+				else if(Cur.type  == ElementStyle::Root)
+					return false;
 			}
-			else
-				result.Insert(ref, ite);
 		}
-	}
-	
-	void Path::Insert(std::u32string_view Table, Ele ref)
-	{
-		if (ref.IsStr())
+		size_t require = 0;
+		for (auto& ite : element_list)
+			require += std::get<1>(ite).size;
+		if(element_list.size() > 1)
+			require += element_list.size() -  1;
+		path.resize(require);
+		elements.resize(element_list.size());
+		size_t Used = 0;
+		for (size_t i = 0; i < element_list.size(); ++i)
 		{
-			size_t old = path.size();
-			path += ref(Table);
-			path_ite.push_back({ old, ref.size });
-		}else
-		{
-			path_ite.push_back(ref);
+			auto [Index, Last] = element_list[i];
+			if (Index == 0)
+				Used = Last.start + Last.size;
+			else {
+				if (i != 0)
+					path[Used++] = U'/';
+				std::memcpy(path.data() + Used, ref.data() + Last.start, sizeof(char32_t) * Last.size);
+				elements[i] = {Last.type, Used, Last.size};
+				Used+= Last.size;
+			}
 		}
-	}
-
-	void Path::Insert(std::u32string_view Table, std::vector<StrTup> const& ref)
-	{
-		for(auto& ite : ref)
-		{
-			Insert(Table, ite);
-		}
+		return true;
 	}
 	
 	Path::Path(std::u32string_view Input)
@@ -118,11 +117,15 @@ namespace Potato::FileSystem
 					switch(Ele.shift.mask)
 					{
 					case 0:
-						return StrTup{ static_cast<size_t>(Ele.shift.capture.data()- Input.data()), Ele.shift.capture.size() };
+						return Element{ ElementStyle::File, static_cast<size_t>(Ele.shift.capture.data() - Input.data()), Ele.shift.capture.size() };
 					case 1:
-						return StrTup::MakeSelf();
+						return Element{ ElementStyle::Root, static_cast<size_t>(Ele.shift.capture.data() - Input.data()), Ele.shift.capture.size() };
 					case 2:
-						return StrTup::MakeUpper();
+						return Element{ ElementStyle::Self, static_cast<size_t>(Ele.shift.capture.data() - Input.data()), Ele.shift.capture.size() };
+					case 3:
+						return Element{ ElementStyle::Upper, static_cast<size_t>(Ele.shift.capture.data() - Input.data()), Ele.shift.capture.size() };
+					case 4:
+						return Element{ ElementStyle::Root, static_cast<size_t>(Ele.shift.capture.data() - Input.data()), Ele.shift.capture.size() };
 					default:
 						return {};
 					}
@@ -136,57 +139,59 @@ namespace Potato::FileSystem
 					}
 					case 1:
 					{
-						std::vector<StrTup> Res;
+						std::vector<Element> Res;
 						for(size_t i = 0; i < Ele.reduce.production_count; ++i)
 						{
 							if(Ele[i].IsNoterminal())
 							{
-								auto P = Ele[i].GetData<StrTup>();
-								if(P == StrTup::MakeSelf())
-								{
-									if(Res.empty())
-										Res.push_back(P);
-								}else if(P == StrTup::MakeUpper())
-								{
-									if(Res.empty())
-										Res.push_back(P);
-									else
-										Res.pop_back();
-								}else
-									Res.push_back(P);
-							}
-								
+								auto P = Ele[i].GetData<Element>();
+								Res.push_back(std::move(P));
+							}	
 						}
 						return std::move(Res);
 					}
 					case 2:
 					{
 						Result.style = Style::DosAbsolute;
-						Result.Insert(Input, Ele[0].GetData<StrTup>());
+						auto Temp = Ele[0].GetData<Element>();
+						Result.elements.push_back(Temp);
+						Result.path = Temp(Input);
 						if(Ele.reduce.production_count >= 3)
 						{
-							auto P = Ele[2].MoveData<std::vector<StrTup>>();
-							Result.Insert(Input, P);
+							auto P = Ele[2].MoveData<std::vector<Element>>();
+							if (!Result.Insert(Input, P.data(), P.size()))
+								Result = {};
 						}
 					}break;
 					case 3:
 					{
 						Result.style = Style::Relative;
-						auto P = Ele[0].MoveData<std::vector<StrTup>>();
-						Result.Insert(Input, P);
+						auto P = Ele[0].MoveData<std::vector<Element>>();
+						if(!Result.Insert(Input, P.data(), P.size()))
+							Result = {};
 					}break;
 					case 4:
 					{
 						Result.style = Style::Mapping;
-						Result.Insert(Input, Ele[0].GetData<StrTup>());
-						if(Ele.reduce.production_count == 3)
-							Result.Insert(Input, Ele[2].GetData<std::vector<StrTup>&>());
+						auto Temp = Ele[0].GetData<Element>();
+						Result.elements.push_back(Temp);
+						Result.path = Temp(Input);
+						if (Ele.reduce.production_count >= 3)
+						{
+							auto P = Ele[2].MoveData<std::vector<Element>>();
+							if(!Result.Insert(Input, P.data(), P.size()))
+								Result = {};
+						}
 					}break;
 					case 5:
 					{
 						Result.style = Style::UnixAbsolute;
-						auto P = Ele[1].MoveData<std::vector<StrTup>>();
-						Result.Insert(Input, P);
+						auto P = Ele[1].MoveData<std::vector<Element>>();
+						P[0].type = ElementStyle::Root;
+						Result.elements.push_back(P[0]);
+						Result.path = P[0](Input);
+						if(!Result.Insert(Input, P.data() + 1, P.size()))
+							Result = {};
 					}break;
 					}
 					return {};
@@ -207,7 +212,7 @@ namespace Potato::FileSystem
 			if(Input.style == Style::Relative)
 			{
 				Path result = *this;
-				if(AppendImp(result, Input.path, Input.path_ite.data(), Input.path_ite.size()))
+				if(result.Insert(Input.path, Input.elements.data(), Input.elements.size()))
 					return result;
 			}
 			return {};
@@ -216,110 +221,6 @@ namespace Potato::FileSystem
 			return Input;
 		}
 		
-	}
-
-	bool Path::AppendImp(Path& result, std::u32string const& ref, StrTup const* tup, size_t length)
-	{
-		size_t Min = (result.style == Style::Relative ? 0 : 1);
-		for (size_t i =0; i < length; ++ i)
-		{
-			auto ite = tup[i];
-			if (ite == StrTup::MakeSelf())
-			{
-				if (result.path_ite.size() == 0)
-					result.path_ite.push_back(ite);
-			}
-			else if (ite == StrTup::MakeUpper())
-			{
-				if (result.path_ite.size() > Min)
-				{
-					auto last = result.path_ite[result.path_ite.size() - 1];
-					if (last.IsStr())
-					{
-						result.path.resize(result.path.size() - last.size);
-						result.path_ite.pop_back();
-					}
-					else if (last == StrTup::MakeSelf())
-					{
-						result.path_ite.pop_back();
-						result.path_ite.push_back(ite);
-					}
-					else if (last == StrTup::MakeUpper())
-						result.path_ite.push_back(ite);
-				}
-				else
-					result.path_ite.push_back(ite);
-			}
-			else
-				result.Insert(ref, ite);
-		}
-		switch (result.style)
-		{
-		case Style::Relative:
-			return true;
-		case Style::Mapping:
-		case Style::DosAbsolute:
-		case Style::UnixAbsolute:
-		{
-			if (result.path_ite.size() == 1 || result.path_ite[1].IsStr())
-				return true;
-		}
-		};
-		return false;
-	}
-
-	std::u32string Path::ToU32String() const
-	{
-		std::u32string re;
-		size_t require_size = 0;
-		for(auto& ite : path_ite)
-			require_size+=ite(path).size();
-		re.reserve(require_size);
-		for (auto& ite : path_ite)
-			re += ite(path);
-		return std::move(re);
-	}
-
-	std::u16string Path::ToU16String() const
-	{
-		std::u16string re;
-		size_t require_size = 0;
-		for (auto& ite : path_ite)
-		{
-			auto str = ite(path);
-			require_size += StrEncode::Encode<char32_t, char16_t>{}.Request(str.data(), str.size()).require_length;
-		}
-		re.resize(require_size);
-		size_t index = 0;
-		for (auto& ite : path_ite)
-		{
-			auto str = ite(path);
-			index += StrEncode::Encode<char32_t, char16_t>{}.Decode(str.data(), str.size(), re.data() + index, require_size - index).used_target_length;
-		}
-		return std::move(re);
-	}
-
-	std::u8string Path::ToU8String() const
-	{
-		if(*this)
-		{
-			std::u8string re;
-			size_t require_size = 0;
-			for (auto& ite : path_ite)
-			{
-				auto str = ite(path);
-				require_size += StrEncode::Encode<char32_t, char8_t>{}.Request(str.data(), str.size()).require_length;
-			}
-			re.resize(require_size);
-			size_t index = 0;
-			for (auto& ite : path_ite)
-			{
-				auto str = ite(path);
-				index += StrEncode::Encode<char32_t, char8_t>{}.Decode(str.data(), str.size(), re.data() + index, require_size - index).used_target_length;
-			}
-			return std::move(re);
-		}
-		return {};
 	}
 
 	bool PathMapping::Regedit(std::u32string_view name, Path path)
@@ -350,11 +251,11 @@ namespace Potato::FileSystem
 			if(re != mapping.end())
 			{
 				auto result = re->second;
-				if(Path::AppendImp(result, path.path, path.path_ite.data() + 1, path.path_ite.size() - 1))
+				if(result.Insert(path.path, path.elements.data() + 1, path.elements.size() - 1))
 					return result;
 			}
 		}
-		return path;
+		return {};
 	}
 
 	PathMapping& GobalPathMapping()

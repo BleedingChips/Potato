@@ -1,5 +1,6 @@
 #include "Potato/Public/Ebnf.h"
 #include "Potato/Public/StrScanner.h"
+#include "Potato/Public/FileSystem.h"
 #include <iostream>
 #include <fstream>
 #include <filesystem>

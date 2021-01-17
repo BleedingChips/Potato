@@ -25,16 +25,14 @@ namespace Potato::FileSystem
 
 		enum class ElementStyle : uint8_t
 		{
-			DosRoot = 0,
-			UnixRoot,
-			MappingRoot,
+			Root,
 			File,
 			Self,
 			Upper,
 		};
 		
-		size_t Size() const noexcept { return path_ite.size(); }
-		std::u32string_view operator[](size_t index) const { return path_ite[index](path); }
+		size_t Size() const noexcept { return elements.size(); }
+		std::u32string_view operator[](size_t index) const { return elements[index](path); }
 		operator bool() const noexcept{ return style != Style::Unknow; }
 		Style GetType() const noexcept {return style; }
 
@@ -42,6 +40,7 @@ namespace Potato::FileSystem
 		Path(std::u32string_view InputPath);
 		Path(Path&&) = default;
 		Path(Path const&) = default;
+		Path(const char32_t input[]) : Path(std::u32string_view(input)){}
 		Path& operator=(Path const&) = default;
 		Path& operator=(Path&&) = default;
 		Path Append(Path const&) const;
