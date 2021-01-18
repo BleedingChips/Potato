@@ -18,41 +18,12 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="..\..\Potato\Public\auto_adapter.h" />
-    <ClInclude Include="..\..\Potato\Public\Ebnf.h" />
-    <ClInclude Include="..\..\Potato\Public\FileSystem.h" />
-    <ClInclude Include="..\..\Potato\Public\Interval.h" />
-    <ClInclude Include="..\..\Potato\Public\IntrusivePointer.h" />
-    <ClInclude Include="..\..\Potato\Public\Lexical.h" />
-    <ClInclude Include="..\..\Potato\Public\Lr0.h" />
-    <ClInclude Include="..\..\Potato\Public\Misc.h" />
-    <ClInclude Include="..\..\Potato\Public\StrEncode.h" />
-    <ClInclude Include="..\..\Potato\Public\StrFormat.h" />
-    <ClInclude Include="..\..\Potato\Public\StrScanner.h" />
-    <ClInclude Include="..\..\Potato\Public\Symbol.h" />
-    <ClInclude Include="..\..\Potato\Public\Tmp.h" />
-    <ClInclude Include="..\..\Potato\Public\Unfa.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\..\Potato\Private\Ebnf.cpp" />
-    <ClCompile Include="..\..\Potato\Private\FileSystem.cpp" />
-    <ClCompile Include="..\..\Potato\Private\Lexical.cpp" />
-    <ClCompile Include="..\..\Potato\Private\Lr0.cpp" />
-    <ClCompile Include="..\..\Potato\Private\Misc.cpp" />
-    <ClCompile Include="..\..\Potato\Private\StrEncode.cpp" />
-    <ClCompile Include="..\..\Potato\Private\StrFormat.cpp" />
-    <ClCompile Include="..\..\Potato\Private\StrScanner.cpp" />
-    <ClCompile Include="..\..\Potato\Private\Symbol.cpp" />
-    <ClCompile Include="..\..\Potato\Private\Unfa.cpp" />
-  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{55e150fe-29c9-482f-963a-7121e64ccc93}</ProjectGuid>
-    <RootNamespace>PotatoStatic</RootNamespace>
+    <ProjectGuid>{2815d62d-2759-4a71-be0a-01f5d43c0e12}</ProjectGuid>
+    <RootNamespace>Potato</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>Potato</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -101,33 +72,26 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <AllProjectBMIsArePublic>false</AllProjectBMIsArePublic>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <AllProjectBMIsArePublic>false</AllProjectBMIsArePublic>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <AllProjectBMIsArePublic>false</AllProjectBMIsArePublic>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <AllProjectBMIsArePublic>false</AllProjectBMIsArePublic>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
-      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
-      <SubSystem>
-      </SubSystem>
+      <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
@@ -137,15 +101,12 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
-      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
-      <SubSystem>
-      </SubSystem>
+      <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -155,15 +116,12 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
-      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
-      <SubSystem>
-      </SubSystem>
+      <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
@@ -173,20 +131,45 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
-      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
-      <SubSystem>
-      </SubSystem>
+      <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\Potato\Public\auto_adapter.h" />
+    <ClInclude Include="..\..\Potato\Public\Ebnf.h" />
+    <ClInclude Include="..\..\Potato\Public\FileSystem.h" />
+    <ClInclude Include="..\..\Potato\Public\Interval.h" />
+    <ClInclude Include="..\..\Potato\Public\IntrusivePointer.h" />
+    <ClInclude Include="..\..\Potato\Public\Lexical.h" />
+    <ClInclude Include="..\..\Potato\Public\Lr0.h" />
+    <ClInclude Include="..\..\Potato\Public\Misc.h" />
+    <ClInclude Include="..\..\Potato\Public\StrEncode.h" />
+    <ClInclude Include="..\..\Potato\Public\StrFormat.h" />
+    <ClInclude Include="..\..\Potato\Public\StrScanner.h" />
+    <ClInclude Include="..\..\Potato\Public\Symbol.h" />
+    <ClInclude Include="..\..\Potato\Public\tmp.h" />
+    <ClInclude Include="..\..\Potato\Public\Unfa.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\Potato\Private\Ebnf.cpp" />
+    <ClCompile Include="..\..\Potato\Private\FileSystem.cpp" />
+    <ClCompile Include="..\..\Potato\Private\Lexical.cpp" />
+    <ClCompile Include="..\..\Potato\Private\Lr0.cpp" />
+    <ClCompile Include="..\..\Potato\Private\Misc.cpp" />
+    <ClCompile Include="..\..\Potato\Private\StrEncode.cpp" />
+    <ClCompile Include="..\..\Potato\Private\StrFormat.cpp" />
+    <ClCompile Include="..\..\Potato\Private\StrScanner.cpp" />
+    <ClCompile Include="..\..\Potato\Private\Symbol.cpp" />
+    <ClCompile Include="..\..\Potato\Private\Unfa.cpp" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

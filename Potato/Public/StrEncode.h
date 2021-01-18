@@ -96,8 +96,32 @@ namespace Potato::StrEncode
 		CharWrapper<char32_t> wrapper;
 		size_t DetectOne(Type const* input, size_t input_length);
 		DecodeResult DecodeOne(Type const* input, size_t input_length);
-		size_t EncodeRequest(char32_t temporary){ return CharWrapper<char32_t>{}.EncodeRequest(temporary); }
+		size_t EncodeRequest(char32_t temporary){ return wrapper.EncodeRequest(temporary); }
 		size_t EncodeOne(char32_t temporary, Type* input, size_t input_length);
+	};
+
+	template<>
+	struct CharWrapper<wchar_t>
+	{
+		using RealType = std::conditional_t<sizeof(wchar_t) == sizeof(char16_t), char16_t, char32_t>;
+		using Type = wchar_t;
+		CharWrapper<RealType> wrapper;
+		size_t DetectOne(Type const* input, size_t input_length){ return wrapper.DetectOne(reinterpret_cast<RealType const*>(input), input_length); }
+		DecodeResult DecodeOne(Type const* input, size_t input_length){ return wrapper.DecodeOne(reinterpret_cast<RealType const*>(input), input_length); }
+		size_t EncodeRequest(char32_t temporary) { return wrapper.EncodeRequest(temporary); }
+		size_t EncodeOne(char32_t temporary, Type* input, size_t input_length){ return wrapper.EncodeOne(temporary, reinterpret_cast<RealType*>(input), input_length); }
+	};
+
+	template<>
+	struct CharWrapper<ReverseEndianness<wchar_t>>
+	{
+		using RealType = std::conditional_t<sizeof(wchar_t) == sizeof(char16_t), char16_t, char32_t>;
+		using Type = wchar_t;
+		CharWrapper<ReverseEndianness<RealType>> wrapper;
+		size_t DetectOne(Type const* input, size_t input_length) { return wrapper.DetectOne(reinterpret_cast<RealType const*>(input), input_length); }
+		DecodeResult DecodeOne(Type const* input, size_t input_length) { return wrapper.DecodeOne(reinterpret_cast<RealType const*>(input), input_length); }
+		size_t EncodeRequest(char32_t temporary) { return wrapper.EncodeRequest(temporary); }
+		size_t EncodeOne(char32_t temporary, Type* input, size_t input_length) { return wrapper.EncodeOne(temporary, reinterpret_cast<RealType*>(input), input_length); }
 	};
 
 	struct RequestResult

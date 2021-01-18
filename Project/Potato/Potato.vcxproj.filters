@@ -2,10 +2,10 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Public">
-      <UniqueIdentifier>{8ce86c9f-0872-4997-9f81-261f520f0427}</UniqueIdentifier>
+      <UniqueIdentifier>{496ae65c-70b6-44d9-ad2a-0c6f1abe84f9}</UniqueIdentifier>
     </Filter>
     <Filter Include="Private">
-      <UniqueIdentifier>{660804ec-af8f-4a7f-9728-842e2616b4fb}</UniqueIdentifier>
+      <UniqueIdentifier>{564a2e4f-8db4-4e60-aaf5-78bc37888429}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -13,6 +13,9 @@
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Potato\Public\Ebnf.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Public\FileSystem.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Potato\Public\Interval.h">
@@ -42,18 +45,18 @@
     <ClInclude Include="..\..\Potato\Public\Symbol.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\Tmp.h">
+    <ClInclude Include="..\..\Potato\Public\tmp.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Potato\Public\Unfa.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\FileSystem.h">
-      <Filter>Public</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Potato\Private\Ebnf.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Potato\Private\FileSystem.cpp">
       <Filter>Private</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Potato\Private\Lexical.cpp">
@@ -78,9 +81,6 @@
       <Filter>Private</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Potato\Private\Unfa.cpp">
-      <Filter>Private</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\FileSystem.cpp">
       <Filter>Private</Filter>
     </ClCompile>
   </ItemGroup>

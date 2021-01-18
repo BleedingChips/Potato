@@ -10,19 +10,19 @@ namespace
 		static Potato::Ebnf::Table fs_ebnf = Potato::Ebnf::CreateTable(
 UR"(
 NormalPath := '[^/]*' : [0]
-DosRoot := '[a-zA-Z\-0-9_]*:' : [1]
+DosRoot := '[a-zA-Z\-0-9_]*:/' : [1]
 Delimiter := '/'
 SelfPath := '\.' : [2]
 UpperPath := '\.\.' : [3]
-MappingRoot := '$[a-zA-Z\-0-9_ ]+:' : [4]
+MappingRoot := '$[a-zA-Z\-0-9_ ]+:/' : [4]
 %%%
 $ := <Ste>
 <File> := (NormalPath | SelfPath | UpperPath) : [0]
 <FilePath> := <File> { Delimiter <File> } : [1]
-<Ste> := DosRoot Delimiter [ <FilePath> ] : [2]
+<Ste> := DosRoot [ <FilePath> ] : [2]
 <Ste> := <FilePath> : [3]
-<Ste> := MappingRoot Delimiter [<FilePath>] : [4]
-<Ste> := Delimiter <FilePath> : [5]
+<Ste> := MappingRoot [<FilePath>] : [4]
+<Ste> := Delimiter <FilePath> Delimiter : [5]
 )"
 		);
 		return fs_ebnf;
@@ -84,7 +84,13 @@ namespace Potato::FileSystem
 		for (auto& ite : element_list)
 			require += std::get<1>(ite).size;
 		if(element_list.size() > 1)
-			require += element_list.size() -  1;
+		{
+			if(std::get<1>(element_list[0]).type == ElementStyle::Root)
+			{
+				require += element_list.size() - 2;
+			}else
+				require += element_list.size() - 1;
+		}
 		path.resize(require);
 		elements.resize(element_list.size());
 		size_t Used = 0;
@@ -94,7 +100,7 @@ namespace Potato::FileSystem
 			if (Index == 0)
 				Used = Last.start + Last.size;
 			else {
-				if (i != 0)
+				if (i != 0 && std::get<1>(element_list[i - 1]).type != ElementStyle::Root)
 					path[Used++] = U'/';
 				std::memcpy(path.data() + Used, ref.data() + Last.start, sizeof(char32_t) * Last.size);
 				elements[i] = {Last.type, Used, Last.size};
@@ -157,9 +163,9 @@ namespace Potato::FileSystem
 						auto Temp = Ele[0].GetData<Element>();
 						Result.elements.push_back(Temp);
 						Result.path = Temp(Input);
-						if(Ele.reduce.production_count >= 3)
+						if(Ele.reduce.production_count >= 2)
 						{
-							auto P = Ele[2].MoveData<std::vector<Element>>();
+							auto P = Ele[1].MoveData<std::vector<Element>>();
 							if (!Result.Insert(Input, P.data(), P.size()))
 								Result = {};
 						}
@@ -177,9 +183,9 @@ namespace Potato::FileSystem
 						auto Temp = Ele[0].GetData<Element>();
 						Result.elements.push_back(Temp);
 						Result.path = Temp(Input);
-						if (Ele.reduce.production_count >= 3)
+						if (Ele.reduce.production_count >= 2)
 						{
-							auto P = Ele[2].MoveData<std::vector<Element>>();
+							auto P = Ele[1].MoveData<std::vector<Element>>();
 							if(!Result.Insert(Input, P.data(), P.size()))
 								Result = {};
 						}
@@ -189,6 +195,8 @@ namespace Potato::FileSystem
 						Result.style = Style::UnixAbsolute;
 						auto P = Ele[1].MoveData<std::vector<Element>>();
 						P[0].type = ElementStyle::Root;
+						P[0].start -=1;
+						P[0].size +=2;
 						Result.elements.push_back(P[0]);
 						Result.path = P[0](Input);
 						if(!Result.Insert(Input, P.data() + 1, P.size()))
@@ -224,6 +232,30 @@ namespace Potato::FileSystem
 		
 	}
 
+	Path Path::Parent() const
+	{
+		if(elements.size() >= 2)
+		{
+			Path result;
+			result.style = style;
+			auto ref = elements[elements.size() - 2];
+			result.path.insert(result.path.end(), path.begin(), path.begin() + ref.start + ref.size);
+			result.elements.insert(result.elements.end(), elements.begin(), elements.begin() + (elements.size() - 1));
+			return result;
+		}
+		return {};
+	}
+
+	std::u32string_view Path::Last() const
+	{
+		if(elements.size() > 0)
+		{
+			auto ref = elements[elements.size() - 1];
+			return ref(path);
+		}
+		return {};
+	}
+	
 	bool PathMapping::Regedit(std::u32string_view name, Path path)
 	{
 		if(path.GetType() == Path::Style::DosAbsolute || path.GetType() == Path::Style::UnixAbsolute)
@@ -248,7 +280,7 @@ namespace Potato::FileSystem
 			assert(path.Size() >= 1);
 			std::shared_lock lg(mutex);
 			auto P = path[0];
-			auto re = mapping.find(std::u32string{P.data() + 1, P.size() - 2});
+			auto re = mapping.find(std::u32string{P.data() + 1, P.size() - 3});
 			if(re != mapping.end())
 			{
 				auto result = re->second;
@@ -278,11 +310,11 @@ namespace Potato::FileSystem
 		{
 			std::filesystem::path tar(Target);
 			size_t SearchingStack = 0;
-			while (SearchingStack < MaxStack && Size() > SearchingStack)
+			while (SearchingStack < MaxStack && Size() > SearchingStack + 1)
 			{
 				auto Last = elements[Size() - SearchingStack - 1];
 				std::u32string_view cur(path.data(), Last.start + Last.size);
-				for (auto& ite : std::filesystem::directory_iterator(cur))
+				for (auto& ite : std::filesystem::directory_iterator(cur, std::filesystem::directory_options::skip_permission_denied))
 				{
 					if (ite.path().filename() == tar)
 					{
@@ -302,7 +334,7 @@ namespace Potato::FileSystem
 		if (GetType() == Path::Style::DosAbsolute || GetType() == Path::Style::UnixAbsolute)
 		{
 			std::filesystem::path tar(Target);
-			for (auto& ite : std::filesystem::recursive_directory_iterator(path))
+			for (auto& ite : std::filesystem::recursive_directory_iterator(path, std::filesystem::directory_options::skip_permission_denied))
 			{
 				if (ite.path().filename() == tar)
 				{
@@ -313,6 +345,59 @@ namespace Potato::FileSystem
 			}
 		}
 		return {};
+	}
+
+	std::vector<Path> Path::FindAllFileFromChild(std::u32string_view Target) const
+	{
+		std::vector<Path> paths;
+		if (GetType() == Path::Style::DosAbsolute || GetType() == Path::Style::UnixAbsolute)
+		{
+			std::filesystem::path tar(Target);
+			for (auto& ite : std::filesystem::recursive_directory_iterator(path, std::filesystem::directory_options::skip_permission_denied))
+			{
+				if (ite.path().filename() == tar)
+				{
+					auto CurPath = ite.path().u32string();
+					std::replace(CurPath.begin(), CurPath.end(), U'\\', U'/');
+					paths.push_back(Path(CurPath));
+				}
+			}
+		}
+		return std::move(paths);
+	}
+
+	size_t Path::LocateFile(std::u32string_view tar) const
+	{
+		size_t i = 0;
+		for(auto& ite : elements)
+		{
+			if(ite(path) == tar)
+				return i;
+			++i;
+		}
+		return i;
+	}
+
+	Path Path::SubPath(size_t start, size_t count) const
+	{
+		start = std::min(start, Size());
+		count = std::min(Size() - start, count);
+		if(count > 0)
+		{
+			Path result;
+			result.elements.insert(result.elements.end(), elements.begin() + start, elements.begin() + start + count);
+			auto s = elements[start];
+			auto e = elements[start + count];
+			result.path.insert(result.path.end(), path.begin() + s.start, path.begin() + e.start + e.size);
+			for(auto& ite : result.elements)
+				ite.start -= s.start;
+			if(start == 0)
+				result.style = style;
+			else
+				result.style = Path::Style::Relative;
+			return std::move(result);
+		}
+		return {};		
 	}
 
 	std::vector<std::byte> LoadEntireFile(Path const& ref)

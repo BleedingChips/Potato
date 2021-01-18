@@ -45,10 +45,15 @@ namespace Potato::FileSystem
 		Path& operator=(Path const&) = default;
 		Path& operator=(Path&&) = default;
 		Path Append(Path const&) const;
+		size_t LocateFile(std::u32string_view) const;
+		Path SubPath(size_t start, size_t count) const;
+		Path Parent() const;
 
 		Path FindFileFromParent(std::u32string_view Target, size_t MaxStack = 0) const;
 		Path FindFileFromChild(std::u32string_view Target) const;
+		std::vector<Path> FindAllFileFromChild(std::u32string_view Target) const;
 
+		std::u32string_view Last() const;
 		std::u32string ToU32String() const{ return path; }
 		std::u16string ToU16String() const { return StrEncode::AsWrapper(path.data(), path.size()).ToString<char16_t>(); }
 		std::u8string ToU8String() const { return StrEncode::AsWrapper(path.data(), path.size()).ToString<char8_t>(); }
@@ -85,6 +90,8 @@ namespace Potato::FileSystem
 
 	std::vector<std::byte> LoadEntireFile(Path const& ref);
 	bool SaveFile(Path const& ref, std::byte const* data, size_t size);
+	template<typename Type>
+	bool SaveFile(Path const& ref, Type const* data, size_t size){ return SaveFile(ref, reinterpret_cast<std::byte const*>(data), size * sizeof(Type)); }
 
 	Path Current();
 

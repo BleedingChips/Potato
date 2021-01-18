@@ -4,14 +4,19 @@
 namespace Potato::StrFormat
 {
 
-	static Lexical::LexicalRegexInitTuple PatternRex[] = {
-		{UR"([^\{\}]+)"},
-		{UR"(\{[^\{\}]*?\})"},
-		{UR"(\}\})"},
-		{UR"(\{\{)"},
-	};
+	
 
-	static Lexical::Table analyzer = Lexical::CreateLexicalFromRegexsReverse(PatternRex, std::size(PatternRex));
+	Lexical::Table const& Analyzer()
+	{
+		static Lexical::LexicalRegexInitTuple PatternRex[] = {
+			{UR"([^\{\}]+)"},
+			{UR"(\{[^\{\}]*?\})"},
+			{UR"(\}\})"},
+			{UR"(\{\{)"},
+		};
+		static Lexical::Table instance = Lexical::CreateLexicalFromRegexsReverse(PatternRex, std::size(PatternRex));
+		return instance;
+	}
 
 	char32_t* FormatWrapper::ConsumeBuffer(size_t require_length)
 	{
@@ -29,7 +34,7 @@ namespace Potato::StrFormat
 	PatternRef CreatePatternRef(std::u32string_view Ref)
 	{
 		try {
-			auto Result = analyzer.Process(Ref);
+			auto Result = Analyzer().Process(Ref);
 			std::vector<PatternRef::Element> patterns;
 			size_t used_count = 0;
 			for (auto& ite : Result)
