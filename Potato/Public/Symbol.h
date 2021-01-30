@@ -3,7 +3,7 @@
 #include <map>
 #include <vector>
 #include <optional>
-#include <assert.h>
+#include <cassert>
 #include <variant>
 #include <typeindex>
 #include <any>
@@ -13,20 +13,30 @@ namespace Potato::Symbol
 {
 
 	using Section = Lexical::Section;
+
+	struct Mask
+	{
+		Mask(const Mask&) = default;
+		Mask(size_t i_index) : index(i_index){ assert(i_index < std::numeric_limits<size_t>::max()); }
+		Mask() = default;
+		Mask& operator=(Mask const&) = default;
+		operator bool() const noexcept { return index != std::numeric_limits<size_t>::max(); }
+		operator size_t() const noexcept{ return index; }
+		size_t AsIndex() const noexcept {return index; }
+	private:
+		size_t index = std::numeric_limits<size_t>::max();
+	};
+
+	template<typename Usage>
+	struct MaskWrapper : Mask
+	{
+		using Mask::Mask;
+		MaskWrapper& operator=(MaskWrapper const&) = default;
+	};
 	
 	struct Table
 	{
-		struct Mask
-		{
-			Mask(const Mask&) = default;
-			Mask(size_t inputindex) : index(inputindex + 1){}
-			Mask() =default;
-			Mask& operator=(Mask const&) = default;
-			operator bool() const noexcept { return index != 0; }
-		private:
-			friend struct Table;
-			size_t index = 0;
-		};
+		using Mask = MaskWrapper<Table>;
 		
 		Mask FindActiveLast(std::u32string_view name) const noexcept;
 		std::vector<Mask> FindActiveAll(std::u32string_view name) const;
@@ -108,6 +118,36 @@ namespace Potato::Symbol
 		std::vector<Storage> unactive_scope;
 		std::vector<Storage> active_scope;
 		std::vector<Mapping> mapping;
+	};
+
+	struct TypeProperty
+	{
+		std::vector<Table::Mask> values;
+	};
+
+	struct ConstDataTable
+	{
+
+		using Mask = MaskWrapper<ConstDataTable>;
+
+		template<typename Data>
+		Mask Insert(Table::Mask mask, Data const& data)
+		{
+			return Insert(mask, reinterpret_cast<std::byte const*>(&data), sizeof(data));
+		}
+		
+		Mask Insert(Table::Mask mask, std::byte const* data, size_t length);
+
+	private:
+		
+		struct ConstDataProperty
+		{
+			Table::Mask type;
+			size_t start_index;
+			size_t length;
+		};
+		std::vector<std::byte> const_data_buffer;
+		std::vector<ConstDataProperty> datas_mapping;
 	};
 
 	struct MemoryModel

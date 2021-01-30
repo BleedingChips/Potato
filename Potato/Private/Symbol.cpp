@@ -14,10 +14,10 @@ namespace Potato::Symbol
 
 	auto Table::FindRaw(Mask mask) const ->Result<const std::any>
 	{
-		if (mask && (mask.index < mapping.size() + 1))
+		if (mask && (mask.AsIndex() < mapping.size()))
 		{
 			Storage const* str = nullptr;
-			auto& mapp = mapping[mask.index - 1];
+			auto& mapp = mapping[mask];
 			if (mapp.is_active)
 				str = &active_scope[mapp.index];
 			else
@@ -89,6 +89,19 @@ namespace Potato::Symbol
 			result.push_back(Mask{mapping.size() - i - 1});
 		}
 		return std::move(result);
+	}
+	
+	auto ConstDataTable::Insert(Table::Mask mask, std::byte const* data, size_t length) -> Mask
+	{
+		if(mask)
+		{
+			size_t start = datas_mapping.size();
+			Mask result(start);
+			const_data_buffer.insert(const_data_buffer.end(), data, data + length);
+			datas_mapping.push_back({mask, start, length});
+			return result;
+		}
+		return {};
 	}
 
 	size_t MemoryModelMaker::operator()(MemoryModel const& info_i)
