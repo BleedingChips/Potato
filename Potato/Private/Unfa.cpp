@@ -213,7 +213,6 @@ namespace Potato::Unfa
 			RangeSets.push_back(Rs);
 		}
 		return { std::move(Symbols), std::move(RangeSets) };
-
 	}
 
 	Table Table::CreateFromRegex(std::u32string_view rex, uint32_t acception_index, uint32_t acception_mask)
@@ -229,201 +228,200 @@ namespace Potato::Unfa
 			temporary_node.emplace_back();
 			auto [symbols, comsumes] = RexLexer(rex);
 			auto history = Lr0::Process(rex_lr0(), symbols.data(), symbols.size());
-			auto result = Lr0::Process(history, [&](Lr0::Element& tra) -> std::any
+			auto result = Lr0::Process(history, [&](Lr0::NTElement& tra) -> std::any
 			{
-				if (tra.IsTerminal())
+				switch (tra.mask)
 				{
-					return comsumes[tra.shift.token_index];
+				case 0: return tra.MoveRawData(0);
+				case 1:
+				{
+					auto Node1 = tra.GetData<TemNode>(0);
+					auto Node2 = tra.GetData<TemNode>(1);
+					temporary_node[Node1.out].emplace_back(Edge{Node2.in,  EEpsilon{}});
+					return TemNode{Node1.in, Node2.out};
 				}
-				else {
-					switch (tra.reduce.mask)
-					{
-					case 0: return tra.MoveRawData(0);
-					case 1:
-					{
-						auto Node1 = tra.GetData<TemNode>(0);
-						auto Node2 = tra.GetData<TemNode>(1);
-						temporary_node[Node1.out].emplace_back(Edge{Node2.in,  EEpsilon{}});
-						return TemNode{Node1.in, Node2.out};
-					}
-					case 2:
-					{
-						auto Node1 = tra.GetData<TemNode>(0);
-						auto Node2 = tra.GetData<TemNode>(2);
-						uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
-						uint32_t NewNodeOut = NewNodeIn + 1;
-						temporary_node.push_back({Edge{Node1.in, EEpsilon{}}, Edge{Node2.in, EEpsilon{}}});
-						temporary_node.emplace_back();
-						temporary_node[Node1.out].emplace_back(Edge{ NewNodeOut, EEpsilon{}});
-						temporary_node[Node2.out].emplace_back(Edge{ NewNodeOut, EEpsilon{}});
-						return TemNode{NewNodeIn, NewNodeOut};
-					}
-					case 3:
-					{
-						return tra.MoveRawData(3);
-					}
-					case 4:
-					{
-						auto Node1 = tra.GetData<TemNode>(1);
-						uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
-						uint32_t NewNodeOut = NewNodeIn + 1;
-						temporary_node.push_back({Edge{Node1.in, ECapture{true, acception_index }}});
-						temporary_node.emplace_back();
-						temporary_node[Node1.out].emplace_back(Edge{NewNodeOut, ECapture{false, acception_index }});
-						return TemNode{ NewNodeIn, NewNodeOut };
-					}
-					case 19:
-					{
-						uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
-						uint32_t NewNodeOut = NewNodeIn + 1;
-						temporary_node.push_back({Edge{NewNodeOut, EEpsilon{}}});
-						temporary_node.emplace_back();
-						return TemNode{ NewNodeIn, NewNodeOut };
-					}
-					case 20:
-					{
-						uint32_t NewNode1 = static_cast<uint32_t>(temporary_node.size());
-						uint32_t NewNode2 = NewNode1 + 1;
-						uint32_t NewNode3 = NewNode2 + 1;
-						temporary_node.push_back({Edge{NewNode2, ECapture{true, acception_index}}});
-						temporary_node.push_back({Edge{NewNode3, ECapture{false, acception_index}}});
-						temporary_node.emplace_back();
-						return TemNode{ NewNode1, NewNode3 };
-					}
-					case 5: {return Interval{}; }
-					case 6:
-					{
-						auto& r1 = tra.GetData<Interval&>(0);
-						auto& r2 = tra.GetData<Interval&>(1);
-						r1 = r1 | r2;
-						return tra.MoveRawData(0);
-					}
-					case 7:
-					{
-						auto& r1 = tra.GetData<Interval&>(0);
-						auto& r2 = tra.GetData<Interval&>(1);
-						auto& r3 = tra.GetData<Interval&>(3);
-						r1 = r1 | r2.AsSegment().Expand(r3.AsSegment());
-						return tra.MoveRawData(0);
-					}
-					case 8:
-					{
-						uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
-						uint32_t NewNodeOut = NewNodeIn + 1;
-						temporary_node.push_back({ Edge{ NewNodeOut, EComsume{tra.MoveData<Interval>(1)} } });
-						temporary_node.emplace_back();
-						return TemNode{ NewNodeIn, NewNodeOut };
-					}
-					case 9:
-					{
-						Interval r1 = tra.MoveData<Interval>(2);
-						Interval total(Segment{1, std::numeric_limits<char32_t>().max()});
-						r1 = total - r1;
-						uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
-						uint32_t NewNodeOut = NewNodeIn + 1;
-						temporary_node.push_back({ Edge{ NewNodeOut, EComsume{std::move(r1)} } });
-						temporary_node.emplace_back();
-						return TemNode{ NewNodeIn, NewNodeOut };
-					}
-					case 12:
-					{
-						uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
-						uint32_t NewNodeOut = NewNodeIn + 1;
-						temporary_node.push_back({ Edge{ NewNodeOut, EComsume{tra.MoveData<Interval>(0)}} });
-						temporary_node.emplace_back();
-						return TemNode{ NewNodeIn, NewNodeOut };
-					}
-					case 13:
-					{
-						auto Node = tra.GetData<TemNode>(0);
-						uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
-						uint32_t NewNodeOut = NewNodeIn + 1;
-						temporary_node.emplace_back();
-						temporary_node.emplace_back();
-						auto& ref = temporary_node[Node.out];
-						auto& ref2 = temporary_node[NewNodeIn];
-						ref.emplace_back(Edge{ NewNodeOut, EEpsilon{} });
-						ref.emplace_back(Edge{ Node.in, EEpsilon{} });
-						ref2.emplace_back(Edge{ NewNodeOut, EEpsilon{} });
-						ref2.emplace_back(Edge{ Node.in, EEpsilon{} });
-						return TemNode{ NewNodeIn, NewNodeOut };
-					}
-					case 14:
-					{
-						auto Node = tra.GetData<TemNode>(0);
-						uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
-						uint32_t NewNodeOut = NewNodeIn + 1;
-						temporary_node.emplace_back();
-						temporary_node.emplace_back();
-						auto& ref = temporary_node[Node.out];
-						auto& ref2 = temporary_node[NewNodeIn];
-						ref.emplace_back(Edge{ NewNodeOut, EEpsilon{} });
-						ref.emplace_back(Edge{ Node.in, EEpsilon{} });
-						ref2.emplace_back(Edge{ Node.in, EEpsilon{} });
-						return TemNode{ NewNodeIn, NewNodeOut };
-					}
-					case 15:
-					{
-						auto Node = tra.GetData<TemNode>(0);
-						uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
-						uint32_t NewNodeOut = NewNodeIn + 1;
-						temporary_node.emplace_back();
-						temporary_node.emplace_back();
-						auto& ref = temporary_node[Node.out];
-						auto& ref2 = temporary_node[NewNodeIn];
-						ref.emplace_back(Edge{ NewNodeOut, EEpsilon{} });
-						ref2.emplace_back(Edge{ NewNodeOut, EEpsilon{} });
-						ref2.emplace_back(Edge{ Node.in, EEpsilon{} });
-						return TemNode{ NewNodeIn, NewNodeOut };
-					}
-					case 16:
-					{
-						auto Node = tra.GetData<TemNode>(0);
-						uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
-						uint32_t NewNodeOut = NewNodeIn + 1;
-						temporary_node.emplace_back();
-						temporary_node.emplace_back();
-						auto& ref = temporary_node[Node.out];
-						auto& ref2 = temporary_node[NewNodeIn];
-						ref.emplace_back(Edge{ Node.in, EEpsilon{} });
-						ref.emplace_back(Edge{ NewNodeOut, EEpsilon{} });
-						ref2.emplace_back(Edge{ Node.in, EEpsilon{} });
-						ref2.emplace_back(Edge{ NewNodeOut, EEpsilon{} });
-						return TemNode{ NewNodeIn, NewNodeOut };
-					}
-					case 17:
-					{
-						auto Node = tra.GetData<TemNode>(0);
-						uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
-						uint32_t NewNodeOut = NewNodeIn + 1;
-						temporary_node.emplace_back();
-						temporary_node.emplace_back();
-						auto& ref = temporary_node[Node.out];
-						auto& ref2 = temporary_node[NewNodeIn];
-						ref.emplace_back(Edge{ Node.in, EEpsilon{} });
-						ref.emplace_back(Edge{ NewNodeOut, EEpsilon{} });
-						ref2.emplace_back(Edge{ Node.in, EEpsilon{} });
-						return TemNode{ NewNodeIn, NewNodeOut };
-					}
-					case 18:
-					{
-						auto Node = tra.GetData<TemNode>(0);
-						uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
-						uint32_t NewNodeOut = NewNodeIn + 1;
-						temporary_node.emplace_back();
-						temporary_node.emplace_back();
-						auto& ref = temporary_node[Node.out];
-						auto& ref2 = temporary_node[NewNodeIn];
-						ref.emplace_back(Edge{ NewNodeOut, EEpsilon{} });
-						ref2.emplace_back(Edge{ Node.in, EEpsilon{} });
-						ref2.emplace_back(Edge{  NewNodeOut, EEpsilon{} });
-						return TemNode{ NewNodeIn, NewNodeOut };
-					}
-					default: assert(false); return {};
-					}
+				case 2:
+				{
+					auto Node1 = tra.GetData<TemNode>(0);
+					auto Node2 = tra.GetData<TemNode>(2);
+					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
+					uint32_t NewNodeOut = NewNodeIn + 1;
+					temporary_node.push_back({Edge{Node1.in, EEpsilon{}}, Edge{Node2.in, EEpsilon{}}});
+					temporary_node.emplace_back();
+					temporary_node[Node1.out].emplace_back(Edge{ NewNodeOut, EEpsilon{}});
+					temporary_node[Node2.out].emplace_back(Edge{ NewNodeOut, EEpsilon{}});
+					return TemNode{NewNodeIn, NewNodeOut};
+				}
+				case 3:
+				{
+					return tra.MoveRawData(3);
+				}
+				case 4:
+				{
+					auto Node1 = tra.GetData<TemNode>(1);
+					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
+					uint32_t NewNodeOut = NewNodeIn + 1;
+					temporary_node.push_back({Edge{Node1.in, ECapture{true, acception_index }}});
+					temporary_node.emplace_back();
+					temporary_node[Node1.out].emplace_back(Edge{NewNodeOut, ECapture{false, acception_index }});
+					return TemNode{ NewNodeIn, NewNodeOut };
+				}
+				case 19:
+				{
+					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
+					uint32_t NewNodeOut = NewNodeIn + 1;
+					temporary_node.push_back({Edge{NewNodeOut, EEpsilon{}}});
+					temporary_node.emplace_back();
+					return TemNode{ NewNodeIn, NewNodeOut };
+				}
+				case 20:
+				{
+					uint32_t NewNode1 = static_cast<uint32_t>(temporary_node.size());
+					uint32_t NewNode2 = NewNode1 + 1;
+					uint32_t NewNode3 = NewNode2 + 1;
+					temporary_node.push_back({Edge{NewNode2, ECapture{true, acception_index}}});
+					temporary_node.push_back({Edge{NewNode3, ECapture{false, acception_index}}});
+					temporary_node.emplace_back();
+					return TemNode{ NewNode1, NewNode3 };
+				}
+				case 5: {return Interval{}; }
+				case 6:
+				{
+					auto& r1 = tra.GetData<Interval&>(0);
+					auto& r2 = tra.GetData<Interval&>(1);
+					r1 = r1 | r2;
+					return tra.MoveRawData(0);
+				}
+				case 7:
+				{
+					auto& r1 = tra.GetData<Interval&>(0);
+					auto& r2 = tra.GetData<Interval&>(1);
+					auto& r3 = tra.GetData<Interval&>(3);
+					r1 = r1 | r2.AsSegment().Expand(r3.AsSegment());
+					return tra.MoveRawData(0);
+				}
+				case 8:
+				{
+					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
+					uint32_t NewNodeOut = NewNodeIn + 1;
+					temporary_node.push_back({ Edge{ NewNodeOut, EComsume{tra.MoveData<Interval>(1)} } });
+					temporary_node.emplace_back();
+					return TemNode{ NewNodeIn, NewNodeOut };
+				}
+				case 9:
+				{
+					Interval r1 = tra.MoveData<Interval>(2);
+					Interval total(Segment{1, std::numeric_limits<char32_t>().max()});
+					r1 = total - r1;
+					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
+					uint32_t NewNodeOut = NewNodeIn + 1;
+					temporary_node.push_back({ Edge{ NewNodeOut, EComsume{std::move(r1)} } });
+					temporary_node.emplace_back();
+					return TemNode{ NewNodeIn, NewNodeOut };
+				}
+				case 12:
+				{
+					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
+					uint32_t NewNodeOut = NewNodeIn + 1;
+					temporary_node.push_back({ Edge{ NewNodeOut, EComsume{tra.MoveData<Interval>(0)}} });
+					temporary_node.emplace_back();
+					return TemNode{ NewNodeIn, NewNodeOut };
+				}
+				case 13:
+				{
+					auto Node = tra.GetData<TemNode>(0);
+					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
+					uint32_t NewNodeOut = NewNodeIn + 1;
+					temporary_node.emplace_back();
+					temporary_node.emplace_back();
+					auto& ref = temporary_node[Node.out];
+					auto& ref2 = temporary_node[NewNodeIn];
+					ref.emplace_back(Edge{ NewNodeOut, EEpsilon{} });
+					ref.emplace_back(Edge{ Node.in, EEpsilon{} });
+					ref2.emplace_back(Edge{ NewNodeOut, EEpsilon{} });
+					ref2.emplace_back(Edge{ Node.in, EEpsilon{} });
+					return TemNode{ NewNodeIn, NewNodeOut };
+				}
+				case 14:
+				{
+					auto Node = tra.GetData<TemNode>(0);
+					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
+					uint32_t NewNodeOut = NewNodeIn + 1;
+					temporary_node.emplace_back();
+					temporary_node.emplace_back();
+					auto& ref = temporary_node[Node.out];
+					auto& ref2 = temporary_node[NewNodeIn];
+					ref.emplace_back(Edge{ NewNodeOut, EEpsilon{} });
+					ref.emplace_back(Edge{ Node.in, EEpsilon{} });
+					ref2.emplace_back(Edge{ Node.in, EEpsilon{} });
+					return TemNode{ NewNodeIn, NewNodeOut };
+				}
+				case 15:
+				{
+					auto Node = tra.GetData<TemNode>(0);
+					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
+					uint32_t NewNodeOut = NewNodeIn + 1;
+					temporary_node.emplace_back();
+					temporary_node.emplace_back();
+					auto& ref = temporary_node[Node.out];
+					auto& ref2 = temporary_node[NewNodeIn];
+					ref.emplace_back(Edge{ NewNodeOut, EEpsilon{} });
+					ref2.emplace_back(Edge{ NewNodeOut, EEpsilon{} });
+					ref2.emplace_back(Edge{ Node.in, EEpsilon{} });
+					return TemNode{ NewNodeIn, NewNodeOut };
+				}
+				case 16:
+				{
+					auto Node = tra.GetData<TemNode>(0);
+					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
+					uint32_t NewNodeOut = NewNodeIn + 1;
+					temporary_node.emplace_back();
+					temporary_node.emplace_back();
+					auto& ref = temporary_node[Node.out];
+					auto& ref2 = temporary_node[NewNodeIn];
+					ref.emplace_back(Edge{ Node.in, EEpsilon{} });
+					ref.emplace_back(Edge{ NewNodeOut, EEpsilon{} });
+					ref2.emplace_back(Edge{ Node.in, EEpsilon{} });
+					ref2.emplace_back(Edge{ NewNodeOut, EEpsilon{} });
+					return TemNode{ NewNodeIn, NewNodeOut };
+				}
+				case 17:
+				{
+					auto Node = tra.GetData<TemNode>(0);
+					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
+					uint32_t NewNodeOut = NewNodeIn + 1;
+					temporary_node.emplace_back();
+					temporary_node.emplace_back();
+					auto& ref = temporary_node[Node.out];
+					auto& ref2 = temporary_node[NewNodeIn];
+					ref.emplace_back(Edge{ Node.in, EEpsilon{} });
+					ref.emplace_back(Edge{ NewNodeOut, EEpsilon{} });
+					ref2.emplace_back(Edge{ Node.in, EEpsilon{} });
+					return TemNode{ NewNodeIn, NewNodeOut };
+				}
+				case 18:
+				{
+					auto Node = tra.GetData<TemNode>(0);
+					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
+					uint32_t NewNodeOut = NewNodeIn + 1;
+					temporary_node.emplace_back();
+					temporary_node.emplace_back();
+					auto& ref = temporary_node[Node.out];
+					auto& ref2 = temporary_node[NewNodeIn];
+					ref.emplace_back(Edge{ NewNodeOut, EEpsilon{} });
+					ref2.emplace_back(Edge{ Node.in, EEpsilon{} });
+					ref2.emplace_back(Edge{  NewNodeOut, EEpsilon{} });
+					return TemNode{ NewNodeIn, NewNodeOut };
+				}
+				default: assert(false); return {};
 				}
 				return {};
-			});
+			}, 
+			[&](Lr0::TElement& elf) -> std::any
+			{
+				return comsumes[elf.token_index];
+			}
+			);
 			auto result_node = std::any_cast<TemNode>(result);
 			temporary_node[0].emplace_back(Edge{result_node.in, EEpsilon{}});
 			auto last_index = static_cast<uint32_t>(temporary_node.size());

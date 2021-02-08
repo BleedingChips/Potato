@@ -6,6 +6,7 @@
 #include <optional>
 #include <type_traits>
 #include <array>
+#include <any>
 #include "Tmp.h"
 namespace Potato::Misc
 {
@@ -496,4 +497,29 @@ namespace Potato::Misc
 		return { std::forward<interface_t>(inter), std::forward<storage_t>(storage) };
 	};
 
+	template<typename ...type>
+	struct any_visitor
+	{
+		template<typename any_t, typename callable_function>
+		std::enable_if_t<std::is_same_v<std::remove_cv_t<any_t>, std::any>, bool> operator()(any_t&& anys, callable_function&& cf)
+		{
+			return false;
+		}
+	};
+
+	template<typename cur_type, typename ...type>
+	struct any_visitor<cur_type, type...>
+	{
+		template<typename any_t, typename callable_function>
+		std::enable_if_t<std::is_same_v<std::remove_cvref_t<any_t>, std::any>, bool> operator()(any_t&& in_any, callable_function&& cf)
+		{
+			if(auto P = std::any_cast<cur_type*>(std::forward<any_t>(in_any)); P != nullptr)
+			{
+				std::forward<callable_function>(cf)(*P);
+				return true;
+			}
+			return any_visitor<type...>{}(std::forward<any_t>(in_any), std::forward<callable_function>(cf));
+		}
+	};
+	
 }

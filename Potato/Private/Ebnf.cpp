@@ -156,7 +156,7 @@ namespace Potato::Ebnf
 				}
 			}
 		}
-		return { std::move(AllStep) };
+		return History{ std::move(AllStep) };
 	}
 
 	History Process(Table const& Tab, std::u32string_view Code)
@@ -181,37 +181,40 @@ namespace Potato::Ebnf
 		}
 	}
 
-	std::any History::operator()(std::any(*Function)(void*, Element&), void* FunctionBody) const
+	std::any History::operator()(std::function<std::any(NTElement&)> NTFunc, std::function<std::any(TElement&)> TFunc) const
 	{
-		std::vector<Element::Property> Storage;
-		for (auto& ite : steps)
+		if(NTFunc && TFunc)
 		{
-			if (ite.IsTerminal())
+			std::vector<NTElement::Property> Storage;
+			for (auto& ite : steps)
 			{
-				Element Re(ite);
-				Re.datas = nullptr;
-				auto Result = (*Function)(FunctionBody, Re);
-				Storage.push_back({ ite, std::move(Result) });
-			}
-			else {
-				Element Re(ite);
-				size_t TotalUsed = ite.reduce.production_count;
-				size_t CurrentAdress = Storage.size() - TotalUsed;
-				Re.datas = Storage.data() + CurrentAdress;
-				if (TotalUsed >= 1)
+				if (ite.IsTerminal())
 				{
-					Re.section = {Re[0].section.start, Re[TotalUsed - 1].section.end};
+					TElement Re(ite);
+					auto Result = TFunc(Re);
+					Storage.push_back({ ite, std::move(Result) });
 				}
 				else {
-					Re.section = ite.section;
+					NTElement Re(ite);
+					size_t TotalUsed = ite.reduce.production_count;
+					size_t CurrentAdress = Storage.size() - TotalUsed;
+					Re.datas = Storage.data() + CurrentAdress;
+					if (TotalUsed >= 1)
+					{
+						Re.section = {Re[0].section.start, Re[TotalUsed - 1].section.end};
+					}
+					else {
+						Re.section = ite.section;
+					}
+					auto Result = NTFunc(Re);
+					Storage.resize(CurrentAdress);
+					Storage.push_back({ ite, std::move(Result) });
 				}
-				auto Result = (*Function)(FunctionBody, Re);
-				Storage.resize(CurrentAdress);
-				Storage.push_back({ ite, std::move(Result) });
 			}
+			assert(Storage.size() == 1);
+			return std::move(Storage[0].data);
 		}
-		assert(Storage.size() == 1);
-		return std::move(Storage[0].data);
+		return {};
 	}
 
 	std::u32string ExpandExe(std::vector<std::u32string_view> ts)
@@ -381,30 +384,9 @@ namespace Potato::Ebnf
 			auto [Symbols, Elements] = EbnfLexer(nfa_table, sperated_code[0].code, Loc);
 			try {
 				auto History = Lr0::Process(lr0_instance, Symbols.data(), Symbols.size());
-				Lr0::Process(History, [&](Lr0::Element& input) -> std::any {
-					if (input.IsTerminal())
+				Lr0::Process(History, [&](Lr0::NTElement& input) -> std::any {
+					switch (input.mask)
 					{
-						switch (input.value)
-						{
-						case* T::Terminal: {
-							return Elements[input.shift.token_index].capture;
-						}break;
-						case* T::Rex: {
-							auto re = Elements[input.shift.token_index].capture;
-							return  std::u32string_view(re.data() + 1, re.size() - 2);
-						}break;
-						case* T::Number: {
-							uint32_t Number = 0;
-							for (auto ite : Elements[input.shift.token_index].capture)
-								Number = Number * 10 + ite - U'0';
-							return Number;
-						} break;
-						default:break;
-						}
-					}
-					else {
-						switch (input.reduce.mask)
-						{
 						case 1: {
 							auto Token = input.GetData<std::u32string_view>(1);
 							auto Rex = input.GetData<std::u32string_view>(3);
@@ -428,10 +410,32 @@ namespace Potato::Ebnf
 						case 3:
 							break;
 						default: assert(false); break;
-						}
 					}
 					return {};
-				});
+				},
+				[&](Lr0::TElement& input) -> std::any
+				{
+					switch (input.value)
+					{
+					case* T::Terminal: {
+						return Elements[input.token_index].capture;
+					}break;
+					case* T::Rex: {
+						auto re = Elements[input.token_index].capture;
+						return  std::u32string_view(re.data() + 1, re.size() - 2);
+					}break;
+					case* T::Number: {
+						uint32_t Number = 0;
+						for (auto ite : Elements[input.token_index].capture)
+							Number = Number * 10 + ite - U'0';
+						return Number;
+					} break;
+					default:
+						return {};
+					}
+					return {};
+				}
+				);
 			}
 			catch (Lr0::Exception::UnaccableSymbol const& US)
 			{
@@ -439,7 +443,6 @@ namespace Potato::Ebnf
 				auto P = Elements[US.index];
 				throw MakeException(Exception::UnacceptableToken{ std::u32string(P.capture), P.section});
 			}
-			
 		}
 
 		std::map<std::u32string, size_t> noterminal_symbol_to_index;
@@ -525,58 +528,8 @@ namespace Potato::Ebnf
 
 			try {
 				auto History = Lr0::Process(imp, Symbols.data(), Symbols.size());
-				auto Total = Lr0::Process(History, [&](Lr0::Element & tra) -> std::any {
-					if (tra.IsTerminal())
-					{
-						auto& element = Elements[tra.shift.token_index];
-						auto string = std::u32string(element.capture);
-						switch (tra.value)
-						{
-						case* T::Terminal: {
-							auto Find = symbol_to_mask.find(string);
-							if (Find != symbol_to_mask.end())
-								return Token{ Symbol(Find->second, Lr0::TerminalT{}), element };
-							else
-								throw MakeException(Exception::UndefinedTerminal{ string, element.section });
-						}break;
-						case* T::NoTerminal: {
-							auto Find = noterminal_symbol_to_index.insert({ string, noterminal_symbol_to_index.size() });
-							return Token{ Symbol(Find.first->second, Lr0::NoTerminalT{}), element };
-						}break;
-						case* T::Rex: {
-							static const std::u32string SpecialChar = UR"($()*+.[]?\^{}|,\)";
-							assert(string.size() >= 2);
-							auto re = symbol_to_mask.insert({ string, static_cast<uint32_t>(symbol_to_mask.size()) });
-							if (re.second)
-							{
-								std::u32string rex;
-								for (size_t i = 1; i < string.size() - 1; ++i)
-								{
-									for (auto& ite : SpecialChar)
-										if (ite == string[i])
-										{
-											rex.push_back(U'\\');
-											break;
-										}
-									rex.push_back(string[i]);
-								}
-								symbol_rex.push_back({ std::move(rex),  re.first->second });
-								state_to_mask.push_back(Lexical::DefaultMask());
-							}
-							return Token{ Symbol(re.first->second, Lr0::TerminalT{}), element };
-						}break;
-						case* T::Number: {
-							size_t Number = 0;
-							for (auto ite : string)
-								Number = Number * 10 + ite - U'0';
-							return Number;
-						}break;
-						default:
-							break;
-						}
-					}
-					else {
-						switch (tra.reduce.mask)
+				auto Total = Lr0::Process(History, [&](Lr0::NTElement & tra) -> std::any {
+					switch (tra.mask)
 						{
 						case 0: {
 						} break;
@@ -682,9 +635,59 @@ namespace Potato::Ebnf
 							return std::tuple<std::set<Symbol>, size_t>{ std::set<Symbol>{}, Lr0::ProductionInput::default_mask()};
 						} break;
 						}
+					return {};
+				},
+				[&](Lr0::TElement& tra) -> std::any
+				{
+					auto& element = Elements[tra.token_index];
+					auto string = std::u32string(element.capture);
+					switch (tra.value)
+					{
+						case* T::Terminal: {
+							auto Find = symbol_to_mask.find(string);
+							if (Find != symbol_to_mask.end())
+								return Token{ Symbol(Find->second, Lr0::TerminalT{}), element };
+							else
+								throw MakeException(Exception::UndefinedTerminal{ string, element.section });
+						}break;
+						case* T::NoTerminal: {
+							auto Find = noterminal_symbol_to_index.insert({ string, noterminal_symbol_to_index.size() });
+							return Token{ Symbol(Find.first->second, Lr0::NoTerminalT{}), element };
+						}break;
+						case* T::Rex: {
+							static const std::u32string SpecialChar = UR"($()*+.[]?\^{}|,\)";
+							assert(string.size() >= 2);
+							auto re = symbol_to_mask.insert({ string, static_cast<uint32_t>(symbol_to_mask.size()) });
+							if (re.second)
+							{
+								std::u32string rex;
+								for (size_t i = 1; i < string.size() - 1; ++i)
+								{
+									for (auto& ite : SpecialChar)
+										if (ite == string[i])
+										{
+											rex.push_back(U'\\');
+											break;
+										}
+									rex.push_back(string[i]);
+								}
+								symbol_rex.push_back({ std::move(rex),  re.first->second });
+								state_to_mask.push_back(Lexical::DefaultMask());
+							}
+							return Token{ Symbol(re.first->second, Lr0::TerminalT{}), element };
+						}break;
+						case* T::Number: {
+							size_t Number = 0;
+							for (auto ite : string)
+								Number = Number * 10 + ite - U'0';
+							return Number;
+						}break;
+						default:
+							break;
 					}
 					return {};
-				});
+				}
+				);
 			}
 			catch (Lr0::Exception::UnaccableSymbol const& US)
 			{
@@ -721,21 +724,8 @@ namespace Potato::Ebnf
 			auto [Symbols, Elements] = EbnfLexer(nfa_instance, sperated_code[2].code, Loc);
 			try {
 				auto History = Lr0::Process(lr0_instance, Symbols.data(), Symbols.size());
-				Lr0::Process(History, [&](Lr0::Element& step) -> std::any {
-					if (step.IsTerminal())
-					{
-						if (step.value == *T::Terminal || step.value == *T::Rex)
-						{
-							auto element = Elements[step.shift.token_index];
-							auto Find = symbol_to_mask.find(std::u32string(element.capture));
-							if (Find != symbol_to_mask.end())
-								return Token{ Symbol(Find->second, Lr0::TerminalT{}) };
-							else
-								throw MakeException(Exception::UndefinedTerminal{std::u32string(element.capture), element.section });
-						}
-					}
-					else {
-						switch (step.reduce.mask)
+				Lr0::Process(History, [&](Lr0::NTElement& step) -> std::any {
+					switch (step.mask)
 						{
 						case 1: {
 							std::vector<Symbol> List;
@@ -764,9 +754,22 @@ namespace Potato::Ebnf
 							return {};
 						} break;
 						}
+					return {};
+				},
+				[&](Lr0::TElement& step)->std::any
+				{
+					if (step.value == *T::Terminal || step.value == *T::Rex)
+					{
+						auto element = Elements[step.token_index];
+						auto Find = symbol_to_mask.find(std::u32string(element.capture));
+						if (Find != symbol_to_mask.end())
+							return Token{ Symbol(Find->second, Lr0::TerminalT{}) };
+						else
+							throw MakeException(Exception::UndefinedTerminal{std::u32string(element.capture), element.section });
 					}
 					return {};
-				});
+				}
+				);
 			}
 			catch (Lr0::Exception::UnaccableSymbol const& US)
 			{

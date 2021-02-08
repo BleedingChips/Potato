@@ -103,6 +103,38 @@ namespace Potato::Lr0
 		constexpr bool IsStartSymbol() const noexcept { return value.IsStartSymbol(); }
 	};
 
+	struct TElement
+	{
+		Symbol value;
+		size_t token_index;
+		TElement(Step const& value) : value(value.value), token_index(value.shift.token_index){ assert(value.IsTerminal()); }
+		TElement(TElement const&) = default;
+		TElement& operator=(TElement const&) = default;
+	};
+	
+	struct NTElement
+	{
+		Symbol value;
+		size_t production_index;
+		size_t production_count;
+		size_t mask;
+		std::tuple<Symbol, std::any>* datas = nullptr;
+		std::tuple<Symbol, std::any>& operator[](size_t index) { return datas[index]; }
+		Symbol& GetSymbol(size_t index) { return std::get<0>((*this)[index]); }
+		template<typename Type>
+		Type GetData(size_t index) { return std::any_cast<Type>(std::get<1>((*this)[index])); }
+		template<typename Type>
+		std::remove_reference_t<Type> MoveData(size_t index) {return std::move(std::any_cast<std::add_lvalue_reference_t<Type>>(std::get<1>((*this)[index])));}
+		std::any MoveRawData(size_t index) { return std::move(std::get<1>((*this)[index])); }
+		std::any& GetRawData(size_t index) { return std::get<1>((*this)[index]); }
+		NTElement(Step const& value) :
+			value(value.value), production_index(value.reduce.production_index), production_count(value.reduce.production_count) , mask(value.reduce.mask)
+		{ assert(value.IsNoTerminal()); }
+		NTElement(NTElement const&) = default;
+		NTElement& operator=(NTElement const&) = default;
+	};
+
+	/*
 	struct Element : Step
 	{
 		std::tuple<Symbol, std::any>* datas = nullptr;
@@ -117,28 +149,22 @@ namespace Potato::Lr0
 		Element& operator=(Step const& ref) { Step::operator=(ref); return *this; }
 		Element(Step const& ref) : Step(ref) {}
 	};
+	*/
 
 	struct History
 	{
 		std::vector<Step> steps;
-		std::any operator()(std::any(*Function)(void*, Element&), void* FunctionBody) const;
-		template<typename RespondFunction>
-		std::any operator()(RespondFunction&& Func) const {
-			auto FunctionImp = [](void* FunctionBody, Element& data) -> std::any {
-				return  std::forward<RespondFunction>(*static_cast<std::remove_reference_t<RespondFunction>*>(FunctionBody))(data);
-			};
-			return operator()(FunctionImp, static_cast<void*>(&Func));
-		}
+		std::any operator()(std::function<std::any(NTElement&)> NTFunc, std::function<std::any(TElement&)> TFun) const;
 	};
 
 	History Process(Table const& Table, Symbol const* TokenArray, size_t TokenLength);
 
-	inline std::any Process(History const& ref, std::any(*Function)(void*, Element&), void* FunctionBody) { return ref(Function, FunctionBody); }
+	inline std::any Process(History const& ref, std::function<std::any(NTElement&)> NTFunc, std::function<std::any(TElement&)> TFun) { return ref(std::move(NTFunc), std::move(TFun)); }
 
-	inline std::any Process(Table const& Table, Symbol const* TokenArray, size_t TokenLength, std::any(*Function)(void*, Element&), void* FunctionBody)
+	inline std::any Process(Table const& Table, Symbol const* TokenArray, size_t TokenLength, std::function<std::any(NTElement&)> NTFunc, std::function<std::any(TElement&)> TFun)
 	{
 		auto His = Process(Table, TokenArray, TokenLength);
-		return Process(His, Function, FunctionBody);
+		return Process(His, std::move(NTFunc), std::move(TFun));
 	}
 
 	template<typename RespondFunction>

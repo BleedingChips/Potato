@@ -42,13 +42,13 @@
     <ClInclude Include="..\..\Potato\Public\StrScanner.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\Symbol.h">
-      <Filter>Public</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Potato\Public\tmp.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Potato\Public\Unfa.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Public\Grammar.h">
       <Filter>Public</Filter>
     </ClInclude>
   </ItemGroup>
@@ -77,10 +77,10 @@
     <ClCompile Include="..\..\Potato\Private\StrScanner.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\Symbol.cpp">
+    <ClCompile Include="..\..\Potato\Private\Unfa.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\Unfa.cpp">
+    <ClCompile Include="..\..\Potato\Private\Grammar.cpp">
       <Filter>Private</Filter>
     </ClCompile>
   </ItemGroup>

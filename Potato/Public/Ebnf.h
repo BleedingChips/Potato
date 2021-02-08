@@ -36,7 +36,7 @@ namespace Potato::Ebnf
 				size_t production_count = 0;
 			}reduce;
 			struct {
-				std::u32string_view capture = 0;
+				std::u32string_view capture;
 				size_t mask = 0;
 			}shift;
 		};
@@ -45,6 +45,57 @@ namespace Potato::Ebnf
 		bool IsNoterminal() const noexcept { return !IsTerminal(); }
 	};
 
+	struct TElement
+	{
+		size_t state = 0;
+		std::u32string_view string;
+		Section section;
+		std::u32string_view capture = 0;
+		size_t mask = 0;
+		TElement(Step const& step) : state(step.state), string(step.string), section(step.section), capture(step.shift.capture), mask(step.shift.mask)
+		{
+			assert(step.IsTerminal());
+		}
+		TElement(TElement const&) = default;
+		TElement& operator=(TElement const&) = default;
+	};
+
+	struct NTElement
+	{
+		struct Property : Step
+		{
+			Property() {}
+			Property(Step step, std::any datas) : Step(step), data(std::move(datas)){}
+			Property(Property const&) = default;
+			Property(Property&&) = default;
+			Property& operator=(Property&& p) = default;
+			Property& operator=(Property const& p) = default;
+			std::any data;
+			template<typename Type>
+			Type GetData() { return std::any_cast<Type>(data); }
+			template<typename Type>
+			Type* TryGetData() { return std::any_cast<Type>(&data); }
+			template<typename Type>
+			std::remove_reference_t<Type> MoveData() { return std::move(std::any_cast<std::add_lvalue_reference_t<Type>>(data)); }
+			std::any MoveRawData() { return std::move(data); }
+		};
+		size_t state = 0;
+		std::u32string_view string;
+		Section section;
+		size_t mask = 0;
+		size_t production_count = 0;
+		Property* datas = nullptr;
+		Property& operator[](size_t index) { return datas[index]; }
+		Property* begin() { return datas; }
+		Property* end() { return datas + production_count;}
+		NTElement(Step const& ref) : state(ref.state), string(ref.string), section(ref.section), mask(ref.reduce.mask), production_count(ref.reduce.production_count)
+		{
+			assert(!ref.IsTerminal());
+		}
+		NTElement& operator=(NTElement const&) = default;
+	};
+
+	/*
 	struct Element : Step
 	{
 		struct Property : Step
@@ -70,23 +121,20 @@ namespace Potato::Ebnf
 		Property* end() {assert(Step::IsNoterminal()); return datas + reduce.production_count;}
 		Element(Step const& ref) : Step(ref) {}
 	};
+	*/
 
 	struct History
 	{
 		std::vector<Step> steps;
-		std::any operator()(std::any(*Function)(void*, Element&), void* FUnctionBody) const;
-		template<typename RespondFunction>
-		std::any operator()(RespondFunction&& Func) const{
-			auto FunctionImp = [](void* FunctionBody, Element& data) -> std::any {
-				return  std::forward<RespondFunction>(*static_cast<std::remove_reference_t<RespondFunction>*>(FunctionBody))(data);
-			};
-			return operator()(FunctionImp, static_cast<void*>(&Func));
-		}
+		std::any operator()(std::function<std::any(NTElement&)> NTFunc, std::function<std::any(TElement&)> TFunc) const;
 		std::vector<std::u32string> Expand() const;
 	};
 
 	History Process(Table const& Tab, std::u32string_view Code);
-	inline std::any Process(History const& His, std::any(*Function)(void*, Element&), void* FUnctionBody) { return His(Function, FUnctionBody); }
+	inline std::any Process(History const& His, std::function<std::any(NTElement&)> NTFunc, std::function<std::any(TElement&)> TFunc)
+	{
+		return His(std::move(NTFunc), std::move(TFunc));
+	}
 	template<typename RespondFunction>
 	std::any Process(History const& ref, RespondFunction&& Func) { return ref(std::forward<RespondFunction>(Func));}
 	template<typename RequireType, typename RespondFunction>

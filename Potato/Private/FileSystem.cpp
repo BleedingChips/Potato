@@ -117,28 +117,9 @@ namespace Potato::FileSystem
 		{
 			Path Result;
 			auto His = Ebnf::Process(ref, Input);
-			His([&](Ebnf::Element& Ele) -> std::any
+			His([&](Ebnf::NTElement& Ele) -> std::any
 			{
-				if(Ele.IsTerminal())
-				{
-					switch(Ele.shift.mask)
-					{
-					case 0:
-						return Element{ ElementStyle::File, static_cast<size_t>(Ele.shift.capture.data() - Input.data()), Ele.shift.capture.size() };
-					case 1:
-						return Element{ ElementStyle::Root, static_cast<size_t>(Ele.shift.capture.data() - Input.data()), Ele.shift.capture.size() };
-					case 2:
-						return Element{ ElementStyle::Self, static_cast<size_t>(Ele.shift.capture.data() - Input.data()), Ele.shift.capture.size() };
-					case 3:
-						return Element{ ElementStyle::Upper, static_cast<size_t>(Ele.shift.capture.data() - Input.data()), Ele.shift.capture.size() };
-					case 4:
-						return Element{ ElementStyle::Root, static_cast<size_t>(Ele.shift.capture.data() - Input.data()), Ele.shift.capture.size() };
-					default:
-						return {};
-					}
-				}else if(Ele.IsNoterminal())
-				{
-					switch (Ele.reduce.mask)
+				switch (Ele.mask)
 					{
 					case 0:
 					{
@@ -147,7 +128,7 @@ namespace Potato::FileSystem
 					case 1:
 					{
 						std::vector<Element> Res;
-						for(size_t i = 0; i < Ele.reduce.production_count; ++i)
+						for(size_t i = 0; i < Ele.production_count; ++i)
 						{
 							if(Ele[i].IsNoterminal())
 							{
@@ -163,7 +144,7 @@ namespace Potato::FileSystem
 						auto Temp = Ele[0].GetData<Element>();
 						Result.elements.push_back(Temp);
 						Result.path = Temp(Input);
-						if(Ele.reduce.production_count >= 2)
+						if(Ele.production_count >= 2)
 						{
 							auto P = Ele[1].MoveData<std::vector<Element>>();
 							if (!Result.Insert(Input, P.data(), P.size()))
@@ -183,7 +164,7 @@ namespace Potato::FileSystem
 						auto Temp = Ele[0].GetData<Element>();
 						Result.elements.push_back(Temp);
 						Result.path = Temp(Input);
-						if (Ele.reduce.production_count >= 2)
+						if (Ele.production_count >= 2)
 						{
 							auto P = Ele[1].MoveData<std::vector<Element>>();
 							if(!Result.Insert(Input, P.data(), P.size()))
@@ -204,9 +185,26 @@ namespace Potato::FileSystem
 					}break;
 					}
 					return {};
+			},
+			[&](Ebnf::TElement& Ele) -> std::any
+			{
+				switch(Ele.mask)
+				{
+				case 0:
+					return Element{ ElementStyle::File, static_cast<size_t>(Ele.capture.data() - Input.data()), Ele.capture.size() };
+				case 1:
+					return Element{ ElementStyle::Root, static_cast<size_t>(Ele.capture.data() - Input.data()), Ele.capture.size() };
+				case 2:
+					return Element{ ElementStyle::Self, static_cast<size_t>(Ele.capture.data() - Input.data()), Ele.capture.size() };
+				case 3:
+					return Element{ ElementStyle::Upper, static_cast<size_t>(Ele.capture.data() - Input.data()), Ele.capture.size() };
+				case 4:
+					return Element{ ElementStyle::Root, static_cast<size_t>(Ele.capture.data() - Input.data()), Ele.capture.size() };
+				default:
+					return {};
 				}
-				return {};
-			});
+			}
+			);
 			*this = std::move(Result);
 		}catch (Ebnf::Exception::Interface const&)
 		{

@@ -73,52 +73,52 @@ int main()
 
 	auto His = Lr0::Process(tab, Syms.data(), Syms.size());
 
-	int result = std::any_cast<int>(Lr0::Process(His, [&](Lr0::Element& E) -> std::any {
-		if (E.IsTerminal())
+	int result = std::any_cast<int>(Lr0::Process(His, [&](Lr0::NTElement& E) -> std::any {
+		switch (E.mask)
 		{
-			if (E.value == *Terminal::Num)
-				return Datas[E.shift.token_index];
-		}
-		else {
-			switch (E.reduce.mask)
-			{
-			case 1: return std::move(E.GetRawData(0));
-			case 2: return E.GetData<int>(0) + E.GetData<int>(2);
-			case 3: return E.GetData<int>(0) * E.GetData<int>(2);
-			default:
-				break;
-			}
+		case 1: return std::move(E.GetRawData(0));
+		case 2: return E.GetData<int>(0) + E.GetData<int>(2);
+		case 3: return E.GetData<int>(0) * E.GetData<int>(2);
+		default:
+			break;
 		}
 		return {};
-	}));
+	},
+	[&](Lr0::TElement& E) -> std::any
+	{
+		if (E.value == *Terminal::Num)
+			return Datas[E.token_index];
+		return {};
+	}
+	));
 
 	std::cout << result << std::endl;
 	
 	Ebnf::Table tab2 = Ebnf::CreateTable(EbnfCode1());
 	auto His2 = Ebnf::Process(tab2, U"1 + 2 + 3 * 4 - 4 / 2 + 2 * +3 * -2");
-	int result2 = std::any_cast<int>(Ebnf::Process(His2, [](Ebnf::Element& e) -> std::any {
-		if (e.IsTerminal())
+	int result2 = std::any_cast<int>(Ebnf::Process(His2, [](Ebnf::NTElement& e) -> std::any {
+		switch (e.mask)
 		{
-			if (e.shift.mask == 1)
-			{
-				int Data;
-				StrScanner::DirectProcess(e.shift.capture, Data);
-				return Data;
-			}
-		}
-		else {
-			switch (e.reduce.mask)
-			{
-			case 1: return e[0].MoveRawData();
-			case 2: return e[0].GetData<int>() + e[2].GetData<int>();
-			case 3: return e[0].GetData<int>() * e[2].GetData<int>();
-			case 4: return e[0].GetData<int>() / e[2].GetData<int>();
-			case 5: return e[0].GetData<int>() - e[2].GetData<int>();
-			case 6: return e[0].MoveRawData();
-			}
+		case 1: return e[0].MoveRawData();
+		case 2: return e[0].GetData<int>() + e[2].GetData<int>();
+		case 3: return e[0].GetData<int>() * e[2].GetData<int>();
+		case 4: return e[0].GetData<int>() / e[2].GetData<int>();
+		case 5: return e[0].GetData<int>() - e[2].GetData<int>();
+		case 6: return e[0].MoveRawData();
 		}
 		return {};
-	}));
+	},
+	[](Ebnf::TElement& e)->std::any
+	{
+		if (e.mask == 1)
+		{
+			int Data;
+			StrScanner::DirectProcess(e.capture, Data);
+			return Data;
+		}
+		return {};
+	}
+	));
 
 	std::cout << result2 << std::endl;
 }

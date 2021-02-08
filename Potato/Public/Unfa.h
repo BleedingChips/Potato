@@ -126,6 +126,7 @@ namespace Potato::Unfa
 		std::optional<March> Mark(std::u32string_view string, bool greey = true) const;
 		std::byte const* data = nullptr;
 		size_t data_length = 0;
+		
 	};
 
 	struct SerilizedTable
@@ -147,8 +148,6 @@ namespace Potato::Unfa
 		SerilizedTable(SerilizedTable&&) = default;
 		SerilizedTable& operator=(SerilizedTable const&) = default;
 		SerilizedTable& operator=(SerilizedTable&&) = default;
-		
-		
 	private:
 		std::vector<std::byte> datas;
 	};
