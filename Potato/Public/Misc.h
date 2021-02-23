@@ -500,8 +500,14 @@ namespace Potato::Misc
 	template<typename ...type>
 	struct any_visitor
 	{
-		template<typename any_t, typename callable_function>
-		std::enable_if_t<std::is_same_v<std::remove_cv_t<any_t>, std::any>, bool> operator()(any_t&& anys, callable_function&& cf)
+		template<typename callable_function>
+		bool operator()(std::any& anys, callable_function&& cf) const
+		{
+			return false;
+		}
+
+		template<typename callable_function>
+		bool operator()(std::any const& anys, callable_function&& cf) const
 		{
 			return false;
 		}
@@ -510,15 +516,27 @@ namespace Potato::Misc
 	template<typename cur_type, typename ...type>
 	struct any_visitor<cur_type, type...>
 	{
-		template<typename any_t, typename callable_function>
-		std::enable_if_t<std::is_same_v<std::remove_cvref_t<any_t>, std::any>, bool> operator()(any_t&& in_any, callable_function&& cf)
+
+		template<typename callable_function>
+		bool operator()(std::any& anys, callable_function&& cf) const
 		{
-			if(auto P = std::any_cast<cur_type*>(std::forward<any_t>(in_any)); P != nullptr)
+			if(auto P = std::any_cast<cur_type>(&anys); P != nullptr)
 			{
 				std::forward<callable_function>(cf)(*P);
 				return true;
 			}
-			return any_visitor<type...>{}(std::forward<any_t>(in_any), std::forward<callable_function>(cf));
+			return any_visitor<type...>{}(anys, std::forward<callable_function>(cf));
+		}
+
+		template<typename callable_function>
+		bool operator()(std::any const& anys, callable_function&& cf) const
+		{
+			if(auto P = std::any_cast<std::add_lvalue_reference_t<cur_type>>(&anys); P != nullptr)
+			{
+				std::forward<callable_function>(cf)(*P);
+				return true;
+			}
+			return any_visitor<type...>{}(anys, std::forward<callable_function>(cf));
 		}
 	};
 	

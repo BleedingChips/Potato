@@ -51,7 +51,7 @@ namespace Potato::Grammar
 			Section section;
 			std::any property;
 			template<typename RequireType>
-			RequireType* TryCast() noexcept { return std::any_cast<RequireType*>(&property); }
+			RequireType* TryCast() noexcept { return std::any_cast<RequireType>(&property); }
 			template<typename RequireType>
 			RequireType const* TryCast() const noexcept { return std::any_cast<RequireType const*>(&property); }
 		};
@@ -82,7 +82,6 @@ namespace Potato::Grammar
 			bool is_active;
 			size_t index;
 		};
-		size_t area_index = 0;
 		std::vector<Property> unactive_scope;
 		std::vector<Property> active_scope;
 		std::vector<Mapping> mapping;

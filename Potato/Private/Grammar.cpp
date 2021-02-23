@@ -54,7 +54,7 @@ namespace Potato::Grammar
 	{
 		count = std::min(count, active_scope.size());
 		assert(count <= active_scope.size());
-		SymbolAreaMask current_area{area_index++};
+		SymbolAreaMask current_area{areas.size()};
 		for(auto i = active_scope.end() - count; i != active_scope.end(); ++i)
 			i->area = current_area;
 		auto unactive_scope_size = unactive_scope.size();
@@ -71,6 +71,7 @@ namespace Potato::Grammar
 			mapp.is_active = false;
 			mapp.index = unactive_scope_size + count - i - 1;
 		}
+		areas.push_back({unactive_scope_size, count});
 		return current_area;
 	}
 	
