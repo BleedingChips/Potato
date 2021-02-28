@@ -31,7 +31,7 @@ int main()
 	auto P = FileSystem::Current();
 	auto Ite = P.FindFileFromParent(U"Potato", 6);
 
-	Lexical::LexicalRegexInitTuple Rexs[] = {
+	Lexical::RegexInitTuple Rexs[] = {
 		{UR"((\+|\-)?[1-9][0-9]*)", },
 		{UR"(\+)", },
 		{UR"(\*)", },
@@ -73,7 +73,7 @@ int main()
 
 	auto His = Lr0::Process(tab, Syms.data(), Syms.size());
 
-	int result = std::any_cast<int>(Lr0::Process(His, [&](Lr0::NTElement& E) -> std::any {
+	int result = std::any_cast<int>(Lr::Process(His, [&](Lr0::NTElement& E) -> std::any {
 		switch (E.mask)
 		{
 		case 1: return std::move(E.GetRawData(0));

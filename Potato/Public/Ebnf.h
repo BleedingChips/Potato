@@ -1,7 +1,11 @@
 #pragma once
+
+#include <assert.h>
+
 #include "Lr0.h"
 #include "Lexical.h"
-#include <assert.h>
+
+
 namespace Potato::Ebnf
 {
 
@@ -139,76 +143,83 @@ namespace Potato::Ebnf
 	std::any Process(History const& ref, RespondFunction&& Func) { return ref(std::forward<RespondFunction>(Func));}
 	template<typename RequireType, typename RespondFunction>
 	RequireType ProcessWrapper(History const& ref, RespondFunction&& Func) { return std::any_cast<RequireType>(ref(std::forward<RespondFunction>(Func))); }
+}
 
+namespace Potato::Exception::Ebnf
+{
+	using Potato::Ebnf::Section;
 
-	namespace Exception
+	struct Interface
 	{
+		virtual ~Interface() = default;
+	};
 
-		struct Interface
-		{
-			virtual ~Interface() = default;
-		};
-		
-		struct ExceptionStep
-		{
-			std::u32string name;
-			bool is_terminal = false;
-			size_t production_mask = Lr0::ProductionInput::default_mask();
-			size_t production_count = 0;
-			std::u32string capture;
-			Section section;
-		};
+	using BaseDefineInterface = DefineInterface<Interface>;
 
-		struct MissingStartSymbol {};
+	struct ExceptionStep
+	{
+		using ExceptionInterface = BaseDefineInterface;
+		std::u32string name;
+		bool is_terminal = false;
+		size_t production_mask = Lr0::ProductionInput::default_mask();
+		size_t production_count = 0;
+		std::u32string capture;
+		Section section;
+	};
 
-		struct UndefinedTerminal {
-			std::u32string token;
-			Section section;
-		};
+	struct MissingStartSymbol { using ExceptionInterface = BaseDefineInterface;  };
 
-		struct UndefinedNoterminal {
-			std::u32string token;
-		};
+	struct UndefinedTerminal {
+		using ExceptionInterface = BaseDefineInterface;
+		std::u32string token;
+		Section section;
+	};
 
-		struct UnsetDefaultProductionHead {};
+	struct UndefinedNoterminal {
+		using ExceptionInterface = BaseDefineInterface;
+		std::u32string token;
+	};
 
-		struct RedefinedStartSymbol {
-			Section section;
-		};
+	struct UnsetDefaultProductionHead { using ExceptionInterface = BaseDefineInterface; };
 
-		struct UncompleteEbnf
-		{
-			size_t used;
-		};
+	struct RedefinedStartSymbol {
+		using ExceptionInterface = BaseDefineInterface;
+		Section section;
+	};
 
-		struct UnacceptableToken {
-			std::u32string token;
-			Section section;
-		};
+	struct UncompleteEbnf
+	{
+		using ExceptionInterface = BaseDefineInterface;
+		size_t used;
+	};
 
-		struct UnacceptableSyntax {
-			std::u32string type;
-			std::u32string data;
-			Section section;
-			std::vector<std::u32string> exception_step;
-		};
+	struct UnacceptableToken {
+		using ExceptionInterface = BaseDefineInterface;
+		std::u32string token;
+		Section section;
+	};
 
-		struct UnacceptableRegex
-		{
-			std::u32string regex;
-			size_t acception_mask;
-		};
+	struct UnacceptableSyntax {
+		using ExceptionInterface = BaseDefineInterface;
+		std::u32string type;
+		std::u32string data;
+		Section section;
+		std::vector<std::u32string> exception_step;
+	};
 
-		/*
-		struct ErrorMessage {
-			std::u32string message;
-			Nfa::Location loc;
-		};
-		*/
-	}
+	struct UnacceptableRegex
+	{
+		using ExceptionInterface = BaseDefineInterface;
+		std::u32string regex;
+		size_t acception_mask;
+	};
 
-	template<typename StorageInfo>
-	auto MakeException(StorageInfo&& info) { return Potato::Misc::create_exception_tuple<Exception::Interface>(std::forward<StorageInfo>(info)); }
+	/*
+	struct ErrorMessage {
+		std::u32string message;
+		Nfa::Location loc;
+	};
+	*/
 }
 
 namespace Potato::StrFormat

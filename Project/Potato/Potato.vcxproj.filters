@@ -18,13 +18,7 @@
     <ClInclude Include="..\..\Potato\Public\FileSystem.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\Interval.h">
-      <Filter>Public</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Potato\Public\IntrusivePointer.h">
-      <Filter>Public</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\Lexical.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Potato\Public\Lr0.h">
@@ -42,13 +36,22 @@
     <ClInclude Include="..\..\Potato\Public\StrScanner.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\tmp.h">
-      <Filter>Public</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Potato\Public\Unfa.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Potato\Public\Grammar.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Public\Lr.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Public\Lexical.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Public\TMP.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Public\Interval.h">
       <Filter>Public</Filter>
     </ClInclude>
   </ItemGroup>
@@ -81,6 +84,9 @@
       <Filter>Private</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Potato\Private\Grammar.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Potato\Private\Lr.cpp">
       <Filter>Private</Filter>
     </ClCompile>
   </ItemGroup>

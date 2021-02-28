@@ -1,543 +1,260 @@
 #pragma once
-#include <assert.h>
-#include <atomic>
-#include <mutex>
-#include <typeindex>
-#include <optional>
+#include <utility>
 #include <type_traits>
-#include <array>
+#include <concepts>
 #include <any>
-#include "Tmp.h"
-namespace Potato::Misc
+#include <atomic>
+#include <cassert>
+
+#include "TMP.h"
+
+namespace Potato
 {
-	namespace Implement
+	namespace Exception
 	{
-		template<typename T> struct base_value_inherit {
-			T data;
-			base_value_inherit() noexcept {}
-			base_value_inherit(T t) noexcept : data(std::move(t)) {}
-			base_value_inherit(const base_value_inherit&) = default;
-			base_value_inherit(base_value_inherit&&) = default;
-			base_value_inherit& operator=(const base_value_inherit&) = default;
-			base_value_inherit& operator=(base_value_inherit&&) = default;
-			operator T& () noexcept { return data; }
-			operator T() const noexcept { return data; }
-			base_value_inherit& operator=(T t) noexcept { data = t; return *this; }
+		template<typename ...InterfaceT>
+		struct DefineInterface {};
+
+		template<typename ...Interface>
+		struct ExceptionInterfaceTuple {};
+
+		template<typename CurInterface, typename ...Interface>
+		struct ExceptionInterfaceTuple<CurInterface, Interface...> : public CurInterface, ExceptionInterfaceTuple<Interface...>
+		{
 		};
 
-		template<> struct base_value_inherit<void> {
-			base_value_inherit() noexcept {}
-			base_value_inherit& operator= (const base_value_inherit&) = default;
-			base_value_inherit& operator= (base_value_inherit&&) = default;
-			base_value_inherit(const base_value_inherit&) = default;
-			base_value_inherit(base_value_inherit&&) = default;
+		template<typename Storage, std::default_initializable ...Interface>
+		struct ExceptionTuple : public ExceptionInterfaceTuple<Interface...>, public Storage
+		{
+			ExceptionTuple(Storage&& stro) : Storage(std::move(stro)) {};
+			ExceptionTuple(Storage const& stro) : Storage(stro) {}
+			ExceptionTuple(ExceptionTuple&&) = default;
+			ExceptionTuple(ExceptionTuple const&) = default;
 		};
+
+		template<typename Type> struct IsDefineInterface { static constexpr bool Value = false; };
+		template<typename ...Type> struct IsDefineInterface<DefineInterface<Type...>> { static constexpr bool Value = true; };
+		template<typename Type, typename = std::enable_if_t< IsDefineInterface<typename Type::ExceptionInterface>::Value>>
+		struct HasExceptionInterfaceTupleRole {};
+
+		template<typename ExceptionT>
+		auto MakeExceptionTuple(ExceptionT&& ET)
+		{
+			using RequireType = std::remove_all_extents_t<ExceptionT>;
+			if constexpr (Exist<RequireType, HasExceptionInterfaceTupleRole>::Value)
+			{
+				using RealType = typename Replace<typename RequireType::ExceptionInterface>::template With<Instant<ExceptionTuple, RequireType>::template AppendT>;
+				return RealType{ std::forward<ExceptionT>(ET) };
+			}
+			else {
+				return ExceptionTuple<RequireType>{std::forward<ExceptionT>(ET)};
+			}
+		}
+
+
+
+		/*
+		template<typename ...RequireType>
+		struct AnyViewerImplementation
+		{
+			template<typename Funuction>
+			void UniteCall(Funuction&& Func){ return false; }
+			void SperateCall() { return false; }
+		};
+
+		template<typename CurType, typename ...RequireType>
+		struct AnyViewerImp
+		{
+			template<typename >
+		};
+
+		export template<typename ExceptionT>
+			struct AnyViewer
+		{
+		};
+		*/
 	}
 
-	template<typename T> using inherit_t = std::conditional_t<
-		std::is_arithmetic<T>::value || std::is_same_v<T, void>,
-		Implement::base_value_inherit<T>, T
-	>;
+	template<typename RequireType>
+	struct SelfCompare
+	{
+		auto operator()(RequireType const& i1, RequireType const& i2) const { return i1 <=> i2; }
+	};
+
 
 	/*
-	// static_mapping 
-	namespace Implement
-	{
-		template<typename equal_ope, typename less_ope, size_t s, size_t o, typename ...input>
-		struct static_mapping_implement
-		{
-			template<typename T, typename equal_func, typename default_func>
-			decltype(auto) operator()(T&& t, equal_func&& ef, default_func&& df) const
-			{
-				using pick_type = TmpCall::call<TmpCall::append<input...>, TmpCall::select_index<std::integral_constant<size_t, (s + o) / 2>>, TmpCall::self>;
-				if (equal_ope{}(Tmp::itself<pick_type>(), std::forward<T>(t)))
-				{
-					return ef(Tmp::itself<pick_type>());
-				}
-				else if (less_ope{}(Tmp::itself<pick_type>(), std::forward<T>(t)))
-				{
-					return static_mapping_implement<equal_ope, less_ope, s, (s + o) / 2, input...>{}(std::forward<T>(t), std::forward<equal_func>(ef), std::forward<default_func>(df));
-				}
-				else
-				{
-					return static_mapping_implement<equal_ope, less_ope, (s + o) / 2 + 1, o, input...>{}(std::forward<T>(t), std::forward<equal_func>(ef), std::forward<default_func>(df));
-				}
-			}
-		};
-
-		template<class equal_ope, class less_ope, size_t s, typename ...input>
-		struct static_mapping_implement<equal_ope, less_ope, s, s, input...>
-		{
-			template<typename T, typename equal_func, typename default_func>
-			decltype(auto) operator()(T&& t, equal_func&& ef, default_func&& df) const
-			{
-				return df();
-			}
-		};
-	}
-
-	template<typename equal_ope, typename less_ope>
-	struct make_static_mapping
-	{
-		template<typename ...input> struct in
-		{
-			using type = Implement::static_mapping_implement<equal_ope, less_ope, 0, sizeof...(input), input...>;
-		};
+	export template<typename ...RequireType>
+	struct AnyOnlyViewer {
+		template<typename ViewerFunction>
+		AnyOnlyViewer(std::any& any, ViewerFunction&& function) : result(false) {}
+		template<typename ViewerFunction>
+		AnyOnlyViewer(std::any const& any, ViewerFunction&& function) : result (false) {}
+		operator bool() const noexcept { return result; }
+	private:
+		bool result;
 	};
 
-	template<class equal_ope, class less_ope, typename ...input>
-	using static_mapping_t = Implement::static_mapping_implement<less_ope, equal_ope, 0, sizeof...(input), input...>;
+	export template<typename ReuqireType, typename ...LastRequireType>
+	struct AnyOnlyViewer<ReuqireType, LastRequireType...> {
+		template<typename ViewerFunction>
+		AnyOnlyViewer(std::any& any, ViewerFunction&& function)
+		{
+			if (auto re = std::any_cast<ReuqireType>(&any); re != nullptr)
+			{
+				result = true;
+				std::forward<ViewerFunction>(function)(*re);
+			}
+			else {
+				result = AnyOnlyViewer<LastRequireType...>{any, std::forward<ViewerFunction>(function)};
+			}
+		}
+		template<typename ViewerFunction>
+		AnyOnlyViewer(std::any const& any, ViewerFunction&& function)
+		{
+			if (auto re = std::any_cast<ReuqireType>(&any); re != nullptr)
+			{
+				result = true;
+				std::forward<ViewerFunction>(function)(*re);
+			}
+			else {
+				result = AnyOnlyViewer<LastRequireType...>{any, std::forward<ViewerFunction>(function)};
+			}
+		}
+		operator bool() const noexcept { return result; }
+	private:
+		bool result;
+	};
 	*/
 
-	template<typename T> class aligned_class
+	inline bool AnyViewer(std::any const& ref)
 	{
-		char storage[sizeof(T) + alignof(T) - 1];
-		void* get_pointer() const {
-			size_t space = sizeof(T) + alignof(T) - 1;
-			void* ptr = storage;
-			std::align(alignof(T), sizeof(T), ptr, space);
-			return ptr;
-		}
-
-	public:
-
-		operator T& () { return *static_cast<T*>(get_pointer()); }
-		operator const T& () const { return *static_cast<const T*>(get_pointer()); }
-
-		T* operator->() { return static_cast<T*>(get_pointer()); }
-		const T* operator->() const { return static_cast<const T*>(get_pointer()); }
-
-		template<typename ...AT> aligned_class(AT&& ...at) {
-			new (get_pointer()) T(std::forward<AT>(at)...);
-		}
-
-		~aligned_class()
-		{
-			static_cast<T*>(get_pointer())->~T();
-		}
-	};
-
-	namespace Implement
-	{
-		template<size_t s, typename ...T> struct max_align_implement
-		{
-			static constexpr size_t value = s;
-		};
-
-		template<size_t s, typename K, typename ...T> struct max_align_implement<s, K, T...>
-		{
-			static constexpr size_t value = max_align_implement<(s > alignof(K) ? s : alignof(K)), T...>::value;
-		};
+		return false;
 	}
 
-	template<typename ...T> struct max_align : public  Implement::max_align_implement<0, T...> {};
-
-	template<typename value_type> struct stack_list
+	template<typename CurObject, typename ...FunctionObject>
+	bool AnyViewer(std::any const& ref, CurObject&& co, FunctionObject&& ...input_fo)
 	{
-		value_type& type_ref;
-		stack_list* front;
-		stack_list(value_type& ref, stack_list* f = nullptr) noexcept : type_ref(ref), front(f) {}
-	};
-
-	template<typename value_type, typename callable_function, typename ...other_type> decltype(auto) make_stack_list(callable_function&& ca, stack_list<value_type>* sl = nullptr) noexcept
-	{
-		return ca(sl);
-	}
-
-	template<typename value_type, typename callable_function, typename ...other_type> decltype(auto) make_stack_list(callable_function&& ca, stack_list<value_type>* sl, value_type& ref, other_type&& ...ot) noexcept
-	{
-		stack_list<value_type> temporary{ ref, sl };
-		return make_stack_list<value_type>(std::forward<callable_function>(ca), &temporary, std::forward<other_type>(ot)...);
-	}
-
-	template<typename value_type, typename callable_function, typename ...other_type> decltype(auto) make_stack_list(callable_function&& ca, value_type& ref, other_type&& ...ot) noexcept
-	{
-		stack_list<value_type> temporary{ ref };
-		return make_stack_list<value_type>(std::forward<callable_function>(ca), &temporary, std::forward<other_type>(ot)...);
-	}
-
-	template<typename interface_t = void> struct info_interface : inherit_t<interface_t>
-	{
-		bool is(std::type_index info) const noexcept { return info == m_info; }
-		template<typename type> bool is() const noexcept { return is(typeid(type)); }
-		std::type_index info() const noexcept { return m_info; }
-		template<typename ...T>
-		info_interface(std::type_index info, T&& ... t) : m_info(info), inherit_t<interface_t>(std::forward<T>(t)...) {};
-		template<typename T> T& cast() noexcept { assert(is<T>()); return static_cast<T&>(*this); }
-		template<typename T> const T& cast() const noexcept { assert(is<T>()); return static_cast<const T&>(*this); }
-	protected:
-		info_interface(const info_interface& other) : m_info(m_info), inherit_t<interface_t>(static_cast<const interface_t&>(other)) {}
-		info_interface(info_interface&& other) : m_info(m_info), inherit_t<interface_t>(static_cast<interface_t&&>(other)) {}
-		info_interface& operator=(const info_interface& other) { inherit_t<interface_t>::operator=(static_cast<const interface_t&>(other)); return *this; }
-		info_interface& operator=(info_interface&& other) { inherit_t<interface_t>::operator=(static_cast<interface_t&&>(other)); return *this; }
-	private:
-		std::type_index m_info;
-	};
-
-	template<typename Interface, typename HoldType> struct default_deflection_interface : Interface, inherit_t<HoldType>
-	{
-		template<typename ...AT>
-		default_deflection_interface(AT&& ...at) : Interface(typeid(default_deflection_interface)), inherit_t<HoldType>(std::forward<AT>(at)...) {}
-	};
-
-	template<template<typename...> class implement_t = default_deflection_interface, typename interface_t = void> struct deflection_interface : info_interface<interface_t>
-	{
-		using info_interface<interface_t>::info_interface;
-		template<typename type> type& cast() noexcept { assert(this->is<type>()); return static_cast<type&>(static_cast<implement_t<deflection_interface, type>&>(*this)); }
-		template<typename type> const type& cast() const noexcept { assert(this->is<type>()); return static_cast<const type&>(static_cast<const implement_t<deflection_interface, type>&>(*this)); }
-		template<typename T, typename ...AT> bool cast(T&& t, AT&& ...at) noexcept
+		using FunT = std::remove_cvref_t<CurObject>;
+		if constexpr (std::is_function_v<FunT>)
 		{
-			using funtype = Tmp::pick_func<typename Tmp::degenerate_func<Tmp::extract_func_t<T>>::type>;
-			static_assert(funtype::size == 1, "only receive one parameter");
-			using true_type = std::decay_t<typename funtype::template out<Tmp::itself>::type>;
-			//static_assert(std::is_base_of<base_interface, true_type>::value, "need derived form base_interface.");
-			if (this->is<true_type>())
-				return (t(cast<true_type>(), std::forward<AT>(at)...), true);
-			return false;
+			using RequireType = typename FunctionInfo<FunT>::template PackParameters<ItSelf>::Type;
+			if (auto P = std::any_cast<RequireType>(&ref); P != nullptr)
+			{
+				std::forward<CurObject>(co)(*P);
+				return true;
+			}
+			else {
+				return AnyViewer(ref, std::forward<FunctionObject>(input_fo)...);
+			}
 		}
-		template<typename type> using instance_t = implement_t<deflection_interface, type>;
-	};
+		else if constexpr (IsFunctionObject<FunT>::Value)
+		{
+			using RequireType = typename FunctionObjectInfo<FunT>::template PackParameters<ItSelf>::Type;
+			if (auto P = std::any_cast<RequireType>(&ref); P != nullptr)
+			{
+				std::forward<CurObject>(co)(*P);
+				return true;
+			}
+			else {
+				return AnyViewer(ref, std::forward<FunctionObject>(input_fo)...);
+			}
+		}
+		else
+			static_assert(false, "wrong function type");
+	}
 
-	class atomic_reference_count
+	inline bool AnyViewer(std::any& ref)
 	{
-		std::atomic_size_t ref = 0;
+		return false;
+	}
 
-	public:
+	template<typename CurObject, typename ...FunctionObject>
+	bool AnyViewer(std::any& ref, CurObject&& co, FunctionObject&& ...input_fo)
+	{
+		using FunT = std::remove_cvref_t<CurObject>;
+		if constexpr (std::is_function_v<FunT>)
+		{
+			using RequireType = typename FunctionInfo<FunT>::template PackParameters<ItSelf>::Type;
+			if (auto P = std::any_cast<RequireType>(&ref); P != nullptr)
+			{
+				std::forward<CurObject>(co)(*P);
+				return true;
+			}
+			else {
+				return AnyViewer(ref, std::forward<FunctionObject>(input_fo)...);
+			}
+		}
+		else if constexpr (IsFunctionObject<FunT>::Value)
+		{
+			using RequireType = typename FunctionObjectInfo<FunT>::template PackParameters<ItSelf>::Type;
+			if (auto P = std::any_cast<RequireType>(&ref); P != nullptr)
+			{
+				std::forward<CurObject>(co)(*P);
+				return true;
+			}
+			else {
+				return AnyViewer(ref, std::forward<FunctionObject>(input_fo)...);
+			}
+		}
+		else
+			static_assert(false, "wrong function type");
+	}
 
-		void wait_touch(size_t targe_value) const noexcept;
-
-		bool try_add_ref() noexcept;
-
-		void add_ref() noexcept
+	struct AtomicRefCount
+	{
+		void WaitTouch(size_t targe_value) const noexcept;
+		bool TryAndRef() const noexcept;
+		void AddRef() const noexcept
 		{
 			assert(static_cast<std::ptrdiff_t>(ref.load(std::memory_order_relaxed)) >= 0);
 			ref.fetch_add(1, std::memory_order_relaxed);
 		}
-
-		bool sub_ref() noexcept
+		bool SubRef() const noexcept
 		{
 			assert(static_cast<std::ptrdiff_t>(ref.load(std::memory_order_relaxed)) >= 0);
 			return ref.fetch_sub(1, std::memory_order_relaxed) == 1;
 		}
 
-		size_t count() const noexcept { return ref.load(std::memory_order_relaxed); }
+		size_t Count() const noexcept { return ref.load(std::memory_order_relaxed); }
 
-		atomic_reference_count() noexcept : ref(0) {}
-		atomic_reference_count(const atomic_reference_count&) = delete;
-		atomic_reference_count& operator= (const atomic_reference_count&) = delete;
-		~atomic_reference_count() { assert(ref.load(std::memory_order_relaxed) == 0); }
-	};
-
-	//template<typename T> struct replace_void { using type = T; };
-	//template<> struct replace_void<void> { using type = Tmp::itself<void>; };
-
-	template<typename T, typename mutex_t = std::mutex> class scope_lock
-	{
-		T data;
-		mutable mutex_t mutex;
-	public:
-		template<typename ...construction_para>  scope_lock(construction_para&& ...cp) : data(std::forward<construction_para>(cp)...) {}
-		using type = T;
-		using mutex_type = mutex_t;
-
-		using type = T;
-
-		T exchange(T t) noexcept {
-			std::lock_guard<mutex_t> lg(mutex);
-			T tem(std::move(data));
-			data = std::move(t);
-			return tem;
-		}
-
-		T copy() const noexcept {
-			std::lock_guard<mutex_t> lg(mutex);
-			return data;
-		}
-
-		T move() && noexcept {
-			std::lock_guard<mutex_t> lg(mutex);
-			T tem(std::move(data));
-			return tem;
-		}
-
-		scope_lock& equal(T t) noexcept
-		{
-			std::lock_guard<mutex_t> lg(mutex);
-			data = std::move(t);
-			return *this;
-		}
-
-		template<typename callable_object> decltype(auto) lock(callable_object&& obj) noexcept(noexcept(std::forward<callable_object>(obj)(static_cast<T&>(data))))
-		{
-			std::lock_guard<mutex_t> lg(mutex);
-			return std::forward<callable_object>(obj)(static_cast<T&>(data));
-		}
-		template<typename callable_object> decltype(auto) lock(callable_object&& obj) const noexcept(noexcept(std::forward<callable_object>(obj)(static_cast<const T&>(data))))
-		{
-			std::lock_guard<mutex_t> lg(mutex);
-			return std::forward<callable_object>(obj)(static_cast<const T&>(data));
-		}
-
-		template<typename callable_object>  auto try_lock(callable_object&& obj)
-			noexcept(noexcept(std::forward<callable_object>(obj)(static_cast<T&>(data))))
-			-> std::conditional_t<
-			std::is_void_v<decltype(std::forward<callable_object>(obj)(static_cast<T&>(data)))>,
-			bool,
-			std::optional<decltype(std::forward<callable_object>(obj)(static_cast<T&>(data)))>
-			>
-		{
-			if (mutex.try_lock())
-			{
-				std::lock_guard<mutex_t> lg(mutex, std::adopt_lock);
-				if constexpr (std::is_void_v<decltype(std::forward<callable_object>(obj)(static_cast<T&>(data)))>)
-				{
-					return true;
-				}
-				else
-					return{ std::forward<callable_object>(obj)(static_cast<T&>(data)) };
-			}
-			if constexpr (std::is_void_v<decltype(std::forward<callable_object>(obj)(static_cast<T&>(data)))>)
-			{
-				return false;
-			}
-			else
-				return {};
-		}
-
-		template<typename other_mutex_t, typename other_type, typename callable_object> auto lock_with(scope_lock<other_type, other_mutex_t>& sl, callable_object&& obj)
-			noexcept(noexcept(std::forward<callable_object>(obj)(data, sl.data)))
-			-> decltype(std::forward<callable_object>(obj)(data, sl.data))
-		{
-			std::lock(mutex, sl.mutex);
-			std::lock_guard<mutex_t> lg(mutex, std::adopt_lock);
-			std::lock_guard<other_mutex_t> lg2(sl.mutex, std::adopt_lock);
-			return std::forward<callable_object>(obj)(data, sl.data);
-		}
-
-	};
-
-
-
-	template<size_t ...index, typename tuple_t, typename callable> decltype(auto) apply(std::integer_sequence<size_t, index...>, tuple_t&& t, callable&& c)
-	{
-		return std::forward<callable>(c)(std::get<index>(std::forward<tuple_t>(t))...);
-	}
-
-	inline size_t adjust_alignas_space(size_t require_space, size_t alignas_size)
-	{
-		size_t sub = require_space % alignas_size;
-		return sub == 0 ? require_space : require_space - sub + alignas_size;
-	}
-
-	template<size_t aligna> struct alignas(aligna)aligna_buffer {
-		static void* allocate(size_t space)
-		{
-			return new aligna_buffer[adjust_alignas_space(space, aligna)];
-		}
-		template<typename T> static T* allocate(size_t space)
-		{
-			return reinterpret_cast<T*>(allocate(space));
-		}
-		template<typename T> static void release(T * data) noexcept
-		{
-			delete[] reinterpret_cast<aligna_buffer<aligna>*>(data);
-		}
-	};
-
-	struct version
-	{
-		uint64_t m_version = 1;
-		version(version&& v) noexcept : m_version(v.m_version) { v.m_version = 1; }
-		version(const version&) noexcept : m_version(1) {}
-		version()noexcept : m_version(1) {}
-		version& operator= (version v) noexcept
-		{
-			version tem(std::move(v));
-			m_version = tem.m_version;
-			tem.m_version = 0;
-			return *this;
-		}
-		bool operator ==(const version& v) const noexcept { return m_version == v.m_version; }
-		bool update_to(const version& v) noexcept {
-			if (m_version != v.m_version)
-			{
-				m_version = v.m_version;
-				return true;
-			}
-			else
-				return false;
-		}
-		void update() noexcept { m_version++; }
-	};
-
-	template<typename T, T default_value> struct integer_moveonly
-	{
-		T value;
-		integer_moveonly() noexcept : value(default_value) {}
-		integer_moveonly(T v) noexcept : value(std::move(v)) {}
-		integer_moveonly(integer_moveonly&& im) noexcept : value(im.value) { im.value = default_value; }
-		operator T () const noexcept { return value; }
-		integer_moveonly& operator=(integer_moveonly&& im) noexcept
-		{
-			integer_moveonly tem(std::move(im));
-			value = tem.value;
-			tem.value = default_value;
-			return *this;
-		}
-	};
-
-	template<typename T> struct viewer
-	{
-		//operator T*() const noexcept { return m_ptr; }
-		operator const T* () const noexcept { return m_ptr; }
-		size_t size() const noexcept { return m_count; }
-		viewer(const T* ptr, size_t size) : m_ptr(ptr), m_count(size) {}
-		const T& operator [](size_t index) const noexcept { return m_ptr[index]; }
+		AtomicRefCount() noexcept : ref(0) {}
+		AtomicRefCount(AtomicRefCount const&) = delete;
+		AtomicRefCount& operator= (AtomicRefCount const&) = delete;
+		~AtomicRefCount() { assert(ref.load(std::memory_order_relaxed) == 0); }
 	private:
-		const T* m_ptr;
-		size_t m_count;
+		mutable std::atomic_size_t ref = 0;
 	};
 
-	template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
-	template<class... Ts> overloaded(Ts...)->overloaded<Ts...>;
-
-	template<typename Ts, typename = std::void_t<>> struct scope_guard;
-
-	template<typename Ts>
-	struct scope_guard<Ts, std::void_t<decltype(std::declval<Ts>()())>> {
-
-		static_assert(std::is_nothrow_invocable_v<Ts>, "scope gurad need noexcept function");
-		scope_guard(Ts ts) noexcept : m_function(std::move(ts)), m_dissmise(false) {}
-		~scope_guard()  noexcept { if (!m_dissmise) m_function(); }
-		void dissmise() noexcept { m_dissmise = true; }
-	private:
-		Ts m_function;
-		bool m_dissmise;
-	};
-
-	template<typename Ts> scope_guard(Ts)->scope_guard<Ts>;
-
-	namespace Implement {
-		template<size_t s, size_t e> struct sequence_call_implement
-		{
-			template<typename Tuple, typename Function>
-			void operator()(Function&& f, Tuple&& type) {
-				std::forward<Function>(f)(std::get<s>(std::forward<Tuple>(type)));
-				sequence_call_implement<s + 1, e>{}(std::forward<Function>(f), std::forward<Tuple>(type));
-			}
-		};
-		template<size_t e> struct sequence_call_implement<e, e>
-		{
-			template<typename Tuple, typename Function>
-			void operator()(Function&& f, Tuple&& type) {}
-		};
-	}
-
-	template<typename Function, typename Tuple> void sequence_call(Function&& f, Tuple&& type)
-	{
-		Implement::sequence_call_implement<0, std::tuple_size_v<std::remove_reference_t<Tuple>>>{}(std::forward<Function>(f), std::forward<Tuple>(type));
-	}
-
-	template<typename Type> struct span {
-		Type* data() noexcept { return pointer; }
-		Type const* data() const noexcept { return pointer; }
-		size_t size() const noexcept { return count; }
-		span(Type* data, size_t size) : pointer(data), count(size) {}
-		span(const span&) = default;
-		span() = default;
-		operator bool() const noexcept { return pointer != nullptr && count != 0; }
-		span& operator=(span const&) = default;
-		bool operator==(span const& input) const noexcept { return pointer == input.pointer && count == input.count; }
-		bool operator<(span const& input) const noexcept { return pointer < input.pointer || ( pointer == input.pointer && count < input.count); }
-		Type& operator[](size_t index) noexcept { return pointer[index]; }
-		Type const& operator[](size_t index) const noexcept { return pointer[index]; }
-	private:
-		Type* pointer;
-		size_t count;
-	};
-
-	/*
-	template<typename CallType, typename MemberType, typename ReturnType, typename ...Parameter> struct member_function_wrapper
-	{
-		template<typename FunctionType>
-		struct Storage
-		{
-			FunctionType fun_ptr;
-		};
-
-
-
-		template<typename FunctionType>
-		member_function_wrapper(FunctionType fun_ptr)
-			: 
-	private:
-		std::array<std::byte, sizeof(nullptr) * 4> member_function_pointer_storage;
-		ReturnType (*wrapper_function)(Parameter ...par) = nullptr;
-	};
-	*/
-
-	template<typename interface_t, typename storage_t>
-	struct exception_tuple: public interface_t, public storage_t
-	{
-		exception_tuple(storage_t Info) : storage_t(std::move(Info)) {}
-		exception_tuple(interface_t interface, storage_t Info) : interface_t(std::move(interface)), storage_t(std::move(Info)) {}
-		exception_tuple(exception_tuple const&) = default;
-		exception_tuple(exception_tuple&&) = default;
-	};
-
-	template<typename interface_t, typename storage_t>
-	auto create_exception_tuple(storage_t&& storage)->exception_tuple<std::remove_cvref_t<interface_t>, std::remove_cvref_t<storage_t>>
-	{
-		return {std::forward<storage_t>(storage)};
-	};
-
-	template<typename interface_t, typename storage_t>
-	auto create_exception_tuple(interface_t&& inter, storage_t&& storage)->exception_tuple<std::remove_cvref_t<interface_t>, std::remove_cvref_t<storage_t>>
-	{
-		return { std::forward<interface_t>(inter), std::forward<storage_t>(storage) };
-	};
-
-	template<typename ...type>
-	struct any_visitor
-	{
-		template<typename callable_function>
-		bool operator()(std::any& anys, callable_function&& cf) const
-		{
-			return false;
-		}
-
-		template<typename callable_function>
-		bool operator()(std::any const& anys, callable_function&& cf) const
-		{
-			return false;
-		}
-	};
-
-	template<typename cur_type, typename ...type>
-	struct any_visitor<cur_type, type...>
-	{
-
-		template<typename callable_function>
-		bool operator()(std::any& anys, callable_function&& cf) const
-		{
-			if(auto P = std::any_cast<cur_type>(&anys); P != nullptr)
-			{
-				std::forward<callable_function>(cf)(*P);
-				return true;
-			}
-			return any_visitor<type...>{}(anys, std::forward<callable_function>(cf));
-		}
-
-		template<typename callable_function>
-		bool operator()(std::any const& anys, callable_function&& cf) const
-		{
-			if(auto P = std::any_cast<std::add_lvalue_reference_t<cur_type>>(&anys); P != nullptr)
-			{
-				std::forward<callable_function>(cf)(*P);
-				return true;
-			}
-			return any_visitor<type...>{}(anys, std::forward<callable_function>(cf));
-		}
-	};
-	
+	//template<typename name>
 }
+
+
+
+
+/*
+export{
+	namespace Potato
+	{
+		template<typename InterfaceT, typename StorageT>
+		struct ExceptionTuple : public InterfaceT, public StorageT
+		{
+			ExceptionTuple(StorageT Info) : StorageT(std::move(Info)) {}
+			ExceptionTuple(InterfaceT Interface, StorageT Storage) : InterfaceT(std::move(Interface)), StorageT(std::move(Storage)) {}
+			ExceptionTuple(ExceptionTuple const&) = default;
+			ExceptionTuple(ExceptionTuple&&) = default;
+		};
+
+		template<typename InterfaceT, typename StorageT>
+		auto MakeExceptionTuple(StorageT&& storage)->ExceptionTuple<InterfaceT, std::remove_cvref_t<StorageT>>
+		{
+			return { std::forward<StorageT>(storage) };
+		};
+
+		template<typename InterfaceT, typename StorageT>
+		auto MakeExceptionTuple(InterfaceT&& inter, StorageT&& storage)->ExceptionTuple<std::remove_cvref_t<InterfaceT>, std::remove_cvref_t<StorageT>>
+		{
+			return { std::forward<InterfaceT>(inter), std::forward<StorageT>(storage) };
+		};
+	}
+}
+*/

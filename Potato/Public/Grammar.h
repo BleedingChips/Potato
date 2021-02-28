@@ -30,7 +30,7 @@ namespace Potato::Grammar
 		size_t index = std::numeric_limits<size_t>::max();
 	};
 
-	template<Potato::Tmp::const_string>
+	template<Potato::ConstString>
 	struct MaskWrapper : Mask
 	{
 		using Mask::Mask;

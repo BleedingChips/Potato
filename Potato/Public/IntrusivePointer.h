@@ -1,6 +1,9 @@
 #pragma once
-#include "Tmp.h"
-namespace Potato::SmartPtr
+#include <type_traits>
+
+#include "Misc.h"
+
+namespace Potato
 {
 	// intrustive_ptr ***********************************************************
 	struct IntrusivePtrDefaultWrapper
@@ -80,7 +83,7 @@ namespace Potato::SmartPtr
 		{
 			return Wrapper{}(ptr, std::forward<parameter_types>(i)...);
 		}
-		
+
 		template<typename ...parameter_types>
 		decltype(auto) operator()(parameter_types&& ... i) const
 		{

@@ -3,12 +3,9 @@
 #include "../Public/StrEncode.h"
 namespace Potato::StrFormat
 {
-
-	
-
 	Lexical::Table const& Analyzer()
 	{
-		static Lexical::LexicalRegexInitTuple PatternRex[] = {
+		static Lexical::RegexInitTuple PatternRex[] = {
 			{UR"([^\{\}]+)"},
 			{UR"(\{[^\{\}]*?\})"},
 			{UR"(\}\})"},
@@ -50,7 +47,7 @@ namespace Potato::StrFormat
 			}
 			return { Ref, std::move(patterns) };
 		}
-		catch (Lexical::Error::UnaccaptableLexicalItem const& str)
+		catch (Exception::Lexical::UnaccaptableItem const& str)
 		{
 			throw Error::UnsupportPatternString{ std::u32string(Ref), std::u32string(str.possible_token) };
 		}
@@ -116,7 +113,7 @@ namespace Potato::StrFormat
 namespace Potato::StrFormat
 {
 
-	static Lexical::LexicalRegexInitTuple FormatRex[] = {
+	static Lexical::RegexInitTuple FormatRex[] = {
 		{UR"(\s)"},
 		{UR"(-hex)"},
 		//UR"(-e)"

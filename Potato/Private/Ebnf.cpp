@@ -5,7 +5,6 @@
 
 namespace Potato::Ebnf
 {
-
 	enum class T
 	{
 		Empty = 0,
@@ -167,17 +166,17 @@ namespace Potato::Ebnf
 			auto Steps = Lr0::Process(Tab.lr0_table, Symbols.data(), Symbols.size());
 			return Translate(Tab, Steps, Datas);
 		}
-		catch (Lr0::Exception::UnaccableSymbol const& Symbol)
+		catch (Exception::Lr::UnaccableSymbol const& Symbol)
 		{
 			auto his = Translate(Tab, Symbol.backup_step, Datas);
 			auto Str = Tab.FindSymbolString(Symbol.symbol.Index(), Symbol.symbol.IsTerminal());
 			if (Str.empty())
 			{
 				Section loc = (Symbol.index > 0) ? Datas[Symbol.index - 1].section : Section{};
-				throw MakeException(Exception::UnacceptableSyntax{ U"$_Eof", U"$_Eof", loc, his.Expand() });
+				throw Exception::MakeExceptionTuple(Exception::Ebnf::UnacceptableSyntax{ U"$_Eof", U"$_Eof", loc, his.Expand() });
 			}
 			auto loc = Datas[Symbol.symbol.Index()].section;
-			throw MakeException(Exception::UnacceptableSyntax{ std::u32string(Str), std::u32string(Datas[Symbol.index].capture),Datas[Symbol.index].section, his.Expand() });
+			throw Exception::MakeExceptionTuple(Exception::Ebnf::UnacceptableSyntax{ std::u32string(Str), std::u32string(Datas[Symbol.index].capture),Datas[Symbol.index].section, his.Expand() });
 		}
 	}
 
@@ -267,7 +266,7 @@ namespace Potato::Ebnf
 
 	Lexical::Table CreateLexicalTable(std::map<T, std::u32string_view> const& mapping, PreEbnfInitTuple const* init_tuple, size_t length)
 	{
-		std::vector<Lexical::LexicalRegexInitTuple> true_tuple;
+		std::vector<Lexical::RegexInitTuple> true_tuple;
 		true_tuple.reserve(length);
 		for(size_t i =0; i < length; ++i)
 		{
@@ -350,7 +349,7 @@ namespace Potato::Ebnf
 			}
 
 			if (used < 2)
-				throw MakeException(Exception::UncompleteEbnf{ used });
+				throw Exception::MakeExceptionTuple(Exception::Ebnf::UncompleteEbnf{ used });
 		}
 		
 		std::vector<uint32_t> state_to_mask;
@@ -384,7 +383,7 @@ namespace Potato::Ebnf
 			auto [Symbols, Elements] = EbnfLexer(nfa_table, sperated_code[0].code, Loc);
 			try {
 				auto History = Lr0::Process(lr0_instance, Symbols.data(), Symbols.size());
-				Lr0::Process(History, [&](Lr0::NTElement& input) -> std::any {
+				Lr::Process(History, [&](Lr0::NTElement& input) -> std::any {
 					switch (input.mask)
 					{
 						case 1: {
@@ -437,18 +436,18 @@ namespace Potato::Ebnf
 				}
 				);
 			}
-			catch (Lr0::Exception::UnaccableSymbol const& US)
+			catch (Exception::Lr::UnaccableSymbol const& US)
 			{
 				assert(Elements.size() > US.index);
 				auto P = Elements[US.index];
-				throw MakeException(Exception::UnacceptableToken{ std::u32string(P.capture), P.section});
+				throw Exception::MakeExceptionTuple(Exception::Ebnf::UnacceptableToken{ std::u32string(P.capture), P.section});
 			}
 		}
 
 		std::map<std::u32string, size_t> noterminal_symbol_to_index;
 		std::vector<Lr0::ProductionInput> productions;
 		std::optional<Symbol> start_symbol;
-		size_t noterminal_temporary = Lr0::SymbolStorageMax - 1;
+		size_t noterminal_temporary = Lr::symbol_storage_max - 1;
 
 
 		struct Token
@@ -517,7 +516,7 @@ namespace Potato::Ebnf
 			);
 
 			std::optional<Symbol> LastHead;
-			size_t LastTemporaryNoTerminal = Lr0::SymbolStorageMax - 1;
+			size_t LastTemporaryNoTerminal = Lr0::symbol_storage_max - 1;
 
 			using SymbolList = std::vector<Symbol>;
 
@@ -528,7 +527,7 @@ namespace Potato::Ebnf
 
 			try {
 				auto History = Lr0::Process(imp, Symbols.data(), Symbols.size());
-				auto Total = Lr0::Process(History, [&](Lr0::NTElement & tra) -> std::any {
+				auto Total = Lr::Process(History, [&](Lr0::NTElement & tra) -> std::any {
 					switch (tra.mask)
 						{
 						case 0: {
@@ -539,7 +538,7 @@ namespace Potato::Ebnf
 							if (!start_symbol)
 								start_symbol = P1.sym;
 							else
-								throw MakeException(Exception::RedefinedStartSymbol{ P1.march.section });
+								throw Exception::MakeExceptionTuple(Exception::Ebnf::RedefinedStartSymbol{ P1.march.section });
 							return std::vector<Lr0::ProductionInput>{};
 						}break;
 						case 2: {
@@ -568,7 +567,7 @@ namespace Potato::Ebnf
 						}
 						case 7: {
 							if (!LastHead)
-								throw MakeException(Exception::UnsetDefaultProductionHead{});
+								throw Exception::MakeExceptionTuple(Exception::Ebnf::UnsetDefaultProductionHead{});
 							return Token{ *LastHead, {} };
 						}
 						case 8: {
@@ -648,7 +647,7 @@ namespace Potato::Ebnf
 							if (Find != symbol_to_mask.end())
 								return Token{ Symbol(Find->second, Lr0::TerminalT{}), element };
 							else
-								throw MakeException(Exception::UndefinedTerminal{ string, element.section });
+								throw Exception::MakeExceptionTuple(Exception::Ebnf::UndefinedTerminal{ string, element.section });
 						}break;
 						case* T::NoTerminal: {
 							auto Find = noterminal_symbol_to_index.insert({ string, noterminal_symbol_to_index.size() });
@@ -689,10 +688,10 @@ namespace Potato::Ebnf
 				}
 				);
 			}
-			catch (Lr0::Exception::UnaccableSymbol const& US)
+			catch (Exception::Lr::UnaccableSymbol const& US)
 			{
 				auto P = Elements[US.index];
-				throw MakeException(Exception::UnacceptableToken{ std::u32string(P.capture), P.section });
+				throw Exception::MakeExceptionTuple(Exception::Ebnf::UnacceptableToken{ std::u32string(P.capture), P.section });
 			}
 
 		}
@@ -724,7 +723,7 @@ namespace Potato::Ebnf
 			auto [Symbols, Elements] = EbnfLexer(nfa_instance, sperated_code[2].code, Loc);
 			try {
 				auto History = Lr0::Process(lr0_instance, Symbols.data(), Symbols.size());
-				Lr0::Process(History, [&](Lr0::NTElement& step) -> std::any {
+				Lr::Process(History, [&](Lr0::NTElement& step) -> std::any {
 					switch (step.mask)
 						{
 						case 1: {
@@ -765,21 +764,21 @@ namespace Potato::Ebnf
 						if (Find != symbol_to_mask.end())
 							return Token{ Symbol(Find->second, Lr0::TerminalT{}) };
 						else
-							throw MakeException(Exception::UndefinedTerminal{std::u32string(element.capture), element.section });
+							throw Exception::MakeExceptionTuple(Exception::Ebnf::UndefinedTerminal{std::u32string(element.capture), element.section });
 					}
 					return {};
 				}
 				);
 			}
-			catch (Lr0::Exception::UnaccableSymbol const& US)
+			catch (Exception::Lr::UnaccableSymbol const& US)
 			{
 				auto P = Elements[US.index];
-				throw MakeException(Exception::UnacceptableToken{ std::u32string(P.capture), P.section });
+				throw Exception::MakeExceptionTuple(Exception::Ebnf::UnacceptableToken{ std::u32string(P.capture), P.section });
 			}
 		}
 
 		if (!start_symbol)
-			throw MakeException(Exception::MissingStartSymbol{});
+			throw Exception::MakeExceptionTuple(Exception::Ebnf::MissingStartSymbol{});
 
 		size_t DefineProduction_count = productions.size();
 		//productions.insert(productions.end(), std::move_iterator(productions_for_temporary.begin()), std::move_iterator(productions_for_temporary.end()));
@@ -801,7 +800,7 @@ namespace Potato::Ebnf
 		}
 		
 		try {
-			std::vector<Lexical::LexicalRegexInitTuple> Rexs;
+			std::vector<Lexical::RegexInitTuple> Rexs;
 			Rexs.reserve(symbol_rex.size());
 			for(auto& ite : symbol_rex)
 			{
@@ -817,16 +816,16 @@ namespace Potato::Ebnf
 				std::move(lexical_table),
 				std::move(symbol_map), TerminalCount, std::move(Lr0Table) };
 		}
-		catch (Unfa::Exception::UnaccaptableRexgex const& ref)
+		catch (Exception::Unfa::UnaccaptableRexgex const& ref)
 		{
-			throw MakeException(Exception::UnacceptableRegex{ref.regex, ref.accepetable_mask});
+			throw Exception::MakeExceptionTuple(Exception::Ebnf::UnacceptableRegex{ref.regex, ref.accepetable_mask});
 		}
-		catch (Lr0::Exception::NoterminalUndefined const NU)
+		catch (Exception::Lr::NoterminalUndefined const NU)
 		{
 			for(auto& ite : noterminal_symbol_to_index)
 				if(ite.second == NU.value.Index())
-					throw MakeException(Exception::UndefinedNoterminal{std::u32string(ite.first)});
-			throw MakeException(Exception::UndefinedNoterminal{ std::u32string(U"$UnknowSymbol") });
+					throw Exception::MakeExceptionTuple(Exception::Ebnf::UndefinedNoterminal{std::u32string(ite.first)});
+			throw Exception::MakeExceptionTuple(Exception::Ebnf::UndefinedNoterminal{ std::u32string(U"$UnknowSymbol") });
 		}
 	}
 }

@@ -1,9 +1,9 @@
 #include "../Public/Misc.h"
 #include <iostream>
 
-namespace Potato::Misc
+namespace Potato
 {
-	bool atomic_reference_count::try_add_ref() noexcept
+	bool AtomicRefCount::TryAndRef() const noexcept
 	{
 		auto oldValue = ref.load(std::memory_order_relaxed);
 		assert(static_cast<std::ptrdiff_t>(oldValue) >= 0);
@@ -17,7 +17,7 @@ namespace Potato::Misc
 		return true;
 	}
 
-	void atomic_reference_count::wait_touch(size_t targe_value) const noexcept
+	void AtomicRefCount::WaitTouch(size_t targe_value) const noexcept
 	{
 		while (auto oldValue = ref.load(std::memory_order_relaxed))
 		{

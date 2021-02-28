@@ -5,6 +5,7 @@
 #include <thread>
 #include <future>
 #include <map>
+
 #include "Misc.h"
 #include "IntrusivePointer.h"
 #include "StrEncode.h"
@@ -109,7 +110,7 @@ namespace Potato::FileSystem
 	{
 		static File OpenFile(Path const&);
 	private:
-		Potato::SmartPtr::IntrusivePtr<Implement::FileInterface> ptr;
+		Potato::IntrusivePtr<Implement::FileInterface> ptr;
 	};
 
 	

@@ -2,36 +2,6 @@
 #include <optional>
 namespace Potato::Lr0
 {
-	std::any History::operator()(std::function<std::any(NTElement&)> NTFunc, std::function<std::any(TElement&)> TFun) const
-	{
-		if(NTFunc && TFun)
-		{
-			std::vector<std::tuple<Symbol, std::any>> DataBuffer;
-			for (auto& ite : steps)
-			{
-				if(ite.IsTerminal())
-				{
-					TElement ele{ite};
-					if(TFun)
-					{
-						auto Result = TFun(ele);
-						DataBuffer.push_back({ite.value, std::move(Result)});
-					}
-				}else {
-					NTElement ele{ite};
-					assert(DataBuffer.size() >= ite.reduce.production_count);
-					size_t CurrentAdress = DataBuffer.size() - ite.reduce.production_count;
-					ele.datas = DataBuffer.data() + CurrentAdress;
-					auto Result = NTFunc(ele);
-					DataBuffer.resize(CurrentAdress);
-					DataBuffer.push_back({ ite.value, std::move(Result) });
-				}
-			}
-			assert(DataBuffer.size() == 1);
-			return std::move(std::get<1>(DataBuffer[0]));
-		}
-		return {};
-	}
 
 	struct SearchElement
 	{
@@ -153,7 +123,7 @@ namespace Potato::Lr0
 				}
 			}
 		}
-		throw MakeException(Exception::UnaccableSymbol{ MaxTokenUsed, MaxTokenUsed < TokenLength ? TokenArray[MaxTokenUsed] : Symbol::EndOfFile(), std::move(BackupSteps) });
+		throw Exception::MakeExceptionTuple(Exception::Lr::UnaccableSymbol{ MaxTokenUsed, MaxTokenUsed < TokenLength ? TokenArray[MaxTokenUsed] : Symbol::EndOfFile(), std::move(BackupSteps) });
 	}
 
 	std::set<Symbol> CalNullableSet(const std::vector<ProductionInput>& production)
@@ -278,7 +248,7 @@ namespace Potato::Lr0
 							SearchStack.push_back({ Productions.size(), 1 });
 						}
 						if (!Finded)
-							throw MakeException(Exception::NoterminalUndefined{ TargetSymbol });
+							throw Exception::MakeExceptionTuple(Exception::Lr::NoterminalUndefined{ TargetSymbol });
 					}
 				}
 			}
@@ -311,7 +281,7 @@ namespace Potato::Lr0
 							Inserted.first->second.insert(ite2);
 					}
 				}else
-					throw MakeException(Exception::OperatorPriorityConflict{ ite, ite });
+					throw Exception::MakeExceptionTuple(Exception::Lr::OperatorPriorityConflict{ ite, ite });
 			}
 		}
 		return std::move(ope_priority);

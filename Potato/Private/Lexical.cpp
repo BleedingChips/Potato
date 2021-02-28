@@ -42,7 +42,7 @@ namespace Potato::Lexical
 		}), edges.end());
 	}
 	
-	Table Table::CreateFromRegexs(LexicalRegexInitTuple const* adress, size_t length, bool ignore_controller)
+	Table Table::CreateFromRegexs(RegexInitTuple const* adress, size_t length, bool ignore_controller)
 	{
 		std::vector<Unfa::Table> unfas;
 		unfas.reserve(length);
@@ -54,7 +54,7 @@ namespace Potato::Lexical
 		return { result.Simplify(LexicalFilter) };
 	}
 
-	Table Table::CreateFromRegexsReverse(LexicalRegexInitTuple const* adress, size_t length, bool ignore_controller)
+	Table Table::CreateFromRegexsReverse(RegexInitTuple const* adress, size_t length, bool ignore_controller)
 	{
 		std::vector<Unfa::Table> unfas;
 		unfas.reserve(length);
@@ -109,7 +109,7 @@ namespace Potato::Lexical
 				}
 				code = re->last_string;
 			}else
-				throw Error::UnaccaptableLexicalItem{ std::u32string( code.begin(),  code.begin() + std::min(static_cast<size_t>(8), code.size())), current_section };
+				throw Exception::MakeExceptionTuple(Exception::Lexical::UnaccaptableItem{ std::u32string( code.begin(),  code.begin() + std::min(static_cast<size_t>(8), code.size())), current_section });
 		}
 		return result;
 	}

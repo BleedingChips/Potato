@@ -206,7 +206,7 @@ namespace Potato::FileSystem
 			}
 			);
 			*this = std::move(Result);
-		}catch (Ebnf::Exception::Interface const&)
+		}catch (Exception::Ebnf::Interface const&)
 		{
 			
 		}
@@ -433,8 +433,7 @@ namespace Potato::FileSystem
 
 	struct LocalFile : Implement::FileInterface
 	{
-		Potato::Misc::atomic_reference_count ref;
-
+		Potato::AtomicRefCount ref;
 	};
 
 }
