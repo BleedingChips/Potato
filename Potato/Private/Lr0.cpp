@@ -18,7 +18,7 @@ namespace Potato::Lr0
 		for (size_t i = 0; i < Nodes.shift_count; ++i)
 		{
 			auto TarShift = Table.shifts[i + Nodes.shift_adress];
-			if (TarShift.require_symbol == Sym)
+			if (TarShift.require_symbol == static_cast<SymbolStorageT>(Sym))
 			{
 				SE.State.push_back(TarShift.shift_state);
 				if (Sym.IsTerminal() && !Sym.IsEndOfFile())

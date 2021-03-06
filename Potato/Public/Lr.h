@@ -6,6 +6,7 @@
 #include <vector>
 #include <functional>
 #include <set>
+#include <optional>
 
 #include "Misc.h"
 
@@ -80,23 +81,34 @@ namespace Potato::Lr
 		TElement& operator=(TElement const&) = default;
 	};
 
+	struct NTElementData
+	{
+		Symbol symbol;
+		std::any data;
+		operator Symbol() const { return symbol; }
+		template<typename Type>
+		Type Consume() { return std::move(std::any_cast<Type>(data)); }
+		std::any Consume() { return std::move(data); }
+		template<typename Type>
+		std::optional<Type> TryConsume() {
+			auto P = std::any_cast<Type>(&data);
+			if (P != nullptr)
+				return std::move(*P);
+			else
+				return std::nullopt;
+		}
+	};
+
 	struct NTElement
 	{
+
 		Symbol value;
 		size_t production_index;
-		size_t production_count;
 		size_t mask;
-		std::tuple<Symbol, std::any>* datas = nullptr;
-		std::tuple<Symbol, std::any>& operator[](size_t index) { return datas[index]; }
-		Symbol& GetSymbol(size_t index) { return std::get<0>((*this)[index]); }
-		template<typename Type>
-		Type GetData(size_t index) { return std::any_cast<Type>(std::get<1>((*this)[index])); }
-		template<typename Type>
-		std::remove_reference_t<Type> MoveData(size_t index) { return std::move(std::any_cast<std::add_lvalue_reference_t<Type>>(std::get<1>((*this)[index]))); }
-		std::any MoveRawData(size_t index) { return std::move(std::get<1>((*this)[index])); }
-		std::any& GetRawData(size_t index) { return std::get<1>((*this)[index]); }
-		NTElement(Step const& value) :
-			value(value.value), production_index(value.reduce.production_index), production_count(value.reduce.production_count), mask(value.reduce.mask)
+		std::span<NTElementData> datas;
+		NTElementData& operator[](size_t index) { return datas[index]; }
+		NTElement(Step const& value, NTElementData* data_ptr) :
+			value(value.value), production_index(value.reduce.production_index), datas(data_ptr, value.reduce.production_count), mask(value.reduce.mask)
 		{
 			assert(value.IsNoTerminal());
 		}

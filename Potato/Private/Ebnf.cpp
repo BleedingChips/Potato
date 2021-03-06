@@ -194,10 +194,10 @@ namespace Potato::Ebnf
 					Storage.push_back({ ite, std::move(Result) });
 				}
 				else {
-					NTElement Re(ite);
+					
 					size_t TotalUsed = ite.reduce.production_count;
 					size_t CurrentAdress = Storage.size() - TotalUsed;
-					Re.datas = Storage.data() + CurrentAdress;
+					NTElement Re(ite, Storage.data() + CurrentAdress);
 					if (TotalUsed >= 1)
 					{
 						Re.section = {Re[0].section.start, Re[TotalUsed - 1].section.end};
@@ -318,33 +318,34 @@ namespace Potato::Ebnf
 		};
 
 		static Unfa::SerilizedTable sperator = Unfa::CreateUnfaTableFromRegex(UR"((.*?(?:\r\n|\n))[\f\t\v\r]*?%%%[\s]*?\n|()[\f\t\v\r]*?%%%[\s]*?\n)").Simplify();
-
+		auto end_point = Lexical::CalculateSectionPoint(code);
 		struct SperatedCode
 		{
 			std::u32string_view code;
 			Section section;
 		};
 		SperatedCode sperated_code[3];
-
 		{
 			size_t used = 0;
 			SectionPoint Point;
 			while (!code.empty() && used < 3)
 			{
 				auto P = sperator.Mark(code, false);
-				auto next_point = Lexical::CalculateSectionPoint(P->capture.string);
+				
 				if (P)
 				{
 					auto new_point = Lexical::CalculateSectionPoint(P->sub_capture[0].string);
-					sperated_code[used] = { P->sub_capture[0].string, {Point, new_point} };
+					auto cur_end_point = Point + new_point;
+					sperated_code[used] = { P->sub_capture[0].string, {Point, cur_end_point} };
 					code = { code.begin() + P->capture.string.size(), code.end() };
+					Point = cur_end_point;
 				}
 				else
 				{
-					sperated_code[used] = { code, {Point, next_point} };
+					sperated_code[used] = { code, {Point, end_point} };
 					code = {};
 				}
-				Point = next_point;
+				
 				++used;
 			}
 
@@ -387,19 +388,19 @@ namespace Potato::Ebnf
 					switch (input.mask)
 					{
 						case 1: {
-							auto Token = input.GetData<std::u32string_view>(1);
-							auto Rex = input.GetData<std::u32string_view>(3);
+							auto Token = input[1].Consume<std::u32string_view>();
+							auto Rex = input[3].Consume<std::u32string_view>();
 							auto re = symbol_to_mask.insert({ std::u32string(Token), static_cast<uint32_t>(symbol_to_mask.size()) });
-							state_to_mask.push_back(input.GetData<uint32_t>(4));
+							state_to_mask.push_back(input[4].Consume<uint32_t>());
 							symbol_rex.push_back({ std::u32string(Rex), re.first->second });
 						}break;
 						case 7: {
-							auto Rex = input.GetData<std::u32string_view>(3);
+							auto Rex = input[3].Consume<std::u32string_view>();
 							symbol_rex.push_back({ std::u32string(Rex), Lexical::DefaultIgnoreMask() });
 							state_to_mask.push_back(Lexical::DefaultMask());
 						} break;
 						case 5: {
-							return input.GetData<uint32_t>(2);
+							return input[2].Consume<uint32_t>();
 						}break;
 						case 6: {
 							return Lexical::DefaultMask();
@@ -534,7 +535,7 @@ namespace Potato::Ebnf
 						} break;
 						case 1: {
 							LastHead = std::nullopt;
-							auto P1 = tra.MoveData<Token>(3);
+							auto P1 = tra[3].Consume<Token>();
 							if (!start_symbol)
 								start_symbol = P1.sym;
 							else
@@ -542,18 +543,18 @@ namespace Potato::Ebnf
 							return std::vector<Lr0::ProductionInput>{};
 						}break;
 						case 2: {
-							return tra.MoveRawData(0);
+							return tra[0].Consume();
 						} break;
 						case 3: {
-							auto P1 = tra.MoveData<SymbolList>(0);
-							auto P2 = tra.MoveData<SymbolList>(1);
+							auto P1 = tra[0].Consume<SymbolList>();
+							auto P2 = tra[1].Consume<SymbolList>();
 							P1.insert(P1.end(), P2.begin(), P2.end());
 							return std::move(P1);
 						}break;
 						case 5: {
 							auto TemSym = Symbol(noterminal_temporary--, Lr0::NoTerminalT{});
-							auto P1 = tra.MoveData<SymbolList>(0);
-							auto P2 = tra.MoveData<SymbolList>(2);
+							auto P1 = tra[0].Consume<SymbolList>();
+							auto P2 = tra[2].Consume<SymbolList>();
 							P1.insert(P1.begin(), TemSym);
 							P2.insert(P2.begin(), TemSym);
 							productions.push_back({ std::move(P1) });
@@ -561,7 +562,7 @@ namespace Potato::Ebnf
 							return SymbolList{ TemSym };
 						} break;
 						case 6: {
-							auto P1 = std::move(tra.GetData<Token>(0));
+							auto P1 = tra[0].Consume<Token>();
 							LastHead = P1.sym;
 							return P1;
 						}
@@ -571,28 +572,28 @@ namespace Potato::Ebnf
 							return Token{ *LastHead, {} };
 						}
 						case 8: {
-							auto Head = tra.GetData<Token>(1);
-							auto Expression = std::move(tra.GetData<SymbolList>(3));
-							auto [RemoveRe, Enum] = std::move(tra.GetData<std::tuple<std::set<Symbol>, size_t>>(4));
+							auto Head = tra[1].Consume<Token>();
+							auto Expression = tra[3].Consume<SymbolList>();
+							auto [RemoveRe, Enum] = tra[4].Consume<std::tuple<std::set<Symbol>, size_t>>();
 							Expression.insert(Expression.begin(), Head.sym);
 							Lr0::ProductionInput re(std::move(Expression), std::move(RemoveRe), Enum);
 							productions.push_back(std::move(re));
 							return {};
 						}break;
 						case 19: {
-							auto Head = tra.GetData<Token>(1);
-							auto [RemoveRe, Enum] = std::move(tra.GetData<std::tuple<std::set<Symbol>, size_t>>(3));
+							auto Head = tra[1].Consume<Token>();
+							auto [RemoveRe, Enum] = std::move(tra[3].Consume<std::tuple<std::set<Symbol>, size_t>>());
 							SymbolList Expression({ Head.sym });
 							Lr0::ProductionInput re(std::move(Expression), std::move(RemoveRe), Enum);
 							productions.push_back(std::move(re));
 							return {};
 						}break;
 						case 9: {
-							return tra.MoveRawData(1);
+							return tra[1].Consume();
 						}break;
 						case 10: {
 							auto TemSym = Symbol(noterminal_temporary--, Lr0::NoTerminalT{});
-							auto P = tra.MoveData<SymbolList>(1);
+							auto P = tra[1].Consume<SymbolList>();
 							P.insert(P.begin(), TemSym);
 							productions.push_back(std::move(P));
 							productions.push_back(Lr0::ProductionInput({ TemSym }));
@@ -600,7 +601,7 @@ namespace Potato::Ebnf
 						}break;
 						case 11: {
 							auto TemSym = Symbol(noterminal_temporary--, Lr0::NoTerminalT{});
-							auto P = tra.MoveData<SymbolList>(1);
+							auto P = tra[1].Consume<SymbolList>();
 							auto List = { TemSym, TemSym };
 							P.insert(P.begin(), List.begin(), List.end());
 							productions.push_back(std::move(P));
@@ -608,12 +609,12 @@ namespace Potato::Ebnf
 							return SymbolList{ TemSym };
 						} break;
 						case 12: {
-							auto P = std::move(tra.GetData<Token>(0));
+							auto P = tra[0].Consume<Token>();
 							SymbolList SL({ P.sym });
 							return std::move(SL);
 						} break;
 						case 13: {
-							return tra.MoveRawData(1);
+							return tra[1].Consume();
 						} break;
 						case 14: {
 							return size_t(Lr0::ProductionInput::default_mask());
@@ -622,13 +623,13 @@ namespace Potato::Ebnf
 							return std::set<Symbol>{};
 						}break;
 						case 16: {
-							auto P = std::move(tra.GetData<std::set<Symbol>>(0));
-							auto P2 = std::move(tra.GetData<Token>(1));
+							auto P = tra[0].Consume<std::set<Symbol>>();
+							auto P2 = tra[1].Consume<Token>();
 							P.insert(P2.sym);
 							return std::move(P);
 						}break;
 						case 17: {
-							return std::tuple<std::set<Symbol>, size_t>{tra.GetData<std::set<Symbol>>(1), tra.GetData<size_t>(2)};
+							return std::tuple<std::set<Symbol>, size_t>{tra[1].Consume<std::set<Symbol>>(), tra[2].Consume<size_t>()};
 						} break;
 						case 18: {
 							return std::tuple<std::set<Symbol>, size_t>{ std::set<Symbol>{}, Lr0::ProductionInput::default_mask()};
@@ -728,27 +729,27 @@ namespace Potato::Ebnf
 						{
 						case 1: {
 							std::vector<Symbol> List;
-							List.push_back(step.GetData<Token>(0).sym);
+							List.push_back(step[0].Consume<Token>().sym);
 							return std::move(List);
 						}break;
 						case 2: {
-							auto P1 = step.MoveData<std::vector<Symbol>>(0);
-							auto P2 = step.MoveData<std::vector<Symbol>>(1);
+							auto P1 = step[0].Consume<std::vector<Symbol>>();
+							auto P2 = step[1].Consume<std::vector<Symbol>>();
 							P1.insert(P1.end(), P2.begin(), P2.end());
 							return std::move(P1);
 						} break;
 						case 3: {
-							auto P = step.GetData<Token>(1).sym;
+							auto P = step[1].Consume<Token>().sym;
 							operator_priority.push_back({ {P}, Lr0::Associativity::Left });
 							return {};
 						} break;
 						case 4: {
-							auto P = step.MoveData<std::vector<Symbol>>(2);
+							auto P = step[2].Consume<std::vector<Symbol>>();
 							operator_priority.push_back({ std::move(P), Lr0::Associativity::Left });
 							return {};
 						} break;
 						case 5: {
-							auto P = step.MoveData<std::vector<Symbol>>(2);
+							auto P = step[2].Consume<std::vector<Symbol>>();
 							operator_priority.push_back({ std::move(P), Lr0::Associativity::Right });
 							return {};
 						} break;

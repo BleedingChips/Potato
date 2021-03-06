@@ -5,6 +5,7 @@
 #include <any>
 #include <atomic>
 #include <cassert>
+#include <span>
 
 #include "TMP.h"
 
@@ -199,6 +200,72 @@ namespace Potato
 		else
 			static_assert(false, "wrong function type");
 	}
+
+	template<typename ...RequireT>
+	struct AnyViewerTemplate
+	{
+		template<typename Func>
+		bool operator()(std::any& ref, Func&& func) { return false; }
+		template<typename Func>
+		bool operator()(std::any const& ref, Func&& func) { return false; }
+	};
+
+	template<typename RequireTThis, typename ...RequireT>
+	struct AnyViewerTemplate<RequireTThis, RequireT...>
+	{
+		template<typename Func>
+		bool operator()(std::any& ref, Func&& func) {
+			if (auto P = std::any_cast<RequireTThis>(&ref); P != nullptr)
+			{
+				std::forward<Func>(func)(*P);
+				return true;
+			}
+			else {
+				return AnyViewerTemplate<RequireT...>{}(ref, std::forward<Func>(func));
+			}
+		}
+		template<typename Func>
+		bool operator()(std::any const& ref, Func&& func) { 
+			if (auto P = std::any_cast<RequireTThis>(&ref); P != nullptr)
+			{
+				std::forward<Func>(func)(*P);
+				return true;
+			}
+			else {
+				return AnyViewerTemplate<RequireT...>{}(ref, std::forward<Func>(func));
+			}
+		}
+	};
+
+	/*
+	struct Any : public std::any
+	{
+		using std::any::any;
+
+		Any& operator=(Any const&) = default;
+		Any& operator=(Any &&) = default;
+
+		template<typename Type>
+		Type GetData() { return std::any_cast<Type>(data); }
+		template<typename Type>
+		Type* TryGetDataPtr() { return std::any_cast<Type>(&data); }
+		template<typename Type>
+		std::remove_reference_t<Type> MoveData() { return std::move(std::any_cast<std::add_lvalue_reference_t<Type>>(data)); }
+		std::any&& MoveRawData() { return std::move(*this); }
+	};
+	*/
+
+	template<typename StorageType = std::size_t>
+	struct IndexSpan
+	{
+		StorageType start;
+		StorageType length;
+		template<template<typename ...> class Output = std::span, typename ArrayType>
+		auto operator()(ArrayType& Type) const -> Output<std::remove_reference_t<decltype(*Type.data())>>
+		{
+			return Output<std::remove_reference_t<decltype(*Type.begin())>>(Type.data() + start, Type.data() + start + length);
+		};
+	};
 
 	struct AtomicRefCount
 	{

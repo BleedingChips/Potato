@@ -76,9 +76,9 @@ int main()
 	int result = std::any_cast<int>(Lr::Process(His, [&](Lr0::NTElement& E) -> std::any {
 		switch (E.mask)
 		{
-		case 1: return std::move(E.GetRawData(0));
-		case 2: return E.GetData<int>(0) + E.GetData<int>(2);
-		case 3: return E.GetData<int>(0) * E.GetData<int>(2);
+		case 1: return E[0].Consume();
+		case 2: return E[0].Consume<int>() + E[2].Consume<int>();
+		case 3: return E[0].Consume<int>() * E[2].Consume<int>();
 		default:
 			break;
 		}
@@ -99,12 +99,12 @@ int main()
 	int result2 = std::any_cast<int>(Ebnf::Process(His2, [](Ebnf::NTElement& e) -> std::any {
 		switch (e.mask)
 		{
-		case 1: return e[0].MoveRawData();
-		case 2: return e[0].GetData<int>() + e[2].GetData<int>();
-		case 3: return e[0].GetData<int>() * e[2].GetData<int>();
-		case 4: return e[0].GetData<int>() / e[2].GetData<int>();
-		case 5: return e[0].GetData<int>() - e[2].GetData<int>();
-		case 6: return e[0].MoveRawData();
+		case 1: return e[0].Consume();
+		case 2: return e[0].Consume<int>() + e[2].Consume<int>();
+		case 3: return e[0].Consume<int>() * e[2].Consume<int>();
+		case 4: return e[0].Consume<int>() / e[2].Consume<int>();
+		case 5: return e[0].Consume<int>() - e[2].Consume<int>();
+		case 6: return e[0].Consume();
 		}
 		return {};
 	},

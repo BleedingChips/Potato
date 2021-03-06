@@ -76,23 +76,27 @@ namespace Potato::Ebnf
 			Property& operator=(Property const& p) = default;
 			std::any data;
 			template<typename Type>
-			Type GetData() { return std::any_cast<Type>(data); }
+			Type Consume() { return std::move(std::any_cast<Type>(data)); }
+			std::any Consume() { return std::move(data); }
 			template<typename Type>
-			Type* TryGetData() { return std::any_cast<Type>(&data); }
-			template<typename Type>
-			std::remove_reference_t<Type> MoveData() { return std::move(std::any_cast<std::add_lvalue_reference_t<Type>>(data)); }
-			std::any MoveRawData() { return std::move(data); }
+			std::optional<Type> TryConsume() {
+				auto P = std::any_cast<Type>(&data);
+				if (P != nullptr)
+					return std::move(*P);
+				else
+					return std::nullopt;
+			}
 		};
 		size_t state = 0;
 		std::u32string_view string;
 		Section section;
 		size_t mask = 0;
-		size_t production_count = 0;
-		Property* datas = nullptr;
-		Property& operator[](size_t index) { return datas[index]; }
-		Property* begin() { return datas; }
-		Property* end() { return datas + production_count;}
-		NTElement(Step const& ref) : state(ref.state), string(ref.string), section(ref.section), mask(ref.reduce.mask), production_count(ref.reduce.production_count)
+		std::span<Property> production;
+		Property& operator[](size_t index) { return production[index]; }
+		auto begin() { return production.begin(); }
+		auto end() { return production.end();}
+		
+		NTElement(Step const& ref, Property* data) : state(ref.state), string(ref.string), section(ref.section), mask(ref.reduce.mask), production(data, ref.reduce.production_count)
 		{
 			assert(!ref.IsTerminal());
 		}

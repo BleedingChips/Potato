@@ -6,7 +6,7 @@ namespace Potato::Lr
 	{
 		if (NTFunc && TFun)
 		{
-			std::vector<std::tuple<Symbol, std::any>> DataBuffer;
+			std::vector<NTElementData> DataBuffer;
 			for (auto& ite : steps)
 			{
 				if (ite.IsTerminal())
@@ -19,17 +19,16 @@ namespace Potato::Lr
 					}
 				}
 				else {
-					NTElement ele{ ite };
 					assert(DataBuffer.size() >= ite.reduce.production_count);
 					size_t CurrentAdress = DataBuffer.size() - ite.reduce.production_count;
-					ele.datas = DataBuffer.data() + CurrentAdress;
+					NTElement ele{ ite, DataBuffer.data() + CurrentAdress};
 					auto Result = NTFunc(ele);
 					DataBuffer.resize(CurrentAdress);
 					DataBuffer.push_back({ ite.value, std::move(Result) });
 				}
 			}
 			assert(DataBuffer.size() == 1);
-			return std::move(std::get<1>(DataBuffer[0]));
+			return DataBuffer[0].Consume();
 		}
 		return {};
 	}

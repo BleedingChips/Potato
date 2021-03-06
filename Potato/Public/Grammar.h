@@ -12,6 +12,7 @@
 #include "Misc.h"
 #include "tmp.h"
 #include <span>
+#include <cassert>
 namespace Potato::Grammar
 {
 

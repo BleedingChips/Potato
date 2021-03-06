@@ -123,16 +123,16 @@ namespace Potato::FileSystem
 					{
 					case 0:
 					{
-						return Ele[0].MoveRawData();
+						return Ele[0].Consume();
 					}
 					case 1:
 					{
 						std::vector<Element> Res;
-						for(size_t i = 0; i < Ele.production_count; ++i)
+						for(size_t i = 0; i < Ele.production.size(); ++i)
 						{
 							if(Ele[i].IsNoterminal())
 							{
-								auto P = Ele[i].GetData<Element>();
+								auto P = Ele[i].Consume<Element>();
 								Res.push_back(std::move(P));
 							}	
 						}
@@ -141,12 +141,12 @@ namespace Potato::FileSystem
 					case 2:
 					{
 						Result.style = Style::DosAbsolute;
-						auto Temp = Ele[0].GetData<Element>();
+						auto Temp = Ele[0].Consume<Element>();
 						Result.elements.push_back(Temp);
 						Result.path = Temp(Input);
-						if(Ele.production_count >= 2)
+						if(Ele.production.size() >= 2)
 						{
-							auto P = Ele[1].MoveData<std::vector<Element>>();
+							auto P = Ele[1].Consume<std::vector<Element>>();
 							if (!Result.Insert(Input, P.data(), P.size()))
 								Result = {};
 						}
@@ -154,19 +154,19 @@ namespace Potato::FileSystem
 					case 3:
 					{
 						Result.style = Style::Relative;
-						auto P = Ele[0].MoveData<std::vector<Element>>();
+						auto P = Ele[0].Consume<std::vector<Element>>();
 						if(!Result.Insert(Input, P.data(), P.size()))
 							Result = {};
 					}break;
 					case 4:
 					{
 						Result.style = Style::Mapping;
-						auto Temp = Ele[0].GetData<Element>();
+						auto Temp = Ele[0].Consume<Element>();
 						Result.elements.push_back(Temp);
 						Result.path = Temp(Input);
-						if (Ele.production_count >= 2)
+						if (Ele.production.size() >= 2)
 						{
-							auto P = Ele[1].MoveData<std::vector<Element>>();
+							auto P = Ele[1].Consume<std::vector<Element>>();
 							if(!Result.Insert(Input, P.data(), P.size()))
 								Result = {};
 						}
@@ -174,7 +174,7 @@ namespace Potato::FileSystem
 					case 5:
 					{
 						Result.style = Style::UnixAbsolute;
-						auto P = Ele[1].MoveData<std::vector<Element>>();
+						auto P = Ele[1].Consume<std::vector<Element>>();
 						P[0].type = ElementStyle::Root;
 						P[0].start -=1;
 						P[0].size +=2;

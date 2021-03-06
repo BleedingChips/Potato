@@ -235,18 +235,18 @@ namespace Potato::Unfa
 			{
 				switch (tra.mask)
 				{
-				case 0: return tra.MoveRawData(0);
+				case 0: return tra[0].Consume();
 				case 1:
 				{
-					auto Node1 = tra.GetData<TemNode>(0);
-					auto Node2 = tra.GetData<TemNode>(1);
+					auto Node1 = tra[0].Consume<TemNode>();
+					auto Node2 = tra[1].Consume<TemNode>();
 					temporary_node[Node1.out].emplace_back(Edge{Node2.in,  EEpsilon{}});
 					return TemNode{Node1.in, Node2.out};
 				}
 				case 2:
 				{
-					auto Node1 = tra.GetData<TemNode>(0);
-					auto Node2 = tra.GetData<TemNode>(2);
+					auto Node1 = tra[0].Consume<TemNode>();
+					auto Node2 = tra[2].Consume<TemNode>();
 					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
 					uint32_t NewNodeOut = NewNodeIn + 1;
 					temporary_node.push_back({Edge{Node1.in, EEpsilon{}}, Edge{Node2.in, EEpsilon{}}});
@@ -257,11 +257,11 @@ namespace Potato::Unfa
 				}
 				case 3:
 				{
-					return tra.MoveRawData(3);
+					return tra[3].Consume();
 				}
 				case 4:
 				{
-					auto Node1 = tra.GetData<TemNode>(1);
+					auto Node1 = tra[1].Consume<TemNode>();
 					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
 					uint32_t NewNodeOut = NewNodeIn + 1;
 					temporary_node.push_back({Edge{Node1.in, ECapture{true, acception_index }}});
@@ -290,30 +290,30 @@ namespace Potato::Unfa
 				case 5: {return SeqIntervalT{}; }
 				case 6:
 				{
-					auto& r1 = tra.GetData<SeqIntervalT&>(0);
-					auto& r2 = tra.GetData<SeqIntervalT&>(1);
+					auto r1 = tra[0].Consume<SeqIntervalT>();
+					auto r2 = tra[1].Consume<SeqIntervalT>();
 					r1 = r1.Union(r2);
-					return tra.MoveRawData(0);
+					return std::move(r1);
 				}
 				case 7:
 				{
-					auto& r1 = tra.GetData<SeqIntervalT&>(0);
-					auto& r2 = tra.GetData<SeqIntervalT&>(1);
-					auto& r3 = tra.GetData<SeqIntervalT&>(3);
+					auto r1 = tra[0].Consume<SeqIntervalT>();
+					auto r2 = tra[1].Consume<SeqIntervalT>();
+					auto r3 = tra[3].Consume<SeqIntervalT>();
 					r1 = r1.Union(r2.MinMax().Union(r3.MinMax()));
-					return tra.MoveRawData(0);
+					return std::move(r1);
 				}
 				case 8:
 				{
 					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
 					uint32_t NewNodeOut = NewNodeIn + 1;
-					temporary_node.push_back({ Edge{ NewNodeOut, EComsume{tra.MoveData<SeqIntervalT>(1)} } });
+					temporary_node.push_back({ Edge{ NewNodeOut, EComsume{tra[1].Consume<SeqIntervalT>()} } });
 					temporary_node.emplace_back();
 					return TemNode{ NewNodeIn, NewNodeOut };
 				}
 				case 9:
 				{
-					SeqIntervalT r1 = tra.MoveData<SeqIntervalT>(2);
+					SeqIntervalT r1 = tra[2].Consume<SeqIntervalT>();
 					r1 = r1.Complementary(MaxIntervalRange());
 					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
 					uint32_t NewNodeOut = NewNodeIn + 1;
@@ -325,13 +325,13 @@ namespace Potato::Unfa
 				{
 					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
 					uint32_t NewNodeOut = NewNodeIn + 1;
-					temporary_node.push_back({ Edge{ NewNodeOut, EComsume{tra.MoveData<SeqIntervalT>(0)}} });
+					temporary_node.push_back({ Edge{ NewNodeOut, EComsume{tra[0].Consume<SeqIntervalT>()}} });
 					temporary_node.emplace_back();
 					return TemNode{ NewNodeIn, NewNodeOut };
 				}
 				case 13:
 				{
-					auto Node = tra.GetData<TemNode>(0);
+					auto Node = tra[0].Consume<TemNode>();
 					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
 					uint32_t NewNodeOut = NewNodeIn + 1;
 					temporary_node.emplace_back();
@@ -346,7 +346,7 @@ namespace Potato::Unfa
 				}
 				case 14:
 				{
-					auto Node = tra.GetData<TemNode>(0);
+					auto Node = tra[0].Consume<TemNode>();
 					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
 					uint32_t NewNodeOut = NewNodeIn + 1;
 					temporary_node.emplace_back();
@@ -360,7 +360,7 @@ namespace Potato::Unfa
 				}
 				case 15:
 				{
-					auto Node = tra.GetData<TemNode>(0);
+					auto Node = tra[0].Consume<TemNode>();
 					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
 					uint32_t NewNodeOut = NewNodeIn + 1;
 					temporary_node.emplace_back();
@@ -374,7 +374,7 @@ namespace Potato::Unfa
 				}
 				case 16:
 				{
-					auto Node = tra.GetData<TemNode>(0);
+					auto Node = tra[0].Consume<TemNode>();
 					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
 					uint32_t NewNodeOut = NewNodeIn + 1;
 					temporary_node.emplace_back();
@@ -389,7 +389,7 @@ namespace Potato::Unfa
 				}
 				case 17:
 				{
-					auto Node = tra.GetData<TemNode>(0);
+					auto Node = tra[0].Consume<TemNode>();
 					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
 					uint32_t NewNodeOut = NewNodeIn + 1;
 					temporary_node.emplace_back();
@@ -403,7 +403,7 @@ namespace Potato::Unfa
 				}
 				case 18:
 				{
-					auto Node = tra.GetData<TemNode>(0);
+					auto Node = tra[0].Consume<TemNode>();
 					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
 					uint32_t NewNodeOut = NewNodeIn + 1;
 					temporary_node.emplace_back();
