@@ -20,6 +20,23 @@ namespace Potato::Grammar
 
 	struct Mask
 	{
+		operator bool() const noexcept{ return storage.has_value(); }
+		std::u32string_view Name() const noexcept { assert(*this); return storage->name; }
+		size_t Index() const noexcept { assert(*this); return storage->index; }
+		Mask() = default;
+		Mask(Mask const&) = default;
+		Mask(size_t index, std::u32string_view name) : storage(Storage{index, name}){}
+	private:
+		struct Storage
+		{
+			size_t index;
+			std::u32string_view name;
+		};
+		std::optional<Storage> storage;
+	};
+
+	struct Mask
+	{
 		Mask(const Mask&) = default;
 		Mask(size_t i_index) : index(i_index){ assert(i_index < std::numeric_limits<size_t>::max()); }
 		Mask() = default;
@@ -39,6 +56,7 @@ namespace Potato::Grammar
 	};
 
 	using SymbolMask = MaskWrapper<"Symbol">;
+
 	using SymbolAreaMask = MaskWrapper<"SymbolArea">;
 	
 	struct Symbol
@@ -65,8 +83,10 @@ namespace Potato::Grammar
 		std::span<Property> FindArea(SymbolAreaMask mask) noexcept
 		{
 			auto re = static_cast<Symbol const*>(this)->FindArea(mask);
-			return {const_cast<Property*>(re.data()), re.size()};
+			return std::span<Property>{const_cast<Property*>(re.data()), re.size()};
 		}
+		std::span<Property const> FindLastActive(size_t count) const noexcept;
+		std::span<Property> FindLastActive(size_t count) noexcept { auto P = static_cast<Symbol const*>(this)->FindLastActive(count); return std::span<Property>{const_cast<Property*>(P.data()), P.size()};       }
 
 		SymbolAreaMask PopElementAsUnactive(size_t count);
 
@@ -91,7 +111,7 @@ namespace Potato::Grammar
 
 	struct TypeProperty
 	{
-		std::vector<SymbolMask> member;
+		SymbolAreaMask member;
 	};
 
 	using ValueMask = MaskWrapper<"Value">;

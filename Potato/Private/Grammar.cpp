@@ -40,6 +40,12 @@ namespace Potato::Grammar
 		return nullptr;
 	}
 
+	std::span<Symbol::Property const> Symbol::FindLastActive(size_t count) const noexcept
+	{
+		count = std::min(count, active_scope.size());
+		return {(active_scope.data() + active_scope.size() - count), count};
+	}
+
 	std::span<Symbol::Property const> Symbol::FindArea(SymbolAreaMask mask) const noexcept
 	{
 		if(mask && (mask.AsIndex() < areas.size()))
