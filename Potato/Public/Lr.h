@@ -87,7 +87,7 @@ namespace Potato::Lr
 		std::any data;
 		operator Symbol() const { return symbol; }
 		template<typename Type>
-		Type Consume() { return std::move(std::any_cast<Type>(data)); }
+		std::remove_reference_t<Type> Consume() { return std::move(std::any_cast<std::add_lvalue_reference_t<Type>>(data)); }
 		std::any Consume() { return std::move(data); }
 		template<typename Type>
 		std::optional<Type> TryConsume() {

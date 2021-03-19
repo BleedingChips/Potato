@@ -9,7 +9,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\Potato\Public\auto_adapter.h">
+    <ClInclude Include="..\..\Potato\Public\AutoAdapter.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Potato\Public\Ebnf.h">

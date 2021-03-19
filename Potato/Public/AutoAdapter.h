@@ -1,6 +1,7 @@
 #pragma once
 #include <functional>
-#include "Misc.h"
+#include "TMP.h"
+/*
 namespace Potato::Tool
 {
 	class unorder_adapt
@@ -179,4 +180,98 @@ namespace Potato::Tool
 				);
 	}
 
+}
+*/
+
+namespace Potato
+{
+	
+	namespace Implement
+	{
+		template<typename Type, size_t index> struct TypeWrapper{};
+
+		template<size_t Index, typename Input, typename Output>
+		struct PackerImplement;
+
+		template<size_t Index, typename Input, typename ...OInput, typename ...Output>
+		struct PackerImplement<Index, TypeTuple<Input, OInput...>, TypeTuple<Output...>> {
+			using Type = typename PackerImplement<Index + 1, TypeTuple<OInput...>, TypeTuple<Output..., TypeWrapper<Input, Index>>>::Type;
+		};
+
+		template<size_t Index, typename ...Output>
+		struct PackerImplement<Index, TypeTuple<>, TypeTuple<Output...>> {
+			using Type = TypeTuple<Output...>;
+		};
+
+		template<typename ...OInput>
+		struct Package {
+			using Type = typename PackerImplement<0, TypeTuple<OInput...>, TypeTuple<>>::Type;
+		};
+
+		template<size_t index, typename InputType> struct AdapterOneResult
+		{
+			static constexpr size_t Index = index;
+			using Last = InputType;
+		};
+
+		template<typename ...Input>
+		struct AdapterOneType;
+
+		template<typename RequireType, typename ...Last, size_t Index, typename Input, typename ...OInput>
+		struct AdapterOneType<RequireType, TypeTuple<Last...>, TypeTuple<TypeWrapper<Input, Index>, OInput...>>
+		{
+		public:
+			using Type = typename std::conditional_t<
+				std::is_convertible_v<Input, RequireType>,
+				Instant<ItSelf, AdapterOneResult<Index, TypeTuple<Last..., OInput...>>>,
+				Instant<AdapterOneType, RequireType, TypeTuple<Last..., TypeWrapper<Input, Index>>, TypeTuple<OInput...>>
+			>::template AppendT<>;
+		};
+
+		template<typename RequireType, typename ...Last>
+		struct AdapterOneType<RequireType, TypeTuple<Last...>, TypeTuple<>>
+		{
+		public:
+			using Type = AdapterOneResult<std::numeric_limits<size_t>::max(), TypeTuple<Last...>>;
+		};
+
+		template<typename Index, typename Require, typename Provide>
+		struct Adapter;
+
+		template<typename ...Index, typename CurRequire, typename ...ORequire, typename ...Provide>
+		struct Adapter<TypeTuple<Index...>, TypeTuple<CurRequire, ORequire...>, TypeTuple<Provide...>>
+		{
+			using Cur = typename AdapterOneType<CurRequire, TypeTuple<>, TypeTuple<Provide...>>::Type;
+			using Type = std::conditional_t<
+			Cur::Index < std::numeric_limits<size_t>::max(),
+			Instant<Adapter, TypeTuple<Index..., std::integral_constant<size_t, Cur::Index>>, TypeTuple<ORequire...>, typename Cur::Last>,
+			Instant<ItSelf, std::index_sequence<>>
+			>::template AppenT<>::Type;
+		};
+	}
+
+	inline void OP(float*){}
+
+	template<typename FuncObject, typename ...Parameter>
+	struct Adaptable {
+		using FunRequire = typename FunctionObjectInfo<FuncObject>::template PackParameters<TypeTuple>;
+		using ParProvide = typename Implement::Package<Parameter...>::Type;
+		using PK = Instant<Implement::AdapterOneType, int64_t, TypeTuple<>>::template Append<TypeTuple<Implement::TypeWrapper<int64_t, 0>>>;
+		//using K = typename Implement::AdapterOneType<int64_t, TypeTuple<>, TypeTuple<Implement::TypeWrapper<int64_t, 0>>>::Type;
+		//using Index = typename Implement::Adapter<TypeTuple<>, FunRequire, ParProvide>::Type;
+		//static constexpr value = (Index::Size == FunRequire::Size);
+		Adaptable() {
+			OP(PK{});
+		}
+	};
+
+	/*
+	template<typename FuncObject, typename ...Parameter>
+	decltype(auto) AutoAdapter(FuncObject&& fo, Parameter&& ... par) 
+	{
+		using FunRequire = typename FunctionObjectInfo<FuncObject>::template PackParameters<TypeTuple>;
+		using ParProvide = typename Implement::Package<Parameter...>::Type;
+		using Index = typename Implement::Adapter<std::index_sequence<>, FunRequire, ParProvide>::Type;
+	}
+	*/
 }

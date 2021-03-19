@@ -5,123 +5,66 @@
 
 namespace Potato::Grammar
 {
-
-	SymbolMask Symbol::FindActiveSymbolAtLast(std::u32string_view name) const noexcept
+	SymbolMask Table::InsertSymbol(std::u32string_view name, std::any property, Section section)
 	{
-		for (auto ite = active_scope.rbegin(); ite != active_scope.rend(); ++ite)
-		{
-			if(ite->name == name)
-				return ite->index;
-		}
-		return {};
-	}
-
-	std::vector<SymbolMask> Symbol::FindActiveAllSymbol(std::u32string_view name) const
-	{
-		std::vector<SymbolMask> result;
-		for (auto ite = active_scope.rbegin(); ite != active_scope.rend(); ++ite)
-		{
-			if (ite->name == name)
-				result.push_back(ite->index);
-		}
-		return std::move(result);
-	}
-
-	Symbol::Property const* Symbol::FindSymbol(SymbolMask mask) const
-	{
-		if (mask && (mask.AsIndex() < mapping.size()))
-		{
-			auto& mapp = mapping[mask];
-			if (mapp.is_active)
-				return &active_scope[mapp.index];
-			else
-				return &unactive_scope[mapp.index];
-		}
-		return nullptr;
-	}
-
-	std::span<Symbol::Property const> Symbol::FindLastActive(size_t count) const noexcept
-	{
-		count = std::min(count, active_scope.size());
-		return {(active_scope.data() + active_scope.size() - count), count};
-	}
-
-	std::span<Symbol::Property const> Symbol::FindArea(SymbolAreaMask mask) const noexcept
-	{
-		if(mask && (mask.AsIndex() < areas.size()))
-		{
-			auto [start, count] = areas[mask];
-			return {unactive_scope.data() + start, count};
-		}else
-			return {};
-	}
-
-	SymbolAreaMask Symbol::PopElementAsUnactive(size_t count)
-	{
-		count = std::min(count, active_scope.size());
-		assert(count <= active_scope.size());
-		SymbolAreaMask current_area{areas.size()};
-		for(auto i = active_scope.end() - count; i != active_scope.end(); ++i)
-			i->area = current_area;
-		auto unactive_scope_size = unactive_scope.size();
-		auto offset = active_scope.size() - count;
-		auto offset_ite = active_scope.begin() + offset;
-		unactive_scope.insert(unactive_scope.end(), 
-			std::move_iterator(offset_ite),
-			std::move_iterator(active_scope.end())
-		);
-		active_scope.erase(offset_ite, active_scope.end());
-		for (size_t i = 0; i < count; ++i)
-		{
-			auto& mapp = *(mapping.rbegin() + i);
-			mapp.is_active = false;
-			mapp.index = unactive_scope_size + count - i - 1;
-		}
-		areas.push_back({unactive_scope_size, count});
-		return current_area;
-	}
-	
-	SymbolMask Symbol::Insert(std::u32string_view name,  std::any property, Section section)
-	{
-		SymbolMask mask{mapping.size()};
-		active_scope.push_back({name, mask, {}, section, std::move(property)});
-		mapping.push_back(Mapping{true, active_scope.size() - 1});
+		SymbolMask mask{ scope.size(), name };
+		scope.push_back({ mask, {}, section, std::move(property) });
+		active_scope.push_back(mask);
 		return mask;
 	}
-	
-	ValueMask Value::InsertValue(SymbolMask mask, std::byte const* data, size_t length)
+
+	ValueMask Table::InsertValue(SymbolMask type, std::u32string_view type_name, std::span<std::byte const> datas)
 	{
-		if(mask)
-		{
-			ValueMask vmask{value_mapping.size()};
-			size_t start = value_buffer.size();
-			value_buffer.insert(value_buffer.end(), data, data + length);
-			value_mapping.push_back({mask, Style::Real, start, length});
-			return vmask;
-		}
-		return {};
+		ValueMask vmask{ data_mapping.size(), type, type_name, datas.size() };
+		size_t start = data_buffer.size();
+		data_buffer.insert(data_buffer.end(), datas.begin(), datas.end());
+		data_mapping.push_back({ type, type_name, {start, datas.size()} });
+		return vmask;
 	}
 
-	ValueMask Value::ReservedLazyValue()
+	AreaMask Table::PopSymbolAsUnactive(size_t count)
 	{
-		ValueMask res(value_mapping.size());
-		value_mapping.push_back({{}, Style::Lazy, 0, 0});
-		return res;
-	}
+		count = std::min(count, active_scope.size());
+		AreaMask current_area{ areas.size(), count };
+		IndexSpan<> cur_areas_sub{0, 0};
+		IndexSpan<> cur_areas{ areas.size(), 0};
 
-	bool Value::InsertLazyValue(SymbolMask index, std::byte const* data, size_t length)
-	{
-		if(index && index.AsIndex() < value_mapping.size() && value_mapping[index].style == Style::Lazy)
+		for (auto i = active_scope.end() - count; i != active_scope.end(); ++i)
 		{
-			auto& ref = value_mapping[index];
-			if(ref.style == Style::Lazy)
+			auto& pro = scope[i->Index()];
+			pro.area = current_area;
+			if (cur_areas_sub.length == 0)
 			{
-				value_buffer.insert(value_buffer.end(), data, data + length);
-				ref.style = Style::LazyInited;
-				return true;
+				cur_areas_sub = { pro.mask.Index(), 1};
+			}
+			else {
+				if(cur_areas_sub.start + count == pro.mask.Index())
+					++cur_areas_sub.length;
+				else {
+					areas_sub.push_back(cur_areas_sub);
+					++cur_areas.length;
+					cur_areas_sub = {pro.mask.Index(), 1};
+				}
 			}
 		}
-		return false;
+		if (cur_areas_sub.length != 0)
+		{
+			areas_sub.push_back(cur_areas_sub);
+			++cur_areas.length;
+		}
+		areas.push_back(cur_areas);
+		active_scope.erase(active_scope.end() - count, active_scope.end());
+		return current_area;
+	}
+
+	SymbolMask Table::FindActiveSymbolAtLast(std::u32string_view name) const noexcept
+	{
+		for (auto ite = active_scope.rbegin(); ite != active_scope.rend(); ++ite)
+		{
+			if(ite->Name() == name)
+				return *ite;
+		}
+		return {};
 	}
 
 	size_t MemoryModelMaker::operator()(MemoryModel const& info_i)

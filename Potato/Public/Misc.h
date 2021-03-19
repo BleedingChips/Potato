@@ -138,7 +138,7 @@ namespace Potato
 		using FunT = std::remove_cvref_t<CurObject>;
 		if constexpr (std::is_function_v<FunT>)
 		{
-			using RequireType = typename FunctionInfo<FunT>::template PackParameters<ItSelf>::Type;
+			using RequireType = std::remove_reference_t<typename FunctionInfo<FunT>::template PackParameters<ItSelf>::Type>;
 			if (auto P = std::any_cast<RequireType>(&ref); P != nullptr)
 			{
 				std::forward<CurObject>(co)(*P);
@@ -150,7 +150,7 @@ namespace Potato
 		}
 		else if constexpr (IsFunctionObject<FunT>::Value)
 		{
-			using RequireType = typename FunctionObjectInfo<FunT>::template PackParameters<ItSelf>::Type;
+			using RequireType = std::remove_reference_t<typename FunctionObjectInfo<FunT>::template PackParameters<ItSelf>::Type>;
 			if (auto P = std::any_cast<RequireType>(&ref); P != nullptr)
 			{
 				std::forward<CurObject>(co)(*P);
@@ -175,7 +175,7 @@ namespace Potato
 		using FunT = std::remove_cvref_t<CurObject>;
 		if constexpr (std::is_function_v<FunT>)
 		{
-			using RequireType = typename FunctionInfo<FunT>::template PackParameters<ItSelf>::Type;
+			using RequireType = std::remove_reference_t<typename FunctionInfo<FunT>::template PackParameters<ItSelf>::Type>;
 			if (auto P = std::any_cast<RequireType>(&ref); P != nullptr)
 			{
 				std::forward<CurObject>(co)(*P);
@@ -187,7 +187,7 @@ namespace Potato
 		}
 		else if constexpr (IsFunctionObject<FunT>::Value)
 		{
-			using RequireType = typename FunctionObjectInfo<FunT>::template PackParameters<ItSelf>::Type;
+			using RequireType = std::remove_reference_t<typename FunctionObjectInfo<FunT>::template PackParameters<ItSelf>::Type>;
 			if (auto P = std::any_cast<RequireType>(&ref); P != nullptr)
 			{
 				std::forward<CurObject>(co)(*P);

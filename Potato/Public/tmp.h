@@ -44,6 +44,10 @@ namespace Potato
 	};
 	template<template<typename ...> class Output, typename ...Input> using InstantT = Output<Input...>;
 
+	template<typename ...Type> struct TypeTuple {
+		static constexpr size_t Size = sizeof...(Type);
+	};
+
 	// Replace
 
 	template<typename Type> struct Replace;
@@ -430,4 +434,6 @@ namespace Potato
 
 	template<ConstString str>
 	struct ConstStringHolder {};
+
+	
 }
