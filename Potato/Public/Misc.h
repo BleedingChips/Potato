@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cassert>
 #include <span>
+#include <tuple>
 
 #include "TMP.h"
 
@@ -291,6 +292,104 @@ namespace Potato
 	private:
 		mutable std::atomic_size_t ref = 0;
 	};
+
+	namespace Implement
+	{
+		template<typename Type, size_t index> struct TypeWithIndex {};
+
+		template<size_t Index, typename Input, typename Output>
+		struct TypeWithIndexPacker;
+
+		template<size_t Index, typename Input, typename ...OInput, typename ...Output>
+		struct TypeWithIndexPacker<Index, TypeTuple<Input, OInput...>, TypeTuple<Output...>> {
+			using Type = typename TypeWithIndexPacker<Index + 1, TypeTuple<OInput...>, TypeTuple<Output..., TypeWithIndex<Input, Index>>>::Type;
+		};
+
+		template<size_t Index, typename ...Output>
+		struct TypeWithIndexPacker<Index, TypeTuple<>, TypeTuple<Output...>> {
+			using Type = TypeTuple<Output...>;
+		};
+
+		template<typename ...OInput>
+		struct PackageTypeWithIndex {
+			using Type = typename TypeWithIndexPacker<0, TypeTuple<OInput...>, TypeTuple<>>::Type;
+		};
+
+		template<size_t index, typename InputType> struct AdapteResult
+		{
+			static constexpr size_t Index = index;
+			using Last = InputType;
+		};
+
+		template<typename Result, typename Last, typename Input>
+		struct AdapteCurrentType;
+
+		template<typename RequireType, typename ...Last, typename Input, size_t Index, typename ...OInput>
+		struct AdapteCurrentType<RequireType, TypeTuple<Last...>, TypeTuple<TypeWithIndex<Input, Index>, OInput...>>
+		{
+		public:
+			using Type = typename std::conditional_t<
+				std::is_convertible_v<Input, RequireType>,
+				Instant<ItSelf, AdapteResult<Index, TypeTuple<Last..., OInput...>>>,
+				//Instant<ItSelf, AdapterOneResult<Index, TypeTuple<Last..., OInput...>>>
+				Instant<Implement::AdapteCurrentType, RequireType, TypeTuple<Last..., TypeWithIndex<Input, Index>>, TypeTuple<OInput...>>
+			>::template AppendT<>::Type;
+		};
+
+		template<typename RequireType, typename ...Last>
+		struct AdapteCurrentType<RequireType, TypeTuple<Last...>, TypeTuple<>>
+		{
+		public:
+			using Type = AdapteResult<std::numeric_limits<size_t>::max(), TypeTuple<Last...>>;
+		};
+
+		template<typename Index, typename Require, typename Provide>
+		struct AutoInvoteAdapter;
+
+		template<typename ...Index, typename CurRequire, typename ...ORequire, typename ...Provide>
+		struct AutoInvoteAdapter<TypeTuple<Index...>, TypeTuple<CurRequire, ORequire...>, TypeTuple<Provide...>>
+		{
+			using PreExecute = typename AdapteCurrentType<CurRequire, TypeTuple<>, TypeTuple<Provide...>>::Type;
+			using Type = typename std::conditional_t <
+				PreExecute::Index < std::numeric_limits<size_t>::max(),
+				Instant<Implement::AutoInvoteAdapter, TypeTuple<Index..., std::integral_constant<size_t, PreExecute::Index>>, TypeTuple<ORequire...>, typename PreExecute::Last>,
+				Instant<ItSelf, TypeTuple<>>
+				>::template AppendT<>::Type;
+		};
+
+		template<typename ...Index, typename ...Provide>
+		struct AutoInvoteAdapter<TypeTuple<Index...>, TypeTuple<>, TypeTuple<Provide...>>
+		{
+			using Type = TypeTuple<Index...>;
+		};
+
+		template<typename Index> struct AutoInvoteExeceuter;
+		template<size_t ...Index> struct AutoInvoteExeceuter<TypeTuple<std::integral_constant<size_t, Index>...>>
+		{
+			template<typename FuncObject, typename ...Par>
+			decltype(auto) operator()(FuncObject&& FO, Par&& ...par) {
+				auto fortup = std::forward_as_tuple(par...);
+				return std::forward<FuncObject>(FO)(std::get<Index>(fortup)...);
+			}
+		};
+	}
+
+	template<typename FuncObject, typename ...Parameter>
+	struct AutoInvocable {
+		using FunRequire = typename FunctionObjectInfo<std::remove_reference_t<FuncObject>>::template PackParameters<TypeTuple>;
+		using ParProvide = typename Implement::PackageTypeWithIndex<Parameter...>::Type;
+		using Index = typename Implement::AutoInvoteAdapter<TypeTuple<>, FunRequire, ParProvide>::Type;
+		static constexpr bool Value = (Index::Size == FunRequire::Size);
+	};
+
+	template<typename FuncObject, typename ...Parameter> constexpr bool AutoInvocableV = AutoInvocable<FuncObject, Parameter...>::Value;
+
+	template<typename FuncObject, typename ...Parameter>
+	decltype(auto) AutoInvote(FuncObject&& fo, Parameter&& ... par) requires AutoInvocableV<FuncObject, Parameter...>
+	{
+		using Index = typename AutoInvocable<FuncObject, Parameter...>::Index;
+		return Implement::AutoInvoteExeceuter<Index>{}(std::forward<FuncObject>(fo), std::forward<Parameter>(par)...);
+	}
 
 	//template<typename name>
 }

@@ -143,7 +143,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\Potato\Public\AutoAdapter.h" />
     <ClInclude Include="..\..\Potato\Public\Ebnf.h" />
     <ClInclude Include="..\..\Potato\Public\FileSystem.h" />
     <ClInclude Include="..\..\Potato\Public\Interval.h" />

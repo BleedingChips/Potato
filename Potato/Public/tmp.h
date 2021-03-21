@@ -37,15 +37,32 @@ namespace Potato
 
 	template<template<typename ...> class Output, typename ...Input> struct Instant
 	{
+	private:
+		template<typename ...OInput> struct AppendTWrapper{ using Type = Output<Input..., OInput...>; };
+		template<typename ...OInput> struct FrontTWrapper { using Type = Output<OInput..., Input...>; };
+	public:
 		template<typename ...OInput> using Append = Instant<Output, Input..., OInput...>;
-		template<typename ...OInput> using AppendT = Output<Input..., OInput...>;
+		template<typename ...OInput> using AppendT = typename AppendTWrapper<OInput...>::Type;
 		template<typename ...OInput> using Front = Instant<Output, OInput..., Input...>;
-		template<typename ...OInput> using FrontT = Output<OInput..., Input...>;
+		template<typename ...OInput> using FrontT = typename FrontTWrapper<OInput...>::Type;
+
+	
 	};
 	template<template<typename ...> class Output, typename ...Input> using InstantT = Output<Input...>;
 
+	namespace Implement {
+		template<size_t Index, typename ...InputType> struct TypeTupleIndex;
+		template<size_t Index, typename Cur, typename ...InputType> struct TypeTupleIndex<Index, Cur, InputType...>{
+			using Type = typename TypeTupleIndex<Index - 1, InputType...>::Type;
+		};
+		template<typename Cur, typename ...InputType> struct TypeTupleIndex<0, Cur, InputType...> {
+			using Type = Cur;
+		};
+	}
+
 	template<typename ...Type> struct TypeTuple {
 		static constexpr size_t Size = sizeof...(Type);
+		template<size_t Index> using Get = typename Implement::TypeTupleIndex<Index, Type...>::Type;
 	};
 
 	// Replace

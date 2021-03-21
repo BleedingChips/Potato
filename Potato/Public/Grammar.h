@@ -90,6 +90,8 @@ namespace Potato::Grammar
 			RequireType* TryCast() noexcept { return std::any_cast<RequireType>(&property); }
 			template<typename RequireType>
 			RequireType const* TryCast() const noexcept { return std::any_cast<RequireType const*>(&property); }
+			template<typename FunObject>
+			bool operator()(FunObject&& fo) { return AnyViewer(property, std::forward<FunObject>(fo)); }
 		};
 
 		SymbolMask InsertSymbol(std::u32string_view name, std::any property, Section section = {});
@@ -104,32 +106,72 @@ namespace Potato::Grammar
 		SymbolMask FindActiveSymbolAtLast(std::u32string_view name) const noexcept;
 		std::vector<SymbolMask> FindActiveAllSymbol(std::u32string_view name) const{ return active_scope; }
 
-		template<typename FunObj>
-		bool FindProperty(SymbolMask mask, FunObj&& Function) requires std::is_invocable_v<FunObj, Property&>;
+		template<typename ...InputType> struct AvailableInvocableDetecter {
+			static constexpr bool Value = false;
+		};
+
+		template<typename InputType> struct AvailableInvocableDetecter<InputType> {
+			static constexpr bool RequireProperty = std::is_same_v<std::remove_cvref_t<InputType>, Property>;
+			static constexpr bool RequireAppendProperty = false;
+			static constexpr bool Value = true;
+		};
+
+		template<typename InputType, typename InputType2> struct AvailableInvocableDetecter<InputType, InputType2> {
+			static constexpr bool RequireProperty = false;
+			static constexpr bool RequireAppendProperty = true;
+			static constexpr bool Value = !std::is_same_v<std::remove_cvref_t<InputType>, Property> && std::is_same_v<std::remove_cvref_t<InputType2>, Property>
+				|| !std::is_same_v<std::remove_cvref_t<InputType2>, Property> && std::is_same_v<std::remove_cvref_t<InputType>, Property>;
+			using RequireType = std::conditional_t<std::is_same_v<std::remove_cvref_t<InputType>, Property>, InputType2, InputType>;
+		};
+
+		template<typename FunObj> using AvailableInvocable = FunctionObjectInfo<std::remove_cvref_t<FunObj>>::template PackParameters<AvailableInvocableDetecter>;
+		template<typename FunObj> static constexpr bool AvailableInvocableV = AvailableInvocable<FunObj>::Value;
 
 		template<typename FunObj>
-		size_t FindProperty(AreaMask mask, FunObj&& Function) requires std::is_invocable_v<FunObj, Property&>;
-
-		template<typename ...OFunObj>
-		bool FindPropertyData(SymbolMask mask, OFunObj&&... OF);
-
-		template<typename ...OFunObj>
-		size_t FindPropertyData(AreaMask mask, OFunObj&&... OF);
+		bool FindProperty(SymbolMask mask, FunObj&& Function) requires AvailableInvocableV<FunObj>;
 
 		template<typename FunObj>
-		size_t FindAllProperty(FunObj&& Function) requires std::is_invocable_v<FunObj, Property&>;
+		size_t FindProperty(AreaMask mask, FunObj&& Function) requires AvailableInvocableV<FunObj>;
 
 		template<typename FunObj>
-		size_t FindActiveProperty(size_t count, FunObj&& Function) requires std::is_invocable_v<FunObj, Property&>;
+		size_t FindAllProperty(FunObj&& Function) requires AvailableInvocableV<FunObj>;
 
 		template<typename FunObj>
-		size_t FindAllActiveProperty(FunObj&& Function) requires std::is_invocable_v<FunObj, Property&>;
+		size_t FindActiveProperty(size_t count, FunObj&& Function) requires AvailableInvocableV<FunObj>;
+
+		template<typename FunObj>
+		size_t FindAllActiveProperty(FunObj&& Function) requires AvailableInvocableV<FunObj> {
+			return this->FindActiveProperty(active_scope.size(), std::forward<FunObj>(Function));
+		}
 
 		Table(Table&&) = default;
 		Table(Table const&) = default;
 		Table() = default;
 
 	private:
+
+		template<typename FunObj>
+		static bool Execute(Property& pro, FunObj&& fo) requires AvailableInvocableV<FunObj>
+		{
+			using Detect = AvailableInvocable<FunObj>;
+			if constexpr (Detect::RequireProperty)
+			{
+				std::forward<FunObj>(fo)(pro);
+				return true;
+			}
+			else {
+				if constexpr(!Detect::RequireAppendProperty)
+					return pro(std::forward<FunObj>(fo));
+				else {
+					bool Re = false;
+					AnyViewer(pro.property, [&](typename Detect::RequireType RT) {
+						AutoInvote(std::forward<FunObj>(fo), RT, pro);
+						Re = true;
+					});
+					return Re;
+				}
+			}
+		}
 		
 		struct Mapping
 		{
@@ -151,18 +193,17 @@ namespace Potato::Grammar
 	};
 
 	template<typename FunObj>
-	bool Table::FindProperty(SymbolMask mask, FunObj&& Function) requires std::is_invocable_v<FunObj, Property&>
+	bool Table::FindProperty(SymbolMask mask, FunObj&& Function) requires AvailableInvocableV<FunObj>
 	{
 		if (mask && mask.Index() < scope.size())
 		{
-			std::forward<FunObj>(Function)(scope[mask.Index()]);
-			return true;
+			return Table::Execute(scope[mask.Index()], std::forward<FunObj>(Function));
 		}
 		return false;
 	}
 
 	template<typename FunObj>
-	size_t Table::FindProperty(AreaMask mask, FunObj&& Function) requires std::is_invocable_v<FunObj, Property&>
+	size_t Table::FindProperty(AreaMask mask, FunObj&& Function) requires AvailableInvocableV<FunObj>
 	{
 		size_t called = 0;
 		if (mask && mask.Index() < areas.size())
@@ -173,50 +214,35 @@ namespace Potato::Grammar
 				auto span2 = ite(scope);
 				for (auto& ite2 : span2)
 				{
-					std::forward<FunObj>(Function)(ite2);
-					++called;
+					if(Table::Execute(ite2, std::forward<FunObj>(Function)))
+						++called;
 				}
 			}
 		}
 		return called;
 	}
 
-	template<typename ...OFunObj>
-	size_t Table::FindPropertyData(AreaMask mask, OFunObj&& ...OFO)
+	template<typename FunObj>
+	size_t Table::FindAllProperty(FunObj&& Function) requires AvailableInvocableV<FunObj>
 	{
 		size_t called = 0;
-		this->FindProperty(mask, [&](Table::Property& P){
-			if(Potato::AnyViewer(P.property, std::forward<OFunObj>(OFO)...))
+		for (auto& ite : scope)
+		{
+			if (Table::Execute(ite, std::forward<FunObj>(Function)))
 				++called;
-		});
+		}
 		return called;
 	}
 
-	template<typename ...OFunObj>
-	bool Table::FindPropertyData(SymbolMask mask, OFunObj&& ...OFO)
-	{
-		bool Fined = false;
-		this->FindProperty(mask, [&](Table::Property& P) {
-			Fined = Potato::AnyViewer(P.property, std::forward<OFunObj>(OFO)...);
-		});
-		return Fined;
-	}
-
 	template<typename FunObj>
-	size_t Table::FindAllProperty(FunObj&& Function) requires std::is_invocable_v<FunObj, Property&>
-	{
-		return this->FindActiveProperty(active_scope.size(), std::forward<FunObj>(Function));
-	}
-
-	template<typename FunObj>
-	size_t Table::FindActiveProperty(size_t count, FunObj&& Function) requires std::is_invocable_v<FunObj, Property&>
+	size_t Table::FindActiveProperty(size_t count, FunObj&& Function) requires AvailableInvocableV<FunObj>
 	{
 		count = std::min(count, active_scope.size());
 		size_t called = 0;
 		for (auto ite = active_scope.end() - count; ite != active_scope.end(); ++ite)
 		{
-			std::forward<FunObj>(Function)(scope[ite->Index()]);
-			++called;
+			if (Table::Execute(scope[ite->Index()], std::forward<FunObj>(Function)))
+				++called;
 		}
 		return called;
 	}
