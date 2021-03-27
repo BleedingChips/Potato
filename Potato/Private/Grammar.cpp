@@ -27,7 +27,7 @@ namespace Potato::Grammar
 		count = std::min(count, active_scope.size());
 		AreaMask current_area{ areas.size(), count };
 		IndexSpan<> cur_areas_sub{0, 0};
-		IndexSpan<> cur_areas{ areas.size(), 0};
+		IndexSpan<> cur_areas{ areas_sub.size(), 0};
 
 		for (auto i = active_scope.end() - count; i != active_scope.end(); ++i)
 		{
@@ -38,7 +38,7 @@ namespace Potato::Grammar
 				cur_areas_sub = { pro.mask.Index(), 1};
 			}
 			else {
-				if(cur_areas_sub.start + count == pro.mask.Index())
+				if(cur_areas_sub.start + cur_areas_sub.length == pro.mask.Index())
 					++cur_areas_sub.length;
 				else {
 					areas_sub.push_back(cur_areas_sub);
@@ -67,8 +67,45 @@ namespace Potato::Grammar
 		return {};
 	}
 
+	MemoryTag MemoryTagStyle::Finalize(MemoryTag owner)
+	{
+		auto mod = owner.size % owner.align;
+		if (mod == 0)
+			return owner;
+		else
+			return {owner.align, (owner.size + owner.align - mod)};
+	}
+
+	auto CLikeMemoryTagStyle::InsertMember(MemoryTag owner, MemoryTag member) -> Result
+	{
+		auto align = std::max(owner.align, member.align);
+		auto mod = owner.size % member.align;
+		if (mod == 0)
+		{
+			return { owner.size, {align, owner.size + member.size}};
+		}
+		else {
+			auto offset = owner.size + (member.align - mod);
+			return {offset, {align, offset + member.size}};
+		}
+	}
+
+	auto HlslMemoryTagStyle::InsertMember(MemoryTag owner, MemoryTag member) -> Result
+	{
+		assert(member.align == MinAlign());
+		constexpr size_t AlignSize = MinAlign() * 4;
+		MemoryTag temp{ owner };
+		size_t rever_size = AlignSize - temp.size % AlignSize;
+		if (member.size >= AlignSize || rever_size < member.size)
+			temp.size += rever_size;
+		return {temp.size, {temp.align, temp.size + member.size}};
+	}
+
+	/*
 	size_t MemoryModelMaker::operator()(MemoryModel const& info_i)
 	{
+		history = info;
+		finalize = std::nullopt;
 		auto re = Handle(info, info_i);
 		info.align = re.align;
 		info.size += re.size_reserved;
@@ -102,4 +139,5 @@ namespace Potato::Grammar
 		result.size += ReservedSize(result, result);
 		return result;
 	}
+	*/
 }

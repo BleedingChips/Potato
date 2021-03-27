@@ -121,6 +121,7 @@ namespace Potato::Grammar
 			static constexpr bool RequireAppendProperty = true;
 			static constexpr bool Value = !std::is_same_v<std::remove_cvref_t<InputType>, Property> && std::is_same_v<std::remove_cvref_t<InputType2>, Property>
 				|| !std::is_same_v<std::remove_cvref_t<InputType2>, Property> && std::is_same_v<std::remove_cvref_t<InputType>, Property>;
+			static constexpr bool LeftProperty = std::is_same_v<std::remove_cvref_t<InputType>, Property>;
 			using RequireType = std::conditional_t<std::is_same_v<std::remove_cvref_t<InputType>, Property>, InputType2, InputType>;
 		};
 
@@ -165,7 +166,10 @@ namespace Potato::Grammar
 				else {
 					bool Re = false;
 					AnyViewer(pro.property, [&](typename Detect::RequireType RT) {
-						AutoInvote(std::forward<FunObj>(fo), RT, pro);
+						if constexpr (Detect::LeftProperty)
+							std::forward<FunObj>(fo)(pro, RT);
+						else
+							std::forward<FunObj>(fo)(RT, pro);
 						Re = true;
 					});
 					return Re;
@@ -273,36 +277,105 @@ namespace Potato::Grammar
 		bool is_member;
 	};
 
-	struct MemoryModel
+	struct MemoryTag
 	{
 		size_t align = 0;
 		size_t size = 0;
+		MemoryTag(size_t i_align = 0, size_t i_size = 0)
+			: align(i_align), size(i_size)
+		{  
+			assert(((align - 1) & align) == 0);
+			assert(align == 0 || size % align == 0);
+		};
+		MemoryTag(MemoryTag const&) = default;
+		MemoryTag& operator=(MemoryTag const&) = default;
 	};
 
+	struct MemoryTagStyle
+	{
+		struct Result 
+		{
+			size_t member_offset;
+			MemoryTag owner;
+		};
+		static constexpr size_t MinAlign() noexcept{ return alignof(std::byte); };
+		//Result InsertMember(MemoryTag owner, MemoryTag member) = 0;
+		MemoryTag Finalize(MemoryTag owner);
+	};
+
+	struct CLikeMemoryTagStyle : MemoryTagStyle
+	{
+		Result InsertMember(MemoryTag owner, MemoryTag member);
+	};
+
+	struct HlslMemoryTagStyle : MemoryTagStyle
+	{
+		static constexpr size_t MinAlign() noexcept {return alignof(uint32_t);}
+		Result InsertMember(MemoryTag owner, MemoryTag member);
+	};
+
+	struct MemoryTagFactoryCore
+	{
+		MemoryTag scope;
+		std::optional<MemoryTag> history;
+		std::optional<MemoryTag> finalize;
+	};
+
+	template<typename FactoryStyle = CLikeMemoryTagStyle>
+	requires std::is_base_of_v<MemoryTagStyle, FactoryStyle>
+	struct MemoryTagFatcory : protected MemoryTagFactoryCore
+	{
+		size_t InsertMember(MemoryTag const& input) {
+			history = scope;
+			finalize = std::nullopt;
+			MemoryTagStyle::Result result = style.InsertMember(scope, input);
+			scope = result.owner;
+			return result.member_offset;
+		}
+		MemoryTag Finalize() {
+			if(finalize)
+				return *finalize;
+			else {
+				MemoryTag fin = style.Finalize(scope);
+				finalize = fin;
+				return fin;
+			}
+		}
+		MemoryTagFatcory() {
+			scope = {style.MinAlign(), 0};
+		}
+		MemoryTagFatcory(MemoryTagFatcory const&) = default;
+		MemoryTagFatcory& operator=(MemoryTagFatcory const&) = default;
+	protected:
+		FactoryStyle style;
+	};
+
+	/*
 	struct MemoryModelMaker
 	{
-		
 		struct HandleResult
 		{
 			size_t align = 0;
 			size_t size_reserved = 0;
 		};
-
 		size_t operator()(MemoryModel const& info);
-		operator MemoryModel() const { return Finalize(info); }
-
 		MemoryModelMaker(MemoryModel info = {}) : info(std::move(info)) {}
 		MemoryModelMaker(MemoryModelMaker const&) = default;
 		MemoryModelMaker& operator=(MemoryModelMaker const&) = default;
-
 		static size_t MaxAlign(MemoryModel out, MemoryModel in) noexcept;
 		static size_t ReservedSize(MemoryModel out, MemoryModel in) noexcept;
-
-	private:
-		
+	protected:
 		virtual HandleResult Handle(MemoryModel cur, MemoryModel input) const;
 		virtual MemoryModel Finalize(MemoryModel cur) const;
+	private:
 		MemoryModel info;
+		std::optional<MemoryModel> history;
+		std::optional<MemoryModel> finalize;
 	};
+	*/
+
+	
+
+
 
 }
