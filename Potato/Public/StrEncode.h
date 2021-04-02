@@ -4,7 +4,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
-
+#include <span>
 namespace Potato::StrEncode
 {
 
@@ -41,31 +41,25 @@ namespace Potato::StrEncode
 	struct CharWrapper<char8_t>
 	{
 		using Type = char8_t;
-		size_t DetectOne(Type const* input, size_t input_length);
-		DecodeResult DecodeOne(Type const* input, size_t input_length);
+		size_t DetectOne(std::basic_string_view<Type> input);
+		DecodeResult DecodeOne(std::basic_string_view<Type> input);
 		size_t EncodeRequest(char32_t temporary);
-		size_t EncodeOne(char32_t temporary, Type* input, size_t input_length);
+		size_t EncodeOne(char32_t temporary, std::span<Type> output);
 	};
 
 	template<>
-	struct CharWrapper<ReverseEndianness<char8_t>>
+	struct CharWrapper<ReverseEndianness<char8_t>> : public CharWrapper<char8_t>
 	{
-		using Type = char8_t;
-		CharWrapper<char8_t> temporary;
-		size_t DetectOne(Type const* input, size_t input_length){ return temporary.DetectOne(input, input_length); }
-		DecodeResult DecodeOne(Type const* input, size_t input_length){ return temporary.DecodeOne(input, input_length); }
-		size_t EncodeRequest(char32_t input_temporary){ return temporary.EncodeRequest(input_temporary); }
-		size_t EncodeOne(char32_t input_temporary, Type* input, size_t input_length){ return temporary.EncodeOne(input_temporary, input, input_length); }
 	};
 
 	template<>
 	struct CharWrapper<char16_t>
 	{
 		using Type = char16_t;
-		size_t DetectOne(Type const* input, size_t input_length);
-		DecodeResult DecodeOne(Type const* input, size_t input_length);
+		size_t DetectOne(std::basic_string_view<Type> input);
+		DecodeResult DecodeOne(std::basic_string_view<Type> input);
 		size_t EncodeRequest(char32_t temporary);
-		size_t EncodeOne(char32_t temporary, Type* input, size_t input_length);
+		size_t EncodeOne(char32_t temporary, std::span<Type> output);
 	};
 
 	template<>
@@ -73,20 +67,20 @@ namespace Potato::StrEncode
 	{
 		using Type = char16_t;
 		CharWrapper<char16_t> wrapper;
-		size_t DetectOne(Type const* input, size_t input_length);
-		DecodeResult DecodeOne(Type const* input, size_t input_length);
+		size_t DetectOne(std::basic_string_view<Type> input);
+		DecodeResult DecodeOne(std::basic_string_view<Type> input);
 		size_t EncodeRequest(char32_t temporary){ return wrapper.EncodeRequest(temporary);}
-		size_t EncodeOne(char32_t temporary, Type* input, size_t input_length);
+		size_t EncodeOne(char32_t temporary, std::span<Type> output);
 	};
 
 	template<>
 	struct CharWrapper<char32_t>
 	{
 		using Type = char32_t;
-		size_t DetectOne(Type const* input, size_t input_length){ return (input != nullptr && input_length > 0 && input[0] < 0x110000) ? 1 : 0; }
-		DecodeResult DecodeOne(Type const* input, size_t input_length){ return (input != nullptr && input_length > 0 && input[0] < 0x110000) ? DecodeResult{1, input[0]} : DecodeResult{ 0, {} };  }
+		size_t DetectOne(std::basic_string_view<Type> input){ return (!input.empty() && input[0] < 0x110000) ? 1 : 0; }
+		DecodeResult DecodeOne(std::basic_string_view<Type> input){ return (!input.empty() && input[0] < 0x110000) ? DecodeResult{1, input[0]} : DecodeResult{ 0, {} };  }
 		size_t EncodeRequest(char32_t temporary){ return temporary < 0x110000 ? 1 : 0; }
-		size_t EncodeOne(char32_t temporary, Type* input, size_t input_length){ if(input != nullptr && input_length > 0 && temporary < 0x110000) {input[0] = temporary; return 1;} else return 0; }
+		size_t EncodeOne(char32_t temporary, std::span<Type> output){ if(!output.empty() && temporary < 0x110000) { output[0] = temporary; return 1;} else return 0; }
 	};
 
 	template<>
@@ -94,10 +88,10 @@ namespace Potato::StrEncode
 	{
 		using Type = char32_t;
 		CharWrapper<char32_t> wrapper;
-		size_t DetectOne(Type const* input, size_t input_length);
-		DecodeResult DecodeOne(Type const* input, size_t input_length);
+		size_t DetectOne(std::basic_string_view<Type> input);
+		DecodeResult DecodeOne(std::basic_string_view<Type> input);
 		size_t EncodeRequest(char32_t temporary){ return wrapper.EncodeRequest(temporary); }
-		size_t EncodeOne(char32_t temporary, Type* input, size_t input_length);
+		size_t EncodeOne(char32_t temporary, std::span<Type> output);
 	};
 
 	template<>
@@ -106,10 +100,10 @@ namespace Potato::StrEncode
 		using RealType = std::conditional_t<sizeof(wchar_t) == sizeof(char16_t), char16_t, char32_t>;
 		using Type = wchar_t;
 		CharWrapper<RealType> wrapper;
-		size_t DetectOne(Type const* input, size_t input_length){ return wrapper.DetectOne(reinterpret_cast<RealType const*>(input), input_length); }
-		DecodeResult DecodeOne(Type const* input, size_t input_length){ return wrapper.DecodeOne(reinterpret_cast<RealType const*>(input), input_length); }
+		size_t DetectOne(std::basic_string_view<Type> input){ return wrapper.DetectOne({reinterpret_cast<RealType const*>(input.data()), input.size()}); }
+		DecodeResult DecodeOne(std::basic_string_view<Type> input){ return wrapper.DecodeOne({ reinterpret_cast<RealType const*>(input.data()), input.size() }); }
 		size_t EncodeRequest(char32_t temporary) { return wrapper.EncodeRequest(temporary); }
-		size_t EncodeOne(char32_t temporary, Type* input, size_t input_length){ return wrapper.EncodeOne(temporary, reinterpret_cast<RealType*>(input), input_length); }
+		size_t EncodeOne(char32_t temporary, std::span<Type> output){ return wrapper.EncodeOne(temporary, { reinterpret_cast<RealType*>(output.data()), output.size() }); }
 	};
 
 	template<>
@@ -118,10 +112,10 @@ namespace Potato::StrEncode
 		using RealType = std::conditional_t<sizeof(wchar_t) == sizeof(char16_t), char16_t, char32_t>;
 		using Type = wchar_t;
 		CharWrapper<ReverseEndianness<RealType>> wrapper;
-		size_t DetectOne(Type const* input, size_t input_length) { return wrapper.DetectOne(reinterpret_cast<RealType const*>(input), input_length); }
-		DecodeResult DecodeOne(Type const* input, size_t input_length) { return wrapper.DecodeOne(reinterpret_cast<RealType const*>(input), input_length); }
+		size_t DetectOne(std::basic_string_view<Type> input) { return wrapper.DetectOne({ reinterpret_cast<RealType const*>(input.data()), input.size() }); }
+		DecodeResult DecodeOne(std::basic_string_view<Type> input) { return wrapper.DecodeOne({ reinterpret_cast<RealType const*>(input.data()), input.size() }); }
 		size_t EncodeRequest(char32_t temporary) { return wrapper.EncodeRequest(temporary); }
-		size_t EncodeOne(char32_t temporary, Type* input, size_t input_length) { return wrapper.EncodeOne(temporary, reinterpret_cast<RealType*>(input), input_length); }
+		size_t EncodeOne(char32_t temporary, std::span<Type> output) { return wrapper.EncodeOne(temporary, { reinterpret_cast<RealType*>(output.data()), output.size() }); }
 	};
 
 	struct RequestResult
@@ -140,25 +134,24 @@ namespace Potato::StrEncode
 	template<typename From, typename To>
 	struct Encode
 	{
-		RequestResult Request(RemoveReverseEndianness_t<From> const* from, size_t from_length);
-		EncodeResult Decode(RemoveReverseEndianness_t<From> const* from, size_t from_length, RemoveReverseEndianness_t<To>* to, size_t to_length);
+		RequestResult Request(std::basic_string_view<RemoveReverseEndianness_t<From>> from);
+		EncodeResult Decode(std::basic_string_view<RemoveReverseEndianness_t<From>> from, std::span<RemoveReverseEndianness_t<To>> to);
 	};
 
 	template<typename From, typename To>
-	RequestResult Encode<From, To>::Request(RemoveReverseEndianness_t<From> const* from, size_t from_length)
+	RequestResult Encode<From, To>::Request(std::basic_string_view<RemoveReverseEndianness_t<From>> from)
 	{
-		if(from != nullptr)
+		if(!from.empty())
 		{
 			RequestResult result;
 			CharWrapper<From> from_wrapper;
 			CharWrapper<To> to_wrapper;
-			while (from_length > 0)
+			while (from.size() > 0)
 			{
-				DecodeResult decode_result = from_wrapper.DecodeOne(from, from_length);
+				DecodeResult decode_result = from_wrapper.DecodeOne(from);
 				if (decode_result.used_length != 0)
 				{
-					from += decode_result.used_length;
-					from_length -= decode_result.used_length;
+					from = from.substr(decode_result.used_length);
 					size_t require = to_wrapper.EncodeRequest(decode_result.temporary);
 					result.characters += 1;
 					result.require_length += require;
@@ -172,29 +165,26 @@ namespace Potato::StrEncode
 	}
 
 	template<typename From, typename To>
-	EncodeResult Encode<From, To>::Decode(RemoveReverseEndianness_t<From> const* from, size_t from_length, RemoveReverseEndianness_t<To>* to, size_t to_length)
+	EncodeResult Encode<From, To>::Decode(std::basic_string_view<RemoveReverseEndianness_t<From>> from, std::span<RemoveReverseEndianness_t<To>> to)
 	{
-		
-		if(from != nullptr && to != nullptr)
+		if(!from.empty())
 		{
 			EncodeResult result;
 			CharWrapper<From> from_wrapper;
 			CharWrapper<To> to_wrapper;
-			while (from_length > 0 && to_length > 0)
+			while (!from.empty())
 			{
-				DecodeResult decode_result = from_wrapper.DecodeOne(from, from_length);
+				DecodeResult decode_result = from_wrapper.DecodeOne(from);
 				if (decode_result.used_length != 0)
 				{
-					std::optional<size_t> re = to_wrapper.EncodeOne(decode_result.temporary, to, to_length);
+					std::optional<size_t> re = to_wrapper.EncodeOne(decode_result.temporary, to);
 					if(re && *re != 0)
 					{
 						result.encode_character_count +=1;
 						result.used_source_length += decode_result.used_length;
 						result.used_target_length += *re;
-						from += decode_result.used_length;
-						from_length -= decode_result.used_length;
-						to += *re;
-						to_length -= *re;
+						from = from.substr(decode_result.used_length);
+						to = to.subspan(*re);
 					}
 				}
 				else
@@ -208,22 +198,21 @@ namespace Potato::StrEncode
 	template<typename SameType>
 	struct Encode<SameType, SameType>
 	{
-		RequestResult Request(RemoveReverseEndianness_t<SameType> const* from, size_t from_length);
-		EncodeResult Decode(RemoveReverseEndianness_t<SameType> const* from, size_t from_length, RemoveReverseEndianness_t<SameType>* to, size_t to_length);
+		RequestResult Request(std::basic_string_view<RemoveReverseEndianness_t<SameType>> from);
+		EncodeResult Decode(std::basic_string_view<RemoveReverseEndianness_t<SameType>> from, std::span<RemoveReverseEndianness_t<SameType>> to);
 	};
 
 	template<typename SameType>
-	RequestResult Encode<SameType, SameType>::Request(RemoveReverseEndianness_t<SameType> const* from, size_t from_length)
+	RequestResult Encode<SameType, SameType>::Request(std::basic_string_view<RemoveReverseEndianness_t<SameType>> from)
 	{
 		RequestResult result;
 		CharWrapper<SameType> wrapper;
-		while (from_length > 0)
+		while (!from.empty())
 		{
-			DecodeResult decode_result = wrapper.DecodeOne(from, from_length);
+			DecodeResult decode_result = wrapper.DecodeOne(from);
 			if (decode_result.used_length != 0)
 			{
-				from += decode_result.used_length;
-				from_length -= decode_result.used_length;
+				from = from.substr(decode_result.used_length);
 				result.require_length += decode_result.used_length;
 				result.characters += 1;
 			}
@@ -234,20 +223,19 @@ namespace Potato::StrEncode
 	}
 
 	template<typename SameType>
-	EncodeResult Encode<SameType, SameType>::Decode(RemoveReverseEndianness_t<SameType> const* from, size_t from_length, RemoveReverseEndianness_t<SameType>* to, size_t to_length)
+	EncodeResult Encode<SameType, SameType>::Decode(std::basic_string_view<RemoveReverseEndianness_t<SameType>> from, std::span<RemoveReverseEndianness_t<SameType>> to)
 	{
-		if(to != nullptr)
+		if(!to.empty())
 		{
 			RequestResult result;
 			CharWrapper<SameType> wrapper;
 			auto ite_from = from;
-			while (from_length > 0)
+			while (!from.empty())
 			{
-				DecodeResult decode_result = wrapper.DecodeOne(ite_from, from_length);
-				if (decode_result.used_length != 0 && result.require_length + decode_result.used_length <= to_length)
+				DecodeResult decode_result = wrapper.DecodeOne(ite_from);
+				if (decode_result.used_length != 0 && result.require_length + decode_result.used_length <= to.size())
 				{
-					ite_from += decode_result.used_length;
-					from_length -= decode_result.used_length;
+					ite_from.substr(decode_result.used_length);
 					result.require_length += decode_result.used_length;
 					result.characters += 1;
 				}
@@ -255,7 +243,7 @@ namespace Potato::StrEncode
 					break;
 			}
 			if(result.require_length != 0)
-				std::memcpy(to, from, sizeof(RemoveReverseEndianness_t<SameType>) * result.require_length);
+				std::memcpy(to.data(), from.data(), sizeof(RemoveReverseEndianness_t<SameType>) * result.require_length);
 			return {result.require_length, result.require_length, result.characters};
 		}
 		return {0, 0, 0};
@@ -268,15 +256,15 @@ namespace Potato::StrEncode
 		template<typename ToType>
 		std::basic_string<RemoveReverseEndianness_t<ToType>> ToString() const
 		{
-			RequestResult request = Encode<From, ToType>{}.Request(str.data(), str.size());
+			RequestResult request = Encode<From, ToType>{}.Request(str);
 			std::basic_string<RemoveReverseEndianness_t<ToType>> result(request.require_length, 0);
-			To<ToType>(result.data(), result.size());
+			To<ToType>(result);
 			return std::move(result);
 		}
 		template<typename ToType>
-		EncodeResult To(RemoveReverseEndianness_t<ToType>* output, size_t output_length) const
+		EncodeResult To(std::span<RemoveReverseEndianness_t<ToType>> output) const
 		{
-			return Encode<From, ToType>{}.Decode(str.data(), str.size(), output, output_length);
+			return Encode<From, ToType>{}.Decode(str, output);
 		}
 	};
 
@@ -302,31 +290,8 @@ namespace Potato::StrEncode
 		UTF32BE
 	};
 
-	constexpr size_t ToSize(BomType bom)
-	{
-		switch (bom)
-		{
-		case BomType::UTF8: return 3;
-		case BomType::UTF16BE:
-		case BomType::UTF16LE:
-			return 2;
-		case BomType::UTF32BE:
-		case BomType::UTF32LE:
-			return 4;
-		case BomType::UTF8_NoBom:
-		default:
-			return 0;
-		}
-	}
-
-	enum class Endian : uint8_t {
-		Less,
-		Big
-	};
-
-	Endian DetectEndian();
-	BomType DetectBom(std::byte const* bom,size_t bom_length) noexcept;
-	std::byte const* ToBinary(BomType type) noexcept;
+	BomType DetectBom(std::span<std::byte const> bom) noexcept;
+	std::span<std::byte const> ToBinary(BomType type) noexcept;
 	
 	template<typename StorageType>
 	BomType DefaultBom() noexcept
@@ -334,13 +299,13 @@ namespace Potato::StrEncode
 		if constexpr(std::is_same_v<StorageType, char8_t> || std::is_same_v<StorageType, ReverseEndianness<char8_t>>)
 			return BomType::UTF8;
 		else if constexpr (std::is_same_v<StorageType, char16_t>)
-			return DetectEndian() == Endian::Less ? BomType::UTF16LE : BomType::UTF16BE;
+			return std::endian::native == std::endian::little ? BomType::UTF16LE : BomType::UTF16BE;
 		else if constexpr (std::is_same_v<StorageType, ReverseEndianness<char16_t>>)
-			return DetectEndian() == Endian::Less ? BomType::UTF16BE : BomType::UTF16LE;
+			return std::endian::native == std::endian::little ? BomType::UTF16BE : BomType::UTF16LE;
 		else if constexpr (std::is_same_v<StorageType, char32_t>)
-			return DetectEndian() == Endian::Less ? BomType::UTF32LE : BomType::UTF32BE;
+			return std::endian::native == std::endian::little ? BomType::UTF32LE : BomType::UTF32BE;
 		else if constexpr (std::is_same_v<StorageType, ReverseEndianness<char32_t>>)
-			return DetectEndian() == Endian::Less ? BomType::UTF32BE : BomType::UTF32LE;
+			return std::endian::native == std::endian::little ? BomType::UTF32BE : BomType::UTF32LE;
 		else
 			static_assert(false, "unsupport type");
 	}
@@ -348,17 +313,19 @@ namespace Potato::StrEncode
 	
 	struct DocumentWrapper
 	{
-		DocumentWrapper(std::byte const* code, size_t length);
+		DocumentWrapper(std::span<std::byte const> input);
 		template<typename Type>
 		std::basic_string<Type> ToString() const;
-		operator bool() const noexcept{ return documenet != nullptr;}
+		operator bool() const noexcept{ return !document.empty();}
 		template<typename Type>
-		static std::vector<std::byte> EncodeToDocument(RemoveReverseEndianness_t<Type> const* input, size_t length, BomType bom = BomType::UTF8_NoBom);
+		static std::vector<std::byte> EncodeToDocument(std::basic_string_view<RemoveReverseEndianness_t<Type>> input, BomType bom = BomType::UTF8_NoBom);
 	private:
-		std::byte const* documenet = nullptr;
-		size_t documenet_length = 0;
-		std::byte const* main_body = nullptr;
-		size_t main_body_length = 0;
+		template<typename Type>
+		std::basic_string_view<Type> AsViewer() const {
+			return {reinterpret_cast<Type const*>(document_without_bom.data()), document_without_bom.size() / sizeof(Type) };
+		}
+		std::span<std::byte const> document;
+		std::span<std::byte const> document_without_bom;
 		BomType type = BomType::UTF8_NoBom;
 	};
 
@@ -369,70 +336,69 @@ namespace Potato::StrEncode
 		{
 		case BomType::UTF8:
 		case BomType::UTF8_NoBom:
-			return AsWrapper(reinterpret_cast<char8_t const*>(main_body), main_body_length).ToString<Type>();
+			return AsWrapper(this->AsViewer<char8_t>()).ToString<Type>();
 		case BomType::UTF16LE:
-			if (DetectEndian() == Endian::Less)
-				return AsWrapper(reinterpret_cast<char16_t const*>(main_body), main_body_length / sizeof(char16_t)).ToString<Type>();
+			if constexpr (std::endian::native == std::endian::little)
+				return AsWrapper(this->AsViewer<char16_t>()).ToString<Type>();
 			else
-				return AsWrapperReverse(reinterpret_cast<char16_t const*>(main_body), main_body_length / sizeof(char16_t)).ToString<Type>();
+				return AsWrapperReverse(this->AsViewer<char16_t>()).ToString<Type>();
 		case BomType::UTF16BE:
-			if (DetectEndian() == Endian::Big)
-				return AsWrapper(reinterpret_cast<char16_t const*>(main_body), main_body_length / sizeof(char16_t)).ToString<Type>();
+			if constexpr (std::endian::native == std::endian::big)
+				return AsWrapper(this->AsViewer<char16_t>()).ToString<Type>();
 			else
-				return AsWrapperReverse(reinterpret_cast<char16_t const*>(main_body), main_body_length / sizeof(char16_t)).ToString<Type>();
+				return AsWrapperReverse(this->AsViewer<char16_t>()).ToString<Type>();
 		case BomType::UTF32LE:
-			if (DetectEndian() == Endian::Less)
-				return AsWrapper(reinterpret_cast<char32_t const*>(main_body), main_body_length / sizeof(char32_t)).ToString<Type>();
+			if constexpr (std::endian::native == std::endian::little)
+				return AsWrapper(this->AsViewer<char16_t>()).ToString<Type>();
 			else
-				return AsWrapperReverse(reinterpret_cast<char32_t const*>(main_body), main_body_length / sizeof(char32_t)).ToString<Type>();
+				return AsWrapperReverse(this->AsViewer<char16_t>()).ToString<Type>();
 		case BomType::UTF32BE:
-			if (DetectEndian() == Endian::Big)
-				return AsWrapper(reinterpret_cast<char32_t const*>(main_body), main_body_length / sizeof(char32_t)).ToString<Type>();
+			if constexpr (std::endian::native == std::endian::big)
+				return AsWrapper(this->AsViewer<char16_t>()).ToString<Type>();
 			else
-				return AsWrapperReverse(reinterpret_cast<char32_t const*>(main_body), main_body_length / sizeof(char32_t)).ToString<Type>();
+				return AsWrapperReverse(this->AsViewer<char16_t>()).ToString<Type>();
 		default:
 			return std::basic_string<Type>{};
 		};
 	}
 
 	template<typename Type>
-	std::vector<std::byte> DocumentWrapper::EncodeToDocument(RemoveReverseEndianness_t<Type> const* input, size_t length, BomType bom)
+	std::vector<std::byte> DocumentWrapper::EncodeToDocument(std::basic_string_view<RemoveReverseEndianness_t<Type>> input, BomType bom)
 	{
-		size_t bom_size = ToSize(bom);
-		std::vector<std::byte> result;
+		auto Bom = ToBinary(bom);
+		std::vector<std::byte> result = Bom;
 		switch (bom)
 		{
 		case BomType::UTF8:
 		case BomType::UTF8_NoBom:
 		{
 			Encode<Type, char8_t> Wrapper;
-			RequestResult re = Wrapper.Request(input, length);
-			result.resize(re.require_length * sizeof(char8_t) + bom_size);
-			std::memcpy(result.data(), ToBinary(bom), bom_size);
-			Wrapper.Decode(input, length, reinterpret_cast<char8_t *>(result.data() + bom_size), (result.size() - bom_size) / sizeof(char8_t));
+			RequestResult re = Wrapper.Request(input);
+			result.resize(re.require_length * sizeof(char8_t) + Bom.size());
+			auto output = std::span<char8_t>(reinterpret_cast<char8_t*>(result.data() + Bom.size()), re.require_length);
+			Wrapper.Decode(input, output);
 			return std::move(result);
 		}
 		break;
 		case BomType::UTF16LE:
 		case BomType::UTF16BE:
 		{
-			if(DetectEndian() == Endian::Less && bom == BomType::UTF16LE || DetectEndian() == Endian::Big && bom == BomType::UTF16BE)
+			if(std::endian::native == std::endian::little && bom == BomType::UTF16LE || std::endian::native == std::endian::big && bom == BomType::UTF16BE)
 			{
 				Encode<Type, char16_t> Wrapper;
-				RequestResult re = Wrapper.Request(input, length);
-				std::vector<std::byte> result;
-				result.resize(bom_size + re.require_length * sizeof(char16_t));
-				std::memcpy(result.data(), ToBinary(bom), bom_size);
-				Wrapper.Decode(input, length, reinterpret_cast<char16_t*>(result.data() + bom_size), (result.size() - bom_size) / sizeof(char16_t));
+				RequestResult re = Wrapper.Request(input);
+				result.resize(Bom.size() + re.require_length * sizeof(char16_t));
+				auto output = std::span<char16_t>(reinterpret_cast<char16_t*>(result.data() + Bom.size()), re.require_length);
+				Wrapper.Decode(input, output);
 				return std::move(result);
 			}else
 			{
 				Encode<Type, ReverseEndianness<char16_t>> Wrapper;
-				RequestResult re = Wrapper.Request(input, length);
+				RequestResult re = Wrapper.Request(input);
 				std::vector<std::byte> result;
-				result.resize(bom_size + re.require_length * sizeof(char16_t));
-				std::memcpy(result.data(), ToBinary(bom), bom_size);
-				Wrapper.Decode(input, length, reinterpret_cast<char16_t*>(result.data() + bom_size), (result.size() - bom_size) / sizeof(char16_t));
+				result.resize(Bom.size() + re.require_length * sizeof(char16_t));
+				auto output = std::span<char16_t>(reinterpret_cast<char16_t*>(result.data() + Bom.size()), re.require_length);
+				Wrapper.Decode(input, output); 
 				return std::move(result);
 			}
 		}
@@ -440,24 +406,22 @@ namespace Potato::StrEncode
 		case BomType::UTF32BE:
 		case BomType::UTF32LE:
 		{
-			if (DetectEndian() == Endian::Less && bom == BomType::UTF32LE || DetectEndian() == Endian::Big && bom == BomType::UTF32BE)
+			if (std::endian::native == std::endian::little && bom == BomType::UTF32LE || std::endian::native == std::endian::big && bom == BomType::UTF32BE)
 			{
 				Encode<Type, char32_t> Wrapper;
-				RequestResult re = Wrapper.Request(input, length);
-				std::vector<std::byte> result;
-				result.resize(bom_size + re.require_length * sizeof(char32_t));
-				std::memcpy(result.data(), ToBinary(bom), bom_size);
-				Wrapper.Decode(input, length, reinterpret_cast<char32_t*>(result.data() + bom_size), (result.size() - bom_size) / sizeof(char32_t));
+				RequestResult re = Wrapper.Request(input);
+				result.resize(Bom.size() + re.require_length * sizeof(char32_t));
+				auto output = std::span<char32_t>(reinterpret_cast<char32_t*>(result.data() + Bom.size()), re.require_length);
+				Wrapper.Decode(input, output); 
 				return std::move(result);
 			}
 			else
 			{
 				Encode<Type, ReverseEndianness<char32_t>> Wrapper;
-				RequestResult re = Wrapper.Request(input, length);
-				std::vector<std::byte> result;
-				result.resize(bom_size + re.require_length * sizeof(char32_t));
-				std::memcpy(result.data(), ToBinary(bom), bom_size);
-				Wrapper.Decode(input, length, reinterpret_cast<char32_t*>(result.data() + bom_size), (result.size() - bom_size) / sizeof(char32_t));
+				RequestResult re = Wrapper.Request(input);
+				result.resize(Bom.size() + re.require_length * sizeof(char32_t));
+				auto output = std::span<char32_t>(reinterpret_cast<char32_t*>(result.data() + Bom.size()), re.require_length);
+				Wrapper.Decode(input, output); 
 				return std::move(result);
 			}
 		}

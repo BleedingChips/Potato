@@ -4,6 +4,7 @@
 #include <string>
 #include <cassert>
 #include <typeinfo>
+#include <span>
 namespace Potato::StrFormat
 {
 
@@ -29,7 +30,7 @@ namespace Potato::StrFormat
 	struct FormatWrapper
 	{
 		size_t TotalLength() const noexcept { return total_length; }
-		char32_t* ConsumeBuffer(size_t require_length);
+		std::span<char32_t> ConsumeBuffer(size_t require_length);
 		size_t LastLength() const noexcept { return last_length; }
 		FormatWrapper(std::u32string& out_buffer) : buffer(out_buffer.data()), last_length(out_buffer.size()), total_length(out_buffer.size()) {}
 	private:

@@ -15,14 +15,14 @@ namespace Potato::StrFormat
 		return instance;
 	}
 
-	char32_t* FormatWrapper::ConsumeBuffer(size_t require_length)
+	std::span<char32_t> FormatWrapper::ConsumeBuffer(size_t require_length)
 	{
 		if(last_length >= require_length)
 		{
 			auto result = buffer + ite;
 			last_length -= require_length;
 			ite += require_length;
-			return result;
+			return {result, require_length};
 		}else
 			throw Error::LackOfBufferLength{ std::u32string(buffer, total_length),  require_length };
 	}
@@ -89,7 +89,8 @@ namespace Potato::StrFormat
 				{
 				case PatternType::NormalString:
 				{
-					std::memcpy(Wrapper.ConsumeBuffer(str.size()), str.data(), str.size() * sizeof(std::u32string_view::value_type));
+					auto comsume = Wrapper.ConsumeBuffer(str.size());
+					std::memcpy(comsume.data(), str.data(), str.size() * sizeof(std::u32string_view::value_type));
 				} break;
 				case PatternType::Parameter: {return pattern_index; } break;
 				default:
@@ -154,7 +155,8 @@ namespace Potato::StrFormat
 	void Formatter<char32_t*>::Format(FormatWrapper& wrapper, std::u32string_view par, char32_t const* Input)
 	{
 		auto size_t = StringLength(par, Input);
-		std::memcpy(wrapper.ConsumeBuffer(size_t), Input, size_t * sizeof(char32_t));
+		auto com = wrapper.ConsumeBuffer(size_t);
+		std::memcpy(com.data(), Input, size_t * sizeof(char32_t));
 	}
 
 	size_t Formatter<std::u32string_view>::StringLength(std::u32string_view par, std::u32string_view Input)
@@ -164,7 +166,7 @@ namespace Potato::StrFormat
 
 	void Formatter<std::u32string_view>::Format(FormatWrapper& wrapper, std::u32string_view par, std::u32string_view Input)
 	{
-		std::memcpy(wrapper.ConsumeBuffer(Input.size()), Input.data(), Input.size() * sizeof(char32_t));
+		std::memcpy(wrapper.ConsumeBuffer(Input.size()).data(), Input.data(), Input.size() * sizeof(char32_t));
 	}
 
 	size_t Formatter<std::u32string>::StringLength(std::u32string_view par, std::u32string const& Input)
@@ -174,7 +176,7 @@ namespace Potato::StrFormat
 
 	void Formatter<std::u32string>::Format(FormatWrapper& wrapper, std::u32string_view par, std::u32string const& Input)
 	{
-		std::memcpy(wrapper.ConsumeBuffer(Input.size()), Input.data(), Input.size() * sizeof(char32_t));
+		std::memcpy(wrapper.ConsumeBuffer(Input.size()).data(), Input.data(), Input.size() * sizeof(char32_t));
 	}
 
 	size_t Formatter<char32_t>::StringLength(std::u32string_view par, char32_t Input)
@@ -184,7 +186,7 @@ namespace Potato::StrFormat
 
 	void Formatter<char32_t>::Format(FormatWrapper& wrapper, std::u32string_view par, char32_t Input)
 	{
-		*wrapper.ConsumeBuffer(1) = Input;
+		wrapper.ConsumeBuffer(1)[0] = Input;
 	}
 
 	size_t Formatter<double>::StringLength(std::u32string_view par, double Input)
@@ -197,7 +199,7 @@ namespace Potato::StrFormat
 	{
 		char data[50];
 		size_t used_size = sprintf_s(data, "%lf", Input);
-		StrEncode::AsWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(wrapper.ConsumeBuffer(used_size), used_size);
+		StrEncode::AsWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(wrapper.ConsumeBuffer(used_size));
 	}
 
 	size_t Formatter<float>::StringLength(std::u32string_view par, float Input)
@@ -210,7 +212,7 @@ namespace Potato::StrFormat
 	{
 		char data[50];
 		size_t used_size = sprintf_s(data,"%f", Input);
-		StrEncode::AsWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(wrapper.ConsumeBuffer(used_size), used_size);
+		StrEncode::AsWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(wrapper.ConsumeBuffer(used_size));
 	}
 
 	size_t Formatter<uint32_t>::StringLength(std::u32string_view par, uint32_t Input)
@@ -235,7 +237,7 @@ namespace Potato::StrFormat
 			format = "%I32u";
 		char data[50];
 		size_t used_size = sprintf_s(data, format.data(), Input);
-		StrEncode::AsWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(wrapper.ConsumeBuffer(used_size), used_size);
+		StrEncode::AsWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(wrapper.ConsumeBuffer(used_size));
 	}
 
 	size_t Formatter<int32_t>::StringLength(std::u32string_view par, int32_t Input)
@@ -248,7 +250,7 @@ namespace Potato::StrFormat
 	{
 		char data[50];
 		size_t used_size = sprintf_s(data, 50, "%I32d", Input);
-		StrEncode::AsWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(wrapper.ConsumeBuffer(used_size), used_size);
+		StrEncode::AsWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(wrapper.ConsumeBuffer(used_size));
 	}
 
 	size_t Formatter<uint64_t>::StringLength(std::u32string_view par, uint64_t Input)
@@ -273,7 +275,7 @@ namespace Potato::StrFormat
 			format = "%I64u";
 		char data[50];
 		size_t used_size = sprintf_s(data, 50, format.data(), Input);
-		StrEncode::AsWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(wrapper.ConsumeBuffer(used_size), used_size);
+		StrEncode::AsWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(wrapper.ConsumeBuffer(used_size));
 	}
 	
 	size_t Formatter<int64_t>::StringLength(std::u32string_view par, int64_t Input)
@@ -286,7 +288,7 @@ namespace Potato::StrFormat
 	{
 		char data[50];
 		size_t used_size = sprintf_s(data, 50, "%I64d", Input);
-		StrEncode::AsWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(wrapper.ConsumeBuffer(used_size), used_size);
+		StrEncode::AsWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(wrapper.ConsumeBuffer(used_size));
 	}
 	
 }

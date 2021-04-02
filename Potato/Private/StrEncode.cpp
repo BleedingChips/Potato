@@ -31,22 +31,22 @@ namespace Potato::StrEncode
 		}
 	}
 	
-	size_t CharWrapper<char8_t>::DetectOne(Type const* input, size_t input_length)
+	size_t CharWrapper<char8_t>::DetectOne(std::basic_string_view<Type> input)
 	{
-		if(input != nullptr && input_length > 0)
+		if(!input.empty())
 		{
 			auto rs = UTF8RequireSpace(input[0]);
-			if(input_length >= rs && CheckUTF8(input + 1, rs - 1))
+			if(input.size() >= rs && CheckUTF8(input.data() + 1, rs - 1))
 				return rs;
 		}
 		return 0;
 	}
 
-	DecodeResult CharWrapper<char8_t>::DecodeOne(Type const* input, size_t input_length)
+	DecodeResult CharWrapper<char8_t>::DecodeOne(std::basic_string_view<Type> input)
 	{
-		assert(input != nullptr && input_length > 0);
+		assert(!input.empty());
 		auto rs = UTF8RequireSpace(input[0]);
-		assert(input_length >= rs);
+		assert(input.size() >= rs);
 		switch (rs)
 		{
 		case 1: return {1, input[0]};
@@ -68,34 +68,34 @@ namespace Potato::StrEncode
 		else return 0;
 	}
 
-	size_t CharWrapper<char8_t>::EncodeOne(char32_t temporary, Type* input, size_t input_length)
+	size_t CharWrapper<char8_t>::EncodeOne(char32_t temporary, std::span<Type> output)
 	{
-		assert(input != nullptr && input_length > 0);
+		assert(!output.empty());
 		auto rr = EncodeRequest(temporary);
-		assert(input_length >= rr);
+		assert(output.size() >= rr);
 		switch (rr)
 		{
 		case 1:
 		{
-			input[0] = static_cast<char8_t>(temporary & 0x0000007F);
+			output[0] = static_cast<char8_t>(temporary & 0x0000007F);
 		}break;
 		case 2:
 		{
-			input[0] = 0xC0 | static_cast<char>((temporary & 0x07C0) >> 6);
-			input[1] = 0x80 | static_cast<char>((temporary & 0x3F));
+			output[0] = 0xC0 | static_cast<char>((temporary & 0x07C0) >> 6);
+			output[1] = 0x80 | static_cast<char>((temporary & 0x3F));
 		}break;
 		case 3:
 		{
-			input[0] = 0xE0 | static_cast<char>((temporary & 0xF000) >> 12);
-			input[1] = 0x80 | static_cast<char>((temporary & 0xFC0) >> 6);
-			input[2] = 0x80 | static_cast<char>((temporary & 0x3F));
+			output[0] = 0xE0 | static_cast<char>((temporary & 0xF000) >> 12);
+			output[1] = 0x80 | static_cast<char>((temporary & 0xFC0) >> 6);
+			output[2] = 0x80 | static_cast<char>((temporary & 0x3F));
 		}break;
 		case 4:
 		{
-			input[0] = 0x1E | static_cast<char>((temporary & 0x1C0000) >> 18);
-			input[1] = 0x80 | static_cast<char>((temporary & 0x3F000) >> 12);
-			input[2] = 0x80 | static_cast<char>((temporary & 0xFC0) >> 6);
-			input[3] = 0x80 | static_cast<char>((temporary & 0x3F));
+			output[0] = 0x1E | static_cast<char>((temporary & 0x1C0000) >> 18);
+			output[1] = 0x80 | static_cast<char>((temporary & 0x3F000) >> 12);
+			output[2] = 0x80 | static_cast<char>((temporary & 0xFC0) >> 6);
+			output[3] = 0x80 | static_cast<char>((temporary & 0x3F));
 		}break;
 		default: break;
 		}
@@ -109,13 +109,13 @@ namespace Potato::StrEncode
 		return 1;
 	}
 
-	size_t CharWrapper<char16_t>::DetectOne(Type const* input, size_t input_length)
+	size_t CharWrapper<char16_t>::DetectOne(std::basic_string_view<Type> input)
 	{
-		if(input != nullptr && input_length > 0)
+		if(!input.empty())
 		{
 			if((input[0] & 0xD800) == 0xD800)
 			{
-				if(input_length >= 2 && (input[1] & 0xDC00) == 0xDC00)
+				if(input.size() >= 2 && (input[1] & 0xDC00) == 0xDC00)
 				{
 					return 2;
 				}else
@@ -126,15 +126,15 @@ namespace Potato::StrEncode
 		return 0;
 	}
 
-	DecodeResult CharWrapper<char16_t>::DecodeOne(Type const* input, size_t input_length)
+	DecodeResult CharWrapper<char16_t>::DecodeOne(std::basic_string_view<Type> input)
 	{
-		assert(input != nullptr && input_length > 0);
+		assert(!input.empty());
 		size_t rs  = 0;
 		if ((input[0] & 0xD800) == 0xD800)
 			rs = 2;
 		else
 			rs = 1;
-		assert(input_length >= rs);
+		assert(input.size() >= rs);
 		switch (rs)
 		{
 		case 1: return { 1, input[0] };
@@ -153,19 +153,19 @@ namespace Potato::StrEncode
 			return 0;
 	}
 
-	size_t CharWrapper<char16_t>::EncodeOne(char32_t temporary, Type* input, size_t input_length)
+	size_t CharWrapper<char16_t>::EncodeOne(char32_t temporary, std::span<Type> output)
 	{
-		assert(input != nullptr && input_length > 0);
+		assert(!output.empty());
 		size_t rs = EncodeRequest(temporary);
-		assert(input_length >= rs);
+		assert(output.size() >= rs);
 		switch (rs)
 		{
-		case 1: input[0] = static_cast<char16_t>(temporary); return 1;
+		case 1: output[0] = static_cast<char16_t>(temporary); return 1;
 		case 2:
 		{
 			char32_t tar = temporary - 0x10000;
-			input[0] = static_cast<char16_t>((tar & 0xFFC00) >> 10) + 0xD800;
-			input[1] = static_cast<char16_t>((tar & 0x3FF)) + 0xDC00;
+			output[0] = static_cast<char16_t>((tar & 0xFFC00) >> 10) + 0xD800;
+			output[1] = static_cast<char16_t>((tar & 0x3FF)) + 0xDC00;
 			return 2;
 		}
 		default: return 0;
@@ -184,88 +184,82 @@ namespace Potato::StrEncode
 		}
 	}
 
-	size_t CharWrapper<ReverseEndianness<char16_t>>::DetectOne(Type const* input, size_t input_length)
+	size_t CharWrapper<ReverseEndianness<char16_t>>::DetectOne(std::basic_string_view<Type> input)
 	{
 		// todo
-		if(input != nullptr && input_length > 0)
+		if(!input.empty())
 		{
 			char16_t temporary[2];
-			auto size = std::min(std::size(temporary), input_length);
-			std::memcpy(temporary, input, size * sizeof(char16_t));
+			auto size = std::min(std::size(temporary), input.size());
+			std::memcpy(temporary, input.data(), size * sizeof(char16_t));
 			Reverser(temporary, sizeof(char16_t), size);
-			return wrapper.DetectOne(temporary, size);
+			return wrapper.DetectOne({temporary, size});
 		}
 		return 0;
 	}
 
-	DecodeResult CharWrapper<ReverseEndianness<char16_t>>::DecodeOne(Type const* input, size_t input_length)
+	DecodeResult CharWrapper<ReverseEndianness<char16_t>>::DecodeOne(std::basic_string_view<Type> input)
 	{
 		// todo
 		char16_t temporary[2];
-		auto size = std::min(std::size(temporary), input_length);
-		std::memcpy(temporary, input, size * sizeof(char16_t));
+		auto size = std::min(std::size(temporary), input.size());
+		std::memcpy(temporary, input.data(), size * sizeof(char16_t));
 		Reverser(temporary, sizeof(char16_t), size);
-		return wrapper.DecodeOne(temporary, size);
+		return wrapper.DecodeOne({temporary, size});
 	}
 
-	size_t CharWrapper<ReverseEndianness<char16_t>>::EncodeOne(char32_t temporary, Type* input, size_t input_length)
+	size_t CharWrapper<ReverseEndianness<char16_t>>::EncodeOne(char32_t temporary, std::span<Type> output)
 	{
 		// todo
-		if(input > nullptr)
+		if(!output.empty())
 		{
 			char16_t temporary_buffer[2];
-			auto size = std::min(std::size(temporary_buffer), input_length);
-			auto re = wrapper.EncodeOne(temporary, temporary_buffer, size);
+			auto size = std::min(std::size(temporary_buffer), output.size());
+			auto re = wrapper.EncodeOne(temporary, {temporary_buffer, size});
 			Reverser(temporary_buffer, sizeof(char16_t), re);
-			std::memcpy(input, temporary_buffer, sizeof(char16_t) * re);
+			std::memcpy(output.data(), temporary_buffer, sizeof(char16_t) * re);
 			return re;
 		}
 		return 0;
 	}
 
-	size_t CharWrapper<ReverseEndianness<char32_t>>::DetectOne(Type const* input, size_t input_length)
+	size_t CharWrapper<ReverseEndianness<char32_t>>::DetectOne(std::basic_string_view<Type> input)
 	{
 		// todo
-		if (input != nullptr && input_length > 0)
+		if (!input.empty())
 		{
 			char32_t temporary;
-			auto size = std::min(static_cast<size_t>(1), input_length);
-			std::memcpy(&temporary, input, size * sizeof(char32_t));
+			auto size = std::min(static_cast<size_t>(1), input.size());
+			std::memcpy(&temporary, input.data(), size * sizeof(char32_t));
 			Reverser(&temporary, sizeof(char32_t), size);
-			return wrapper.DetectOne(&temporary, size);
+			return wrapper.DetectOne({&temporary, size});
 		}
 		return 0;
 	}
 
-	DecodeResult CharWrapper<ReverseEndianness<char32_t>>::DecodeOne(Type const* input, size_t input_length)
+	DecodeResult CharWrapper<ReverseEndianness<char32_t>>::DecodeOne(std::basic_string_view<Type> input)
 	{
 		// todo
 		char32_t temporary;
-		auto size = std::min(static_cast<size_t>(1), input_length);
-		std::memcpy(&temporary, input, size * sizeof(char32_t));
+		auto size = std::min(static_cast<size_t>(1), input.size());
+		std::memcpy(&temporary, input.data(), size * sizeof(char32_t));
 		Reverser(&temporary, sizeof(char32_t), size);
-		return wrapper.DecodeOne(&temporary, size);
+		return wrapper.DecodeOne({&temporary, size});
 	}
 
-	size_t CharWrapper<ReverseEndianness<char32_t>>::EncodeOne(char32_t temporary, Type* input, size_t input_length)
+	size_t CharWrapper<ReverseEndianness<char32_t>>::EncodeOne(char32_t temporary, std::span<Type> output)
 	{
 		// todo
-		if (input > nullptr)
+		if (!output.empty())
 		{
 			char32_t temporary_buffer;
-			auto size = std::min(static_cast<size_t>(1), input_length);
-			auto re = wrapper.EncodeOne(temporary, &temporary_buffer, size);
+			auto size = std::min(static_cast<size_t>(1), output.size());
+			auto re = wrapper.EncodeOne(temporary, {&temporary_buffer, size});
 			Reverser(&temporary_buffer, sizeof(char32_t), re);
-			std::memcpy(input, &temporary_buffer, sizeof(char32_t) * re);
+			std::memcpy(output.data(), &temporary_buffer, sizeof(char32_t) * re);
 			return re;
 		}
 		return 0;
-	}
-	Endian DetectEndian()
-	{
-		constexpr uint16_t Detect = 0x0001;
-		static Endian result = (*reinterpret_cast<uint8_t const*>(&Detect) == 0x01) ? Endian::Less : Endian::Big;
-		return result;
 	}
 	
 
@@ -275,43 +269,41 @@ namespace Potato::StrEncode
 	const unsigned char utf32_le_bom[] = { 0x00, 0x00, 0xFE, 0xFF };
 	const unsigned char utf32_be_bom[] = { 0xFF, 0xFe, 0x00, 0x00 };
 
-	BomType DetectBom(std::byte const* bom, size_t bom_length) noexcept
+	BomType DetectBom(std::span<std::byte const> bom) noexcept
 	{
-		if(bom_length >= std::size(utf8_bom) && std::memcmp(bom, utf8_bom, std::size(utf8_bom)) == 0)
+		if(bom.size() >= std::size(utf8_bom) && std::memcmp(bom.data(), utf8_bom, std::size(utf8_bom)) == 0)
 			return BomType::UTF8;
-		if (bom_length >= std::size(utf16_le_bom) && std::memcmp(bom, utf16_le_bom, std::size(utf16_le_bom)) == 0)
+		if (bom.size() >= std::size(utf16_le_bom) && std::memcmp(bom.data(), utf16_le_bom, std::size(utf16_le_bom)) == 0)
 			return BomType::UTF16LE;
-		if (bom_length >= std::size(utf32_le_bom) && std::memcmp(bom, utf32_le_bom, std::size(utf32_le_bom)) == 0)
+		if (bom.size() >= std::size(utf32_le_bom) && std::memcmp(bom.data(), utf32_le_bom, std::size(utf32_le_bom)) == 0)
 			return BomType::UTF32LE;
-		if (bom_length >= std::size(utf16_be_bom) && std::memcmp(bom, utf16_be_bom, std::size(utf16_be_bom)) == 0)
+		if (bom.size() >= std::size(utf16_be_bom) && std::memcmp(bom.data(), utf16_be_bom, std::size(utf16_be_bom)) == 0)
 			return BomType::UTF16BE;
-		if (bom_length >= std::size(utf32_be_bom) && std::memcmp(bom, utf32_be_bom, std::size(utf32_be_bom)) == 0)
+		if (bom.size() >= std::size(utf32_be_bom) && std::memcmp(bom.data(), utf32_be_bom, std::size(utf32_be_bom)) == 0)
 			return BomType::UTF32BE;
 		return BomType::UTF8_NoBom;
 	}
 
-	std::byte const* ToBinary(BomType type) noexcept
+	std::span<std::byte const> ToBinary(BomType type) noexcept
 	{
 		switch (type)
 		{
-		case BomType::UTF8: return reinterpret_cast<std::byte const*>(utf8_bom);
-		case BomType::UTF16LE: return reinterpret_cast<std::byte const*>(utf16_le_bom);
-		case BomType::UTF32LE: return reinterpret_cast<std::byte const*>(utf32_le_bom);
-		case BomType::UTF16BE: return reinterpret_cast<std::byte const*>(utf16_be_bom);
-		case BomType::UTF32BE: return reinterpret_cast<std::byte const*>(utf32_be_bom);
-		default: return nullptr;
+		case BomType::UTF8: return { reinterpret_cast<std::byte const*>(utf8_bom), std::size(utf8_bom)};
+		case BomType::UTF16LE: return { reinterpret_cast<std::byte const*>(utf16_le_bom), std::size(utf16_le_bom) };
+		case BomType::UTF32LE: return { reinterpret_cast<std::byte const*>(utf32_le_bom), std::size(utf32_le_bom) };
+		case BomType::UTF16BE: return { reinterpret_cast<std::byte const*>(utf16_be_bom), std::size(utf16_be_bom) };
+		case BomType::UTF32BE: return { reinterpret_cast<std::byte const*>(utf32_be_bom), std::size(utf32_be_bom) };
+		default: return {};
 		}
 	}
 
-	DocumentWrapper::DocumentWrapper(std::byte const* code, size_t length)
+	DocumentWrapper::DocumentWrapper(std::span<std::byte const> input)
 	{
-		if(code != nullptr && length != 0)
+		if(!input.empty())
 		{
-			type = DetectBom(code, length);
-			documenet = code;
-			documenet_length = length;
-			main_body = code + ToSize(type);
-			main_body_length = length - ToSize(type);
+			type = DetectBom(input);
+			document = input;
+			document_without_bom = input.subspan(ToBinary(type).size());
 		}
 	}
 }
