@@ -155,6 +155,7 @@
     <ClInclude Include="..\..\Potato\Public\StrFormat.h" />
     <ClInclude Include="..\..\Potato\Public\StrScanner.h" />
     <ClInclude Include="..\..\Potato\Public\Grammar.h" />
+    <ClInclude Include="..\..\Potato\Public\SVM.h" />
     <ClInclude Include="..\..\Potato\Public\TMP.h" />
     <ClInclude Include="..\..\Potato\Public\Unfa.h" />
   </ItemGroup>
@@ -169,6 +170,7 @@
     <ClCompile Include="..\..\Potato\Private\StrFormat.cpp" />
     <ClCompile Include="..\..\Potato\Private\StrScanner.cpp" />
     <ClCompile Include="..\..\Potato\Private\Grammar.cpp" />
+    <ClCompile Include="..\..\Potato\Private\SVM.cpp" />
     <ClCompile Include="..\..\Potato\Private\Unfa.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

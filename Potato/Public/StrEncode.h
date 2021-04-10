@@ -235,7 +235,7 @@ namespace Potato::StrEncode
 				DecodeResult decode_result = wrapper.DecodeOne(ite_from);
 				if (decode_result.used_length != 0 && result.require_length + decode_result.used_length <= to.size())
 				{
-					ite_from.substr(decode_result.used_length);
+					ite_from = ite_from.substr(decode_result.used_length);
 					result.require_length += decode_result.used_length;
 					result.characters += 1;
 				}
@@ -318,7 +318,11 @@ namespace Potato::StrEncode
 		std::basic_string<Type> ToString() const;
 		operator bool() const noexcept{ return !document.empty();}
 		template<typename Type>
-		static std::vector<std::byte> EncodeToDocument(std::basic_string_view<RemoveReverseEndianness_t<Type>> input, BomType bom = BomType::UTF8_NoBom);
+		static std::vector<std::byte> EncodeToDocument(std::basic_string_view<Type> input, BomType bom = BomType::UTF8_NoBom);
+		template<typename Type>
+		static std::vector<std::byte> EncodeToDocument(std::basic_string<Type> const& input, BomType bom = BomType::UTF8_NoBom) {
+			return EncodeToDocument(std::basic_string_view<Type>(input), bom);
+		}
 	private:
 		template<typename Type>
 		std::basic_string_view<Type> AsViewer() const {
@@ -363,10 +367,11 @@ namespace Potato::StrEncode
 	}
 
 	template<typename Type>
-	std::vector<std::byte> DocumentWrapper::EncodeToDocument(std::basic_string_view<RemoveReverseEndianness_t<Type>> input, BomType bom)
+	std::vector<std::byte> DocumentWrapper::EncodeToDocument(std::basic_string_view<Type> input, BomType bom)
 	{
 		auto Bom = ToBinary(bom);
-		std::vector<std::byte> result = Bom;
+		std::vector<std::byte> result;
+		result.insert(result.end(), Bom.begin(), Bom.end());
 		switch (bom)
 		{
 		case BomType::UTF8:
@@ -390,7 +395,7 @@ namespace Potato::StrEncode
 				result.resize(Bom.size() + re.require_length * sizeof(char16_t));
 				auto output = std::span<char16_t>(reinterpret_cast<char16_t*>(result.data() + Bom.size()), re.require_length);
 				Wrapper.Decode(input, output);
-				return std::move(result);
+				return result;
 			}else
 			{
 				Encode<Type, ReverseEndianness<char16_t>> Wrapper;
@@ -399,7 +404,7 @@ namespace Potato::StrEncode
 				result.resize(Bom.size() + re.require_length * sizeof(char16_t));
 				auto output = std::span<char16_t>(reinterpret_cast<char16_t*>(result.data() + Bom.size()), re.require_length);
 				Wrapper.Decode(input, output); 
-				return std::move(result);
+				return result;
 			}
 		}
 		break;
@@ -413,7 +418,7 @@ namespace Potato::StrEncode
 				result.resize(Bom.size() + re.require_length * sizeof(char32_t));
 				auto output = std::span<char32_t>(reinterpret_cast<char32_t*>(result.data() + Bom.size()), re.require_length);
 				Wrapper.Decode(input, output); 
-				return std::move(result);
+				return result;
 			}
 			else
 			{
@@ -422,7 +427,7 @@ namespace Potato::StrEncode
 				result.resize(Bom.size() + re.require_length * sizeof(char32_t));
 				auto output = std::span<char32_t>(reinterpret_cast<char32_t*>(result.data() + Bom.size()), re.require_length);
 				Wrapper.Decode(input, output); 
-				return std::move(result);
+				return result;
 			}
 		}
 		break;

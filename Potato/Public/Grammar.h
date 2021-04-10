@@ -77,7 +77,7 @@ namespace Potato::Grammar
 		friend struct Table;
 	};
 	
-	struct Table
+	struct SymbolForm
 	{
 
 		struct Property
@@ -145,9 +145,9 @@ namespace Potato::Grammar
 			return this->FindActiveProperty(active_scope.size(), std::forward<FunObj>(Function));
 		}
 
-		Table(Table&&) = default;
-		Table(Table const&) = default;
-		Table() = default;
+		SymbolForm(SymbolForm&&) = default;
+		SymbolForm(SymbolForm const&) = default;
+		SymbolForm() = default;
 
 	private:
 
@@ -197,7 +197,7 @@ namespace Potato::Grammar
 	};
 
 	template<typename FunObj>
-	bool Table::FindProperty(SymbolMask mask, FunObj&& Function) requires AvailableInvocableV<FunObj>
+	bool SymbolForm::FindProperty(SymbolMask mask, FunObj&& Function) requires AvailableInvocableV<FunObj>
 	{
 		if (mask && mask.Index() < scope.size())
 		{
@@ -207,7 +207,7 @@ namespace Potato::Grammar
 	}
 
 	template<typename FunObj>
-	size_t Table::FindProperty(AreaMask mask, FunObj&& Function) requires AvailableInvocableV<FunObj>
+	size_t SymbolForm::FindProperty(AreaMask mask, FunObj&& Function) requires AvailableInvocableV<FunObj>
 	{
 		size_t called = 0;
 		if (mask && mask.Index() < areas.size())
@@ -227,7 +227,7 @@ namespace Potato::Grammar
 	}
 
 	template<typename FunObj>
-	size_t Table::FindAllProperty(FunObj&& Function) requires AvailableInvocableV<FunObj>
+	size_t SymbolForm::FindAllProperty(FunObj&& Function) requires AvailableInvocableV<FunObj>
 	{
 		size_t called = 0;
 		for (auto& ite : scope)
@@ -239,7 +239,7 @@ namespace Potato::Grammar
 	}
 
 	template<typename FunObj>
-	size_t Table::FindActiveProperty(size_t count, FunObj&& Function) requires AvailableInvocableV<FunObj>
+	size_t SymbolForm::FindActiveProperty(size_t count, FunObj&& Function) requires AvailableInvocableV<FunObj>
 	{
 		count = std::min(count, active_scope.size());
 		size_t called = 0;
@@ -251,6 +251,18 @@ namespace Potato::Grammar
 		return called;
 	}
 
+	struct IDReference
+	{
+		SymbolMask symbol_ref;
+		std::u32string_view raw_name;
+		IDReference() = default;
+		IDReference(SymbolMask input) : symbol_ref(input) {}
+		IDReference(SymbolMask input, std::u32string_view input2) { if(input) symbol_ref = input; else raw_name = input2; }
+		IDReference(std::u32string_view input) : raw_name(input) {}
+		bool IsNotASymbol() const noexcept{ return !symbol_ref; }
+		std::u32string_view Name() const noexcept { return symbol_ref ? symbol_ref.Name() : raw_name; }
+	};
+
 	enum class TypeModification
 	{
 		Const,
@@ -260,9 +272,9 @@ namespace Potato::Grammar
 
 	struct TypeProperty
 	{
-		SymbolMask type;
-		std::u32string_view name;
+		IDReference id;
 		std::vector<TypeModification> modification;
+		std::vector<size_t> arrays;
 	};
 
 	struct TypeSymbol
@@ -273,7 +285,6 @@ namespace Potato::Grammar
 	struct ValueSymbol
 	{
 		TypeProperty type_property;
-		std::vector<std::optional<size_t>> arrays;
 		bool is_member;
 	};
 

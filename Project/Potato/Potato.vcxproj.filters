@@ -51,6 +51,9 @@
     <ClInclude Include="..\..\Potato\Public\Interval.h">
       <Filter>Public</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Potato\Public\SVM.h">
+      <Filter>Public</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Potato\Private\Ebnf.cpp">
@@ -84,6 +87,9 @@
       <Filter>Private</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Potato\Private\Lr.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Potato\Private\SVM.cpp">
       <Filter>Private</Filter>
     </ClCompile>
   </ItemGroup>
