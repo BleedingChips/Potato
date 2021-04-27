@@ -55,6 +55,7 @@ namespace Potato::Grammar
 		friend struct Table;
 	};
 
+	/*
 	struct ValueMask
 	{
 		operator bool() const noexcept { return storage.has_value(); }
@@ -76,6 +77,7 @@ namespace Potato::Grammar
 		std::optional<Storage> storage;
 		friend struct Table;
 	};
+	*/
 	
 	struct SymbolForm
 	{
@@ -96,11 +98,13 @@ namespace Potato::Grammar
 
 		SymbolMask InsertSymbol(std::u32string_view name, std::any property, Section section = {});
 
+		/*
 		ValueMask InsertValue(std::u32string_view type_name, std::span<std::byte const> datas) {
 			return InsertValue(FindActiveSymbolAtLast(type_name), type_name, datas);
 		}
 		ValueMask InsertValue(SymbolMask type, std::u32string_view type_name, std::span<std::byte const> datas);
-		
+		*/
+
 		AreaMask PopSymbolAsUnactive(size_t count);
 
 		SymbolMask FindActiveSymbolAtLast(std::u32string_view name) const noexcept;
@@ -111,18 +115,15 @@ namespace Potato::Grammar
 		};
 
 		template<typename InputType> struct AvailableInvocableDetecter<InputType> {
-			static constexpr bool RequireProperty = std::is_same_v<std::remove_cvref_t<InputType>, Property>;
-			static constexpr bool RequireAppendProperty = false;
+			using RequireType = std::conditional_t<std::is_same_v<std::remove_cvref_t<InputType>, Property>, void, std::remove_cvref_t<InputType>>;
+			static constexpr bool AppendProperty = false;
 			static constexpr bool Value = true;
 		};
 
 		template<typename InputType, typename InputType2> struct AvailableInvocableDetecter<InputType, InputType2> {
-			static constexpr bool RequireProperty = false;
-			static constexpr bool RequireAppendProperty = true;
-			static constexpr bool Value = !std::is_same_v<std::remove_cvref_t<InputType>, Property> && std::is_same_v<std::remove_cvref_t<InputType2>, Property>
-				|| !std::is_same_v<std::remove_cvref_t<InputType2>, Property> && std::is_same_v<std::remove_cvref_t<InputType>, Property>;
-			static constexpr bool LeftProperty = std::is_same_v<std::remove_cvref_t<InputType>, Property>;
-			using RequireType = std::conditional_t<std::is_same_v<std::remove_cvref_t<InputType>, Property>, InputType2, InputType>;
+			using RequireType = std::remove_cvref_t<InputType>;
+			static constexpr bool AppendProperty = true;
+			static constexpr bool Value = std::conditional_t < std::is_same_v<std::remove_cvref_t<InputType>, Property>;
 		};
 
 		template<typename FunObj> using AvailableInvocable = FunctionObjectInfo<std::remove_cvref_t<FunObj>>::template PackParameters<AvailableInvocableDetecter>;
@@ -155,7 +156,7 @@ namespace Potato::Grammar
 		static bool Execute(Property& pro, FunObj&& fo) requires AvailableInvocableV<FunObj>
 		{
 			using Detect = AvailableInvocable<FunObj>;
-			if constexpr (Detect::RequireProperty)
+			if constexpr (std::is_same_v<typename Detect::RequireType, void>)
 			{
 				std::forward<FunObj>(fo)(pro);
 				return true;

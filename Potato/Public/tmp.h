@@ -1,7 +1,6 @@
 #pragma once
 #include <type_traits>
 
-
 namespace Potato
 {
 	/* IsOneOf */
