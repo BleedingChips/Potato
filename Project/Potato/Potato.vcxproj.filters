@@ -9,19 +9,31 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\Potato\Public\TMP.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Public\Misc.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Public\Lr.h">
+      <Filter>Public</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\Potato\Public\Ebnf.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Potato\Public\FileSystem.h">
       <Filter>Public</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Potato\Public\Interval.h">
+      <Filter>Public</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\Potato\Public\IntrusivePointer.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\Lr0.h">
+    <ClInclude Include="..\..\Potato\Public\Lexical.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\Misc.h">
+    <ClInclude Include="..\..\Potato\Public\Lr0.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Potato\Public\StrEncode.h">
@@ -33,29 +45,26 @@
     <ClInclude Include="..\..\Potato\Public\StrScanner.h">
       <Filter>Public</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Potato\Public\SVM.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Public\SymbolForm.h">
+      <Filter>Public</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\Potato\Public\Unfa.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\Grammar.h">
+    <ClInclude Include="..\..\Potato\Public\MemoryModel.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\Lr.h">
-      <Filter>Public</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\Lexical.h">
-      <Filter>Public</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\TMP.h">
-      <Filter>Public</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\Interval.h">
-      <Filter>Public</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\SVM.h">
+    <ClInclude Include="..\..\Potato\Public\ConstDataForm.h">
       <Filter>Public</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\Potato\Private\Misc.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\Potato\Private\Ebnf.cpp">
       <Filter>Private</Filter>
     </ClCompile>
@@ -65,10 +74,10 @@
     <ClCompile Include="..\..\Potato\Private\Lexical.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\Lr0.cpp">
+    <ClCompile Include="..\..\Potato\Private\Lr.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\Misc.cpp">
+    <ClCompile Include="..\..\Potato\Private\Lr0.cpp">
       <Filter>Private</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Potato\Private\StrEncode.cpp">
@@ -80,16 +89,16 @@
     <ClCompile Include="..\..\Potato\Private\StrScanner.cpp">
       <Filter>Private</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\Potato\Private\SVM.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Potato\Private\SymbolForm.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\Potato\Private\Unfa.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\Grammar.cpp">
-      <Filter>Private</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\Lr.cpp">
-      <Filter>Private</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\SVM.cpp">
+    <ClCompile Include="..\..\Potato\Private\MemoryModel.cpp">
       <Filter>Private</Filter>
     </ClCompile>
   </ItemGroup>

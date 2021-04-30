@@ -119,6 +119,7 @@ namespace Potato
 
 		template<typename TargetType> TargetType* CastSafe() const noexcept { return static_cast<TargetType*>(ptr); }
 		template<typename TargetType> TargetType* CastReinterpret() const noexcept { return reinterpret_cast<TargetType*>(ptr); }
+		IntrusivePtr<std::remove_const_t<Type>, Wrapper> RemoveConstCast() const noexcept { return const_cast<std::remove_const_t<Type>*>(ptr); };
 	private:
 		friend Wrapper;
 		Type* ptr;

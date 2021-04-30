@@ -10,8 +10,6 @@ namespace Potato::Ebnf
 {
 
 	using Symbol = Lr0::Symbol;
-	using SectionPoint = Lexical::SectionPoint;
-	using Section = Lexical::Section;
 
 	struct Table
 	{
@@ -151,7 +149,6 @@ namespace Potato::Ebnf
 
 namespace Potato::Exception::Ebnf
 {
-	using Potato::Ebnf::Section;
 
 	struct Interface
 	{

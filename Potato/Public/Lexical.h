@@ -2,12 +2,8 @@
 
 #include "Unfa.h"
 
-namespace Potato::Lexical
+namespace Potato
 {
-
-	inline constexpr uint32_t DefaultMask() { return std::numeric_limits<uint32_t>::max() - 1; }
-	inline constexpr uint32_t DefaultIgnoreMask() { return std::numeric_limits<uint32_t>::max(); }
-	
 	struct SectionPoint
 	{
 		std::size_t total_index = 0;
@@ -16,20 +12,28 @@ namespace Potato::Lexical
 		bool operator<(SectionPoint const& lp) const { return total_index < lp.total_index; }
 		SectionPoint operator+(SectionPoint const& sp) const
 		{
-			return { total_index + sp.total_index, line + sp.line, (sp.line != 0 ? sp.line_index : line_index + sp.line_index)};
+			return { total_index + sp.total_index, line + sp.line, (sp.line != 0 ? sp.line_index : line_index + sp.line_index) };
 		}
 		SectionPoint& operator+=(SectionPoint const& sp)
 		{
 			*this = *this + sp;
 			return *this;
 		}
-		auto operator<=>(SectionPoint const& lp) const {  return total_index <=> lp.total_index; }
+		auto operator<=>(SectionPoint const& lp) const { return total_index <=> lp.total_index; }
 	};
 
 	SectionPoint CalculateSectionPoint(std::u32string_view view);
 
 	using Section = ::Potato::Interval<SectionPoint>;
+}
 
+
+namespace Potato::Lexical
+{
+
+	inline constexpr uint32_t DefaultMask() { return std::numeric_limits<uint32_t>::max() - 1; }
+	inline constexpr uint32_t DefaultIgnoreMask() { return std::numeric_limits<uint32_t>::max(); }
+	
 	struct RegexInitTuple
 	{
 		RegexInitTuple(std::u32string_view input_regex = {}) : regex(input_regex), mask(DefaultMask()) {}
@@ -64,7 +68,6 @@ namespace Potato::Lexical
 
 namespace Potato::Exception::Lexical
 {
-	using Potato::Lexical::Section;
 
 	struct UnaccaptableItem {
 		std::u32string possible_token;

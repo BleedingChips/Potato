@@ -318,7 +318,7 @@ namespace Potato::Ebnf
 		};
 
 		static Unfa::SerilizedTable sperator = Unfa::CreateUnfaTableFromRegex(UR"((.*?(?:\r\n|\n))[\f\t\v\r]*?%%%[\s]*?\n|()[\f\t\v\r]*?%%%[\s]*?\n)").Simplify();
-		auto end_point = Lexical::CalculateSectionPoint(code);
+		auto end_point = CalculateSectionPoint(code);
 		struct SperatedCode
 		{
 			std::u32string_view code;
@@ -334,7 +334,7 @@ namespace Potato::Ebnf
 				
 				if (P)
 				{
-					auto new_point = Lexical::CalculateSectionPoint(P->sub_capture[0].string);
+					auto new_point = CalculateSectionPoint(P->sub_capture[0].string);
 					auto cur_end_point = Point + new_point;
 					sperated_code[used] = { P->sub_capture[0].string, {Point, cur_end_point} };
 					code = { code.begin() + P->capture.string.size(), code.end() };
