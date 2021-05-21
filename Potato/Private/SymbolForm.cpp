@@ -5,10 +5,19 @@
 
 namespace Potato::Symbol
 {
+
+	Mask Form::InsertBuildInSymbol(std::u32string_view name, std::any property, Section section)
+	{
+		Mask mask{ mapping.size(), name };
+		mapping.push_back({ Mapping::Category::BUILDIN, buildin_scope.size() });
+		buildin_scope.push_back({ mask, {}, section, std::move(property) });
+		return mask;
+	}
+
 	Mask Form::InsertSymbol(std::u32string_view name, std::any property, Section section)
 	{
 		Mask mask{ mapping.size(), name };
-		mapping.push_back({ true, active_scope.size() });
+		mapping.push_back({ Mapping::Category::ACTIVE, active_scope.size() });
 		active_scope.push_back({ mask, {}, section, std::move(property) });
 		return mask;
 	}
@@ -32,7 +41,7 @@ namespace Potato::Symbol
 			size_t offset = 0;
 			for (auto Ite = mapping.begin() + (mapping.size() - count); Ite != mapping.end(); ++Ite, ++offset)
 			{
-				Ite->is_active = false;
+				Ite->category = Mapping::Category::UNACTIVE;
 				Ite->index = current_area.Index() + offset;
 			}
 		}
@@ -95,6 +104,11 @@ namespace Potato::Symbol
 				}
 			}
 		}
+		for (auto ite = buildin_scope.rbegin(); ite != buildin_scope.rend(); ++ite)
+		{
+			if(ite->mask.Name() == name)
+				return {&*ite};
+		}
 		return {};
 	}
 
@@ -110,8 +124,21 @@ namespace Potato::Symbol
 		if (InputMask && InputMask.Index() < mapping.size())
 		{
 			auto map = mapping[InputMask.Index()];
-			auto scope = map.is_active ? &active_scope : &unactive_scope;
-			auto& Pro = (*scope)[map.index];
+			decltype(&active_scope) scopr_ptr = nullptr;
+			switch (map.category)
+			{
+			case Mapping::Category::ACTIVE:
+				scopr_ptr = &active_scope;
+				break;
+			case Mapping::Category::UNACTIVE:
+				scopr_ptr = &unactive_scope;
+				break;
+			default:
+				scopr_ptr = &buildin_scope;
+				break;
+			}
+			assert(scopr_ptr != nullptr);
+			auto& Pro = (*scopr_ptr)[map.index];
 			if(Pro.mask.Name() == InputMask.Name())
 				return {&Pro};
 		}

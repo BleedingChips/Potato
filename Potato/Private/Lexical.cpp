@@ -1,5 +1,26 @@
 #include "../Public/Lexical.h"
 #include <map>
+
+namespace Potato
+{
+	SectionPoint CalculateSectionPoint(std::u32string_view str)
+	{
+		SectionPoint Result;
+		for (auto Ite : str)
+		{
+			++Result.total_index;
+			if (Ite == U'\n')
+			{
+				++Result.line;
+				Result.line_index = 0;
+			}
+			else
+				++Result.line_index;
+		}
+		return Result;
+	}
+}
+
 namespace Potato::Lexical
 {
 
@@ -64,22 +85,6 @@ namespace Potato::Lexical
 		if(ignore_controller)
 			MakeUpUnfaTable(result);
 		return { result.Simplify(LexicalFilter) };
-	}
-
-	SectionPoint CalculateSectionPoint(std::u32string_view str)
-	{
-		SectionPoint Result;
-		for(auto Ite : str)
-		{
-			++Result.total_index;
-			if(Ite == U'\n')
-			{
-				++Result.line;
-				Result.line_index = 0;
-			}else
-				++Result.line_index;
-		}
-		return Result;
 	}
 
 	std::optional<March> Table::ProcessOnce(std::u32string_view code) const

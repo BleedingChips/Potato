@@ -14,6 +14,7 @@
 #include "IntrusivePointer.h"
 #include <span>
 #include <cassert>
+#include "Types.h"
 
 namespace Potato::Symbol
 {
@@ -32,6 +33,7 @@ namespace Potato::Symbol
 		{
 			size_t index;
 			std::u32string_view name;
+			bool is_build_in;
 		};
 		std::optional<Storage> storage;
 		friend struct Table;
@@ -73,6 +75,7 @@ namespace Potato::Symbol
 		};
 
 		Mask InsertSymbol(std::u32string_view name, std::any property, Section section = {});
+		Mask InsertBuildInSymbol(std::u32string_view name, std::any property, Section section = {});
 		Mask InsertSearchArea(std::u32string_view name, Area area, Section section = {});
 		
 		Area PopSymbolAsUnactive(size_t count);
@@ -157,11 +160,18 @@ namespace Potato::Symbol
 
 		struct Mapping
 		{
-			bool is_active;
+			enum class Category
+			{
+				UNACTIVE,
+				ACTIVE,
+				BUILDIN,
+			};
+			Category category;
 			size_t index;
 		};
 		std::vector<Property> unactive_scope;
 		std::vector<Property> active_scope;
+		std::vector<Property> buildin_scope;
 		std::vector<Mapping> mapping;
 	};
 
@@ -189,10 +199,10 @@ namespace Potato::Symbol
 	size_t Form::ExecuteRange(std::span<PropertyT> span, FunObj&& fo) requires AvailableInvocableV<FunObj>
 	{
 		size_t index = 0;
-		for (auto ite : result)
+		for (auto ite : span)
 		{
 			assert(ite != nullptr);
-			if (this->Execute(*ite, std::forward<FunObj>(Function)))
+			if (this->Execute(*ite, std::forward<FunObj>(fo)))
 				index += 1;
 		}
 		return index;
@@ -239,6 +249,27 @@ namespace Potato::Symbol
 	{
 		return this->ExecuteRange(this->GetAllAciveProperty(), std::forward<FunObj>(Function));
 	}
+
+	struct TypeReference
+	{
+		Mask reference;
+		std::vector<Potato::Types::Modifier> modifier;
+		Types::Layout layout;
+	};
+
+	struct TypeProperty
+	{
+		struct Member
+		{
+			TypeReference type_reference;
+			Types::Layout layout;
+			size_t offset;
+		};
+		Types::Layout layout;
+		std::vector<Member> members;
+	};
+
+
 
 	/*
 

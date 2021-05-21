@@ -1,9 +1,9 @@
-#include "../Public/MemoryModel.h"
-namespace Potato::MemoryModel
+#include "../Public/Types.h"
+namespace Potato::Types
 {
-	size_t Style::MinAlign() const noexcept { return alignof(std::byte); };
+	size_t LayoutStyle::MinAlign() const noexcept { return alignof(std::byte); };
 
-	Property Style::Finalize(Property owner)
+	Layout LayoutStyle::Finalize(Layout owner) noexcept
 	{
 		auto mod = owner.size % owner.align;
 		if (mod == 0)
@@ -12,19 +12,14 @@ namespace Potato::MemoryModel
 			return { owner.align, (owner.size + owner.align - mod) };
 	}
 	   
-	Style::Result Factory::InserMember(Property member)
+	LayoutStyle::Result LayoutFactory::InserMember(Layout member)
 	{
 		auto result = style_ref.InsertMember(scope, member);
 		scope = result.owner;
 		return result;
 	}
 
-	Property Factory::Finalize() const noexcept
-	{
-		return style_ref.Finalize(scope);
-	}
-
-	auto CLikeStyle::InsertMember(Property owner, Property member) -> Result
+	auto CLikeLayoutStyle::InsertMember(Layout owner, Layout member) noexcept -> Result
 	{
 		auto align = std::max(owner.align, member.align);
 		auto mod = owner.size % member.align;
@@ -38,11 +33,11 @@ namespace Potato::MemoryModel
 		}
 	}
 
-	auto HlslStyle::InsertMember(Property owner, Property member)->Result
+	auto HlslLikeLayOutStyle::InsertMember(Layout owner, Layout member) noexcept ->Result
 	{
 		assert(member.align == MinAlign());
 		constexpr size_t AlignSize = MinAlign() * 4;
-		Property temp{ owner };
+		Layout temp{ owner };
 		size_t rever_size = AlignSize - temp.size % AlignSize;
 		if (member.size >= AlignSize || rever_size < member.size)
 			temp.size += rever_size;
