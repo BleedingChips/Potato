@@ -57,7 +57,7 @@
     <ClInclude Include="..\..\Potato\Public\ConstDataForm.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\IR.h">
+    <ClInclude Include="..\..\Potato\Public\HIR.h">
       <Filter>Public</Filter>
     </ClInclude>
   </ItemGroup>
@@ -99,6 +99,9 @@
       <Filter>Private</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Potato\Private\ConstDataForm.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Potato\Private\HIR.cpp">
       <Filter>Private</Filter>
     </ClCompile>
   </ItemGroup>

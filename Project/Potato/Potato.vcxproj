@@ -22,7 +22,7 @@
     <ClInclude Include="..\..\Potato\Public\ConstDataForm.h" />
     <ClInclude Include="..\..\Potato\Public\Ebnf.h" />
     <ClInclude Include="..\..\Potato\Public\FileSystem.h" />
-    <ClInclude Include="..\..\Potato\Public\IR.h" />
+    <ClInclude Include="..\..\Potato\Public\HIR.h" />
     <ClInclude Include="..\..\Potato\Public\Interval.h" />
     <ClInclude Include="..\..\Potato\Public\IntrusivePointer.h" />
     <ClInclude Include="..\..\Potato\Public\Lexical.h" />
@@ -41,6 +41,7 @@
     <ClCompile Include="..\..\Potato\Private\ConstDataForm.cpp" />
     <ClCompile Include="..\..\Potato\Private\Ebnf.cpp" />
     <ClCompile Include="..\..\Potato\Private\FileSystem.cpp" />
+    <ClCompile Include="..\..\Potato\Private\HIR.cpp" />
     <ClCompile Include="..\..\Potato\Private\Lexical.cpp" />
     <ClCompile Include="..\..\Potato\Private\Lr.cpp" />
     <ClCompile Include="..\..\Potato\Private\Lr0.cpp" />
