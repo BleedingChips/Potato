@@ -99,18 +99,30 @@ namespace Potato::Ebnf
 
 	History Translate(Table const& Tab, Lr0::History const& Steps, std::vector<Lexical::March> const& Datas)
 	{
-		std::vector<Step> AllStep;
-		AllStep.reserve(Steps.steps.size());
-		Section LastSection;
-		std::vector<size_t> TemporaryNoTerminalList;
-		std::vector<std::optional<size_t>> SimulateProduction;
+		std::vector<std::u32string_view> Names;
+		Names.reserve(Steps.steps.size());
+		size_t NewStepSize = 0;
 		for (auto& Ite : Steps.steps)
 		{
+			auto Name = Tab.FindSymbolString(Ite.value.Index(), Ite.IsTerminal());
+			if (Ite.IsTerminal())
+				++NewStepSize;
+			else if(!Name.empty())
+				NewStepSize += 2;
+			Names.push_back(Name);
+		}
+		std::vector<Step> AllStep;
+		AllStep.reserve(NewStepSize);
+		Section LastSection;
+		std::vector<size_t> AvailableElement;
+		for (size_t index = 0; index < Steps.steps.size(); ++index)
+		{
+			auto& Ite = Steps.steps[index];
 			Step Result{};
 			Result.state = Ite.value.Index();
-			Result.is_terminal = Ite.IsTerminal();
-			Result.string = Tab.FindSymbolString(Result.state, Result.is_terminal);
-			if(!Result.string.empty() && Result.is_terminal)
+			Result.category = Ite.IsTerminal() ? StepCategory::TERMINAL : StepCategory::NOTERMINAL;
+			Result.string = Names[index];
+			if (!Result.string.empty() && Result.IsTerminal())
 			{
 				auto& DatasRef = Datas[Ite.shift.token_index];
 				Result.section = DatasRef.section;
@@ -118,40 +130,62 @@ namespace Potato::Ebnf
 				Result.shift.capture = DatasRef.capture;
 				Result.shift.mask = Tab.state_to_mask[DatasRef.acception];
 				AllStep.push_back(Result);
-				SimulateProduction.push_back(std::nullopt);
-			}else
+				AvailableElement.push_back(AllStep.size() - 1);
+			}
+			else
 			{
 				assert(Result.IsNoterminal());
-				size_t ProCount = Ite.reduce.production_count;
-				size_t Used = 0;
-				size_t UsedSimulateCount = 0;
-				size_t StartPosition = SimulateProduction.size() - ProCount;
-				for (size_t i = SimulateProduction.size(); i > StartPosition; --i)
+				if (Result.string.empty())
 				{
-					if (!SimulateProduction[i - 1].has_value())
-					{
-						++Used;
+					size_t ProCount = Ite.reduce.production_count;
+					assert(ProCount <= AvailableElement.size());
+					AvailableElement.resize(AvailableElement.size() - ProCount);
+					if (AvailableElement.empty())
+						AvailableElement.push_back(0);
+					else {
+						AvailableElement.push_back(*AvailableElement.rbegin() + 1);
 					}
-					else
-					{
-						assert(!TemporaryNoTerminalList.empty());
-						Used += *TemporaryNoTerminalList.rbegin();
-						TemporaryNoTerminalList.pop_back();
-					}
-					++UsedSimulateCount;
 				}
-				SimulateProduction.resize(SimulateProduction.size() - UsedSimulateCount);
-				if(Result.string.empty())
-				{
-					TemporaryNoTerminalList.push_back(Used);
-					SimulateProduction.push_back(TemporaryNoTerminalList.size());
-				}else
-				{
+				else {
 					Result.reduce.mask = Ite.reduce.mask;
-					Result.reduce.production_count = Used;
+					Result.reduce.production_count = 0;
 					Result.section = LastSection;
-					SimulateProduction.push_back(std::nullopt);
+					assert(AvailableElement.size() >= Ite.reduce.production_count);
+					auto StartIte = AllStep.begin() + (!AvailableElement.empty() ? AvailableElement[AvailableElement.size() - Ite.reduce.production_count] : 0);
+					size_t FindNoterminal = 0;
+					size_t FindTerminal = 0;
+					for (auto Ite = StartIte; Ite != AllStep.end(); ++Ite)
+					{
+						switch (Ite->category)
+						{
+						case StepCategory::TERMINAL:
+							if (FindNoterminal == 0)
+								++FindTerminal;
+							break;
+						case StepCategory::NOTERMINAL:
+							FindNoterminal -= 1;
+							if (FindNoterminal == 0)
+								++FindTerminal;
+							break;
+						case StepCategory::PREDEFINETERMINAL:
+							FindNoterminal += 1;
+							break;
+						default:
+							break;
+						}
+					}
+					Result.reduce.production_count = FindTerminal;
+					Result.section = LastSection;
+					Step PreDefine = Result;
+					PreDefine.category = StepCategory::PREDEFINETERMINAL;
+					AllStep.insert(StartIte, PreDefine);
 					AllStep.push_back(Result);
+					AvailableElement.resize((AvailableElement.size() - Ite.reduce.production_count));
+					if (AvailableElement.empty())
+						AvailableElement.push_back(0);
+					else {
+						AvailableElement.push_back(*AvailableElement.rbegin() + 1);
+					}
 				}
 			}
 		}
@@ -194,20 +228,27 @@ namespace Potato::Ebnf
 					Storage.push_back({ ite, std::move(Result) });
 				}
 				else {
-					
-					size_t TotalUsed = ite.reduce.production_count;
-					size_t CurrentAdress = Storage.size() - TotalUsed;
-					NTElement Re(ite, Storage.data() + CurrentAdress);
-					if (TotalUsed >= 1)
+					if (ite.IsNoterminal())
 					{
-						Re.section = {Re[0].section.start, Re[TotalUsed - 1].section.end};
+						size_t TotalUsed = ite.reduce.production_count;
+						size_t CurrentAdress = Storage.size() - TotalUsed;
+						NTElement Re(ite, Storage.data() + CurrentAdress);
+						if (TotalUsed >= 1)
+						{
+							Re.section = { Re[0].section.start, Re[TotalUsed - 1].section.end };
+						}
+						else {
+							Re.section = ite.section;
+						}
+						auto Result = NTFunc(Re);
+						Storage.resize(CurrentAdress);
+						Storage.push_back({ ite, std::move(Result) });
 					}
-					else {
-						Re.section = ite.section;
+					else if (ite.IsPreDefineNoterminal())
+					{
+						NTElement Re(ite, nullptr);
+						NTFunc(Re);
 					}
-					auto Result = NTFunc(Re);
-					Storage.resize(CurrentAdress);
-					Storage.push_back({ ite, std::move(Result) });
 				}
 			}
 			assert(Storage.size() == 1);

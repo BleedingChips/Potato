@@ -119,6 +119,7 @@ namespace Potato::FileSystem
 			auto His = Ebnf::Process(ref, Input);
 			His([&](Ebnf::NTElement& Ele) -> std::any
 			{
+				if(Ele.IsPredefine()) return {};
 				switch (Ele.mask)
 					{
 					case 0:

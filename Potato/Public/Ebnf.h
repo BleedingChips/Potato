@@ -26,11 +26,19 @@ namespace Potato::Ebnf
 
 	Table CreateTable(std::u32string_view Code);
 
+	enum class StepCategory
+	{
+		TERMINAL,
+		NOTERMINAL,
+		PREDEFINETERMINAL,
+		UNKNOW
+	};
+
 	struct Step
 	{
 		size_t state = 0;
 		std::u32string_view string;
-		bool is_terminal = false;
+		StepCategory category = StepCategory::UNKNOW;
 		Section section;
 		union {
 			struct {
@@ -43,8 +51,9 @@ namespace Potato::Ebnf
 			}shift;
 		};
 		Step(){}
-		bool IsTerminal() const noexcept { return is_terminal; }
-		bool IsNoterminal() const noexcept { return !IsTerminal(); }
+		bool IsTerminal() const noexcept { return category == StepCategory::TERMINAL; }
+		bool IsNoterminal() const noexcept { return category == StepCategory::NOTERMINAL; }
+		bool IsPreDefineNoterminal() const noexcept { return category == StepCategory::PREDEFINETERMINAL; }
 	};
 
 	struct TElement
@@ -86,17 +95,19 @@ namespace Potato::Ebnf
 			}
 		};
 		size_t state = 0;
+		size_t mask = 0;
 		std::u32string_view string;
 		Section section;
-		size_t mask = 0;
+		bool is_predefine = false;
 		std::span<Property> production;
 		Property& operator[](size_t index) { return production[index]; }
+		bool IsPredefine() const noexcept {return is_predefine;};
 		auto begin() { return production.begin(); }
 		auto end() { return production.end();}
-		
-		NTElement(Step const& ref, Property* data) : state(ref.state), string(ref.string), section(ref.section), mask(ref.reduce.mask), production(data, ref.reduce.production_count)
+		NTElement(Step const& ref, Property* data) : state(ref.state), string(ref.string), section(ref.section), mask(ref.reduce.mask), production(ref.category == StepCategory::NOTERMINAL ? data : nullptr, ref.reduce.production_count)
+			,is_predefine(ref.category == StepCategory::PREDEFINETERMINAL)
 		{
-			assert(!ref.IsTerminal());
+			assert(ref.IsNoterminal() || ref.IsPreDefineNoterminal());
 		}
 		NTElement& operator=(NTElement const&) = default;
 	};

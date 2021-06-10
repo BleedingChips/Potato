@@ -95,16 +95,21 @@ int main()
 	std::cout << result << std::endl;
 	
 	Ebnf::Table tab2 = Ebnf::CreateTable(EbnfCode1());
-	auto His2 = Ebnf::Process(tab2, U"1 + 2 + 3 * 4 - 4 / 2 + 2 * +3 * -2");
+	//auto His2 = Ebnf::Process(tab2, U"1 + 2 + 3 * 4 - 4 / 2 + 2 * +3 * -2");
+	auto His2 = Ebnf::Process(tab2, U" 1 + 23 * !!!#123");
 	int result2 = std::any_cast<int>(Ebnf::Process(His2, [](Ebnf::NTElement& e) -> std::any {
-		switch (e.mask)
+		if (!e.IsPredefine())
 		{
-		case 1: return e[0].Consume();
-		case 2: return e[0].Consume<int>() + e[2].Consume<int>();
-		case 3: return e[0].Consume<int>() * e[2].Consume<int>();
-		case 4: return e[0].Consume<int>() / e[2].Consume<int>();
-		case 5: return e[0].Consume<int>() - e[2].Consume<int>();
-		case 6: return e[0].Consume();
+			switch (e.mask)
+			{
+			case 1: return e[0].Consume();
+			case 2: return e[0].Consume<int>() + e[2].Consume<int>();
+			case 3: return e[0].Consume<int>() * e[2].Consume<int>();
+			case 4: return e[0].Consume<int>() / e[2].Consume<int>();
+			case 5: return e[0].Consume<int>() - e[2].Consume<int>();
+			case 6: return e[0].Consume();
+			case 7: return int(0);
+			}
 		}
 		return {};
 	},
@@ -139,6 +144,7 @@ $ := <Exp>
     := <Exp> '/' <Exp> : [4]
     := <Exp> '-' <Exp> : [5]
     := '(' <Exp> ')' : [6]
+	:= {'!'} {'&'} '#' Num : [7]
 
 %%%
 

@@ -45,7 +45,7 @@
     <ClInclude Include="..\..\Potato\Public\StrScanner.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\SymbolForm.h">
+    <ClInclude Include="..\..\Potato\Public\HIR.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Potato\Public\Unfa.h">
@@ -55,9 +55,6 @@
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Potato\Public\ConstDataForm.h">
-      <Filter>Public</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\HIR.h">
       <Filter>Public</Filter>
     </ClInclude>
   </ItemGroup>
@@ -89,7 +86,7 @@
     <ClCompile Include="..\..\Potato\Private\StrScanner.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\SymbolForm.cpp">
+    <ClCompile Include="..\..\Potato\Private\HIR.cpp">
       <Filter>Private</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Potato\Private\Unfa.cpp">
@@ -99,9 +96,6 @@
       <Filter>Private</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Potato\Private\ConstDataForm.cpp">
-      <Filter>Private</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\HIR.cpp">
       <Filter>Private</Filter>
     </ClCompile>
   </ItemGroup>
