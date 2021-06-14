@@ -6,6 +6,166 @@
 namespace Potato::HIR
 {
 
+	bool TypeReference::IsPointer() const
+	{
+		for (auto& Ite : modifier)
+		{
+			if(Ite.type == Modifier::Type::POINTER)
+				return true;
+		}
+		return false;
+	}
+
+	std::optional<size_t> TypeReference::ArrayCount() const
+	{
+		bool Find = false;
+		size_t count = 0;
+		for (auto& Ite : modifier)
+		{
+			if (Ite.type == Modifier::Type::ARRAY)
+			{
+				
+			}
+		}
+		return {};
+	}
+
+	TypeTag TypeForm::ForwardDefineType()
+	{
+		TypeTag tag {StorageType::CUSTOM, defined_types.size()};
+		defined_types.push_back({});
+		return tag;
+	}
+
+	bool TypeForm::MarkTypeDefineStart(TypeTag Input)
+	{
+		if (Input.IsCustomType() && defined_types.size() > Input.AsIndex() && !defined_types[Input.AsIndex()].has_value())
+		{
+			define_stack_record.push_back({Input, temporary_member_type.size()});
+			return true;
+		}
+		return false;
+	}
+
+	bool TypeForm::InsertMember(TypeReference type_reference, std::u32string name)
+	{
+		assert(!define_stack_record.empty());
+		if (type_reference.type)
+		{
+			if (type_reference.type.AsIndex() < defined_types.size())
+			{
+				auto& ref = defined_types[type_reference.type.AsIndex()];
+				if (ref.has_value() || type_reference.IsPointer())
+				{
+					temporary_member_type.push_back({ std::move(type_reference), std::move(name) });
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	std::optional<Layout> TypeForm::CalculateTypeLayout(TypeTag const& ref) const
+	{
+		assert(ref);
+		if (ref.storage_type.has_value())
+		{
+			switch (*ref.storage_type)
+			{
+			case StorageType::UINT8:
+			case StorageType::INT8:
+				return Layout{ alignof(uint8_t), sizeof(alignof(uint8_t)) };
+				break;
+			case StorageType::UINT16:
+			case StorageType::INT16:
+				return Layout{ alignof(uint16_t), sizeof(alignof(uint16_t)) };
+				break;
+			case StorageType::UINT32:
+			case StorageType::INT32:
+			case StorageType::FLOAT32:
+				return Layout{ alignof(uint32_t), sizeof(alignof(uint32_t)) };
+				break;
+			case StorageType::INT64:
+			case StorageType::UINT64:
+			case StorageType::FLOAT64:
+				return Layout{ alignof(uint64_t), sizeof(alignof(uint64_t)) };
+				break;
+			case StorageType::CUSTOM:
+			{
+				assert(defined_types.size() > ref.AsIndex());
+				auto& ref2 = defined_types[ref.AsIndex()];
+				if(ref2.has_value())
+					return ref2->layout;
+				return {};
+			}break;
+			default:
+				return {};
+			}
+		}
+		return {};
+	}
+
+	std::optional<Layout> TypeForm::CalculateTypeLayout(TypeReference const& ref, Setting const& setting) const
+	{
+		std::optional<Layout> OldLayout = CalculateTypeLayout(ref.type);
+		for (auto Ite : ref.modifier)
+		{
+			switch (Ite.type)
+			{
+			case Modifier::Type::POINTER:
+				OldLayout = setting.pointer_layout;
+				break;
+			case Modifier::Type::ARRAY:
+				if(OldLayout.has_value())
+					OldLayout->size *= Ite.parameter;
+				break;
+			default:
+				break;
+			}
+		}
+		return OldLayout;
+	}
+
+	TypeTag TypeForm::FinishTypeDefine(Setting const& setting)
+	{
+		if (!define_stack_record.empty())
+		{
+			auto [tag, size] = *define_stack_record.rbegin();
+			define_stack_record.pop_back();
+			assert(tag && defined_types.size() > tag.AsIndex() && !defined_types[tag.AsIndex()].has_value());
+			TypeProperty property;
+			auto& layout_ref = property.layout;
+			layout_ref = {setting.min_alignas, 0};
+			for (auto ite = temporary_member_type.begin() + size; ite < temporary_member_type.end(); ++ite)
+			{
+				auto layout = *CalculateTypeLayout(ite->type_reference, setting);
+				//assert(layout.has_value());
+				layout_ref.align = std::max(layout_ref.align, layout.align);
+				auto alian_space = layout_ref.size % layout.align;
+				if(alian_space != 0)
+					layout_ref.size += layout.align - alian_space;
+				if (setting.member_feild.has_value())
+				{
+					alian_space = layout_ref.size % *setting.member_feild;
+					if(alian_space != 0 && alian_space + layout.size > *setting.member_feild)
+						layout_ref.size += *setting.member_feild - alian_space;
+				}
+				ite->offset = layout_ref.size;
+				ite->layout = layout;
+			}
+			auto alian_size = layout_ref.size % layout_ref.align;
+			if(alian_size != 0)
+				layout_ref.size += layout_ref.align - alian_size;
+			auto start_ite = temporary_member_type.begin() + size;
+			property.members.insert(property.members.end(), std::move_iterator(start_ite), std::move_iterator(temporary_member_type.end()));
+			temporary_member_type.erase(start_ite, temporary_member_type.end());
+			defined_types[tag.AsIndex()] = std::move(property);
+			return tag;
+		}
+		return {};
+	}
+
+
 	size_t ConstForm::InserConstData(TypeReference desc, Layout layout, std::span<std::byte const> data)
 	{
 		IndexSpan<> span(const_form.size(), data.size());

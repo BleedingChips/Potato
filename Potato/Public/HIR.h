@@ -47,9 +47,9 @@ namespace Potato::HIR
 
 	struct Layout
 	{
-		uint64_t align = 1;
-		uint64_t size = 0;
-		constexpr Layout(uint64_t i_align = 0, uint64_t i_size = 0)
+		size_t align = 1;
+		size_t size = 0;
+		constexpr Layout(size_t i_align = 0, size_t i_size = 0)
 			: align(i_align), size(i_size)
 		{
 			assert(((align - 1) & align) == 0);
@@ -64,13 +64,78 @@ namespace Potato::HIR
 		enum class Type
 		{
 			CONST,
-			REFERENCE,
 			POINTER,
 			ARRAY,
 		};
 		Type type;
-		uint64_t parameter;
+		size_t parameter;
 	};
+
+	struct TypeTag
+	{
+		operator bool() const noexcept {return storage_type.has_value(); }
+		bool IsCustomType() const noexcept {return *this && *storage_type == StorageType::CUSTOM;}
+		size_t AsIndex() const noexcept {return index;}
+		std::optional<StorageType> storage_type;
+		size_t index;
+	};
+
+	struct FunctionTag
+	{
+		std::optional<size_t> index;
+	};
+
+	struct TypeReference
+	{
+		TypeTag type;
+		std::vector<Modifier> modifier;
+		operator bool () const {return type; }
+		bool IsPointer() const noexcept;
+		std::optional<size_t> ArrayCount() const noexcept;
+	};
+
+	struct TypeProperty
+	{
+		enum class Solt
+		{
+			Construction,
+			Max,
+		};
+		struct Member
+		{
+			TypeReference type_reference;
+			std::u32string name;
+			size_t offset;
+			Layout layout;
+		};
+		Layout layout;
+		std::vector<Member> members;
+		std::vector<FunctionTag> functions;
+		FunctionTag destruction_functions;
+		std::array<IndexSpan<>, static_cast<size_t>(Solt::Max)> functions;
+	};
+
+	struct TypeForm
+	{
+		struct Setting
+		{
+			size_t min_alignas;
+			Layout pointer_layout;
+			std::optional<size_t> member_feild;
+		};
+		TypeTag ForwardDefineType();
+		bool MarkTypeDefineStart(TypeTag Input);
+		bool MarkTypeDefineStart() { return MarkTypeDefineStart(ForwardDefineType()); }
+		bool InsertMember(TypeReference type_reference, std::u32string name);
+		TypeTag FinishTypeDefine(Setting const& setting);
+	private:
+		std::optional<Layout> CalculateTypeLayout(TypeTag const& ref) const;
+		std::optional<Layout> CalculateTypeLayout(TypeReference const& ref, Setting const& setting) const;
+		std::vector<TypeProperty::Member> temporary_member_type;
+		std::vector<std::optional<TypeProperty>> defined_types;
+		std::vector<std::tuple<TypeTag, size_t>> define_stack_record;
+	};
+
 
 	struct Register
 	{
@@ -98,40 +163,11 @@ namespace Potato::HIR
 		uint64_t index;
 	};
 
-	struct TypeReference
-	{
-		Register type;
-		std::vector<Modifier> modifier;
-	};
+	
 
-	struct TypeProperty
-	{
-		struct Member
-		{
-			TypeReference type_reference;
-			std::u32string name;
-			uint32_t offset;
-			Layout layout;
-		};
-		Layout layout;
-		std::vector<Member> members;
-	};
+	
 
-	struct TypeForm
-	{
-		struct Setting
-		{
-			size_t min_alignas;
-		};
-		Register ForwardDefineType();
-		void MarkTypeDefineStart(Register Input);
-		void InsertMember(TypeReference type_reference, std::u32string name);
-		Register FinishTypeDefine(Setting const& setting);
-	private:
-		std::vector<TypeProperty::Member> temporary_member_type;
-		std::vector<TypeProperty> defined_types;
-		std::vector<size_t> define_stack_record;
-	};
+	
 
 	struct ConstForm
 	{
