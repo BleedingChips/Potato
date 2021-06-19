@@ -6,7 +6,7 @@
 namespace Potato::HIR
 {
 
-	bool TypeReference::IsPointer() const
+	bool TypeReference::IsPointer() const noexcept
 	{
 		for (auto& Ite : modifier)
 		{
@@ -14,20 +14,6 @@ namespace Potato::HIR
 				return true;
 		}
 		return false;
-	}
-
-	std::optional<size_t> TypeReference::ArrayCount() const
-	{
-		bool Find = false;
-		size_t count = 0;
-		for (auto& Ite : modifier)
-		{
-			if (Ite.type == Modifier::Type::ARRAY)
-			{
-				
-			}
-		}
-		return {};
 	}
 
 	TypeTag TypeForm::ForwardDefineType()
@@ -126,7 +112,7 @@ namespace Potato::HIR
 		return OldLayout;
 	}
 
-	TypeTag TypeForm::FinishTypeDefine(Setting const& setting)
+	std::optional<TypeTag> TypeForm::FinishTypeDefine(Setting const& setting)
 	{
 		if (!define_stack_record.empty())
 		{
@@ -136,56 +122,83 @@ namespace Potato::HIR
 			TypeProperty property;
 			auto& layout_ref = property.layout;
 			layout_ref = {setting.min_alignas, 0};
+			bool Error = false;
 			for (auto ite = temporary_member_type.begin() + size; ite < temporary_member_type.end(); ++ite)
 			{
-				auto layout = *CalculateTypeLayout(ite->type_reference, setting);
-				//assert(layout.has_value());
-				layout_ref.align = std::max(layout_ref.align, layout.align);
-				auto alian_space = layout_ref.size % layout.align;
+				auto layout = CalculateTypeLayout(ite->type_reference, setting);
+				if (!layout.has_value())
+				{
+					Error = true;
+					break;
+				}
+				layout_ref.align = std::max(layout_ref.align, layout->align);
+				auto alian_space = layout_ref.size % layout->align;
 				if(alian_space != 0)
-					layout_ref.size += layout.align - alian_space;
+					layout_ref.size += layout->align - alian_space;
 				if (setting.member_feild.has_value())
 				{
 					alian_space = layout_ref.size % *setting.member_feild;
-					if(alian_space != 0 && alian_space + layout.size > *setting.member_feild)
+					if(alian_space != 0 && alian_space + layout->size > *setting.member_feild)
 						layout_ref.size += *setting.member_feild - alian_space;
 				}
 				ite->offset = layout_ref.size;
-				ite->layout = layout;
+				ite->layout = *layout;
 			}
 			auto alian_size = layout_ref.size % layout_ref.align;
 			if(alian_size != 0)
 				layout_ref.size += layout_ref.align - alian_size;
 			auto start_ite = temporary_member_type.begin() + size;
-			property.members.insert(property.members.end(), std::move_iterator(start_ite), std::move_iterator(temporary_member_type.end()));
+			if(!Error)
+				property.members.insert(property.members.end(), std::move_iterator(start_ite), std::move_iterator(temporary_member_type.end()));
 			temporary_member_type.erase(start_ite, temporary_member_type.end());
-			defined_types[tag.AsIndex()] = std::move(property);
-			return tag;
+			if (!Error)
+			{
+				defined_types[tag.AsIndex()] = std::move(property);
+				return tag;
+			}
+			return {};
 		}
 		return {};
 	}
 
-
-	size_t ConstForm::InserConstData(TypeReference desc, Layout layout, std::span<std::byte const> data)
+	Potato::ObserverPtr<std::optional<TypeProperty>> TypeForm::FindType(TypeTag tag) noexcept
 	{
-		IndexSpan<> span(const_form.size(), data.size());
-		const_form.resize(const_form.size() + data.size());
-		std::memcpy(const_form.data() + span.start, data.data(), span.length);
-		size_t current = elements.size();
-		elements.push_back(ConstForm::Element{std::move(desc), span, layout});
-		return current;
+		if (tag && tag.IsCustomType() && tag.AsIndex() < defined_types.size())
+		{
+			return &defined_types[tag.AsIndex()];
+		}
+		return {};
 	}
 
-
-	Symbol Form::InsertSymbol(std::u32string_view name, std::any property, Section section)
+	/*
+	std::span<std::byte> StackValueForm::TryAllocateMember(Layout layout)
 	{
-		Symbol mask{ mapping.size(), name };
+		while (true)
+		{
+			if()
+		}
+	}
+	*/
+
+	Register HIRForm::InserConstData(TypeReference desc, Layout layout, std::span<std::byte const> data)
+	{
+		Register reg{Register::Type::CONST, elements.size()};
+		IndexSpan<> span(datas.size(), data.size());
+		datas.resize(datas.size() + data.size());
+		std::memcpy(datas.data() + span.start, data.data(), span.length);
+		elements.push_back({std::move(desc), span, layout});
+		return reg;
+	}
+
+	SymbolTag SymbolForm::InsertSymbol(std::u32string_view name, std::any property, Section section)
+	{
+		SymbolTag mask{ mapping.size(), name };
 		mapping.push_back({ Mapping::Category::ACTIVE, active_scope.size() });
 		active_scope.push_back({ mask, {}, section, std::move(property) });
 		return mask;
 	}
 
-	Symbol Form::InsertSearchArea(std::u32string_view name, SymbolArea area, Section section)
+	SymbolTag SymbolForm::InsertSearchArea(std::u32string_view name, SymbolAreaTag area, Section section)
 	{
 		if(area)
 			return InsertSymbol(name, InsideSearchReference{area}, section);
@@ -193,19 +206,19 @@ namespace Potato::HIR
 			return {};
 	}
 
-	void Form::MarkSymbolActiveScopeBegin()
+	void SymbolForm::MarkSymbolActiveScopeBegin()
 	{
 		activescope_start_index.push_back(active_scope.size());
 	}
 
-	SymbolArea Form::PopSymbolActiveScope()
+	SymbolAreaTag SymbolForm::PopSymbolActiveScope()
 	{
 		if (!activescope_start_index.empty())
 		{
 			auto count = *activescope_start_index.rbegin();
 			assert(count <= active_scope.size());
 			activescope_start_index.pop_back();
-			SymbolArea current_area{ unactive_scope.size(), count };
+			SymbolAreaTag current_area{ unactive_scope.size(), count };
 			auto scope_start_ite = active_scope.begin() + (active_scope.size() - count);
 			for (auto Ite = scope_start_ite; Ite != active_scope.end(); ++Ite)
 				Ite->area = current_area;
@@ -224,8 +237,8 @@ namespace Potato::HIR
 		}
 	}
 
-	auto Form::SearchElement(IteratorTuple Input, std::u32string_view name) const noexcept -> std::variant<
-		Potato::ObserverPtr<Form::Property const>,
+	auto SymbolForm::SearchElement(IteratorTuple Input, std::u32string_view name) const noexcept -> std::variant<
+		Potato::ObserverPtr<SymbolForm::Property const>,
 		std::tuple<IteratorTuple, IteratorTuple>
 	>
 	{
@@ -233,7 +246,7 @@ namespace Potato::HIR
 		for (; Ite != Input.end; ++Ite)
 		{
 			if(Ite->mask.Name() == name)
-				return Potato::ObserverPtr<Form::Property const>(&(*Ite));
+				return Potato::ObserverPtr<SymbolForm::Property const>(&(*Ite));
 			auto Inside = Ite->TryCast<InsideSearchReference>();
 			if (Inside != nullptr)
 			{
@@ -246,14 +259,14 @@ namespace Potato::HIR
 				return std::tuple<IteratorTuple, IteratorTuple>{SearchPair, Input };
 			}
 		}
-		return Potato::ObserverPtr<Form::Property const>{};
+		return Potato::ObserverPtr<SymbolForm::Property const>{};
 	}
 
-	Potato::ObserverPtr<Form::Property const> Form::FindActivePropertyAtLast(std::u32string_view name) const noexcept
+	Potato::ObserverPtr<SymbolForm::Property const> SymbolForm::FindActivePropertyAtLast(std::u32string_view name) const noexcept
 	{
 		auto result = SearchElement({active_scope.rbegin(), active_scope.rend()}, name);
-		if(std::holds_alternative<Potato::ObserverPtr<Form::Property const>>(result))
-			return std::get<Potato::ObserverPtr<Form::Property const>>(result);
+		if(std::holds_alternative<Potato::ObserverPtr<SymbolForm::Property const>>(result))
+			return std::get<Potato::ObserverPtr<SymbolForm::Property const>>(result);
 		else
 		{
 			auto [It1, It2] = std::get<std::tuple<IteratorTuple, IteratorTuple>>(result);
@@ -267,8 +280,8 @@ namespace Potato::HIR
 				auto Pop = *search_stack.rbegin();
 				search_stack.pop_back();
 				auto result = SearchElement(Pop, name);
-				if (std::holds_alternative<Potato::ObserverPtr<Form::Property const>>(result))
-					return std::get<Potato::ObserverPtr<Form::Property const>>(result);
+				if (std::holds_alternative<Potato::ObserverPtr<SymbolForm::Property const>>(result))
+					return std::get<Potato::ObserverPtr<SymbolForm::Property const>>(result);
 				else {
 					auto [It1, It2] = std::get<std::tuple<IteratorTuple, IteratorTuple>>(result);
 					if (It2.start != It2.end)
@@ -281,7 +294,7 @@ namespace Potato::HIR
 		return {};
 	}
 
-	Symbol Form::FindActiveSymbolAtLast(std::u32string_view name) const noexcept
+	SymbolTag SymbolForm::FindActiveSymbolAtLast(std::u32string_view name) const noexcept
 	{
 		auto result = FindActivePropertyAtLast(name);
 		if(result)
@@ -289,7 +302,7 @@ namespace Potato::HIR
 		return {};
 	}
 
-	auto Form::FindProperty(Symbol InputMask) const noexcept -> Potato::ObserverPtr<Property const>
+	auto SymbolForm::FindProperty(SymbolTag InputMask) const noexcept -> Potato::ObserverPtr<Property const>
 	{
 		if (InputMask && InputMask.Index() < mapping.size())
 		{
@@ -312,7 +325,7 @@ namespace Potato::HIR
 		return {};
 	}
 
-	auto Form::FindProperty(SymbolArea Input) const noexcept -> std::span<Property const>
+	auto SymbolForm::FindProperty(SymbolAreaTag Input) const noexcept -> std::span<Property const>
 	{
 		if (Input && Input.Index() + Input.Count() <= unactive_scope.size() && unactive_scope[Input.Index()].area == Input)
 		{

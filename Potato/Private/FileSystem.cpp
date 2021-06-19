@@ -20,9 +20,10 @@ $ := <Ste>
 <File> := (NormalPath | SelfPath | UpperPath) : [0]
 <FilePath> := <File> { Delimiter <File> } : [1]
 <Ste> := DosRoot [ <FilePath> ] : [2]
+<Ste> := DosRoot <FilePath> Delimiter : [2]
 <Ste> := <FilePath> : [3]
 <Ste> := MappingRoot [<FilePath>] : [4]
-<Ste> := Delimiter <FilePath> Delimiter : [5]
+<Ste> := Delimiter <FilePath> [ Delimiter ] : [5]
 )"
 		);
 		return fs_ebnf;
@@ -107,6 +108,7 @@ namespace Potato::FileSystem
 				Used+= Last.size;
 			}
 		}
+
 		return true;
 	}
 	
@@ -181,7 +183,7 @@ namespace Potato::FileSystem
 						P[0].size +=2;
 						Result.elements.push_back(P[0]);
 						Result.path = P[0](Input);
-						if(!Result.Insert(Input, P.data() + 1, P.size()))
+						if(!Result.Insert(Input, P.data() + 1, P.size() - 1))
 							Result = {};
 					}break;
 					}
@@ -231,13 +233,18 @@ namespace Potato::FileSystem
 		
 	}
 
+	bool Path::operator==(Path const& path) const noexcept
+	{
+		return GetType() == path.GetType() && elements.size() == path.elements.size() && this->path == path.path;
+	}
+
 	Path Path::Parent() const
 	{
 		if(elements.size() >= 2)
 		{
 			Path result;
 			result.style = style;
-			auto ref = elements[elements.size() - 2];
+			auto ref = *(elements.rbegin() + 1);
 			result.path.insert(result.path.end(), path.begin(), path.begin() + ref.start + ref.size);
 			result.elements.insert(result.elements.end(), elements.begin(), elements.begin() + (elements.size() - 1));
 			return result;
@@ -249,7 +256,7 @@ namespace Potato::FileSystem
 	{
 		if(elements.size() > 0)
 		{
-			auto ref = elements[elements.size() - 1];
+			auto ref = *elements.rbegin();
 			return ref(path);
 		}
 		return {};
@@ -303,66 +310,109 @@ namespace Potato::FileSystem
 		return Path(CurPath);
 	}
 
-	Path Path::FindFileFromParent(std::u32string_view Target, size_t MaxStack) const
+	Path Path::FindCurentDirectory(std::function<bool(Path const&)> funcobj) const
 	{
-		if (GetType() == Path::Style::DosAbsolute || GetType() == Path::Style::UnixAbsolute)
+		if (funcobj && IsAbsolute())
 		{
-			std::filesystem::path tar(Target);
-			size_t SearchingStack = 0;
-			while (SearchingStack < MaxStack && Size() > SearchingStack + 1)
+			for (auto& ite : std::filesystem::directory_iterator(path, std::filesystem::directory_options::skip_permission_denied))
 			{
-				auto Last = elements[Size() - SearchingStack - 1];
-				std::u32string_view cur(path.data(), Last.start + Last.size);
-				for (auto& ite : std::filesystem::directory_iterator(cur, std::filesystem::directory_options::skip_permission_denied))
+				auto CurPath = ite.path().u32string();
+				std::replace(CurPath.begin(), CurPath.end(), U'\\', U'/');
+				Path result(CurPath);
+				if (funcobj(result))
+					return result;
+			}
+		}
+		return {};
+	}
+
+	Path Path::FindChildDirectory(std::function<bool(Path const&)> funcobj, size_t stack) const
+	{
+		if (funcobj && stack > 0 && IsAbsolute())
+		{
+			std::vector<std::tuple<size_t, std::filesystem::path>> searching_stack;
+			searching_stack.push_back({stack, path});
+			while (!searching_stack.empty())
+			{
+				auto [stack, path] = *searching_stack.rbegin();
+				searching_stack.pop_back();
+				if (stack > 0)
 				{
-					if (ite.path().filename() == tar)
+					stack -= 1;
+					for (auto& ite : std::filesystem::directory_iterator(path, std::filesystem::directory_options::skip_permission_denied))
 					{
-						auto CurPath = ite.path().u32string();
-						std::replace(CurPath.begin(), CurPath.end(), U'\\', U'/');
-						return Path(CurPath);
+						auto sys_path = ite.path();
+						auto user_path = sys_path.u32string();
+						std::replace(user_path.begin(), user_path.end(), U'\\', U'/');
+						Path result(user_path);
+						if (funcobj(result))
+							return result;
+						if (stack > 0 && std::filesystem::is_directory(sys_path))
+							searching_stack.insert(searching_stack.begin(), { stack, std::move(sys_path) });
 					}
 				}
-				++SearchingStack;
 			}
 		}
 		return {};
 	}
 
-	Path Path::FindFileFromChild(std::u32string_view Target) const
+	Path Path::FindParentDirectory(std::function<bool(Path const&)> funcobj, size_t stack) const
 	{
-		if (GetType() == Path::Style::DosAbsolute || GetType() == Path::Style::UnixAbsolute)
+		if (funcobj && stack > 0 && IsAbsolute())
 		{
-			std::filesystem::path tar(Target);
-			for (auto& ite : std::filesystem::recursive_directory_iterator(path, std::filesystem::directory_options::skip_permission_denied))
+			std::filesystem::path searching_stack{path};
+			auto root = searching_stack.root_directory();
+			while (true)
 			{
-				if (ite.path().filename() == tar)
+				for (auto& ite : std::filesystem::directory_iterator(searching_stack, std::filesystem::directory_options::skip_permission_denied))
 				{
-					auto CurPath = ite.path().u32string();
-					std::replace(CurPath.begin(), CurPath.end(), U'\\', U'/');
-					return Path(CurPath);
+					auto sys_path = ite.path();
+					auto user_path = sys_path.u32string();
+					std::replace(user_path.begin(), user_path.end(), U'\\', U'/');
+					Path result(user_path);
+					if (funcobj(result))
+						return result;
 				}
+				if (stack > 0 && searching_stack != root)
+				{
+					--stack;
+					searching_stack = searching_stack.parent_path();
+				}else
+					break;
 			}
 		}
 		return {};
 	}
 
-	std::vector<Path> Path::FindAllFileFromChild(std::u32string_view Target) const
+	std::vector<Path> Path::FindAllCurentDirectory(std::function<bool(Path const&)> funcobj) const
 	{
-		std::vector<Path> paths;
-		if (GetType() == Path::Style::DosAbsolute || GetType() == Path::Style::UnixAbsolute)
-		{
-			std::filesystem::path tar(Target);
-			for (auto& ite : std::filesystem::recursive_directory_iterator(path, std::filesystem::directory_options::skip_permission_denied))
-			{
-				if (ite.path().filename() == tar)
-				{
-					auto CurPath = ite.path().u32string();
-					std::replace(CurPath.begin(), CurPath.end(), U'\\', U'/');
-					paths.push_back(Path(CurPath));
-				}
-			}
-		}
-		return std::move(paths);
+		std::vector<Path> result;
+		FindCurentDirectory([&](Path const& pa) -> bool {
+			if(funcobj(pa))
+				result.push_back(pa);
+			return false;
+		});
+		return result;
+	}
+	std::vector<Path> Path::FindAllChildDirectory(std::function<bool(Path const&)> funcobj, size_t stack) const
+	{
+		std::vector<Path> result;
+		FindChildDirectory([&](Path const& pa) -> bool {
+			if (funcobj(pa))
+				result.push_back(pa);
+			return false;
+		}, stack);
+		return result;
+	}
+	std::vector<Path> Path::FindAllParentDirectory(std::function<bool(Path const&)> funcobj, size_t stack) const
+	{
+		std::vector<Path> result;
+		FindParentDirectory([&](Path const& pa) -> bool {
+			if (funcobj(pa))
+				result.push_back(pa);
+			return false;
+		}, stack);
+		return result;
 	}
 
 	size_t Path::LocateFile(std::u32string_view tar) const
@@ -381,22 +431,22 @@ namespace Potato::FileSystem
 	{
 		start = std::min(start, Size());
 		count = std::min(Size() - start, count);
-		if(count > 0)
+		Path result;
+		result.elements.insert(result.elements.end(), elements.begin() + start, elements.begin() + start + count);
+		if (!result.elements.empty())
 		{
-			Path result;
-			result.elements.insert(result.elements.end(), elements.begin() + start, elements.begin() + start + count);
-			auto s = elements[start];
-			auto e = elements[start + count];
-			result.path.insert(result.path.end(), path.begin() + s.start, path.begin() + e.start + e.size);
-			for(auto& ite : result.elements)
-				ite.start -= s.start;
-			if(start == 0)
+			auto star = result.elements.begin();
+			auto end = result.elements.rbegin();
+			result.path.insert(result.path.end(), path.begin() + star->start, path.begin() + end->start + end->size);
+			size_t offset = star->start;
+			for (auto& ite : result.elements)
+				ite.start -= offset;
+			if (start == 0)
 				result.style = style;
 			else
 				result.style = Path::Style::Relative;
-			return std::move(result);
 		}
-		return {};		
+		return result;
 	}
 
 	std::vector<std::byte> LoadEntireFile(Path const& ref)

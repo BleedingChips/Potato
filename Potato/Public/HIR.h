@@ -110,9 +110,6 @@ namespace Potato::HIR
 		};
 		Layout layout;
 		std::vector<Member> members;
-		std::vector<FunctionTag> functions;
-		FunctionTag destruction_functions;
-		std::array<IndexSpan<>, static_cast<size_t>(Solt::Max)> functions;
 	};
 
 	struct TypeForm
@@ -127,7 +124,8 @@ namespace Potato::HIR
 		bool MarkTypeDefineStart(TypeTag Input);
 		bool MarkTypeDefineStart() { return MarkTypeDefineStart(ForwardDefineType()); }
 		bool InsertMember(TypeReference type_reference, std::u32string name);
-		TypeTag FinishTypeDefine(Setting const& setting);
+		std::optional<TypeTag> FinishTypeDefine(Setting const& setting);
+		Potato::ObserverPtr<std::optional<TypeProperty>> FindType(TypeTag tag) noexcept;
 	private:
 		std::optional<Layout> CalculateTypeLayout(TypeTag const& ref) const;
 		std::optional<Layout> CalculateTypeLayout(TypeReference const& ref, Setting const& setting) const;
@@ -144,17 +142,37 @@ namespace Potato::HIR
 		{
 			CONST,
 			STACK,
-			TYPE,
-			BUILINVALUE,
-			VALUE,
+			MEMORY,
+
+			BI_UINT8,
+			BI_UINT16,
+			BI_UINT32,
+			BI_UINT64,
+
+			BI_INT8,
+			BI_INT16,
+			BI_INT32,
+			BI_INT64,
+
+			BI_FLOAT32,
+			BI_FLOAT64,
+
 			None
 		};
 
 		Register(Register const&) = default;
 		Register& operator=(Register const&) = default;
 		Register(Type register_type, uint64_t index) : type(register_type), index(index) {};
-		Register() : Register(Type::None, 0) {}
-		Register(StorageType desc) : Register(Type::BUILINVALUE, static_cast<uint64_t>(desc)) {};
+		Register(uint8_t input) : Register(Type::BI_UINT8, input) {}
+		Register(uint16_t input) : Register(Type::BI_UINT16, input) {}
+		Register(uint32_t input) : Register(Type::BI_UINT32, input) {}
+		Register(uint64_t input) : Register(Type::BI_UINT64, input) {}
+		Register(int8_t input) : Register(Type::BI_INT8, input) {}
+		Register(int16_t input) : Register(Type::BI_INT16, input) {}
+		Register(int32_t input) : Register(Type::BI_INT32, input) {}
+		Register(int64_t input) : Register(Type::BI_INT64, input) {}
+		Register(float input) : type(Type::BI_FLOAT32), index(0) {  std::memcpy(&index, &input, sizeof(input)); }
+		Register(double input) : type(Type::BI_FLOAT64), index(0) { std::memcpy(&index, &input, sizeof(input)); }
 		operator bool() const noexcept { return type != Type::None; }
 		Type Category() const noexcept { return type; }
 		uint64_t Index() const noexcept { return index; }
@@ -163,18 +181,39 @@ namespace Potato::HIR
 		uint64_t index;
 	};
 
+	struct HIRForm
+	{
+		Register InserConstData(TypeReference desc, Layout layout, std::span<std::byte const> data);
+		template<typename Type>
+		Register InserConstData(Type&& data) requires (StorageTypeEnumV<std::remove_cvref_t<Type>> != StorageType::CUSTOM)
+		{
+			using Type = std::remove_cvref_t<Type>;
+			return InserConstData(TypeReference{ StorageTypeEnumV<Type>, {} }, { alignof(Type), sizeof(Type) }, std::span<std::byte const>{reinterpret_cast<std::byte const*>(&data), sizeof(data)});
+		}
+		template<typename Type>
+		Register InserConstData(std::span<Type> span) requires(StorageTypeEnumV<std::remove_pointer_t<std::remove_const_t<Type>>> != StorageType::CUSTOM)
+		{
+			using Type = std::remove_const_t<Type>;
+			return InserConstData(TypeReference{ StorageTypeEnumV<Type>, {Modifier::Type::ARRAY, span.size()} }, { alignof(Type), sizeof(Type) }, std::span<std::byte const>{reinterpret_cast<std::byte const*>(span.data()), sizeof(Type)* span.size()});
+		}
+	private:
+		struct Element
+		{
+			TypeReference type_reference;
+			IndexSpan<> datas;
+			Layout layout;
+		};
+		std::vector<std::byte> datas;
+		std::vector<Element> elements;
+	};
 	
-
-	
-
-	
-
-	struct ConstForm
+	/*
+	struct StackValueForm
 	{
 		struct Element
 		{
 			TypeReference type_reference;
-			IndexSpan<> span;
+			IndexSpan<> datas;
 			Layout layout;
 		};
 		size_t InserConstData(TypeReference desc, Layout layout, std::span<std::byte const> data);
@@ -191,19 +230,22 @@ namespace Potato::HIR
 			return InserConstData(TypeReference{ StorageTypeEnumV<Type>, {Modifier::Type::ARRAY, span.size()} }, { alignof(Type), sizeof(Type) }, std::span<std::byte const>{reinterpret_cast<std::byte const*>(span.data()), sizeof(Type)* span.size()});
 		}
 	private:
-		std::vector<std::byte> const_form;
+		std::vector<std::byte> datas;
+		size_t usaged_buffer_length = 0;
 		std::vector<Element> elements;
+		std::vector<size_t> stack;
 	};
+	*/
 
-	struct Symbol
+	struct SymbolTag
 	{
 		operator bool() const noexcept { return storage.has_value(); }
 		std::u32string_view Name() const noexcept { assert(*this); return storage->name; }
 		size_t Index() const noexcept { assert(*this); return storage->index; }
-		Symbol() = default;
-		Symbol(Symbol const&) = default;
-		Symbol(size_t index, std::u32string_view name) : storage(Storage{ index, name }) {}
-		std::partial_ordering operator <=> (Symbol const& mask) { if (*this && mask) return Index() <=> mask.Index(); return std::partial_ordering::unordered; }
+		SymbolTag() = default;
+		SymbolTag(SymbolTag const&) = default;
+		SymbolTag(size_t index, std::u32string_view name) : storage(Storage{ index, name }) {}
+		std::partial_ordering operator <=> (SymbolTag const& mask) { if (*this && mask) return Index() <=> mask.Index(); return std::partial_ordering::unordered; }
 	private:
 		struct Storage
 		{
@@ -215,14 +257,14 @@ namespace Potato::HIR
 		friend struct Table;
 	};
 
-	struct SymbolArea
+	struct SymbolAreaTag
 	{
 		operator bool() const noexcept { return storage.has_value(); }
 		size_t Index() const noexcept { assert(*this); return storage->index; }
 		size_t Count() const noexcept { assert(*this); return storage->count; }
-		SymbolArea() = default;
-		SymbolArea(SymbolArea const&) = default;
-		SymbolArea(size_t index, size_t count) : storage(Storage{ index, count }) {}
+		SymbolAreaTag() = default;
+		SymbolAreaTag(SymbolAreaTag const&) = default;
+		SymbolAreaTag(size_t index, size_t count) : storage(Storage{ index, count }) {}
 	private:
 		struct Storage
 		{
@@ -233,13 +275,13 @@ namespace Potato::HIR
 		friend struct Form;
 	};
 
-	struct Form
+	struct SymbolForm
 	{
 
 		struct Property
 		{
-			Symbol mask;
-			SymbolArea area;
+			SymbolTag mask;
+			SymbolAreaTag area;
 			Section section;
 			std::any property;
 			template<typename RequireType>
@@ -250,73 +292,36 @@ namespace Potato::HIR
 			bool operator()(FunObject&& fo) { return AnyViewer(property, std::forward<FunObject>(fo)); }
 		};
 
-		Symbol InsertSymbol(std::u32string_view name, std::any property, Section section = {});
-		Symbol InsertSearchArea(std::u32string_view name, SymbolArea area, Section section = {});
+		SymbolTag InsertSymbol(std::u32string_view name, std::any property, Section section = {});
+		SymbolTag InsertSearchArea(std::u32string_view name, SymbolAreaTag area, Section section = {});
 
 		void MarkSymbolActiveScopeBegin();
-		SymbolArea PopSymbolActiveScope();
+		SymbolAreaTag PopSymbolActiveScope();
 
-		Symbol FindActiveSymbolAtLast(std::u32string_view name) const noexcept;
+		SymbolTag FindActiveSymbolAtLast(std::u32string_view name) const noexcept;
 
 		Potato::ObserverPtr<Property const> FindActivePropertyAtLast(std::u32string_view name) const noexcept;
-		Potato::ObserverPtr<Property> FindActivePropertyAtLast(std::u32string_view name) noexcept { return reinterpret_cast<Form const*>(this)->FindActivePropertyAtLast(name).RemoveConstCast(); }
+		Potato::ObserverPtr<Property> FindActivePropertyAtLast(std::u32string_view name) noexcept { return reinterpret_cast<SymbolForm const*>(this)->FindActivePropertyAtLast(name).RemoveConstCast(); }
 		
-		Potato::ObserverPtr<Property const> FindProperty(Symbol InputMask) const noexcept;
-		Potato::ObserverPtr<Property> FindProperty(Symbol InputMask) noexcept { return reinterpret_cast<Form const*>(this)->FindProperty(InputMask).RemoveConstCast(); }
+		Potato::ObserverPtr<Property const> FindProperty(SymbolTag InputMask) const noexcept;
+		Potato::ObserverPtr<Property> FindProperty(SymbolTag InputMask) noexcept { return reinterpret_cast<SymbolForm const*>(this)->FindProperty(InputMask).RemoveConstCast(); }
 
-		std::span<Property const> FindProperty(SymbolArea Input) const noexcept;
-		std::span<Property> FindProperty(SymbolArea Input) noexcept {
-			auto Result = reinterpret_cast<Form const*>(this)->FindProperty(Input);
+		std::span<Property const> FindProperty(SymbolAreaTag Input) const noexcept;
+		std::span<Property> FindProperty(SymbolAreaTag Input) noexcept {
+			auto Result = reinterpret_cast<SymbolForm const*>(this)->FindProperty(Input);
 			return {const_cast<Property*>(Result.data()), Result.size()};
 		}
 
 		std::span<Property const> GetAllActiveProperty() const noexcept { return active_scope;  }
 		std::span<Property> GetAllActiveProperty() noexcept { return active_scope; }
-		
-		template<typename ...InputType> struct AvailableInvocableDetecter {
-			static constexpr bool Value = false;
-		};
 
-		template<typename InputType> struct AvailableInvocableDetecter<InputType> {
-			using RequireType = std::remove_reference_t<InputType>;
-			static constexpr bool AppendProperty = false;
-			static constexpr bool Value = true;
-		};
-
-		template<typename InputType, typename InputType2> struct AvailableInvocableDetecter<InputType, InputType2> {
-			using RequireType = std::remove_reference_t<InputType>;
-			static constexpr bool AppendProperty = true;
-			static constexpr bool Value = std::is_same_v<std::remove_cvref_t<InputType2>, Property>;
-		};
-
-		template<typename FunObj> using AvailableInvocable = FunctionObjectInfo<std::remove_cvref_t<FunObj>>::template PackParameters<AvailableInvocableDetecter>;
-		template<typename FunObj> static constexpr bool AvailableInvocableV = AvailableInvocable<FunObj>::Value;
-
-		template<typename FunObj>
-		bool FindProperty(Symbol mask, FunObj&& Function) requires AvailableInvocableV<FunObj>;
-
-		template<typename FunObj>
-		bool FindProperty(Symbol mask, FunObj&& Function) const requires AvailableInvocableV<FunObj>;
-
-		template<typename FunObj>
-		size_t FindProperty(SymbolArea mask, FunObj&& Function) requires AvailableInvocableV<FunObj>;
-
-		template<typename FunObj>
-		size_t FindProperty(SymbolArea mask, FunObj&& Function) const requires AvailableInvocableV<FunObj>;
-
-		template<typename FunObj>
-		size_t GetAllAciveProperty(FunObj&& Function) requires AvailableInvocableV<FunObj>;
-
-		template<typename FunObj>
-		size_t GetAllActiveProperty(FunObj&& Function) const requires AvailableInvocableV<FunObj>;
-
-		Form(Form&&) = default;
-		Form(Form const&) = default;
-		Form() = default;
+		SymbolForm(SymbolForm&&) = default;
+		SymbolForm(SymbolForm const&) = default;
+		SymbolForm() = default;
 
 	private:
 
-		struct InsideSearchReference { SymbolArea area; };
+		struct InsideSearchReference { SymbolAreaTag area; };
 
 		struct IteratorTuple
 		{
@@ -325,15 +330,9 @@ namespace Potato::HIR
 		};
 
 		std::variant<
-			Potato::ObserverPtr<Form::Property const>,
+			Potato::ObserverPtr<SymbolForm::Property const>,
 			std::tuple<IteratorTuple, IteratorTuple>
 		> SearchElement(IteratorTuple Input, std::u32string_view name) const noexcept;
-
-		template<typename PropertyT, typename FunObj>
-		static bool Execute(PropertyT&& pro, FunObj&& fo) requires AvailableInvocableV<FunObj>;
-
-		template<typename PropertyT, typename FunObj>
-		static size_t ExecuteRange(std::span<PropertyT> span, FunObj&& fo) requires AvailableInvocableV<FunObj>;
 
 		struct Mapping
 		{
@@ -346,6 +345,7 @@ namespace Potato::HIR
 			Category category;
 			size_t index;
 		};
+
 		std::vector<size_t> activescope_start_index;
 		std::vector<Property> unactive_scope;
 		std::vector<Property> active_scope;
@@ -353,78 +353,19 @@ namespace Potato::HIR
 		std::vector<std::byte> const_data;
 	};
 
-	template<typename PropertyT, typename FunObj>
-	bool Form::Execute(PropertyT&& pro, FunObj&& fo) requires AvailableInvocableV<FunObj>
+	struct Form
 	{
-		using Detect = AvailableInvocable<FunObj>;
-		if constexpr (!Detect::RequireAppendProperty)
-		{
-			std::forward<FunObj>(fo)(pro);
-			return true;
-		}
-		else {
-			auto Ptr = pro->TryCast<typename Detect::RequireType>();
-			if (Ptr != nullptr)
-			{
-				std::forward<FunObj>(fo)(*Ptr, pro);
-				return true;
-			}
-			return false;
-		}
-	}
-
-	template<typename PropertyT, typename FunObj>
-	size_t Form::ExecuteRange(std::span<PropertyT> span, FunObj&& fo) requires AvailableInvocableV<FunObj>
-	{
-		size_t index = 0;
-		for (auto ite : span)
-		{
-			assert(ite != nullptr);
-			if (this->Execute(*ite, std::forward<FunObj>(fo)))
-				index += 1;
-		}
-		return index;
-	}
-
-	template<typename FunObj>
-	bool Form::FindProperty(Symbol mask, FunObj&& Function) requires AvailableInvocableV<FunObj>
-	{
-		auto result = this->FindProperty(mask);
-		if (result)
-			return this->Execute(*result, std::forward<FunObj>(Function));
-		return false;
-	}
-
-	template<typename FunObj>
-	bool Form::FindProperty(Symbol mask, FunObj&& Function) const requires AvailableInvocableV<FunObj>
-	{
-		auto result = this->FindProperty(mask);
-		if (result)
-			return this->Execute(*result, std::forward<FunObj>(Function));
-		return false;
-	}
-
-	template<typename FunObj>
-	size_t Form::FindProperty(SymbolArea mask, FunObj&& Function) requires AvailableInvocableV<FunObj>
-	{
-		return this->ExecuteRange(this->FindProperty(mask), std::forward<FunObj>(Function));
-	}
-
-	template<typename FunObj>
-	size_t Form::FindProperty(SymbolArea mask, FunObj&& Function) const requires AvailableInvocableV<FunObj>
-	{
-		return this->ExecuteRange(this->FindProperty(mask), std::forward<FunObj>(Function));
-	}
-
-	template<typename FunObj>
-	size_t Form::GetAllAciveProperty(FunObj&& Function) requires AvailableInvocableV<FunObj>
-	{
-		return this->ExecuteRange(this->GetAllAciveProperty(), std::forward<FunObj>(Function));
-	}
-
-	template<typename FunObj>
-	size_t Form::GetAllActiveProperty(FunObj&& Function) const requires AvailableInvocableV<FunObj>
-	{
-		return this->ExecuteRange(this->GetAllAciveProperty(), std::forward<FunObj>(Function));
-	}
+		Form(Form&&) = default;
+		Form(Form const&) = default;
+		TypeForm& Type() noexcept{ return type; }
+		TypeForm const& Type() const noexcept { return type; }
+		HIRForm& HIR() noexcept { return hir; }
+		HIRForm const& HIR() const noexcept { return hir; }
+		SymbolForm& Symbol() noexcept { return symbol; }
+		SymbolForm const& Symbol() const noexcept { return symbol; }
+	private:
+		TypeForm type;
+		HIRForm hir;
+		SymbolForm symbol;
+	};
 }

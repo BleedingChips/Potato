@@ -118,4 +118,12 @@ namespace Potato::Lexical
 		}
 		return result;
 	}
+
+	std::optional<March> Table::Match(std::u32string_view code, std::size_t ignore_mask) const
+	{
+		auto re = ProcessOnce(code);
+		if(re && re->last_string.empty() && re->mask != ignore_mask)
+			return re;
+		return {};
+	}
 }

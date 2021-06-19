@@ -5,6 +5,7 @@
 #include <thread>
 #include <future>
 #include <map>
+#include <deque>
 
 #include "Misc.h"
 #include "IntrusivePointer.h"
@@ -13,6 +14,7 @@
 namespace Potato::FileSystem
 {
 	
+
 	struct Path
 	{
 		enum class Style : uint8_t
@@ -36,8 +38,12 @@ namespace Potato::FileSystem
 		size_t Size() const noexcept { return elements.size(); }
 		std::u32string_view operator[](size_t index) const { return elements[index](path); }
 		operator bool() const noexcept{ return style != Style::Unknow; }
+		bool operator==(Path const& path) const noexcept;
+		bool operator==(std::u32string_view path) const noexcept { return this->path == path;}
+		bool operator==(std::u32string const& path) const noexcept { return this->path == path; }
 		Style GetType() const noexcept {return style; }
-
+		bool IsAbsolute() const noexcept {return GetType() == Path::Style::DosAbsolute || GetType() == Path::Style::UnixAbsolute;}
+		operator std::u32string_view() const noexcept {return path;}
 		Path() = default;
 		Path(std::u32string_view InputPath);
 		Path(Path&&) = default;
@@ -47,12 +53,15 @@ namespace Potato::FileSystem
 		Path& operator=(Path&&) = default;
 		Path Append(Path const&) const;
 		size_t LocateFile(std::u32string_view) const;
-		Path SubPath(size_t start, size_t count) const;
+		Path SubPath(size_t start, size_t count = std::numeric_limits<size_t>::max()) const;
 		Path Parent() const;
 
-		Path FindFileFromParent(std::u32string_view Target, size_t MaxStack = 0) const;
-		Path FindFileFromChild(std::u32string_view Target) const;
-		std::vector<Path> FindAllFileFromChild(std::u32string_view Target) const;
+		Path FindCurentDirectory(std::function<bool (Path const&)> funcobj) const;
+		Path FindChildDirectory(std::function<bool(Path const&)> funcobj, size_t stack = std::numeric_limits<size_t>::max()) const;
+		Path FindParentDirectory(std::function<bool(Path const&)> funcobj, size_t stack = std::numeric_limits<size_t>::max()) const;
+		std::vector<Path> FindAllCurentDirectory(std::function<bool(Path const&)> funcobj) const;
+		std::vector<Path> FindAllChildDirectory(std::function<bool(Path const&)> funcobj, size_t stack = std::numeric_limits<size_t>::max()) const;
+		std::vector<Path> FindAllParentDirectory(std::function<bool(Path const&)> funcobj, size_t stack = std::numeric_limits<size_t>::max()) const;
 
 		std::u32string_view Last() const;
 		std::u32string ToU32String() const{ return path; }

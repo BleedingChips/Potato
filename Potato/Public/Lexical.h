@@ -56,6 +56,7 @@ namespace Potato::Lexical
 		Unfa::SerilizedTable table;
 		std::optional<March> ProcessOnce(std::u32string_view code) const;
 		std::vector<March> Process(std::u32string_view code, std::size_t ignore_mask = DefaultIgnoreMask()) const;
+		std::optional<March> Match(std::u32string_view code, std::size_t ignore_mask = DefaultIgnoreMask()) const;
 		bool Empty() const noexcept{return table.Empty();}
 		static Table CreateFromRegexs(RegexInitTuple const* adress, std::size_t length, bool ignore_controller = true);
 		static Table CreateFromRegexsReverse(RegexInitTuple const* adress, std::size_t length, bool ignore_controller = true);

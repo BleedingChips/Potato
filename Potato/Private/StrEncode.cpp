@@ -297,6 +297,34 @@ namespace Potato::StrEncode
 		}
 	}
 
+	std::vector<std::u32string_view> DocumentWrapper::SperateWithLineEnding(std::u32string_view source, bool KeepLineEnding)
+	{
+		std::vector<std::u32string_view> result;
+		auto StartIte = source.begin();
+		std::optional<decltype(source.begin())> LineEndIte;
+		for (auto Ite = source.begin(); Ite != source.end(); ++Ite)
+		{
+			if (*Ite == U'\r')
+			{
+				LineEndIte = Ite;
+			}
+			else if (*Ite == U'\n')
+			{
+				if(!LineEndIte.has_value())
+					LineEndIte = Ite;
+				result.push_back({ StartIte, !KeepLineEnding ? *LineEndIte : Ite + 1});
+				StartIte = Ite + 1;
+				LineEndIte = {};
+			}
+			else {
+				LineEndIte = {};
+			}
+		}
+		if (StartIte != source.end())
+			result.push_back({ StartIte, source.end() });
+		return result;
+	}
+
 	DocumentWrapper::DocumentWrapper(std::span<std::byte const> input)
 	{
 		if(!input.empty())

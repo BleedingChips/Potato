@@ -323,6 +323,7 @@ namespace Potato::StrEncode
 		static std::vector<std::byte> EncodeToDocument(std::basic_string<Type> const& input, BomType bom = BomType::UTF8_NoBom) {
 			return EncodeToDocument(std::basic_string_view<Type>(input), bom);
 		}
+		static std::vector<std::u32string_view> SperateWithLineEnding(std::u32string_view source, bool KeepLineEnding = true);
 	private:
 		template<typename Type>
 		std::basic_string_view<Type> AsViewer() const {
