@@ -18,14 +18,14 @@ namespace Potato::HIR
 
 	TypeTag TypeForm::ForwardDefineType()
 	{
-		TypeTag tag {StorageType::CUSTOM, defined_types.size()};
+		TypeTag tag{ StorageType::CUSTOM, defined_types.size()};
 		defined_types.push_back({});
 		return tag;
 	}
 
 	bool TypeForm::MarkTypeDefineStart(TypeTag Input)
 	{
-		if (Input.IsCustomType() && defined_types.size() > Input.AsIndex() && !defined_types[Input.AsIndex()].has_value())
+		if (Input && Input->IsCustomType() && defined_types.size() > Input->index && !defined_types[Input->index].has_value())
 		{
 			define_stack_record.push_back({Input, temporary_member_type.size()});
 			return true;
@@ -33,7 +33,9 @@ namespace Potato::HIR
 		return false;
 	}
 
-	bool TypeForm::InsertMember(TypeReference type_reference, std::u32string name)
+	/*
+
+	bool TypeForm::InsertMember(TypeReference type_reference, std::u32string_view name)
 	{
 		assert(!define_stack_record.empty());
 		if (type_reference.type)
@@ -54,29 +56,29 @@ namespace Potato::HIR
 	std::optional<Layout> TypeForm::CalculateTypeLayout(TypeTag const& ref) const
 	{
 		assert(ref);
-		if (ref.storage_type.has_value())
+		if (ref.memory_mode.has_value())
 		{
-			switch (*ref.storage_type)
+			switch (*ref.memory_mode)
 			{
-			case StorageType::UINT8:
-			case StorageType::INT8:
+			case MemberMode::UINT8:
+			case MemberMode::INT8:
 				return Layout{ alignof(uint8_t), sizeof(alignof(uint8_t)) };
 				break;
-			case StorageType::UINT16:
-			case StorageType::INT16:
+			case MemberMode::UINT16:
+			case MemberMode::INT16:
 				return Layout{ alignof(uint16_t), sizeof(alignof(uint16_t)) };
 				break;
-			case StorageType::UINT32:
-			case StorageType::INT32:
-			case StorageType::FLOAT32:
+			case MemberMode::UINT32:
+			case MemberMode::INT32:
+			case MemberMode::FLOAT32:
 				return Layout{ alignof(uint32_t), sizeof(alignof(uint32_t)) };
 				break;
-			case StorageType::INT64:
-			case StorageType::UINT64:
-			case StorageType::FLOAT64:
+			case MemberMode::INT64:
+			case MemberMode::UINT64:
+			case MemberMode::FLOAT64:
 				return Layout{ alignof(uint64_t), sizeof(alignof(uint64_t)) };
 				break;
-			case StorageType::CUSTOM:
+			case MemberMode::CUSTOM:
 			{
 				assert(defined_types.size() > ref.AsIndex());
 				auto& ref2 = defined_types[ref.AsIndex()];
@@ -169,6 +171,7 @@ namespace Potato::HIR
 		}
 		return {};
 	}
+	*/
 
 	/*
 	std::span<std::byte> StackValueForm::TryAllocateMember(Layout layout)

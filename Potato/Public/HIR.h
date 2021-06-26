@@ -18,7 +18,7 @@
 
 namespace Potato::HIR
 {
-	enum class StorageType
+	enum class Description
 	{
 		UINT8,
 		UINT16,
@@ -36,6 +36,7 @@ namespace Potato::HIR
 		CUSTOM,
 	};
 	
+	/*
 	template<typename Type> struct StorageTypeEnum { static inline constexpr StorageType value = StorageType::CUSTOM; };
 	template<> struct StorageTypeEnum<int32_t> { static inline constexpr StorageType value = StorageType::INT32; };
 	template<> struct StorageTypeEnum<uint32_t> { static inline constexpr StorageType value = StorageType::UINT32; };
@@ -44,6 +45,7 @@ namespace Potato::HIR
 	template<> struct StorageTypeEnum<int64_t> { static inline constexpr StorageType value = StorageType::INT64; };
 	template<> struct StorageTypeEnum<uint64_t> { static inline constexpr StorageType value = StorageType::UINT64; };
 	template<typename Type> constexpr StorageType StorageTypeEnumV = StorageTypeEnum<Type>::value;
+	*/
 
 	struct Layout
 	{
@@ -71,19 +73,70 @@ namespace Potato::HIR
 		size_t parameter;
 	};
 
-	struct TypeTag
+	struct TypeIndex
 	{
-		operator bool() const noexcept {return storage_type.has_value(); }
-		bool IsCustomType() const noexcept {return *this && *storage_type == StorageType::CUSTOM;}
-		size_t AsIndex() const noexcept {return index;}
-		std::optional<StorageType> storage_type;
-		size_t index;
+		Description storage_type;
+		size_t index = 0;
+		bool IsCustomType() const noexcept { assert(*this); return storage_type == Description::CUSTOM; }
+		size_t Index() const noexcept { return index; }
 	};
 
-	struct FunctionTag
+	using TypeTag = std::optional<TypeIndex>;
+
+	struct FunctionIndex
 	{
-		std::optional<size_t> index;
+		size_t index;
+		size_t parameter_count;
 	};
+
+	using FunctionTag = std::optional<FunctionIndex>;
+
+	namespace Implement
+	{
+
+		
+
+		struct RegisterStorage
+		{
+
+			enum class Type
+			{
+				CONST,
+				STACK,
+				MEMORY,
+				IMMEDIATE_ADRESSING,
+			};
+
+			Type type;
+			Description storage_type = Description::CUSTOM;
+			uint64_t index;
+		};
+
+		struct RegitserStaticDefine
+		{
+			using Type = RegisterStorage::Type;
+			static Tag<RegisterStorage, Implement::RegitserStaticDefine> AsImmediateAdressing(uint8_t input) { return { Type::IMMEDIATE_ADRESSING, Description::UINT8, Transfer(input) }; };
+			static Tag<RegisterStorage, Implement::RegitserStaticDefine> AsImmediateAdressing(uint16_t input) { return { Type::IMMEDIATE_ADRESSING, Description::UINT16, Transfer(input) }; };
+			static Tag<RegisterStorage, Implement::RegitserStaticDefine> AsImmediateAdressing(uint32_t input) { return { Type::IMMEDIATE_ADRESSING, Description::UINT32, Transfer(input) }; };
+			static Tag<RegisterStorage, Implement::RegitserStaticDefine> AsImmediateAdressing(uint64_t input) { return { Type::IMMEDIATE_ADRESSING, Description::UINT64, Transfer(input) }; };
+			static Tag<RegisterStorage, Implement::RegitserStaticDefine> AsImmediateAdressing(int8_t input) { return { Type::IMMEDIATE_ADRESSING, Description::INT8, Transfer(input) }; };
+			static Tag<RegisterStorage, Implement::RegitserStaticDefine> AsImmediateAdressing(int16_t input) { return { Type::IMMEDIATE_ADRESSING, Description::INT16, Transfer(input) }; };
+			static Tag<RegisterStorage, Implement::RegitserStaticDefine> AsImmediateAdressing(int32_t input) { return { Type::IMMEDIATE_ADRESSING, Description::INT32, Transfer(input) }; };
+			static Tag<RegisterStorage, Implement::RegitserStaticDefine> AsImmediateAdressing(int64_t input) { return { Type::IMMEDIATE_ADRESSING, Description::INT64, Transfer(input) }; };
+			static Tag<RegisterStorage, Implement::RegitserStaticDefine> AsImmediateAdressing(float input) { return { Type::IMMEDIATE_ADRESSING, Description::FLOAT32, Transfer(input) }; };
+			static Tag<RegisterStorage, Implement::RegitserStaticDefine> AsImmediateAdressing(double input) { return { Type::IMMEDIATE_ADRESSING, Description::FLOAT64, Transfer(input) }; };
+		private:
+			template<typename Input>
+			static uint64_t Transfer(Input&& input) requires(sizeof(Input) <= sizeof(uint64_t)) {
+				uint64_t result = 0;
+				std::memcpy(&result, &input, sizeof(input));
+				return result;
+			}
+		};
+	}
+
+	using RegitserTag = Tag<Implement::RegisterStorage, Implement::RegitserStaticDefine>;
+	
 
 	struct TypeReference
 	{
@@ -91,7 +144,6 @@ namespace Potato::HIR
 		std::vector<Modifier> modifier;
 		operator bool () const {return type; }
 		bool IsPointer() const noexcept;
-		std::optional<size_t> ArrayCount() const noexcept;
 	};
 
 	struct TypeProperty
@@ -104,7 +156,6 @@ namespace Potato::HIR
 		struct Member
 		{
 			TypeReference type_reference;
-			std::u32string name;
 			size_t offset;
 			Layout layout;
 		};
@@ -123,7 +174,7 @@ namespace Potato::HIR
 		TypeTag ForwardDefineType();
 		bool MarkTypeDefineStart(TypeTag Input);
 		bool MarkTypeDefineStart() { return MarkTypeDefineStart(ForwardDefineType()); }
-		bool InsertMember(TypeReference type_reference, std::u32string name);
+		bool InsertMember(TypeReference type_reference);
 		std::optional<TypeTag> FinishTypeDefine(Setting const& setting);
 		Potato::ObserverPtr<std::optional<TypeProperty>> FindType(TypeTag tag) noexcept;
 	private:
@@ -134,68 +185,9 @@ namespace Potato::HIR
 		std::vector<std::tuple<TypeTag, size_t>> define_stack_record;
 	};
 
-
-	struct Register
-	{
-
-		enum class Type
-		{
-			CONST,
-			STACK,
-			MEMORY,
-
-			BI_UINT8,
-			BI_UINT16,
-			BI_UINT32,
-			BI_UINT64,
-
-			BI_INT8,
-			BI_INT16,
-			BI_INT32,
-			BI_INT64,
-
-			BI_FLOAT32,
-			BI_FLOAT64,
-
-			None
-		};
-
-		Register(Register const&) = default;
-		Register& operator=(Register const&) = default;
-		Register(Type register_type, uint64_t index) : type(register_type), index(index) {};
-		Register(uint8_t input) : Register(Type::BI_UINT8, input) {}
-		Register(uint16_t input) : Register(Type::BI_UINT16, input) {}
-		Register(uint32_t input) : Register(Type::BI_UINT32, input) {}
-		Register(uint64_t input) : Register(Type::BI_UINT64, input) {}
-		Register(int8_t input) : Register(Type::BI_INT8, input) {}
-		Register(int16_t input) : Register(Type::BI_INT16, input) {}
-		Register(int32_t input) : Register(Type::BI_INT32, input) {}
-		Register(int64_t input) : Register(Type::BI_INT64, input) {}
-		Register(float input) : type(Type::BI_FLOAT32), index(0) {  std::memcpy(&index, &input, sizeof(input)); }
-		Register(double input) : type(Type::BI_FLOAT64), index(0) { std::memcpy(&index, &input, sizeof(input)); }
-		operator bool() const noexcept { return type != Type::None; }
-		Type Category() const noexcept { return type; }
-		uint64_t Index() const noexcept { return index; }
-	private:
-		Type type;
-		uint64_t index;
-	};
-
 	struct HIRForm
 	{
-		Register InserConstData(TypeReference desc, Layout layout, std::span<std::byte const> data);
-		template<typename Type>
-		Register InserConstData(Type&& data) requires (StorageTypeEnumV<std::remove_cvref_t<Type>> != StorageType::CUSTOM)
-		{
-			using Type = std::remove_cvref_t<Type>;
-			return InserConstData(TypeReference{ StorageTypeEnumV<Type>, {} }, { alignof(Type), sizeof(Type) }, std::span<std::byte const>{reinterpret_cast<std::byte const*>(&data), sizeof(data)});
-		}
-		template<typename Type>
-		Register InserConstData(std::span<Type> span) requires(StorageTypeEnumV<std::remove_pointer_t<std::remove_const_t<Type>>> != StorageType::CUSTOM)
-		{
-			using Type = std::remove_const_t<Type>;
-			return InserConstData(TypeReference{ StorageTypeEnumV<Type>, {Modifier::Type::ARRAY, span.size()} }, { alignof(Type), sizeof(Type) }, std::span<std::byte const>{reinterpret_cast<std::byte const*>(span.data()), sizeof(Type)* span.size()});
-		}
+		RegitserTag InserConstData(TypeReference desc, Layout layout, std::span<std::byte const> data);
 	private:
 		struct Element
 		{
@@ -277,7 +269,6 @@ namespace Potato::HIR
 
 	struct SymbolForm
 	{
-
 		struct Property
 		{
 			SymbolTag mask;
@@ -353,19 +344,11 @@ namespace Potato::HIR
 		std::vector<std::byte> const_data;
 	};
 
-	struct Form
+	struct Form : TypeForm, HIRForm, SymbolForm
 	{
-		Form(Form&&) = default;
 		Form(Form const&) = default;
-		TypeForm& Type() noexcept{ return type; }
-		TypeForm const& Type() const noexcept { return type; }
-		HIRForm& HIR() noexcept { return hir; }
-		HIRForm const& HIR() const noexcept { return hir; }
-		SymbolForm& Symbol() noexcept { return symbol; }
-		SymbolForm const& Symbol() const noexcept { return symbol; }
-	private:
-		TypeForm type;
-		HIRForm hir;
-		SymbolForm symbol;
+		Form(Form&&) = default;
+		Form& operator=(Form const&) = default;
+		Form& operator=(Form&&) = default;
 	};
 }

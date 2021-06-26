@@ -57,6 +57,12 @@
     <ClInclude Include="..\..\Potato\Public\ConstDataForm.h">
       <Filter>Public</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Potato\Public\Symbol.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Private\Symbol.cpp">
+      <Filter>Private</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Potato\Private\Misc.cpp">
