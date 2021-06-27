@@ -28,9 +28,6 @@ std::u32string_view EbnfCode1();
 int main()
 {
 
-	auto P = FileSystem::Current();
-	auto Ite = P.FindFileFromParent(U"Potato", 6);
-
 	Lexical::RegexInitTuple Rexs[] = {
 		{UR"((\+|\-)?[1-9][0-9]*)", },
 		{UR"(\+)", },
