@@ -4,15 +4,14 @@
 
 #include "Lr.h"
 
-namespace Potato::Lr0
+namespace Potato
 {
-	using namespace Potato::Lr;
 
-	struct Table {
+	struct Lr0Table {
 
 		struct Production
 		{
-			SymbolStorageT value;
+			LrSymbolStorageT value;
 			size_t production_count;
 			size_t mask;
 		};
@@ -24,7 +23,7 @@ namespace Potato::Lr0
 
 		struct Shift
 		{
-			SymbolStorageT require_symbol;
+			LrSymbolStorageT require_symbol;
 			size_t shift_state;
 		};
 
@@ -39,16 +38,16 @@ namespace Potato::Lr0
 		std::vector<Reduce> reduces;
 		std::vector<Shift> shifts;
 		std::vector<Node> nodes;
-		std::map<SymbolStorageT, std::set<size_t>> force_reduce;
+		std::map<LrSymbolStorageT, std::set<size_t>> force_reduce;
 	};
 
-	History Process(Table const& Table, Symbol const* TokenArray, size_t TokenLength);
+	LrHistory Process(Lr0Table const& Table, LrSymbol const* TokenArray, size_t TokenLength);
 
-	inline std::any Process(Table const& Table, Symbol const* TokenArray, size_t TokenLength, std::function<std::any(NTElement&)> NTFunc, std::function<std::any(TElement&)> TFun)
+	inline std::any Process(Lr0Table const& Table, LrSymbol const* TokenArray, size_t TokenLength, std::function<std::any(LrNTElement&)> NTFunc, std::function<std::any(LrTElement&)> TFun)
 	{
 		auto His = Process(Table, TokenArray, TokenLength);
 		return Process(His, std::move(NTFunc), std::move(TFun));
 	}
 
-	Table CreateTable(Symbol start_symbol, std::vector<ProductionInput> const& production, std::vector<OpePriority> const& priority);
+	Lr0Table CreateLr0Table(LrSymbol start_symbol, std::vector<LrProductionInput> const& production, std::vector<LrOpePriority> const& priority);
 }

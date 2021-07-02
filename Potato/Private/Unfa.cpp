@@ -5,11 +5,11 @@
 #include <string_view>
 #include <deque>
 
-namespace Potato::Unfa
+namespace Potato
 {
 	
 	char32_t MaxChar() { return  0x10FFFF;};
-	IntervalT const& MaxIntervalRange() { static IntervalT max{1, MaxChar()}; return max; };
+	UnfaIntervalT const& MaxIntervalRange() { static UnfaIntervalT max{1, MaxChar()}; return max; };
 
 	enum class T
 	{
@@ -30,7 +30,7 @@ namespace Potato::Unfa
 		Colon, // :
 	};
 
-	constexpr Lr0::Symbol operator*(T sym) { return Lr0::Symbol{ static_cast<size_t>(sym), Lr0::TerminalT{} }; };
+	constexpr LrSymbol operator*(T sym) { return LrSymbol{ static_cast<size_t>(sym), LrTerminalT{} }; };
 
 	enum class NT
 	{
@@ -45,11 +45,11 @@ namespace Potato::Unfa
 		NoGreedAppend,
 	};
 
-	constexpr Lr0::Symbol operator*(NT sym) { return Lr0::Symbol{ static_cast<size_t>(sym), Lr0::NoTerminalT{} }; };
+	constexpr LrSymbol operator*(NT sym) { return LrSymbol{ static_cast<size_t>(sym), LrNoTerminalT{} }; };
 
-	const Lr0::Table& rex_lr0()
+	const Lr0Table& rex_lr0()
 	{
-		static Lr0::Table rex_lr0 = Lr0::CreateTable(
+		static Lr0Table rex_lr0 = CreateLr0Table(
 			*NT::Statement,
 			{
 				{{*NT::Statement, *NT::ExpressionStatement}, 0},
@@ -88,50 +88,50 @@ namespace Potato::Unfa
 		return rex_lr0;
 	}
 
-	std::tuple<T, SeqIntervalT> RexLexerTranslater(std::u32string_view::const_iterator& begin, std::u32string_view::const_iterator end)
+	std::tuple<T, UnfaSeqIntervalT> RexLexerTranslater(std::u32string_view::const_iterator& begin, std::u32string_view::const_iterator end)
 	{
 		assert(begin != end);
 		char32_t input = *(begin++);
 		switch (input)
 		{
-		case U'-':return { T::Min, SeqIntervalT{input} };
-		case U'[': return { T::SquareBracketsLeft,  SeqIntervalT{input} };
-		case U']':return  { T::SquareBracketsRight,  SeqIntervalT{input} };
-		case U'(': return  { T::ParenthesesLeft ,  SeqIntervalT{input} };
-		case U')':return { T::ParenthesesRight,  SeqIntervalT{input} };
+		case U'-':return { T::Min, UnfaSeqIntervalT{input} };
+		case U'[': return { T::SquareBracketsLeft,  UnfaSeqIntervalT{input} };
+		case U']':return  { T::SquareBracketsRight,  UnfaSeqIntervalT{input} };
+		case U'(': return  { T::ParenthesesLeft ,  UnfaSeqIntervalT{input} };
+		case U')':return { T::ParenthesesRight,  UnfaSeqIntervalT{input} };
 		case U'*':
 		{
 			if(begin != end && *(begin) == U'?')
 			{
 				++begin;
-				return {T::MulityNoGreedy, SeqIntervalT{input} };
+				return {T::MulityNoGreedy, UnfaSeqIntervalT{input} };
 			}else
-				return { T::Mulity, SeqIntervalT{input} };
+				return { T::Mulity, UnfaSeqIntervalT{input} };
 		}
 		case U'?':
 		{
 			if (begin != end && *(begin) == U'?')
 			{
 				++begin;
-				return { T::QuestionNoGreedy,  SeqIntervalT{input} };
+				return { T::QuestionNoGreedy,  UnfaSeqIntervalT{input} };
 			}
 			else
-				return { T::Question, SeqIntervalT{input} };
+				return { T::Question, UnfaSeqIntervalT{input} };
 		}
-		case U'.': return { T::Char, SeqIntervalT(MaxIntervalRange()) };
-		case U'|':return { T::Or, SeqIntervalT(input) };
+		case U'.': return { T::Char, UnfaSeqIntervalT(MaxIntervalRange()) };
+		case U'|':return { T::Or, UnfaSeqIntervalT(input) };
 		case U'+':
 		{
 			if (begin != end && *(begin) == U'?')
 			{
 				++begin;
-				return { T::AddNoGreedy, SeqIntervalT{input} };
+				return { T::AddNoGreedy, UnfaSeqIntervalT{input} };
 			}
 			else
-				return { T::Add, SeqIntervalT{input} };
+				return { T::Add, UnfaSeqIntervalT{input} };
 		}
-		case U'^':return { T::Not, SeqIntervalT{input} };
-		case U':':return {T::Colon, SeqIntervalT{input} };
+		case U'^':return { T::Not, UnfaSeqIntervalT{input} };
+		case U':':return {T::Colon, UnfaSeqIntervalT{input} };
 		case U'\\':
 		{
 			if(begin != end)
@@ -139,35 +139,35 @@ namespace Potato::Unfa
 				input = *(begin++);
 				switch (input)
 				{
-				case U'd': return { T::Char, SeqIntervalT({U'0', U'9' + 1}) };
+				case U'd': return { T::Char, UnfaSeqIntervalT({U'0', U'9' + 1}) };
 				case U'D': {
-					SeqIntervalT Tem{{ {1, U'0'},{U'9' + 1, MaxChar()} }};
+					UnfaSeqIntervalT Tem{{ {1, U'0'},{U'9' + 1, MaxChar()} }};
 					return { T::Char, std::move(Tem) };
 				};
-				case U'f': return { T::Char, SeqIntervalT{ U'\f'} };
-				case U'n': return { T::Char, SeqIntervalT{ U'\n'} };
-				case U'r': return { T::Char, SeqIntervalT{ U'\r'} };
-				case U't': return { T::Char, SeqIntervalT{ U'\t'} };
-				case U'v': return { T::Char, SeqIntervalT{ U'\v'} };
+				case U'f': return { T::Char, UnfaSeqIntervalT{ U'\f'} };
+				case U'n': return { T::Char, UnfaSeqIntervalT{ U'\n'} };
+				case U'r': return { T::Char, UnfaSeqIntervalT{ U'\r'} };
+				case U't': return { T::Char, UnfaSeqIntervalT{ U'\t'} };
+				case U'v': return { T::Char, UnfaSeqIntervalT{ U'\v'} };
 				case U's':
 				{
-					SeqIntervalT tem({ { 1, 33 }, {127, 128} });
+					UnfaSeqIntervalT tem({ { 1, 33 }, {127, 128} });
 					return { T::Char, std::move(tem) };
 				}
 				case U'S':
 				{
-					SeqIntervalT tem({ {33, 127}, {128, MaxChar()} });
+					UnfaSeqIntervalT tem({ {33, 127}, {128, MaxChar()} });
 					return { T::Char, std::move(tem) };
 				}
 				case U'w':
 				{
-					SeqIntervalT tem({ { U'a', U'z' + 1 }, { U'A', U'Z' + 1 }, { U'_'} });
+					UnfaSeqIntervalT tem({ { U'a', U'z' + 1 }, { U'A', U'Z' + 1 }, { U'_'} });
 					return { T::Char, std::move(tem) };
 				}
 				case U'W':
 				{
-					SeqIntervalT tem({ { U'a', U'z' + 1 }, { U'A', U'Z' + 1 }, { U'_'} });
-					SeqIntervalT total({1, MaxChar() });
+					UnfaSeqIntervalT tem({ { U'a', U'z' + 1 }, { U'A', U'Z' + 1 }, { U'_'} });
+					UnfaSeqIntervalT total({1, MaxChar() });
 					return { T::Char, tem.Complementary(MaxIntervalRange())};
 				}
 				case U'u':
@@ -187,28 +187,28 @@ namespace Potato::Unfa
 						else
 							assert(false);
 					}
-					return { T::Char, SeqIntervalT{static_cast<char32_t>(index)} };
+					return { T::Char, UnfaSeqIntervalT{static_cast<char32_t>(index)} };
 				}
 				default:
-					return { T::Char, SeqIntervalT{input} };
+					return { T::Char, UnfaSeqIntervalT{input} };
 					break;
 				}
 			}else
-				throw Exception::MakeExceptionTuple(Exception::Unfa::UnaccaptableRexgex{});
+				throw Exception::MakeExceptionTuple(Exception::UnfaUnaccaptableRexgex{});
 			break;
 		}
 		default:
-			return { T::Char, SeqIntervalT{input} };
+			return { T::Char, UnfaSeqIntervalT{input} };
 			break;
 		}
 	}
 
-	std::tuple<std::vector<Lr0::Symbol>, std::vector<SeqIntervalT>> RexLexer(std::u32string_view Input)
+	std::tuple<std::vector<LrSymbol>, std::vector<UnfaSeqIntervalT>> RexLexer(std::u32string_view Input)
 	{
 		auto begin = Input.begin();
 		auto end = Input.end();
-		std::vector<Lr0::Symbol> Symbols;
-		std::vector<SeqIntervalT> RangeSets;
+		std::vector<LrSymbol> Symbols;
+		std::vector<UnfaSeqIntervalT> RangeSets;
 		while (begin != end)
 		{
 			auto [Sym, Rs] = RexLexerTranslater(begin, end);
@@ -218,7 +218,7 @@ namespace Potato::Unfa
 		return { std::move(Symbols), std::move(RangeSets) };
 	}
 
-	Table Table::CreateFromRegex(std::u32string_view rex, uint32_t acception_index, uint32_t acception_mask)
+	UnfaTable UnfaTable::CreateFromRegex(std::u32string_view rex, uint32_t acception_index, uint32_t acception_mask)
 	{
 		try
 		{
@@ -230,8 +230,8 @@ namespace Potato::Unfa
 			std::vector<std::vector<Edge>> temporary_node;
 			temporary_node.emplace_back();
 			auto [symbols, comsumes] = RexLexer(rex);
-			auto history = Lr0::Process(rex_lr0(), symbols.data(), symbols.size());
-			auto result = Lr::Process(history, [&](Lr0::NTElement& tra) -> std::any
+			auto history = Process(rex_lr0(), symbols.data(), symbols.size());
+			auto result = Process(history, [&](LrNTElement& tra) -> std::any
 			{
 				switch (tra.mask)
 				{
@@ -287,19 +287,19 @@ namespace Potato::Unfa
 					temporary_node.emplace_back();
 					return TemNode{ NewNode1, NewNode3 };
 				}
-				case 5: {return SeqIntervalT{}; }
+				case 5: {return UnfaSeqIntervalT{}; }
 				case 6:
 				{
-					auto r1 = tra[0].Consume<SeqIntervalT>();
-					auto r2 = tra[1].Consume<SeqIntervalT>();
+					auto r1 = tra[0].Consume<UnfaSeqIntervalT>();
+					auto r2 = tra[1].Consume<UnfaSeqIntervalT>();
 					r1 = r1.Union(r2);
 					return std::move(r1);
 				}
 				case 7:
 				{
-					auto r1 = tra[0].Consume<SeqIntervalT>();
-					auto r2 = tra[1].Consume<SeqIntervalT>();
-					auto r3 = tra[3].Consume<SeqIntervalT>();
+					auto r1 = tra[0].Consume<UnfaSeqIntervalT>();
+					auto r2 = tra[1].Consume<UnfaSeqIntervalT>();
+					auto r3 = tra[3].Consume<UnfaSeqIntervalT>();
 					r1 = r1.Union(r2.MinMax().Union(r3.MinMax()));
 					return std::move(r1);
 				}
@@ -307,13 +307,13 @@ namespace Potato::Unfa
 				{
 					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
 					uint32_t NewNodeOut = NewNodeIn + 1;
-					temporary_node.push_back({ Edge{ NewNodeOut, EComsume{tra[1].Consume<SeqIntervalT>()} } });
+					temporary_node.push_back({ Edge{ NewNodeOut, EComsume{tra[1].Consume<UnfaSeqIntervalT>()} } });
 					temporary_node.emplace_back();
 					return TemNode{ NewNodeIn, NewNodeOut };
 				}
 				case 9:
 				{
-					SeqIntervalT r1 = tra[2].Consume<SeqIntervalT>();
+					UnfaSeqIntervalT r1 = tra[2].Consume<UnfaSeqIntervalT>();
 					r1 = r1.Complementary(MaxIntervalRange());
 					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
 					uint32_t NewNodeOut = NewNodeIn + 1;
@@ -325,7 +325,7 @@ namespace Potato::Unfa
 				{
 					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
 					uint32_t NewNodeOut = NewNodeIn + 1;
-					temporary_node.push_back({ Edge{ NewNodeOut, EComsume{tra[0].Consume<SeqIntervalT>()}} });
+					temporary_node.push_back({ Edge{ NewNodeOut, EComsume{tra[0].Consume<UnfaSeqIntervalT>()}} });
 					temporary_node.emplace_back();
 					return TemNode{ NewNodeIn, NewNodeOut };
 				}
@@ -419,7 +419,7 @@ namespace Potato::Unfa
 				}
 				return {};
 			}, 
-			[&](Lr0::TElement& elf) -> std::any
+			[&](LrTElement& elf) -> std::any
 			{
 				return comsumes[elf.token_index];
 			}
@@ -431,13 +431,13 @@ namespace Potato::Unfa
 			temporary_node[result_node.out].emplace_back(Edge{ last_index, EAcception{acception_index, acception_mask} });
 			return {std::move(temporary_node)};
 		}
-		catch(Exception::Lr::UnaccableSymbol const& Symbol)
+		catch(Exception::LrUnaccableSymbol const& Symbol)
 		{
-			throw Exception::MakeExceptionTuple(Exception::Unfa::UnaccaptableRexgex{ std::u32string(rex), acception_index, acception_mask, Symbol.index });
+			throw Exception::MakeExceptionTuple(Exception::UnfaUnaccaptableRexgex{ std::u32string(rex), acception_index, acception_mask, Symbol.index });
 		}
 	}
 
-	std::tuple<std::set<uint32_t>, std::vector<Table::Edge>> Table::SearchThroughEpsilonEdge(uint32_t const* require_state, size_t length) const
+	std::tuple<std::set<uint32_t>, std::vector<UnfaTable::Edge>> UnfaTable::SearchThroughEpsilonEdge(uint32_t const* require_state, size_t length) const
 	{
 		std::vector<Edge> all_edge;
 		struct SearchTuple
@@ -482,31 +482,31 @@ namespace Potato::Unfa
 		return { std::move(finded), std::move(all_edge) };
 	}
 
-	std::vector<std::tuple<SeqIntervalT, std::vector<uint32_t>>> Table::MergeComsumeEdge(Edge const* tar_edges, size_t edges_length) const
+	std::vector<std::tuple<UnfaSeqIntervalT, std::vector<uint32_t>>> UnfaTable::MergeComsumeEdge(Edge const* tar_edges, size_t edges_length) const
 	{
-		std::vector<std::tuple<SeqIntervalT, std::vector<uint32_t>>> output_edge;
+		std::vector<std::tuple<UnfaSeqIntervalT, std::vector<uint32_t>>> output_edge;
 		for(size_t i = 0; i < edges_length; ++i)
 		{
 			auto& cur_edge = tar_edges[i];
 			assert(cur_edge.Is<EComsume>());
-			std::vector<std::tuple<SeqIntervalT, std::vector<uint32_t>>> temporary = std::move(output_edge);
-			SeqIntervalT cur(cur_edge.Get<EComsume>().interval);
+			std::vector<std::tuple<UnfaSeqIntervalT, std::vector<uint32_t>>> temporary = std::move(output_edge);
+			UnfaSeqIntervalT cur(cur_edge.Get<EComsume>().interval);
 			for(auto& ite : temporary)
 			{
 				if(cur.empty())
 					output_edge.push_back(std::move(ite));
 				auto& [interval, list] = ite;
 				auto result = cur.AsWrapper().Collision(interval.AsWrapper());
-				cur = SeqIntervalT{std::move(result.left), NoDetectT{}};
+				cur = UnfaSeqIntervalT{std::move(result.left), NoDetectT{}};
 				if(!result.middle.empty())
 				{
 					auto new_list = list;
 					assert(std::find(new_list.begin(), new_list.end(), cur_edge.jump_state) == new_list.end());
 					new_list.push_back(cur_edge.jump_state);
-					output_edge.push_back({ SeqIntervalT{std::move(result.middle), NoDetectT{}}, std::move(new_list)});
+					output_edge.push_back({ UnfaSeqIntervalT{std::move(result.middle), NoDetectT{}}, std::move(new_list)});
 				}
 				if(!result.right.empty())
-					output_edge.push_back({ SeqIntervalT{std::move(result.right), NoDetectT{}}, std::move(list) });
+					output_edge.push_back({ UnfaSeqIntervalT{std::move(result.right), NoDetectT{}}, std::move(list) });
 			}
 			if(!cur.empty())
 				output_edge.push_back({std::move(cur), {cur_edge.jump_state}} );
@@ -514,7 +514,7 @@ namespace Potato::Unfa
 		return {std::move(output_edge) };
 	}
 
-	Table Table::Link(Table const* other_table, size_t table_size)
+	UnfaTable UnfaTable::Link(UnfaTable const* other_table, size_t table_size)
 	{
 		size_t edge_count = 1;
 		for(size_t i = 0; i < table_size; ++i)
@@ -547,7 +547,7 @@ namespace Potato::Unfa
 		return {};
 	}
 
-	void Table::DefaultFilter(Table const&, std::vector<Edge>& edges)
+	void UnfaTable::DefaultFilter(UnfaTable const&, std::vector<Edge>& edges)
 	{
 		bool finded_acception = false;
 		edges.erase(std::remove_if(edges.begin(), edges.end(), [&](Edge edge)
@@ -565,7 +565,7 @@ namespace Potato::Unfa
 		}), edges.end());
 	}
 
-	Table Table::Simplify(std::function<void(Table const&, std::vector<Edge>&)> edge_filter) const
+	UnfaTable UnfaTable::Simplify(std::function<void(UnfaTable const&, std::vector<Edge>&)> edge_filter) const
 	{
 		assert(*this);
 		struct RedefineStateInfo
@@ -576,7 +576,7 @@ namespace Potato::Unfa
 
 		std::map<std::set<uint32_t>, uint32_t> redefine_state;
 		std::deque<std::tuple<uint32_t, std::vector<Edge>>> search;
-		std::vector<IntervalT> segment_set;
+		std::vector<UnfaIntervalT> segment_set;
 		std::vector<std::vector<Edge>> temporary_node;
 
 		auto InsertNewStateFuncion = [&](std::set<uint32_t> set, std::vector<Edge> edges) -> uint32_t
@@ -641,7 +641,7 @@ namespace Potato::Unfa
 
 	struct SENode{ uint32_t edge_start_offset; uint32_t edge_count; };
 
-	SerilizedTable::SerilizedTable(Table const& table)
+	UnfaSerilizedTable::UnfaSerilizedTable(UnfaTable const& table)
 	{
 		if(table)
 		{
@@ -652,15 +652,15 @@ namespace Potato::Unfa
 				for (auto& ite2 : ite)
 				{
 					total_space += sizeof(SEEdgeDescription);
-					if (ite2.Is<Table::EAcception>())
+					if (ite2.Is<UnfaTable::EAcception>())
 						total_space += sizeof(SEAcception);
-					else if (ite2.Is<Table::ECapture>())
+					else if (ite2.Is<UnfaTable::ECapture>())
 						total_space += sizeof(SECapture);
-					else if (ite2.Is<Table::EComsume>())
+					else if (ite2.Is<UnfaTable::EComsume>())
 					{
 						total_space += sizeof(SEComsume);
-						auto& ref = ite2.Get<Table::EComsume>();
-						total_space += ref.interval.size() * sizeof(IntervalT);
+						auto& ref = ite2.Get<UnfaTable::EComsume>();
+						total_space += ref.interval.size() * sizeof(UnfaIntervalT);
 					}
 				}
 			}
@@ -681,17 +681,17 @@ namespace Potato::Unfa
 					auto& edge_desc = *reinterpret_cast<SEEdgeDescription*>(edges_adress);
 					edges_adress += sizeof(SEEdgeDescription);
 					edge_desc.jump_state = ite2.jump_state;
-					if(ite2.Is<Table::EAcception>())
+					if(ite2.Is<UnfaTable::EAcception>())
 					{
 						edge_desc.type = SEdgeType::Acception;
 						auto& acception = *reinterpret_cast<SEAcception*>(edges_adress);
 						edges_adress += sizeof(SEAcception);
-						auto& ref = ite2.Get<Table::EAcception>();
+						auto& ref = ite2.Get<UnfaTable::EAcception>();
 						acception.acception_index = ref.acception_index;
 						acception.acception_mask = ref.acception_mask;
-					}else if(ite2.Is<Table::ECapture>())
+					}else if(ite2.Is<UnfaTable::ECapture>())
 					{
-						auto& ref = ite2.Get<Table::ECapture>();
+						auto& ref = ite2.Get<UnfaTable::ECapture>();
 						if (ref.begin)
 							edge_desc.type = SEdgeType::CaptureBegin;
 						else
@@ -699,22 +699,22 @@ namespace Potato::Unfa
 						auto& capture = *reinterpret_cast<SECapture*>(edges_adress);
 						edges_adress += sizeof(SECapture);
 						capture.require_index = ref.require_index;
-					}else if(ite2.Is<Table::EComsume>())
+					}else if(ite2.Is<UnfaTable::EComsume>())
 					{
 						edge_desc.type = SEdgeType::Comsume;
 						auto& comsume = *reinterpret_cast<SEComsume*>(edges_adress);
 						edges_adress += sizeof(SEComsume);
-						auto& ref = ite2.Get<Table::EComsume>();
+						auto& ref = ite2.Get<UnfaTable::EComsume>();
 						comsume.count = static_cast<uint32_t>(ref.interval.size());
-						std::memcpy(edges_adress, ref.interval.AsWrapper().data(), sizeof(IntervalT) * comsume.count);
-						edges_adress += sizeof(IntervalT) * comsume.count;
+						std::memcpy(edges_adress, ref.interval.AsWrapper().data(), sizeof(UnfaIntervalT) * comsume.count);
+						edges_adress += sizeof(UnfaIntervalT) * comsume.count;
 					}
 				}
 			}
 		}
 	}
 
-	std::optional<March> SerilizedTableWrapper::Mark(std::u32string_view string, bool greey) const
+	std::optional<UnfaMarch> UnfaSerilizedTableWrapper::Mark(std::u32string_view string, bool greey) const
 	{
 		assert(!Empty());
 		struct CaptureTuple
@@ -740,7 +740,7 @@ namespace Potato::Unfa
 		std::deque<CaptureTuple> capture_stack;
 		std::deque<SearchStack> search_stack;
 		search_stack.push_back({StartNodeIndex(), EdgeStart(StartNodeIndex()), 0, Node(StartNodeIndex())->edge_count, string, capture_stack.size()});
-		std::optional<std::tuple<March, std::deque<CaptureTuple>>> last_acception;
+		std::optional<std::tuple<UnfaMarch, std::deque<CaptureTuple>>> last_acception;
 		while (!search_stack.empty())
 		{
 			const SearchStack stack = *search_stack.rbegin();
@@ -754,11 +754,11 @@ namespace Potato::Unfa
 			{
 				SEComsume const* comsume = reinterpret_cast<SEComsume const*>(stack.current_edge + 1);
 				size_t seg_count = comsume->count;
-				IntervalT const* seg = reinterpret_cast<IntervalT const*>(comsume + 1);
+				UnfaIntervalT const* seg = reinterpret_cast<UnfaIntervalT const*>(comsume + 1);
 				next_edge = reinterpret_cast<SEEdgeDescription const*>(seg + seg_count);
 				if (!stack.last_string.empty())
 				{
-					SeqIntervalWrapperT wrapper(seg, seg_count);
+					UnfaSeqIntervalWrapperT wrapper(seg, seg_count);
 					auto cur_character = *stack.last_string.begin();
 					if (wrapper.IsInclude(cur_character))
 						next_search = NextSearch{ stack.current_edge->jump_state, {stack.last_string.data() + 1, stack.last_string.size() - 1} };
@@ -771,10 +771,10 @@ namespace Potato::Unfa
 				if (greey)
 				{
 					next_edge = reinterpret_cast<SEEdgeDescription const*>(acception + 1);
-					if (!last_acception || std::get<0>(*last_acception).capture.string.size() < capture_str.size())
+					if (!last_acception || std::get<0>(*last_acception).capture.size() < capture_str.size())
 					{
-						last_acception = {March{
-							{capture_str, 0},
+						last_acception = { UnfaMarch{
+							capture_str,
 							acception->acception_index,
 							acception->acception_mask,
 							{}
@@ -784,8 +784,8 @@ namespace Potato::Unfa
 				}
 				else
 				{
-					last_acception = {March{
-							{capture_str, 0},
+					last_acception = { UnfaMarch{
+							capture_str,
 							acception->acception_index,
 							acception->acception_mask,
 							{}
@@ -834,28 +834,28 @@ namespace Potato::Unfa
 		if (last_acception)
 		{
 			auto [march, acception_capture_stack] = *last_acception;
-			std::vector<March::Sub> mark_result;
-			std::deque<std::tuple<CaptureTuple, size_t>> handle_stack;
+			std::vector<UnfaMarch::Sub> mark_result;
+			std::vector<std::tuple<CaptureTuple, size_t>> stack;
 			for (auto& ite : acception_capture_stack)
 			{
 				if (ite.require_state == march.acception_state)
 				{
 					if (ite.is_begin)
-					{
-						handle_stack.emplace_back(ite, mark_result.size());
-						mark_result.emplace_back();
-					}
+						stack.push_back({ite, mark_result.size()});
 					else {
-						assert(!handle_stack.empty());
-						auto [tuple, index] = *handle_stack.rbegin();
-						handle_stack.pop_back();
-						assert(index < mark_result.size());
+						assert(!stack.empty());
+						auto [tuple, size] = *stack.rbegin();
+						assert(tuple.is_begin);
+						stack.pop_back();
 						auto start_index = tuple.capture_index;
-						mark_result[index] = March::Sub{ std::u32string_view{string.data() + start_index, string.data() + ite.capture_index}, start_index };
+						auto result = UnfaMarch::Sub{ std::u32string_view{string.data() + start_index, string.data() + ite.capture_index}, start_index, {} };
+						result.sub_capture.insert(result.sub_capture.end(), std::move_iterator(mark_result.begin() + size), std::move_iterator(mark_result.end()));
+						mark_result.erase(mark_result.begin() + size, mark_result.end());
+						mark_result.push_back(std::move(result));
 					}
 				}
 			}
-			assert(handle_stack.empty());
+			assert(stack.empty());
 			march.sub_capture = std::move(mark_result);
 			return std::move(march);
 		}

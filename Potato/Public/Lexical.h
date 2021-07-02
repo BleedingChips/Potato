@@ -24,25 +24,25 @@ namespace Potato
 
 	SectionPoint CalculateSectionPoint(std::u32string_view view);
 
-	using Section = ::Potato::Interval<SectionPoint>;
+	using Section = Interval<SectionPoint>;
 }
 
 
-namespace Potato::Lexical
+namespace Potato
 {
 
-	inline constexpr uint32_t DefaultMask() { return std::numeric_limits<uint32_t>::max() - 1; }
-	inline constexpr uint32_t DefaultIgnoreMask() { return std::numeric_limits<uint32_t>::max(); }
+	inline constexpr uint32_t LexicalDefaultMask() { return std::numeric_limits<uint32_t>::max() - 1; }
+	inline constexpr uint32_t LexicalDefaultIgnoreMask() { return std::numeric_limits<uint32_t>::max(); }
 	
-	struct RegexInitTuple
+	struct LexicalRegexInitTuple
 	{
-		RegexInitTuple(std::u32string_view input_regex = {}) : regex(input_regex), mask(DefaultMask()) {}
-		RegexInitTuple(std::u32string_view input_regex, uint32_t input_mask) : regex(input_regex), mask(input_mask){}
+		LexicalRegexInitTuple(std::u32string_view input_regex = {}) : regex(input_regex), mask(LexicalDefaultMask()) {}
+		LexicalRegexInitTuple(std::u32string_view input_regex, uint32_t input_mask) : regex(input_regex), mask(input_mask){}
 		std::u32string_view regex;
 		uint32_t mask;
 	};
 	
-	struct March
+	struct LexicalMarch
 	{
 		uint32_t acception;
 		uint32_t mask;
@@ -51,26 +51,26 @@ namespace Potato::Lexical
 		Section section;
 	};
 
-	struct Table
+	struct LexicalTable
 	{
-		Unfa::SerilizedTable table;
-		std::optional<March> ProcessOnce(std::u32string_view code) const;
-		std::vector<March> Process(std::u32string_view code, std::size_t ignore_mask = DefaultIgnoreMask()) const;
-		std::optional<March> Match(std::u32string_view code, std::size_t ignore_mask = DefaultIgnoreMask()) const;
+		UnfaSerilizedTable table;
+		std::optional<LexicalMarch> ProcessOnce(std::u32string_view code) const;
+		std::vector<LexicalMarch> Process(std::u32string_view code, std::size_t ignore_mask = LexicalDefaultIgnoreMask()) const;
+		std::optional<LexicalMarch> Match(std::u32string_view code, std::size_t ignore_mask = LexicalDefaultIgnoreMask()) const;
 		bool Empty() const noexcept{return table.Empty();}
-		static Table CreateFromRegexs(RegexInitTuple const* adress, std::size_t length, bool ignore_controller = true);
-		static Table CreateFromRegexsReverse(RegexInitTuple const* adress, std::size_t length, bool ignore_controller = true);
-		static void LexicalFilter(Unfa::Table const& table, std::vector<Unfa::Table::Edge>& list);
+		static LexicalTable CreateFromRegexs(LexicalRegexInitTuple const* adress, std::size_t length, bool ignore_controller = true);
+		static LexicalTable CreateFromRegexsReverse(LexicalRegexInitTuple const* adress, std::size_t length, bool ignore_controller = true);
+		static void LexicalFilter(UnfaTable const& table, std::vector<UnfaTable::Edge>& list);
 	};
 
-	inline Table CreateLexicalFromRegexs(RegexInitTuple const* adress, std::size_t length, bool ignore_controller = true){ return Table::CreateFromRegexs(adress, length, ignore_controller); }
-	inline Table CreateLexicalFromRegexsReverse(RegexInitTuple const* adress, size_t length, bool ignore_controller = true) { return Table::CreateFromRegexsReverse(adress, length, ignore_controller); }
+	inline LexicalTable CreateLexicalFromRegexs(LexicalRegexInitTuple const* adress, std::size_t length, bool ignore_controller = true){ return LexicalTable::CreateFromRegexs(adress, length, ignore_controller); }
+	inline LexicalTable CreateLexicalFromRegexsReverse(LexicalRegexInitTuple const* adress, size_t length, bool ignore_controller = true) { return LexicalTable::CreateFromRegexsReverse(adress, length, ignore_controller); }
 }
 
-namespace Potato::Exception::Lexical
+namespace Potato::Exception
 {
 
-	struct UnaccaptableItem {
+	struct LexicalUnaccaptableItem {
 		std::u32string possible_token;
 		Section section;
 	};

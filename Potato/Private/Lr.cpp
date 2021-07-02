@@ -1,17 +1,17 @@
 #include "../Public/lr.h"
 
-namespace Potato::Lr
+namespace Potato
 {
-	std::any History::operator()(std::function<std::any(NTElement&)> NTFunc, std::function<std::any(TElement&)> TFun) const
+	std::any LrHistory::operator()(std::function<std::any(LrNTElement&)> NTFunc, std::function<std::any(LrTElement&)> TFun) const
 	{
 		if (NTFunc && TFun)
 		{
-			std::vector<NTElementData> DataBuffer;
+			std::vector<LrNTElementData> DataBuffer;
 			for (auto& ite : steps)
 			{
 				if (ite.IsTerminal())
 				{
-					TElement ele{ ite };
+					LrTElement ele{ ite };
 					if (TFun)
 					{
 						auto Result = TFun(ele);
@@ -21,7 +21,7 @@ namespace Potato::Lr
 				else {
 					assert(DataBuffer.size() >= ite.reduce.production_count);
 					size_t CurrentAdress = DataBuffer.size() - ite.reduce.production_count;
-					NTElement ele{ ite, DataBuffer.data() + CurrentAdress};
+					LrNTElement ele{ ite, DataBuffer.data() + CurrentAdress};
 					auto Result = NTFunc(ele);
 					DataBuffer.resize(CurrentAdress);
 					DataBuffer.push_back({ ite.value, std::move(Result) });

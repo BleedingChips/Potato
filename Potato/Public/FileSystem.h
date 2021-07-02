@@ -11,7 +11,7 @@
 #include "IntrusivePointer.h"
 #include "StrEncode.h"
 
-namespace Potato::FileSystem
+namespace Potato
 {
 	
 
@@ -67,6 +67,11 @@ namespace Potato::FileSystem
 		std::u32string ToU32String() const{ return path; }
 		std::u16string ToU16String() const { return StrEncode::AsWrapper(path.data(), path.size()).ToString<char16_t>(); }
 		std::u8string ToU8String() const { return StrEncode::AsWrapper(path.data(), path.size()).ToString<char8_t>(); }
+
+		static std::vector<std::byte> LoadEntireFile(Path const& ref);
+		static bool SaveFile(Path const& ref, std::span<std::byte const> data);
+
+		static Path Current();
 		
 	private:
 
@@ -91,19 +96,11 @@ namespace Potato::FileSystem
 		bool Regedit(std::u32string_view, Path path);
 		void Unregedit(std::u32string_view);
 		Path operator()(Path const&) const;
+		static PathMapping& GobalPathMapping();
 	private:
 		mutable std::shared_mutex mutex;
 		std::map<std::u32string, Path> mapping;
 	};
-
-	PathMapping& GobalPathMapping();
-
-	std::vector<std::byte> LoadEntireFile(Path const& ref);
-	bool SaveFile(Path const& ref, std::byte const* data, size_t size);
-	template<typename Type>
-	bool SaveFile(Path const& ref, Type const* data, size_t size){ return SaveFile(ref, reinterpret_cast<std::byte const*>(data), size * sizeof(Type)); }
-
-	Path Current();
 
 	namespace Implement
 	{

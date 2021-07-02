@@ -5,9 +5,9 @@
 
 namespace
 {
-	Potato::Ebnf::Table const& FSEbnf()
+	Potato::EbnfTable const& FSEbnf()
 	{
-		static Potato::Ebnf::Table fs_ebnf = Potato::Ebnf::CreateTable(
+		static Potato::EbnfTable fs_ebnf = Potato::CreateEbnfTable(
 UR"(
 NormalPath := '[^/]*' : [0]
 DosRoot := '[a-zA-Z\-0-9_]*:/' : [1]
@@ -17,7 +17,7 @@ UpperPath := '\.\.' : [3]
 MappingRoot := '$[a-zA-Z\-0-9_ ]+:/' : [4]
 %%%
 $ := <Ste>
-<File> := (NormalPath | SelfPath | UpperPath) : [0]
+<File> := NormalPath | SelfPath | UpperPath : [0]
 <FilePath> := <File> { Delimiter <File> } : [1]
 <Ste> := DosRoot [ <FilePath> ] : [2]
 <Ste> := DosRoot <FilePath> Delimiter : [2]
@@ -33,9 +33,8 @@ $ := <Ste>
 	std::u32string_view Upper = UR"(..)";
 }
 
-namespace Potato::FileSystem
+namespace Potato
 {
-
 
 	bool Path::Insert(std::u32string_view ref, Element const* tup, size_t length)
 	{
@@ -114,30 +113,32 @@ namespace Potato::FileSystem
 	
 	Path::Path(std::u32string_view Input)
 	{
-		Ebnf::Table const& ref = FSEbnf();
+		EbnfTable const& ref = FSEbnf();
 		try
 		{
 			Path Result;
-			auto His = Ebnf::Process(ref, Input);
-			His([&](Ebnf::NTElement& Ele) -> std::any
+			auto His = Process(ref, Input);
+			His([&](EbnfNTElement& Ele) -> std::any
 			{
 				if(Ele.IsPredefine()) return {};
 				switch (Ele.mask)
 					{
 					case 0:
 					{
-						return Ele[0].Consume();
+						return Ele[0].Consume<EbnfSequencer>()[0].Consume();
 					}
 					case 1:
 					{
 						std::vector<Element> Res;
-						for(size_t i = 0; i < Ele.production.size(); ++i)
+						Res.push_back(Ele[0].Consume<Element>());
+						auto Ref = Ele[1].Consume<EbnfSequencer>();
+						for (auto& Ite : Ref)
 						{
-							if(Ele[i].IsNoterminal())
+							if (Ite.IsNoterminal())
 							{
-								auto P = Ele[i].Consume<Element>();
+								auto P = Ite.Consume<Element>();
 								Res.push_back(std::move(P));
-							}	
+							}
 						}
 						return std::move(Res);
 					}
@@ -147,9 +148,10 @@ namespace Potato::FileSystem
 						auto Temp = Ele[0].Consume<Element>();
 						Result.elements.push_back(Temp);
 						Result.path = Temp(Input);
-						if(Ele.production.size() >= 2)
+						auto Seq = Ele[1].Consume<EbnfSequencer>();
+						if(!Seq.empty())
 						{
-							auto P = Ele[1].Consume<std::vector<Element>>();
+							auto P = Seq[0].Consume<std::vector<Element>>();
 							if (!Result.Insert(Input, P.data(), P.size()))
 								Result = {};
 						}
@@ -167,10 +169,11 @@ namespace Potato::FileSystem
 						auto Temp = Ele[0].Consume<Element>();
 						Result.elements.push_back(Temp);
 						Result.path = Temp(Input);
-						if (Ele.production.size() >= 2)
+						auto Seq = Ele[1].Consume<EbnfSequencer>();
+						if (!Seq.empty())
 						{
-							auto P = Ele[1].Consume<std::vector<Element>>();
-							if(!Result.Insert(Input, P.data(), P.size()))
+							auto P = Seq[0].Consume<std::vector<Element>>();
+							if (!Result.Insert(Input, P.data(), P.size()))
 								Result = {};
 						}
 					}break;
@@ -189,7 +192,7 @@ namespace Potato::FileSystem
 					}
 					return {};
 			},
-			[&](Ebnf::TElement& Ele) -> std::any
+			[&](EbnfTElement& Ele) -> std::any
 			{
 				switch(Ele.mask)
 				{
@@ -209,7 +212,7 @@ namespace Potato::FileSystem
 			}
 			);
 			*this = std::move(Result);
-		}catch (Exception::Ebnf::Interface const&)
+		}catch (Exception::EbnfInterface const&)
 		{
 			
 		}
@@ -297,13 +300,13 @@ namespace Potato::FileSystem
 		return {};
 	}
 
-	PathMapping& GobalPathMapping()
+	PathMapping& PathMapping::GobalPathMapping()
 	{
 		static PathMapping instance;
 		return instance;
 	}
 
-	Path Current()
+	Path Path::Current()
 	{
 		auto CurPath = std::filesystem::current_path().u32string();
 		std::replace(CurPath.begin(), CurPath.end(), U'\\', U'/');
@@ -449,7 +452,7 @@ namespace Potato::FileSystem
 		return result;
 	}
 
-	std::vector<std::byte> LoadEntireFile(Path const& ref)
+	std::vector<std::byte> Path::LoadEntireFile(Path const& ref)
 	{
 		if (ref.GetType() == Path::Style::DosAbsolute || ref.GetType() == Path::Style::UnixAbsolute)
 		{
@@ -461,13 +464,13 @@ namespace Potato::FileSystem
 				std::vector<std::byte> datas;
 				datas.resize(require_size);
 				file.read(reinterpret_cast<char*>(datas.data()), require_size);
-				return std::move(datas);
+				return datas;
 			}
 		}
 		return {};
 	}
 
-	bool SaveFile(Path const& ref, std::byte const* data, size_t size)
+	bool Path::SaveFile(Path const& ref, std::span<std::byte const> data)
 	{
 		if (ref.GetType() == Path::Style::DosAbsolute || ref.GetType() == Path::Style::UnixAbsolute)
 		{
@@ -475,7 +478,7 @@ namespace Potato::FileSystem
 			std::ofstream file(tar, std::ios::binary);
 			if (file.good())
 			{
-				file.write(reinterpret_cast<char const*>(data), size);
+				file.write(reinterpret_cast<char const*>(data.data()), data.size());
 				return true;
 			}
 		}

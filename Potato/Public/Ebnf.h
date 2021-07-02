@@ -6,27 +6,25 @@
 #include "Lexical.h"
 
 
-namespace Potato::Ebnf
+namespace Potato
 {
 
-	using Symbol = Lr0::Symbol;
-
-	struct Table
+	struct EbnfTable
 	{
 		std::u32string symbol_table;
 		std::vector<uint32_t> state_to_mask;
-		Lexical::Table lexical_table;
+		LexicalTable lexical_table;
 		std::vector<std::tuple<std::size_t, std::size_t>> symbol_map;
 		size_t ter_count;
-		Lr0::Table lr0_table;
+		Lr0Table lr0_table;
 		std::u32string_view FindSymbolString(size_t input, bool IsTerminal) const noexcept;
 		std::optional<size_t> FindSymbolState(std::u32string_view sym) const noexcept { bool is_terminal; return FindSymbolState(sym, is_terminal); }
 		std::optional<size_t> FindSymbolState(std::u32string_view sym, bool& Isterminal) const noexcept;
 	};
 
-	Table CreateTable(std::u32string_view Code);
+	EbnfTable CreateEbnfTable(std::u32string_view Code);
 
-	enum class StepCategory
+	enum class EbnfStepCategory
 	{
 		TERMINAL,
 		NOTERMINAL,
@@ -34,11 +32,11 @@ namespace Potato::Ebnf
 		UNKNOW
 	};
 
-	struct Step
+	struct EbnfStep
 	{
 		size_t state = 0;
 		std::u32string_view string;
-		StepCategory category = StepCategory::UNKNOW;
+		EbnfStepCategory category = EbnfStepCategory::UNKNOW;
 		Section section;
 		union {
 			struct {
@@ -50,33 +48,35 @@ namespace Potato::Ebnf
 				size_t mask = 0;
 			}shift;
 		};
-		Step(){}
-		bool IsTerminal() const noexcept { return category == StepCategory::TERMINAL; }
-		bool IsNoterminal() const noexcept { return category == StepCategory::NOTERMINAL; }
-		bool IsPreDefineNoterminal() const noexcept { return category == StepCategory::PREDEFINETERMINAL; }
+		EbnfStep(){}
+		bool IsTerminal() const noexcept { return category == EbnfStepCategory::TERMINAL; }
+		bool IsNoterminal() const noexcept { return category == EbnfStepCategory::NOTERMINAL; }
+		bool IsPreDefineNoterminal() const noexcept { return category == EbnfStepCategory::PREDEFINETERMINAL; }
 	};
 
-	struct TElement
+	struct EbnfTElement
 	{
 		size_t state = 0;
 		std::u32string_view string;
 		Section section;
 		std::u32string_view capture = 0;
 		size_t mask = 0;
-		TElement(Step const& step) : state(step.state), string(step.string), section(step.section), capture(step.shift.capture), mask(step.shift.mask)
+		EbnfTElement(EbnfStep const& step) : state(step.state), string(step.string), section(step.section), capture(step.shift.capture), mask(step.shift.mask)
 		{
 			assert(step.IsTerminal());
 		}
-		TElement(TElement const&) = default;
-		TElement& operator=(TElement const&) = default;
+		EbnfTElement(EbnfTElement const&) = default;
+		EbnfTElement& operator=(EbnfTElement const&) = default;
 	};
 
-	struct NTElement
+	
+
+	struct EbnfNTElement
 	{
-		struct Property : Step
+		struct Property : EbnfStep
 		{
 			Property() {}
-			Property(Step step, std::any datas) : Step(step), data(std::move(datas)){}
+			Property(EbnfStep step, std::any datas) : EbnfStep(step), data(std::move(datas)){}
 			Property(Property const&) = default;
 			Property(Property&&) = default;
 			Property& operator=(Property&& p) = default;
@@ -94,6 +94,7 @@ namespace Potato::Ebnf
 					return std::nullopt;
 			}
 		};
+
 		size_t state = 0;
 		size_t mask = 0;
 		std::u32string_view string;
@@ -104,13 +105,36 @@ namespace Potato::Ebnf
 		bool IsPredefine() const noexcept {return is_predefine;};
 		auto begin() { return production.begin(); }
 		auto end() { return production.end();}
-		NTElement(Step const& ref, Property* data) : state(ref.state), string(ref.string), section(ref.section), mask(ref.reduce.mask), production(ref.category == StepCategory::NOTERMINAL ? data : nullptr, ref.reduce.production_count)
-			,is_predefine(ref.category == StepCategory::PREDEFINETERMINAL)
+		EbnfNTElement(EbnfStep const& ref, Property* data) : state(ref.state), string(ref.string), section(ref.section), mask(ref.reduce.mask), 
+			production((ref.category == EbnfStepCategory::NOTERMINAL ? data : nullptr), ref.reduce.production_count)
+			,is_predefine(ref.category == EbnfStepCategory::PREDEFINETERMINAL)
 		{
 			assert(ref.IsNoterminal() || ref.IsPreDefineNoterminal());
 		}
-		NTElement& operator=(NTElement const&) = default;
+		EbnfNTElement& operator=(EbnfNTElement const&) = default;
 	};
+
+	enum class EbnfSequencerType : uint32_t
+	{
+		OR,
+		OPTIONAL,
+		REPEAT,
+	};
+
+	constexpr uint32_t operator*(EbnfSequencerType input) noexcept { return static_cast<uint32_t>(input); }
+
+	struct EbnfSequencer
+	{
+		EbnfSequencerType type;
+		std::vector<EbnfNTElement::Property> datas;
+		EbnfNTElement::Property& operator[](size_t input) { return datas[input]; }
+		decltype(auto) begin() { return datas.begin(); }
+		decltype(auto) end() { return datas.end(); }
+		decltype(auto) size() { return datas.size(); }
+		bool empty() const noexcept { return datas.empty(); }
+	};
+
+	
 
 	/*
 	struct Element : Step
@@ -140,88 +164,88 @@ namespace Potato::Ebnf
 	};
 	*/
 
-	struct History
+	struct EbnfHistory
 	{
-		std::vector<Step> steps;
-		std::any operator()(std::function<std::any(NTElement&)> NTFunc, std::function<std::any(TElement&)> TFunc) const;
+		std::vector<EbnfStep> steps;
+		std::any operator()(std::function<std::any(EbnfNTElement&)> NTFunc, std::function<std::any(EbnfTElement&)> TFunc) const;
 		std::vector<std::u32string> Expand() const;
 	};
 
-	History Process(Table const& Tab, std::u32string_view Code);
-	inline std::any Process(History const& His, std::function<std::any(NTElement&)> NTFunc, std::function<std::any(TElement&)> TFunc)
+	EbnfHistory Process(EbnfTable const& Tab, std::u32string_view Code);
+	inline std::any Process(EbnfHistory const& His, std::function<std::any(EbnfNTElement&)> NTFunc, std::function<std::any(EbnfTElement&)> TFunc)
 	{
 		return His(std::move(NTFunc), std::move(TFunc));
 	}
 	template<typename RespondFunction>
-	std::any Process(History const& ref, RespondFunction&& Func) { return ref(std::forward<RespondFunction>(Func));}
+	std::any Process(EbnfHistory const& ref, RespondFunction&& Func) { return ref(std::forward<RespondFunction>(Func));}
 	template<typename RequireType, typename RespondFunction>
-	RequireType ProcessWrapper(History const& ref, RespondFunction&& Func) { return std::any_cast<RequireType>(ref(std::forward<RespondFunction>(Func))); }
+	RequireType ProcessWrapper(EbnfHistory const& ref, RespondFunction&& Func) { return std::any_cast<RequireType>(ref(std::forward<RespondFunction>(Func))); }
 }
 
-namespace Potato::Exception::Ebnf
+namespace Potato::Exception
 {
 
-	struct Interface
+	struct EbnfInterface
 	{
-		virtual ~Interface() = default;
+		virtual ~EbnfInterface() = default;
 	};
 
-	using BaseDefineInterface = DefineInterface<Interface>;
+	using EbnfBaseDefineInterface = DefineInterface<EbnfInterface>;
 
-	struct ExceptionStep
+	struct EbnfExceptionStep
 	{
-		using ExceptionInterface = BaseDefineInterface;
+		using ExceptionInterface = EbnfBaseDefineInterface;
 		std::u32string name;
 		bool is_terminal = false;
-		size_t production_mask = Lr0::ProductionInput::default_mask();
+		size_t production_mask = LrProductionInput::default_mask();
 		size_t production_count = 0;
 		std::u32string capture;
 		Section section;
 	};
 
-	struct MissingStartSymbol { using ExceptionInterface = BaseDefineInterface;  };
+	struct EbnfMissingStartSymbol { using ExceptionInterface = EbnfBaseDefineInterface;  };
 
-	struct UndefinedTerminal {
-		using ExceptionInterface = BaseDefineInterface;
+	struct EbnfUndefinedTerminal {
+		using ExceptionInterface = EbnfBaseDefineInterface;
 		std::u32string token;
 		Section section;
 	};
 
-	struct UndefinedNoterminal {
-		using ExceptionInterface = BaseDefineInterface;
+	struct EbnfUndefinedNoterminal {
+		using ExceptionInterface = EbnfBaseDefineInterface;
 		std::u32string token;
 	};
 
-	struct UnsetDefaultProductionHead { using ExceptionInterface = BaseDefineInterface; };
+	struct EbnfUnsetDefaultProductionHead { using ExceptionInterface = EbnfBaseDefineInterface; };
 
-	struct RedefinedStartSymbol {
-		using ExceptionInterface = BaseDefineInterface;
+	struct EbnfRedefinedStartSymbol {
+		using ExceptionInterface = EbnfBaseDefineInterface;
 		Section section;
 	};
 
-	struct UncompleteEbnf
+	struct EbnfUncompleteEbnf
 	{
-		using ExceptionInterface = BaseDefineInterface;
+		using ExceptionInterface = EbnfBaseDefineInterface;
 		size_t used;
 	};
 
-	struct UnacceptableToken {
-		using ExceptionInterface = BaseDefineInterface;
+	struct EbnfUnacceptableToken {
+		using ExceptionInterface = EbnfBaseDefineInterface;
 		std::u32string token;
 		Section section;
 	};
 
-	struct UnacceptableSyntax {
-		using ExceptionInterface = BaseDefineInterface;
+	struct EbnfUnacceptableSyntax {
+		using ExceptionInterface = EbnfBaseDefineInterface;
 		std::u32string type;
 		std::u32string data;
 		Section section;
 		std::vector<std::u32string> exception_step;
 	};
 
-	struct UnacceptableRegex
+	struct EbnfUnacceptableRegex
 	{
-		using ExceptionInterface = BaseDefineInterface;
+		using ExceptionInterface = EbnfBaseDefineInterface;
 		std::u32string regex;
 		size_t acception_mask;
 	};

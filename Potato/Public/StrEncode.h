@@ -259,7 +259,7 @@ namespace Potato::StrEncode
 			RequestResult request = Encode<From, ToType>{}.Request(str);
 			std::basic_string<RemoveReverseEndianness_t<ToType>> result(request.require_length, 0);
 			To<ToType>(result);
-			return std::move(result);
+			return result;
 		}
 		template<typename ToType>
 		EncodeResult To(std::span<RemoveReverseEndianness_t<ToType>> output) const

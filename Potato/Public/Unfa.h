@@ -12,14 +12,14 @@
 #include "Misc.h"
 #include "Interval.h"
 
-namespace Potato::Exception::Unfa
+namespace Potato::Exception
 {
-	struct Interface { virtual ~Interface() = default; };
+	struct UnfaInterface { virtual ~UnfaInterface() = default; };
 
-	using BaseDefineInterface = DefineInterface<Interface>;
+	using UnfaBaseDefineInterface = DefineInterface<UnfaInterface>;
 
-	struct UnaccaptableRexgex {
-		using ExceptionInterface = BaseDefineInterface;
+	struct UnfaUnaccaptableRexgex {
+		using ExceptionInterface = UnfaBaseDefineInterface;
 		std::u32string regex;
 		uint32_t accepetable_state;
 		uint32_t accepetable_mask;
@@ -28,34 +28,33 @@ namespace Potato::Exception::Unfa
 }
 
 
-namespace Potato::Unfa
+namespace Potato
 {
-	struct March
+	struct UnfaMarch
 	{
 		struct Sub
 		{
-			std::u32string_view string;
+			std::u32string_view capture;
 			size_t index;
+			std::vector<Sub> sub_capture; 
 		};
-		Sub capture;
+		std::u32string_view capture;
 		uint32_t acception_state;
 		uint32_t acception_mask;
 		std::vector<Sub> sub_capture;
 	};
 
-	using IntervalT = Interval<char32_t>;
-	using SeqIntervalT = SequenceInterval<char32_t>;
-	using SeqIntervalWrapperT = SequenceIntervalWrapper<char32_t>;
+	using UnfaIntervalT = Interval<char32_t>;
+	using UnfaSeqIntervalT = SequenceInterval<char32_t>;
+	using UnfaSeqIntervalWrapperT = SequenceIntervalWrapper<char32_t>;
 
-	struct Table
+	struct UnfaTable
 	{
-
-		
 
 		struct EAcception { uint32_t acception_index; uint32_t acception_mask; };
 		struct EEpsilon {};
 		struct ECapture { uint32_t begin; uint32_t require_index; };
-		struct EComsume { SeqIntervalT interval; };
+		struct EComsume { UnfaSeqIntervalT interval; };
 
 		struct Edge
 		{
@@ -76,22 +75,22 @@ namespace Potato::Unfa
 		};
 		std::vector<std::vector<Edge>> nodes;
 
-		static Table CreateFromRegex(std::u32string_view rex, uint32_t state = 0, uint32_t mask = 0);
+		static UnfaTable CreateFromRegex(std::u32string_view rex, uint32_t state = 0, uint32_t mask = 0);
 		size_t NodeCount() const noexcept { return nodes.size(); }
 		size_t StartNodeIndex() const noexcept { return 0; }
 		//std::optional<March> Mark(std::u32string_view string, bool greey = true) const;
 		std::tuple<std::set<uint32_t>, std::vector<Edge>> SearchThroughEpsilonEdge(uint32_t const* require_state, size_t length) const;
-		std::vector<std::tuple<SeqIntervalT, std::vector<uint32_t>>> MergeComsumeEdge(Edge const* edges, size_t edges_length) const;
-		static Table Link(Table const* other_table, size_t table_size);
-		static void DefaultFilter(Table const&, std::vector<Edge>&);
-		Table Simplify(std::function<void(Table const&, std::vector<Edge>&)> edge_filter = Table::DefaultFilter) const;
+		std::vector<std::tuple<UnfaSeqIntervalT, std::vector<uint32_t>>> MergeComsumeEdge(Edge const* edges, size_t edges_length) const;
+		static UnfaTable Link(UnfaTable const* other_table, size_t table_size);
+		static void DefaultFilter(UnfaTable const&, std::vector<Edge>&);
+		UnfaTable Simplify(std::function<void(UnfaTable const&, std::vector<Edge>&)> edge_filter = UnfaTable::DefaultFilter) const;
 		operator bool() const noexcept { return nodes.size() >= 2; }
 	};
 
-	inline Table CreateUnfaTableFromRegex(std::u32string_view rex, uint32_t state = 0, uint32_t mask = 0) { return Table::CreateFromRegex(rex, state, mask); }
-	inline Table LinkUnfaTable(Table const* other_table, size_t table_size) { return Table::Link(other_table, table_size); }
+	inline UnfaTable CreateUnfaTableFromRegex(std::u32string_view rex, uint32_t state = 0, uint32_t mask = 0) { return UnfaTable::CreateFromRegex(rex, state, mask); }
+	inline UnfaTable LinkUnfaTable(UnfaTable const* other_table, size_t table_size) { return UnfaTable::Link(other_table, table_size); }
 
-	struct SerilizedTableWrapper
+	struct UnfaSerilizedTableWrapper
 	{
 
 		enum class SEdgeType : uint32_t
@@ -127,33 +126,33 @@ namespace Potato::Unfa
 			return reinterpret_cast<SEEdgeDescription const*>(Node(node_index)->edge_start_offset * sizeof(uint32_t) + data.data());
 		}
 		uint32_t StartNodeIndex() const noexcept { return 0; }
-		std::optional<March> Mark(std::u32string_view string, bool greey = true) const;
+		std::optional<UnfaMarch> Mark(std::u32string_view string, bool greey = true) const;
 		std::span<std::byte const> data;
 	};
 
-	struct SerilizedTable
+	struct UnfaSerilizedTable
 	{
-		using SEdgeType = SerilizedTableWrapper::SEdgeType;
-		using SEEdgeDescription = SerilizedTableWrapper::SEEdgeDescription;
-		using SENode = SerilizedTableWrapper::SENode;
+		using SEdgeType = UnfaSerilizedTableWrapper::SEdgeType;
+		using SEEdgeDescription = UnfaSerilizedTableWrapper::SEEdgeDescription;
+		using SENode = UnfaSerilizedTableWrapper::SENode;
 
-		uint32_t NodeCount() const noexcept { return SerilizedTableWrapper{}.NodeCount(); }
+		uint32_t NodeCount() const noexcept { return UnfaSerilizedTableWrapper{}.NodeCount(); }
 		uint32_t StartNodeIndex() const noexcept { return 0; }
 		bool Empty() const noexcept { return datas.empty(); }
-		SerilizedTableWrapper AsWrapper() const noexcept { return { std::span<std::byte const>{datas.begin(), datas.end()} }; }
-		operator SerilizedTableWrapper() const noexcept { return AsWrapper(); }
-		std::optional<March> Mark(std::u32string_view string, bool greey = true) const { return AsWrapper().Mark(string, greey); }
-		SerilizedTable() = default;
-		SerilizedTable(Table const& table);
-		SerilizedTable(SerilizedTable const&) = default;
-		SerilizedTable(SerilizedTable&&) = default;
-		SerilizedTable& operator=(SerilizedTable const&) = default;
-		SerilizedTable& operator=(SerilizedTable&&) = default;
+		UnfaSerilizedTableWrapper AsWrapper() const noexcept { return { std::span<std::byte const>{datas.begin(), datas.end()} }; }
+		operator UnfaSerilizedTableWrapper() const noexcept { return AsWrapper(); }
+		std::optional<UnfaMarch> Mark(std::u32string_view string, bool greey = true) const { return AsWrapper().Mark(string, greey); }
+		UnfaSerilizedTable() = default;
+		UnfaSerilizedTable(UnfaTable const& table);
+		UnfaSerilizedTable(UnfaSerilizedTable const&) = default;
+		UnfaSerilizedTable(UnfaSerilizedTable&&) = default;
+		UnfaSerilizedTable& operator=(UnfaSerilizedTable const&) = default;
+		UnfaSerilizedTable& operator=(UnfaSerilizedTable&&) = default;
 	private:
 		std::vector<std::byte> datas;
 	};
 
-	inline SerilizedTable SerilizedUnfaTable(Table const& table) { return { table }; }
+	inline UnfaSerilizedTable SerilizedUnfaTable(UnfaTable const& table) { return { table }; }
 }
 
 /*

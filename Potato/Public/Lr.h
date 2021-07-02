@@ -10,50 +10,50 @@
 
 #include "Misc.h"
 
-namespace Potato::Lr
+namespace Potato
 {
-	using SymbolStorageT = int32_t;
+	using LrSymbolStorageT = int32_t;
 
-	struct TerminalT {};
-	struct NoTerminalT {};
+	struct LrTerminalT {};
+	struct LrNoTerminalT {};
 
-	inline constexpr size_t symbol_storage_max = static_cast<size_t>(std::numeric_limits<SymbolStorageT>::max()) - 3;
-	inline constexpr size_t symbol_storage_min = static_cast<size_t>(0) + 1;
-	inline constexpr TerminalT terminal;
-	inline constexpr NoTerminalT noterminal;
+	inline constexpr size_t lr_symbol_storage_max = static_cast<size_t>(std::numeric_limits<LrSymbolStorageT>::max()) - 3;
+	inline constexpr size_t lr_symbol_storage_min = static_cast<size_t>(0) + 1;
+	inline constexpr LrTerminalT terminal;
+	inline constexpr LrNoTerminalT noterminal;
 
-	struct Symbol
+	struct LrSymbol
 	{
-		SymbolStorageT value;
-		constexpr Symbol() : Symbol(Symbol::EndOfFile()) {}
-		constexpr Symbol(size_t input, TerminalT) : value(static_cast<SymbolStorageT>(input) + 1) {
-			assert(input < static_cast<uint64_t>(std::numeric_limits<SymbolStorageT>::max()) - 2);
+		LrSymbolStorageT value;
+		constexpr LrSymbol() : LrSymbol(LrSymbol::EndOfFile()) {}
+		constexpr LrSymbol(size_t input, LrTerminalT) : value(static_cast<LrSymbolStorageT>(input) + 1) {
+			assert(input < static_cast<uint64_t>(std::numeric_limits<LrSymbolStorageT>::max()) - 2);
 		}
-		constexpr Symbol(size_t input, NoTerminalT) : value(-static_cast<SymbolStorageT>(input) - 1) {
-			assert(input < static_cast<uint64_t>(std::numeric_limits<SymbolStorageT>::max()) - 2);
+		constexpr LrSymbol(size_t input, LrNoTerminalT) : value(-static_cast<LrSymbolStorageT>(input) - 1) {
+			assert(input < static_cast<uint64_t>(std::numeric_limits<LrSymbolStorageT>::max()) - 2);
 		}
-		constexpr bool operator<(Symbol const& input) const noexcept { return value < input.value; }
-		constexpr bool operator== (Symbol const& input) const noexcept { return value == input.value; }
+		constexpr bool operator<(LrSymbol const& input) const noexcept { return value < input.value; }
+		constexpr bool operator== (LrSymbol const& input) const noexcept { return value == input.value; }
 		constexpr bool IsTerminal() const noexcept { assert(value != 0); return value > 0; }
 		constexpr bool IsNoTerminal() const noexcept { assert(value != 0); return value < 0; }
-		constexpr static Symbol EndOfFile() noexcept { return Symbol(std::numeric_limits<SymbolStorageT>::max()); }
-		constexpr static Symbol StartSymbol() noexcept { return Symbol(0); }
+		constexpr static LrSymbol EndOfFile() noexcept { return LrSymbol(std::numeric_limits<LrSymbolStorageT>::max()); }
+		constexpr static LrSymbol StartSymbol() noexcept { return LrSymbol(0); }
 		constexpr bool IsEndOfFile() const noexcept { return *this == EndOfFile(); }
 		constexpr bool IsStartSymbol() const noexcept { return *this == StartSymbol(); }
-		constexpr SymbolStorageT Value() const noexcept { return value; }
+		constexpr LrSymbolStorageT Value() const noexcept { return value; }
 		constexpr size_t Index() const noexcept {
 			assert(IsTerminal() || IsNoTerminal());
 			return static_cast<size_t>((value < 0 ? -value : value)) - 1;
 		}
-		constexpr operator SymbolStorageT() const noexcept { return value; }
-		static inline constexpr Symbol MakeSymbol(SymbolStorageT input) { return Symbol(input); }
+		constexpr operator LrSymbolStorageT() const noexcept { return value; }
+		static inline constexpr LrSymbol MakeSymbol(LrSymbolStorageT input) { return LrSymbol(input); }
 	private:
-		constexpr Symbol(SymbolStorageT input) : value(input) {}
+		constexpr LrSymbol(LrSymbolStorageT input) : value(input) {}
 	};
 
-	struct Step
+	struct LrStep
 	{
-		Symbol value;
+		LrSymbol value;
 		union
 		{
 			struct {
@@ -72,20 +72,20 @@ namespace Potato::Lr
 		constexpr bool IsStartSymbol() const noexcept { return value.IsStartSymbol(); }
 	};
 
-	struct TElement
+	struct LrTElement
 	{
-		Symbol value;
+		LrSymbol value;
 		size_t token_index;
-		TElement(Step const& value) : value(value.value), token_index(value.shift.token_index) { assert(value.IsTerminal()); }
-		TElement(TElement const&) = default;
-		TElement& operator=(TElement const&) = default;
+		LrTElement(LrStep const& value) : value(value.value), token_index(value.shift.token_index) { assert(value.IsTerminal()); }
+		LrTElement(LrTElement const&) = default;
+		LrTElement& operator=(LrTElement const&) = default;
 	};
 
-	struct NTElementData
+	struct LrNTElementData
 	{
-		Symbol symbol;
+		LrSymbol symbol;
 		std::any data;
-		operator Symbol() const { return symbol; }
+		operator LrSymbol() const { return symbol; }
 		template<typename Type>
 		std::remove_reference_t<Type> Consume() { return std::move(std::any_cast<std::add_lvalue_reference_t<Type>>(data)); }
 		std::any Consume() { return std::move(data); }
@@ -99,113 +99,111 @@ namespace Potato::Lr
 		}
 	};
 
-	struct NTElement
+	struct LrNTElement
 	{
 
-		Symbol value;
+		LrSymbol value;
 		size_t production_index;
 		size_t mask;
-		std::span<NTElementData> datas;
-		NTElementData& operator[](size_t index) { return datas[index]; }
-		NTElement(Step const& value, NTElementData* data_ptr) :
+		std::span<LrNTElementData> datas;
+		LrNTElementData& operator[](size_t index) { return datas[index]; }
+		LrNTElement(LrStep const& value, LrNTElementData* data_ptr) :
 			value(value.value), production_index(value.reduce.production_index), datas(data_ptr, value.reduce.production_count), mask(value.reduce.mask)
 		{
 			assert(value.IsNoTerminal());
 		}
-		NTElement(NTElement const&) = default;
-		NTElement& operator=(NTElement const&) = default;
+		LrNTElement(LrNTElement const&) = default;
+		LrNTElement& operator=(LrNTElement const&) = default;
 	};
 
-	struct History
+	struct LrHistory
 	{
-		std::vector<Step> steps;
-		std::any operator()(std::function<std::any(NTElement&)> NTFunc, std::function<std::any(TElement&)> TFun) const;
+		std::vector<LrStep> steps;
+		std::any operator()(std::function<std::any(LrNTElement&)> NTFunc, std::function<std::any(LrTElement&)> TFun) const;
 	};
 
-	inline std::any Process(History const& ref, std::function<std::any(NTElement&)> NTFunc, std::function<std::any(TElement&)> TFun) { return ref(std::move(NTFunc), std::move(TFun)); }
+	inline std::any Process(LrHistory const& ref, std::function<std::any(LrNTElement&)> NTFunc, std::function<std::any(LrTElement&)> TFun) { return ref(std::move(NTFunc), std::move(TFun)); }
 
 	template<typename RespondFunction>
-	std::any Process(History const& ref, RespondFunction&& Func) { return ref(std::forward<RespondFunction>(Func)); }
+	std::any Process(LrHistory const& ref, RespondFunction&& Func) { return ref(std::forward<RespondFunction>(Func)); }
 
 	template<typename RequireType, typename RespondFunction>
-	RequireType ProcessWrapper(History const& ref, RespondFunction&& Func) { return std::any_cast<RequireType>(ref(std::forward<RespondFunction>(Func))); }
+	RequireType ProcessWrapper(LrHistory const& ref, RespondFunction&& Func) { return std::any_cast<RequireType>(ref(std::forward<RespondFunction>(Func))); }
 
-	enum class Associativity
+	enum class LrAssociativity
 	{
 		Left,
 		Right,
 	};
 
-	struct OpePriority
+	struct LrOpePriority
 	{
 		//OpePriority(std::initializer_list<Symbol> sym) : OpePriority(std::move(sym), Associativity::Left) {}
-		OpePriority(std::vector<Symbol> sym) : OpePriority(std::move(sym), Associativity::Left) {}
-		OpePriority(std::vector<Symbol> sym, Associativity lp) : sym(std::move(sym)), left_priority(lp) {}
+		LrOpePriority(std::vector<LrSymbol> sym) : LrOpePriority(std::move(sym), LrAssociativity::Left) {}
+		LrOpePriority(std::vector<LrSymbol> sym, LrAssociativity lp) : sym(std::move(sym)), left_priority(lp) {}
 		//OpePriority(Symbol sym) : OpePriority(std::vector<Symbol>{ sym }, true) {}
 		//OpePriority(Symbol sym, bool lp) : OpePriority(std::vector<Symbol>{ sym }, lp) {}
-		std::vector<Symbol> sym;
-		Associativity left_priority;
+		std::vector<LrSymbol> sym;
+		LrAssociativity left_priority;
 	};
 
-	struct ProductionInput
+	struct LrProductionInput
 	{
 		constexpr static size_t default_mask() { return std::numeric_limits<size_t>::max(); }
 
-		ProductionInput(std::vector<Symbol> input) : ProductionInput(std::move(input), default_mask()) {}
-		ProductionInput(std::vector<Symbol> input, size_t funtion_enum) : production(std::move(input)), function_mask(funtion_enum) {}
-		ProductionInput(std::vector<Symbol> input, std::set<Symbol> remove, size_t funtion_enum) : production(std::move(input)), function_mask(funtion_enum), force_reduce(std::move(remove)) {}
-		ProductionInput(const ProductionInput&) = default;
-		ProductionInput(ProductionInput&&) = default;
-		ProductionInput& operator=(const ProductionInput&) = default;
-		ProductionInput& operator=(ProductionInput&&) = default;
+		LrProductionInput(std::vector<LrSymbol> input) : LrProductionInput(std::move(input), default_mask()) {}
+		LrProductionInput(std::vector<LrSymbol> input, size_t funtion_enum) : production(std::move(input)), function_mask(funtion_enum) {}
+		LrProductionInput(std::vector<LrSymbol> input, std::set<LrSymbol> remove, size_t funtion_enum) : production(std::move(input)), function_mask(funtion_enum), force_reduce(std::move(remove)) {}
+		LrProductionInput(const LrProductionInput&) = default;
+		LrProductionInput(LrProductionInput&&) = default;
+		LrProductionInput& operator=(const LrProductionInput&) = default;
+		LrProductionInput& operator=(LrProductionInput&&) = default;
 
-		std::vector<Symbol> production;
-		std::set<Symbol> force_reduce;
+		std::vector<LrSymbol> production;
+		std::set<LrSymbol> force_reduce;
 		size_t function_mask;
 	};
 
 	
 }
 
-namespace Potato::Exception::Lr
+namespace Potato::Exception
 {
-	using Potato::Lr::Symbol;
-	using Potato::Lr::History;
 
-	struct Interface
+	struct LrInterface
 	{
-		virtual ~Interface() = default;
+		virtual ~LrInterface() = default;
 	};
 
-	using BaseDefineInterface = DefineInterface<Interface>;
+	using LrBaseDefineInterface = DefineInterface<LrInterface>;
 
-	struct NoterminalUndefined
+	struct LrNoterminalUndefined
 	{
-		using ExceptionInterface = BaseDefineInterface;
-		Symbol value;
+		using ExceptionInterface = LrBaseDefineInterface;
+		LrSymbol value;
 	};
 
-	struct OperatorPriorityConflict
+	struct LrOperatorPriorityConflict
 	{
-		using ExceptionInterface = BaseDefineInterface;
-		Symbol target_symbol;
-		Symbol conflicted_symbol;
+		using ExceptionInterface = LrBaseDefineInterface;
+		LrSymbol target_symbol;
+		LrSymbol conflicted_symbol;
 	};
 
-	struct ProductionRedefined
+	struct LrProductionRedefined
 	{
-		using ExceptionInterface = BaseDefineInterface;
-		std::vector<Symbol> productions;
+		using ExceptionInterface = LrBaseDefineInterface;
+		std::vector<LrSymbol> productions;
 		size_t production_index_1;
 		size_t respond_mask_1;
 		size_t production_index_2;
 		size_t respond_mask_2;
 	};
 
-	struct UnaccableSymbol {
-		using ExceptionInterface = BaseDefineInterface;
+	struct LrUnaccableSymbol {
+		using ExceptionInterface = LrBaseDefineInterface;
 		size_t index;
-		Symbol symbol;
-		History backup_step;
+		LrSymbol symbol;
+		LrHistory backup_step;
 	};
 };

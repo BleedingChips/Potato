@@ -1,6 +1,6 @@
 #include "../Public/Lr0.h"
 #include <optional>
-namespace Potato::Lr0
+namespace Potato
 {
 
 	struct SearchElement
@@ -10,7 +10,7 @@ namespace Potato::Lr0
 		size_t TokenIndex;
 	};
 
-	bool HandleInputToken(Table const& Table, std::vector<Step>& Steps, SearchElement& SE, Symbol Sym, size_t token_index)
+	bool HandleInputToken(Lr0Table const& Table, std::vector<LrStep>& Steps, SearchElement& SE, LrSymbol Sym, size_t token_index)
 	{
 
 		auto CurState = *SE.State.rbegin();
@@ -18,12 +18,12 @@ namespace Potato::Lr0
 		for (size_t i = 0; i < Nodes.shift_count; ++i)
 		{
 			auto TarShift = Table.shifts[i + Nodes.shift_adress];
-			if (TarShift.require_symbol == static_cast<SymbolStorageT>(Sym))
+			if (TarShift.require_symbol == static_cast<LrSymbolStorageT>(Sym))
 			{
 				SE.State.push_back(TarShift.shift_state);
 				if (Sym.IsTerminal() && !Sym.IsEndOfFile())
 				{
-					Step ShiftStep;
+					LrStep ShiftStep;
 					ShiftStep.value = Sym;
 					ShiftStep.shift.token_index = token_index;
 					Steps.push_back(ShiftStep);
@@ -42,10 +42,10 @@ namespace Potato::Lr0
 		size_t production_index;
 		size_t production_count;
 		size_t mask;
-		SymbolStorageT sym;
+		LrSymbolStorageT sym;
 	};
 
-	void ExpandProductions(Table const& Table, SearchElement&& Pros, std::vector<SearchStackElement>& SearchStack, SymbolStorageT sym, std::map<SymbolStorageT, std::set<size_t>> const& force_reduce)
+	void ExpandProductions(Lr0Table const& Table, SearchElement&& Pros, std::vector<SearchStackElement>& SearchStack, LrSymbolStorageT sym, std::map<LrSymbolStorageT, std::set<size_t>> const& force_reduce)
 	{
 		auto CurNode = Table.nodes[*Pros.State.rbegin()];
 		auto Find = force_reduce.find(sym);
@@ -64,25 +64,25 @@ namespace Potato::Lr0
 		SearchStack.insert(SearchStack.end(), std::move_iterator(ForceReduceList.begin()), std::move_iterator(ForceReduceList.end()));
 	}
 
-	Symbol GetSymbol(size_t index, Symbol const* TokenArray, size_t TokenLength)
+	LrSymbol GetSymbol(size_t index, LrSymbol const* TokenArray, size_t TokenLength)
 	{
-		Symbol Sym;
+		LrSymbol Sym;
 		if (index < TokenLength)
 			return TokenArray[index];
 		else if (index == TokenLength)
-			Sym = Symbol::EndOfFile();
+			Sym = LrSymbol::EndOfFile();
 		else
 			assert(false);
-		return Symbol::EndOfFile();
+		return LrSymbol::EndOfFile();
 	}
 
-	History Process(Table const& Table, Symbol const* TokenArray, size_t TokenLength)
+	LrHistory Process(Lr0Table const& Table, LrSymbol const* TokenArray, size_t TokenLength)
 	{
 
 		size_t MaxTokenUsed = 0;
-		std::vector<Step> BackupSteps;
+		std::vector<LrStep> BackupSteps;
 
-		std::vector<Step> Steps;
+		std::vector<LrStep> Steps;
 		std::vector<SearchStackElement> SearchStack;
 		ExpandProductions(Table, { 0, {0}, 0 }, SearchStack, GetSymbol(0, TokenArray, TokenLength), Table.force_reduce);
 		while (!SearchStack.empty())
@@ -92,8 +92,8 @@ namespace Potato::Lr0
 			Steps.resize(Cur.search.StepsRecord);
 			if (Cur.is_reduce)
 			{
-				Step ReduceStep;
-				ReduceStep.value = Symbol::MakeSymbol(Cur.sym);
+				LrStep ReduceStep;
+				ReduceStep.value = LrSymbol::MakeSymbol(Cur.sym);
 				ReduceStep.reduce.production_index = Cur.production_index;
 				ReduceStep.reduce.production_count = Cur.production_count;
 				ReduceStep.reduce.mask = Cur.mask;
@@ -105,10 +105,10 @@ namespace Potato::Lr0
 				ExpandProductions(Table, std::move(Cur.search), SearchStack, GetSymbol(Cur.search.TokenIndex, TokenArray, TokenLength), Table.force_reduce);
 			}
 			else {
-				Symbol Sym = GetSymbol(Cur.search.TokenIndex, TokenArray, TokenLength);
+				LrSymbol Sym = GetSymbol(Cur.search.TokenIndex, TokenArray, TokenLength);
 				bool re = HandleInputToken(Table, Steps, Cur.search, Sym, Cur.search.TokenIndex);
 				if (re) {
-					if (Sym == Symbol::EndOfFile())
+					if (Sym == LrSymbol::EndOfFile())
 						return { std::move(Steps) };
 					else {
 						++Cur.search.TokenIndex;
@@ -123,12 +123,12 @@ namespace Potato::Lr0
 				}
 			}
 		}
-		throw Exception::MakeExceptionTuple(Exception::Lr::UnaccableSymbol{ MaxTokenUsed, MaxTokenUsed < TokenLength ? TokenArray[MaxTokenUsed] : Symbol::EndOfFile(), std::move(BackupSteps) });
+		throw Exception::MakeExceptionTuple(Exception::LrUnaccableSymbol{ MaxTokenUsed, MaxTokenUsed < TokenLength ? TokenArray[MaxTokenUsed] : LrSymbol::EndOfFile(), std::move(BackupSteps) });
 	}
 
-	std::set<Symbol> CalNullableSet(const std::vector<ProductionInput>& production)
+	std::set<LrSymbol> CalNullableSet(const std::vector<LrProductionInput>& production)
 	{
-		std::set<Symbol> result;
+		std::set<LrSymbol> result;
 		bool set_change = true;
 		while (set_change)
 		{
@@ -144,7 +144,7 @@ namespace Potato::Lr0
 					bool nullable_set = true;
 					for (size_t index = 1; index < ite.production.size(); ++index)
 					{
-						Symbol symbol = ite.production[index];
+						LrSymbol symbol = ite.production[index];
 						if (symbol.IsTerminal() || result.find(symbol) == result.end())
 						{
 							nullable_set = false;
@@ -159,12 +159,12 @@ namespace Potato::Lr0
 		return result;
 	}
 
-	std::map<Symbol, std::set<Symbol>> CalNoterminalFirstSet(
-		const std::vector<ProductionInput>& production
+	std::map<LrSymbol, std::set<LrSymbol>> CalNoterminalFirstSet(
+		const std::vector<LrProductionInput>& production
 	)
 	{
 		auto nullable_set = CalNullableSet(production);
-		std::map<Symbol, std::set<Symbol>> result;
+		std::map<LrSymbol, std::set<LrSymbol>> result;
 		bool set_change = true;
 		while (set_change)
 		{
@@ -212,7 +212,7 @@ namespace Potato::Lr0
 		}
 	};
 
-	std::set<ProductionIndex> ExpandProductionIndexSet(std::set<ProductionIndex> const& Pro, std::vector<ProductionInput> const& Productions, std::vector<Symbol> const& AddProduction)
+	std::set<ProductionIndex> ExpandProductionIndexSet(std::set<ProductionIndex> const& Pro, std::vector<LrProductionInput> const& Productions, std::vector<LrSymbol> const& AddProduction)
 	{
 		std::set<ProductionIndex> Result;
 		std::vector<ProductionIndex> SearchStack(Pro.begin(), Pro.end());
@@ -223,7 +223,7 @@ namespace Potato::Lr0
 			auto Re = Result.insert(Ptr);
 			if (Re.second)
 			{
-				std::vector<Symbol> const* Target;
+				std::vector<LrSymbol> const* Target;
 				if (Ptr.index < Productions.size())
 					Target = &(Productions[Ptr.index].production);
 				else
@@ -248,7 +248,7 @@ namespace Potato::Lr0
 							SearchStack.push_back({ Productions.size(), 1 });
 						}
 						if (!Finded)
-							throw Exception::MakeExceptionTuple(Exception::Lr::NoterminalUndefined{ TargetSymbol });
+							throw Exception::MakeExceptionTuple(Exception::LrNoterminalUndefined{ TargetSymbol });
 					}
 				}
 			}
@@ -256,11 +256,11 @@ namespace Potato::Lr0
 		return Result;
 	}
 
-	std::map<Symbol, std::set<Symbol>> TranslateOperatorPriority(
-		const std::vector<OpePriority>& priority
+	std::map<LrSymbol, std::set<LrSymbol>> TranslateOperatorPriority(
+		const std::vector<LrOpePriority>& priority
 	)
 	{
-		std::map<Symbol, std::set<Symbol>> ope_priority;
+		std::map<LrSymbol, std::set<LrSymbol>> ope_priority;
 		for (size_t index = 0; index < priority.size(); ++index)
 		{
 			auto& [opes, left] = priority[index];
@@ -269,7 +269,7 @@ namespace Potato::Lr0
 				auto Inserted = ope_priority.insert({ ite, {} });
 				if (Inserted.second)
 				{
-					if (left == Associativity::Left)
+					if (left == LrAssociativity::Left)
 					{
 						for (auto& ite2 : opes)
 							Inserted.first->second.insert(ite2);
@@ -281,22 +281,22 @@ namespace Potato::Lr0
 							Inserted.first->second.insert(ite2);
 					}
 				}else
-					throw Exception::MakeExceptionTuple(Exception::Lr::OperatorPriorityConflict{ ite, ite });
+					throw Exception::MakeExceptionTuple(Exception::LrOperatorPriorityConflict{ ite, ite });
 			}
 		}
-		return std::move(ope_priority);
+		return ope_priority;
 	}
 
-	Table CreateTable(Symbol start_symbol, std::vector<ProductionInput> const& production, std::vector<OpePriority> const& priority)
+	Lr0Table CreateLr0Table(LrSymbol start_symbol, std::vector<LrProductionInput> const& production, std::vector<LrOpePriority> const& priority)
 	{
-		Table result;
+		Lr0Table result;
 
 		auto OperatorPriority = TranslateOperatorPriority(priority);
 
 		for (size_t index = 0; index < production.size(); ++index)
 		{
 			auto& CurPro = production[index];
-			Table::Production P{ CurPro.production[0], CurPro.production.size() - 1 , CurPro.function_mask };
+			Lr0Table::Production P{ CurPro.production[0], CurPro.production.size() - 1 , CurPro.function_mask };
 			if (CurPro.production.size() >= 3)
 			{
 				auto Sym = CurPro.production[CurPro.production.size() - 2];
@@ -313,7 +313,7 @@ namespace Potato::Lr0
 			result.productions.push_back(std::move(P));
 		}
 
-		std::vector<Symbol> AppendProduction = {Symbol::StartSymbol(), start_symbol, Symbol::EndOfFile()};
+		std::vector<LrSymbol> AppendProduction = { LrSymbol::StartSymbol(), start_symbol, LrSymbol::EndOfFile()};
 
 		std::set<ProductionIndex> PP({ ProductionIndex{ production.size(), 1} });
 		PP = ExpandProductionIndexSet(PP, production, AppendProduction);
@@ -323,11 +323,11 @@ namespace Potato::Lr0
 		for (size_t i = 0; i < StateMapping.size(); ++i)
 		{
 			auto Cur = StateMappingVec[i];
-			std::map<Symbol, std::set<ProductionIndex>> ShiftMapping;
+			std::map<LrSymbol, std::set<ProductionIndex>> ShiftMapping;
 			std::set<size_t> ReduceState;
 			for (auto& Ite : Cur->first)
 			{
-				std::vector<Symbol> const* Target;
+				std::vector<LrSymbol> const* Target;
 				if (Ite.index < production.size())
 					Target = &(production[Ite.index].production);
 				else
@@ -342,7 +342,7 @@ namespace Potato::Lr0
 					ReduceState.insert(Ite.index);
 				}
 			}
-			std::vector<Table::Shift> Shiftting;
+			std::vector<Lr0Table::Shift> Shiftting;
 			for (auto& ite : ShiftMapping)
 			{
 				auto ExpanedSet = ExpandProductionIndexSet(ite.second, production, AppendProduction);
@@ -351,9 +351,9 @@ namespace Potato::Lr0
 					StateMappingVec.push_back(Inserted.first);
 				Shiftting.push_back({ ite.first, Inserted.first->second });
 			}
-			std::vector<Table::Reduce> Reduceing;
+			std::vector<Lr0Table::Reduce> Reduceing;
 			for (auto& ite : ReduceState)
-				Reduceing.push_back(Table::Reduce{ ite });
+				Reduceing.push_back(Lr0Table::Reduce{ ite });
 			result.nodes.push_back({result.reduces.size(), Reduceing.size(), result.shifts.size(),  Shiftting.size()});
 			result.reduces.insert(result.reduces.end(), Reduceing.begin(), Reduceing.end());
 			result.shifts.insert(result.shifts.end(), Shiftting.begin(), Shiftting.end());

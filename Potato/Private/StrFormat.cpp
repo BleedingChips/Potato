@@ -3,15 +3,15 @@
 #include "../Public/StrEncode.h"
 namespace Potato::StrFormat
 {
-	Lexical::Table const& Analyzer()
+	LexicalTable const& Analyzer()
 	{
-		static Lexical::RegexInitTuple PatternRex[] = {
+		static LexicalRegexInitTuple PatternRex[] = {
 			{UR"([^\{\}]+)"},
 			{UR"(\{[^\{\}]*?\})"},
 			{UR"(\}\})"},
 			{UR"(\{\{)"},
 		};
-		static Lexical::Table instance = Lexical::CreateLexicalFromRegexsReverse(PatternRex, std::size(PatternRex));
+		static LexicalTable instance = CreateLexicalFromRegexsReverse(PatternRex, std::size(PatternRex));
 		return instance;
 	}
 
@@ -47,7 +47,7 @@ namespace Potato::StrFormat
 			}
 			return { Ref, std::move(patterns) };
 		}
-		catch (Exception::Lexical::UnaccaptableItem const& str)
+		catch (Exception::LexicalUnaccaptableItem const& str)
 		{
 			throw Error::UnsupportPatternString{ std::u32string(Ref), std::u32string(str.possible_token) };
 		}
@@ -114,13 +114,13 @@ namespace Potato::StrFormat
 namespace Potato::StrFormat
 {
 
-	static Lexical::RegexInitTuple FormatRex[] = {
+	static LexicalRegexInitTuple FormatRex[] = {
 		{UR"(\s)"},
 		{UR"(-hex)"},
 		//UR"(-e)"
 	};
 
-	static Lexical::Table FormatTable = Lexical::CreateLexicalFromRegexsReverse(FormatRex, std::size(FormatRex));
+	static LexicalTable FormatTable = CreateLexicalFromRegexsReverse(FormatRex, std::size(FormatRex));
 
 	struct Paras
 	{
