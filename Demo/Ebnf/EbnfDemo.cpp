@@ -12,7 +12,7 @@ enum class Noterminal
 	Exp = 0,
 };
 
-constexpr Lr0::Symbol operator*(Noterminal input) { return Lr0::Symbol(static_cast<size_t>(input), Lr0::noterminal); }
+constexpr LrSymbol operator*(Noterminal input) { return LrSymbol(static_cast<size_t>(input), noterminal); }
 
 enum class Terminal
 {
@@ -21,32 +21,32 @@ enum class Terminal
 	Multi
 };
 
-constexpr Lr0::Symbol operator*(Terminal input) { return Lr0::Symbol(static_cast<size_t>(input), Lr0::terminal); }
+constexpr LrSymbol operator*(Terminal input) { return LrSymbol(static_cast<size_t>(input), terminal); }
 
 std::u32string_view EbnfCode1();
 
 int main()
 {
 
-	Lexical::RegexInitTuple Rexs[] = {
+	LexicalRegexInitTuple Rexs[] = {
 		{UR"((\+|\-)?[1-9][0-9]*)", },
 		{UR"(\+)", },
 		{UR"(\*)", },
-		{UR"(\s)", Lexical::DefaultIgnoreMask()},
+		{UR"(\s)", LexicalDefaultIgnoreMask()},
 	};
 
-	Lexical::Table LexicalTable1 = Lexical::CreateLexicalFromRegexs(Rexs, std::size(Rexs));
+	LexicalTable LexicalTable1 = CreateLexicalFromRegexs(Rexs, std::size(Rexs));
 
 	auto StrElement = LexicalTable1.Process(UR"(1 + +10 * -2)");
 
-	std::vector<Lr0::Symbol> Syms;
+	std::vector<LrSymbol> Syms;
 	std::vector<int> Datas;
 
 	for (auto& Ite : StrElement)
 	{
 		if (Ite.acception != 3)
 		{
-			Syms.push_back(Lr0::Symbol(Ite.acception, Lr0::TerminalT{}));
+			Syms.push_back(LrSymbol(Ite.acception, LrTerminalT{}));
 			if (Ite.acception == 0)
 			{
 				int data = 0;
@@ -58,7 +58,7 @@ int main()
 		}
 	}
 
-	Lr0::Table tab = Lr0::CreateTable(
+	Lr0Table tab = CreateLr0Table(
 		*Noterminal::Exp,
 	{
 		{{*Noterminal::Exp, *Terminal::Num}, 1},
@@ -68,9 +68,9 @@ int main()
 		{ {{*Terminal::Multi}}, {{*Terminal::Add}} }
 	);
 
-	auto His = Lr0::Process(tab, Syms.data(), Syms.size());
+	auto His = Process(tab, Syms.data(), Syms.size());
 
-	int result = std::any_cast<int>(Lr::Process(His, [&](Lr0::NTElement& E) -> std::any {
+	int result = std::any_cast<int>(Process(His, [&](LrNTElement& E) -> std::any {
 		switch (E.mask)
 		{
 		case 1: return E[0].Consume();
@@ -81,7 +81,7 @@ int main()
 		}
 		return {};
 	},
-	[&](Lr0::TElement& E) -> std::any
+	[&](LrTElement& E) -> std::any
 	{
 		if (E.value == *Terminal::Num)
 			return Datas[E.token_index];
@@ -91,10 +91,9 @@ int main()
 
 	std::cout << result << std::endl;
 	
-	Ebnf::Table tab2 = Ebnf::CreateTable(EbnfCode1());
-	//auto His2 = Ebnf::Process(tab2, U"1 + 2 + 3 * 4 - 4 / 2 + 2 * +3 * -2");
-	auto His2 = Ebnf::Process(tab2, U" 1 + 23 * !!!#123");
-	int result2 = std::any_cast<int>(Ebnf::Process(His2, [](Ebnf::NTElement& e) -> std::any {
+	EbnfTable tab2 = CreateEbnfTable(EbnfCode1());
+	auto His2 = Process(tab2, U"1 + 2 + 3 * 4 - 4 / 2 + 2 * +3 * -2");
+	int result2 = std::any_cast<int>(Process(His2, [](EbnfNTElement& e) -> std::any {
 		if (!e.IsPredefine())
 		{
 			switch (e.mask)
@@ -110,7 +109,7 @@ int main()
 		}
 		return {};
 	},
-	[](Ebnf::TElement& e)->std::any
+	[](EbnfTElement& e)->std::any
 	{
 		if (e.mask == 1)
 		{
@@ -141,7 +140,6 @@ $ := <Exp>
     := <Exp> '/' <Exp> : [4]
     := <Exp> '-' <Exp> : [5]
     := '(' <Exp> ')' : [6]
-	:= {'!'} {'&'} '#' Num : [7]
 
 %%%
 

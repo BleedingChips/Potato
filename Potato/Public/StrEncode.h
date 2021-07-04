@@ -229,13 +229,13 @@ namespace Potato::StrEncode
 		{
 			RequestResult result;
 			CharWrapper<SameType> wrapper;
-			auto ite_from = from;
-			while (!from.empty())
+			auto ite_form = from;
+			while (!ite_form.empty())
 			{
-				DecodeResult decode_result = wrapper.DecodeOne(ite_from);
+				DecodeResult decode_result = wrapper.DecodeOne(ite_form);
 				if (decode_result.used_length != 0 && result.require_length + decode_result.used_length <= to.size())
 				{
-					ite_from = ite_from.substr(decode_result.used_length);
+					ite_form = ite_form.substr(decode_result.used_length);
 					result.require_length += decode_result.used_length;
 					result.characters += 1;
 				}

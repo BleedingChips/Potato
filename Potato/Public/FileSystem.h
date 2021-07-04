@@ -56,17 +56,17 @@ namespace Potato
 		Path SubPath(size_t start, size_t count = std::numeric_limits<size_t>::max()) const;
 		Path Parent() const;
 
-		Path FindCurentDirectory(std::function<bool (Path const&)> funcobj) const;
-		Path FindChildDirectory(std::function<bool(Path const&)> funcobj, size_t stack = std::numeric_limits<size_t>::max()) const;
-		Path FindParentDirectory(std::function<bool(Path const&)> funcobj, size_t stack = std::numeric_limits<size_t>::max()) const;
-		std::vector<Path> FindAllCurentDirectory(std::function<bool(Path const&)> funcobj) const;
-		std::vector<Path> FindAllChildDirectory(std::function<bool(Path const&)> funcobj, size_t stack = std::numeric_limits<size_t>::max()) const;
-		std::vector<Path> FindAllParentDirectory(std::function<bool(Path const&)> funcobj, size_t stack = std::numeric_limits<size_t>::max()) const;
+		Path FindCurentDirectory(std::function<bool (Path&)> funcobj) const;
+		Path FindChildDirectory(std::function<bool(Path&)> funcobj, size_t stack = std::numeric_limits<size_t>::max()) const;
+		Path FindParentDirectory(std::function<bool(Path&)> funcobj, size_t stack = std::numeric_limits<size_t>::max()) const;
+		std::vector<Path> FindAllCurentDirectory(std::function<bool(Path&)> funcobj) const;
+		std::vector<Path> FindAllChildDirectory(std::function<bool(Path&)> funcobj, size_t stack = std::numeric_limits<size_t>::max()) const;
+		std::vector<Path> FindAllParentDirectory(std::function<bool(Path&)> funcobj, size_t stack = std::numeric_limits<size_t>::max()) const;
 
 		std::u32string_view Last() const;
-		std::u32string ToU32String() const{ return path; }
-		std::u16string ToU16String() const { return StrEncode::AsWrapper(path.data(), path.size()).ToString<char16_t>(); }
-		std::u8string ToU8String() const { return StrEncode::AsWrapper(path.data(), path.size()).ToString<char8_t>(); }
+
+		template<typename CharType>
+		decltype(auto) ToString() const { return ToStringImp(ItSelf<CharType>{}); }
 
 		static std::vector<std::byte> LoadEntireFile(Path const& ref);
 		static bool SaveFile(Path const& ref, std::span<std::byte const> data);
@@ -74,6 +74,10 @@ namespace Potato
 		static Path Current();
 		
 	private:
+
+		template<typename InputType>
+		decltype(auto) ToStringImp(ItSelf<InputType>) const { return StrEncode::AsWrapper(path.data(), path.size()).ToString<InputType>(); }
+		decltype(auto) ToStringImp(ItSelf<char32_t>) const { return path; }
 
 		struct Element
 		{

@@ -313,7 +313,7 @@ namespace Potato
 		return Path(CurPath);
 	}
 
-	Path Path::FindCurentDirectory(std::function<bool(Path const&)> funcobj) const
+	Path Path::FindCurentDirectory(std::function<bool(Path&)> funcobj) const
 	{
 		if (funcobj && IsAbsolute())
 		{
@@ -329,7 +329,7 @@ namespace Potato
 		return {};
 	}
 
-	Path Path::FindChildDirectory(std::function<bool(Path const&)> funcobj, size_t stack) const
+	Path Path::FindChildDirectory(std::function<bool(Path&)> funcobj, size_t stack) const
 	{
 		if (funcobj && stack > 0 && IsAbsolute())
 		{
@@ -359,7 +359,7 @@ namespace Potato
 		return {};
 	}
 
-	Path Path::FindParentDirectory(std::function<bool(Path const&)> funcobj, size_t stack) const
+	Path Path::FindParentDirectory(std::function<bool(Path&)> funcobj, size_t stack) const
 	{
 		if (funcobj && stack > 0 && IsAbsolute())
 		{
@@ -387,30 +387,30 @@ namespace Potato
 		return {};
 	}
 
-	std::vector<Path> Path::FindAllCurentDirectory(std::function<bool(Path const&)> funcobj) const
+	std::vector<Path> Path::FindAllCurentDirectory(std::function<bool(Path&)> funcobj) const
 	{
 		std::vector<Path> result;
-		FindCurentDirectory([&](Path const& pa) -> bool {
+		FindCurentDirectory([&](Path& pa) -> bool {
 			if(funcobj(pa))
 				result.push_back(pa);
 			return false;
 		});
 		return result;
 	}
-	std::vector<Path> Path::FindAllChildDirectory(std::function<bool(Path const&)> funcobj, size_t stack) const
+	std::vector<Path> Path::FindAllChildDirectory(std::function<bool(Path&)> funcobj, size_t stack) const
 	{
 		std::vector<Path> result;
-		FindChildDirectory([&](Path const& pa) -> bool {
+		FindChildDirectory([&](Path& pa) -> bool {
 			if (funcobj(pa))
 				result.push_back(pa);
 			return false;
 		}, stack);
 		return result;
 	}
-	std::vector<Path> Path::FindAllParentDirectory(std::function<bool(Path const&)> funcobj, size_t stack) const
+	std::vector<Path> Path::FindAllParentDirectory(std::function<bool(Path&)> funcobj, size_t stack) const
 	{
 		std::vector<Path> result;
-		FindParentDirectory([&](Path const& pa) -> bool {
+		FindParentDirectory([&](Path& pa) -> bool {
 			if (funcobj(pa))
 				result.push_back(pa);
 			return false;
@@ -456,7 +456,7 @@ namespace Potato
 	{
 		if (ref.GetType() == Path::Style::DosAbsolute || ref.GetType() == Path::Style::UnixAbsolute)
 		{
-			std::filesystem::path tar(ref.ToU32String());
+			std::filesystem::path tar(ref.ToString<wchar_t>());
 			std::ifstream file(tar, std::ios::binary);
 			if (file.good()) 
 			{
@@ -474,7 +474,7 @@ namespace Potato
 	{
 		if (ref.GetType() == Path::Style::DosAbsolute || ref.GetType() == Path::Style::UnixAbsolute)
 		{
-			std::filesystem::path tar(ref.ToU32String());
+			std::filesystem::path tar(ref.ToString<wchar_t>());
 			std::ofstream file(tar, std::ios::binary);
 			if (file.good())
 			{

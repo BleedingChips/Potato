@@ -25,45 +25,43 @@ namespace Potato::StrScanner
 	{
 		UnfaSerilizedTable table;
 		template<typename ...TargetType>
-		size_t Process(std::u32string_view code, TargetType&... all_target);
+		std::optional<size_t> Process(std::u32string_view code, TargetType&... all_target) const;
 	private:
 		template<typename CurTarget, typename ...TargetType>
-		void ProcessImplement(UnfaMarch::Sub const* marching, size_t& last_marching, CurTarget& target, TargetType&... other)
+		size_t ProcessImplement(UnfaMarch::Sub const* marching, size_t last_marching, CurTarget& target, TargetType&... other) const
 		{
 			if(last_marching > 0)
 			{
 				DirectProcess(marching[0].capture, target);
-				--last_marching;
-				marching += 1;
-				ProcessImplement(marching, last_marching, other...);
+				return this->ProcessImplement(marching + 1, last_marching - 1, other...);
 			}
+			return 0;
 		}
-		void ProcessImplement(UnfaMarch::Sub const* marching, size_t& last_marching){}
+		size_t ProcessImplement(UnfaMarch::Sub const* marching, size_t last_marching) const{ return last_marching;  }
 	};
 
 	template<typename ...TargetType>
-	size_t Pattern::Process(std::u32string_view code, TargetType&... all_target)
+	std::optional<size_t> Pattern::Process(std::u32string_view code, TargetType&... all_target) const
 	{
 		auto result = table.Mark(code);
 		if(result)
 		{
-			size_t used = result->sub_capture.size();
-			ProcessImplement(result->sub_capture.data(), used, all_target...);
-			return result->sub_capture.size() - used;
+			auto last = this->ProcessImplement(result->sub_capture.data(), result->sub_capture.size(), all_target...);
+			return result->sub_capture.size() - last;
 		}
-		return 0;
+		return {};
 	}
 
 	inline Pattern CreatePattern(std::u32string_view pattern){ return { CreateUnfaTableFromRegex(pattern).Simplify() }; }
 
 	template<typename ...TargetType>
-	void Process(Pattern const& pattern, std::u32string_view in, TargetType& ... tar_type){ pattern(in, tar_type...); }
+	std::optional<size_t> Process(Pattern const& pattern, std::u32string_view in, TargetType& ... tar_type){ return pattern.Process(in, tar_type...); }
 
 	template<typename ...TargetType>
-	void Process(std::u32string_view pattern, std::u32string_view in, TargetType& ... tar_type)
+	std::optional<size_t> Process(std::u32string_view pattern, std::u32string_view in, TargetType& ... tar_type)
 	{
 		Pattern cur_pattern{CreateUnfaTableFromRegex(pattern)};
-		cur_pattern.Process(in, tar_type...);
+		return cur_pattern.Process(in, tar_type...);
 	}
 	
 }

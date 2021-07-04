@@ -81,6 +81,56 @@ namespace Potato
 		size_t index = 0;
 		bool IsCustomType() const noexcept { return storage_type == MemoryDescription::CUSTOM; }
 		size_t Index() const noexcept { return index; }
+
+		template<typename Type> struct DefaultTypeWrapper { static constexpr bool Value = false; };
+		template<> struct DefaultTypeWrapper<uint8_t> {
+			static constexpr bool Value = true;
+			TypeIndex operator()() const noexcept { return TypeIndex{ MemoryDescription::UINT8, 0 }; }
+		};
+		template<> struct DefaultTypeWrapper<uint16_t> {
+			static constexpr bool Value = true;
+			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::UINT16, 0 }; }
+		};
+		template<> struct DefaultTypeWrapper<uint32_t> {
+			static constexpr bool Value = true;
+			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::UINT32, 0 }; }
+		};
+		template<> struct DefaultTypeWrapper<uint64_t> {
+			static constexpr bool Value = true;
+			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::UINT64, 0 }; }
+		};
+		template<> struct DefaultTypeWrapper<int8_t> {
+			static constexpr bool Value = true;
+			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::INT8, 0 }; }
+		};
+		template<> struct DefaultTypeWrapper<int16_t> {
+			static constexpr bool Value = true;
+			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::INT16, 0 }; }
+		};
+		template<> struct DefaultTypeWrapper<int32_t> {
+			static constexpr bool Value = true;
+			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::INT32, 0 }; }
+		};
+		template<> struct DefaultTypeWrapper<int64_t> {
+			static constexpr bool Value = true;
+			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::INT64, 0 }; }
+		};
+		template<> struct DefaultTypeWrapper<bool> {
+			static constexpr bool Value = true;
+			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::BOOL, 0 }; }
+		};
+		template<> struct DefaultTypeWrapper<float> {
+			static constexpr bool Value = true;
+			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::FLOAT32, 0 }; }
+		};
+		template<> struct DefaultTypeWrapper<double> {
+			static constexpr bool Value = true;
+			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::FLOAT32, 0 }; }
+		};
+
+
+		template<typename Input>
+		static TypeIndex DefaultType() noexcept requires(DefaultTypeWrapper<Input>::Value) { return  DefaultTypeWrapper<Input>{}(); }
 	};
 
 	using TypeMask = std::optional<TypeIndex>;
