@@ -5,6 +5,7 @@
 #include <string_view>
 #include <vector>
 #include <span>
+#include <fstream>
 namespace Potato::StrEncode
 {
 
@@ -41,6 +42,7 @@ namespace Potato::StrEncode
 	struct CharWrapper<char8_t>
 	{
 		using Type = char8_t;
+		size_t RequireSpace(Type);
 		size_t DetectOne(std::basic_string_view<Type> input);
 		DecodeResult DecodeOne(std::basic_string_view<Type> input);
 		size_t EncodeRequest(char32_t temporary);
@@ -56,6 +58,7 @@ namespace Potato::StrEncode
 	struct CharWrapper<char16_t>
 	{
 		using Type = char16_t;
+		size_t RequireSpace(Type);
 		size_t DetectOne(std::basic_string_view<Type> input);
 		DecodeResult DecodeOne(std::basic_string_view<Type> input);
 		size_t EncodeRequest(char32_t temporary);
@@ -67,6 +70,7 @@ namespace Potato::StrEncode
 	{
 		using Type = char16_t;
 		CharWrapper<char16_t> wrapper;
+		size_t RequireSpace(Type);
 		size_t DetectOne(std::basic_string_view<Type> input);
 		DecodeResult DecodeOne(std::basic_string_view<Type> input);
 		size_t EncodeRequest(char32_t temporary){ return wrapper.EncodeRequest(temporary);}
@@ -77,6 +81,7 @@ namespace Potato::StrEncode
 	struct CharWrapper<char32_t>
 	{
 		using Type = char32_t;
+		size_t RequireSpace(Type) { return 1; }
 		size_t DetectOne(std::basic_string_view<Type> input){ return (!input.empty() && input[0] < 0x110000) ? 1 : 0; }
 		DecodeResult DecodeOne(std::basic_string_view<Type> input){ return (!input.empty() && input[0] < 0x110000) ? DecodeResult{1, input[0]} : DecodeResult{ 0, {} };  }
 		size_t EncodeRequest(char32_t temporary){ return temporary < 0x110000 ? 1 : 0; }
@@ -88,6 +93,7 @@ namespace Potato::StrEncode
 	{
 		using Type = char32_t;
 		CharWrapper<char32_t> wrapper;
+		size_t RequireSpace(Type) { return 1; }
 		size_t DetectOne(std::basic_string_view<Type> input);
 		DecodeResult DecodeOne(std::basic_string_view<Type> input);
 		size_t EncodeRequest(char32_t temporary){ return wrapper.EncodeRequest(temporary); }
@@ -100,6 +106,7 @@ namespace Potato::StrEncode
 		using RealType = std::conditional_t<sizeof(wchar_t) == sizeof(char16_t), char16_t, char32_t>;
 		using Type = wchar_t;
 		CharWrapper<RealType> wrapper;
+		size_t RequireSpace(Type input) { return wrapper.RequireSpace(static_cast<RealType>(input)); }
 		size_t DetectOne(std::basic_string_view<Type> input){ return wrapper.DetectOne({reinterpret_cast<RealType const*>(input.data()), input.size()}); }
 		DecodeResult DecodeOne(std::basic_string_view<Type> input){ return wrapper.DecodeOne({ reinterpret_cast<RealType const*>(input.data()), input.size() }); }
 		size_t EncodeRequest(char32_t temporary) { return wrapper.EncodeRequest(temporary); }
@@ -112,6 +119,7 @@ namespace Potato::StrEncode
 		using RealType = std::conditional_t<sizeof(wchar_t) == sizeof(char16_t), char16_t, char32_t>;
 		using Type = wchar_t;
 		CharWrapper<ReverseEndianness<RealType>> wrapper;
+		size_t RequireSpace(Type input) { return wrapper.RequireSpace(static_cast<RealType>(input)); }
 		size_t DetectOne(std::basic_string_view<Type> input) { return wrapper.DetectOne({ reinterpret_cast<RealType const*>(input.data()), input.size() }); }
 		DecodeResult DecodeOne(std::basic_string_view<Type> input) { return wrapper.DecodeOne({ reinterpret_cast<RealType const*>(input.data()), input.size() }); }
 		size_t EncodeRequest(char32_t temporary) { return wrapper.EncodeRequest(temporary); }
@@ -309,7 +317,6 @@ namespace Potato::StrEncode
 		else
 			static_assert(false, "unsupport type");
 	}
-
 	
 	struct DocumentWrapper
 	{
@@ -435,4 +442,15 @@ namespace Potato::StrEncode
 		default: return {};
 		};
 	}
+
+	struct HugeDocumenetReader
+	{
+		HugeDocumenetReader(std::u32string_view Path);
+		operator bool () const noexcept{ return fstream.is_open(); }
+		std::optional<std::u32string> ReadLine(bool KeepLine);
+		std::optional<char32_t> ReadOne();
+	private:
+		BomType bom_type = BomType::UTF8_NoBom;
+		std::ifstream fstream;
+	};
 }

@@ -1,20 +1,6 @@
 #include "../Public/StrEncode.h"
 namespace Potato::StrEncode
 {
-
-	size_t UTF8RequireSpace(char8_t first_char)
-	{
-		if ((first_char & 0xF8) == 0xF0)
-			return 4;
-		else if ((first_char & 0xF0) == 0xE0)
-			return 3;
-		else if ((first_char & 0xE0) == 0xC0)
-			return 2;
-		else if ((first_char & 0x80) == 0)
-			return 1;
-		else
-			return 0;
-	}
 	
 	bool CheckUTF8(char8_t const* input, size_t space)
 	{
@@ -30,12 +16,26 @@ namespace Potato::StrEncode
 			return true;
 		}
 	}
+
+	size_t CharWrapper<char8_t>::RequireSpace(Type first_char)
+	{
+		if ((first_char & 0xF8) == 0xF0)
+			return 4;
+		else if ((first_char & 0xF0) == 0xE0)
+			return 3;
+		else if ((first_char & 0xE0) == 0xC0)
+			return 2;
+		else if ((first_char & 0x80) == 0)
+			return 1;
+		else
+			return 0;
+	}
 	
 	size_t CharWrapper<char8_t>::DetectOne(std::basic_string_view<Type> input)
 	{
 		if(!input.empty())
 		{
-			auto rs = UTF8RequireSpace(input[0]);
+			auto rs = RequireSpace(input[0]);
 			if(input.size() >= rs && CheckUTF8(input.data() + 1, rs - 1))
 				return rs;
 		}
@@ -45,7 +45,7 @@ namespace Potato::StrEncode
 	DecodeResult CharWrapper<char8_t>::DecodeOne(std::basic_string_view<Type> input)
 	{
 		assert(!input.empty());
-		auto rs = UTF8RequireSpace(input[0]);
+		auto rs = RequireSpace(input[0]);
 		assert(input.size() >= rs);
 		switch (rs)
 		{
@@ -102,9 +102,9 @@ namespace Potato::StrEncode
 		return rr;
 	}
 
-	size_t CheckUTF16RequireSize(char16_t input)
+	size_t CharWrapper<char16_t>::RequireSpace(Type input)
 	{
-		if((input & 0xD800) == 0xD800)
+		if ((input & 0xD800) == 0xD800)
 			return 2;
 		return 1;
 	}
@@ -182,6 +182,12 @@ namespace Potato::StrEncode
 				std::swap(element[k], element[element_length - k - 1]);
 			element += element_length;
 		}
+	}
+
+	size_t CharWrapper<ReverseEndianness<char16_t>>::RequireSpace(Type Input)
+	{
+		Reverser(&Input, sizeof(char16_t), 1);
+		return wrapper.RequireSpace(Input);
 	}
 
 	size_t CharWrapper<ReverseEndianness<char16_t>>::DetectOne(std::basic_string_view<Type> input)
@@ -333,5 +339,102 @@ namespace Potato::StrEncode
 			document = input;
 			document_without_bom = input.subspan(ToBinary(type).size());
 		}
+	}
+
+	HugeDocumenetReader::HugeDocumenetReader(std::u32string_view Path)
+	{
+		auto path_str = AsWrapper(Path).ToString<wchar_t>();
+		fstream.open(path_str,  std::ios::binary);
+		if (fstream.is_open())
+		{
+			std::byte Bom[4];
+			fstream.read(reinterpret_cast<char*>(Bom), sizeof(std::byte) * 4);
+			bom_type = DetectBom(Bom);
+			fstream.seekg(ToBinary(bom_type).size(), std::ios_base::beg);
+		}
+	}
+
+	template<typename Storage, size_t size, typename Wrapper>
+	std::optional<char32_t> Read(std::ifstream& fstream, Wrapper wrapper)
+	{
+		Storage Data[size];
+		fstream.read(reinterpret_cast<char*>(Data), sizeof(Storage));
+		auto re_size = wrapper.RequireSpace(Data[0]);
+		if (re_size > 0)
+		{
+			assert(re_size <= size);
+			fstream.read(reinterpret_cast<char*>(Data + 1), (re_size - 1) * sizeof(Storage));
+			return wrapper.DecodeOne({ Data, re_size }).temporary;
+		}
+		return {};
+	}
+
+	std::optional<char32_t> HugeDocumenetReader::ReadOne()
+	{
+		if (fstream.good())
+		{
+			switch (bom_type)
+			{
+			case Potato::StrEncode::BomType::UTF8_NoBom:
+			case Potato::StrEncode::BomType::UTF8:
+				return Read<char8_t, 8>(fstream, StrEncode::CharWrapper<char8_t>{});
+			case Potato::StrEncode::BomType::UTF16LE:
+			case Potato::StrEncode::BomType::UTF16BE:
+			{
+				auto P = DefaultBom<char16_t>();
+				if (bom_type == P)
+				{
+					return Read<char16_t, 2>(fstream, StrEncode::CharWrapper<char16_t>{});
+				}
+				else {
+					return Read<char16_t, 2>(fstream, StrEncode::CharWrapper<StrEncode::ReverseEndianness<char16_t>>{});
+				}
+			}
+			case Potato::StrEncode::BomType::UTF32LE:
+			case Potato::StrEncode::BomType::UTF32BE:
+			{
+				auto P = DefaultBom<char32_t>();
+				if (bom_type == P)
+				{
+					return Read<char32_t, 1>(fstream, StrEncode::CharWrapper<char32_t>{});
+				}
+				else {
+					return Read<char32_t, 1>(fstream, StrEncode::CharWrapper<StrEncode::ReverseEndianness<char32_t>>{});
+				}
+			}
+			default:
+				break;
+			}
+		}
+		return {};
+	}
+
+	std::optional<std::u32string> HugeDocumenetReader::ReadLine(bool KeepLine)
+	{
+		if (fstream.good())
+		{
+			std::u32string result;
+			bool has_special = 0;
+			while (true)
+			{
+				auto cur = ReadOne();
+				if (cur)
+				{
+					if(*cur == U'\r' && KeepLine)
+						result.push_back(*cur);
+					else if (*cur == U'\n')
+					{
+						if(KeepLine)
+							result.push_back(*cur);
+						return result;
+					}else
+						result.push_back(*cur);
+				}
+				else
+					break;
+			}
+			return result;
+		}
+		return {};
 	}
 }
