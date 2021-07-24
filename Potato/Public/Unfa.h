@@ -48,48 +48,6 @@ namespace Potato
 	using UnfaSeqIntervalT = SequenceInterval<char32_t>;
 	using UnfaSeqIntervalWrapperT = SequenceIntervalWrapper<char32_t>;
 
-	struct UnfaTable
-	{
-
-		struct EAcception { uint32_t acception_index; uint32_t acception_mask; };
-		struct EEpsilon {};
-		struct ECapture { uint32_t begin; uint32_t require_index; };
-		struct EComsume { UnfaSeqIntervalT interval; };
-
-		struct Edge
-		{
-			using PropertyT = std::variant<EAcception, EEpsilon, ECapture, EComsume>;
-			uint32_t jump_state;
-			PropertyT property;
-			Edge(Edge const&) = default;
-			Edge(Edge&&) = default;
-			Edge(uint32_t js, PropertyT T) : jump_state(js), property(std::move(T)) {}
-			template<typename Type>
-			bool Is() const noexcept { return std::holds_alternative<Type>(property); }
-			template<typename Type>
-			decltype(auto) Get() const noexcept { return std::get<Type>(property); }
-			template<typename Type>
-			decltype(auto) Get() noexcept { return std::get<Type>(property); }
-			Edge& operator=(Edge&&) = default;
-			Edge& operator=(Edge const&) = default;
-		};
-		std::vector<std::vector<Edge>> nodes;
-
-		static UnfaTable CreateFromRegex(std::u32string_view rex, uint32_t state = 0, uint32_t mask = 0);
-		size_t NodeCount() const noexcept { return nodes.size(); }
-		size_t StartNodeIndex() const noexcept { return 0; }
-		//std::optional<March> Mark(std::u32string_view string, bool greey = true) const;
-		std::tuple<std::set<uint32_t>, std::vector<Edge>> SearchThroughEpsilonEdge(uint32_t const* require_state, size_t length) const;
-		std::vector<std::tuple<UnfaSeqIntervalT, std::vector<uint32_t>>> MergeComsumeEdge(Edge const* edges, size_t edges_length) const;
-		static UnfaTable Link(UnfaTable const* other_table, size_t table_size);
-		static void DefaultFilter(UnfaTable const&, std::vector<Edge>&);
-		UnfaTable Simplify(std::function<void(UnfaTable const&, std::vector<Edge>&)> edge_filter = UnfaTable::DefaultFilter) const;
-		operator bool() const noexcept { return nodes.size() >= 2; }
-	};
-
-	inline UnfaTable CreateUnfaTableFromRegex(std::u32string_view rex, uint32_t state = 0, uint32_t mask = 0) { return UnfaTable::CreateFromRegex(rex, state, mask); }
-	inline UnfaTable LinkUnfaTable(UnfaTable const* other_table, size_t table_size) { return UnfaTable::Link(other_table, table_size); }
-
 	struct UnfaSerilizedTableWrapper
 	{
 
@@ -143,16 +101,58 @@ namespace Potato
 		operator UnfaSerilizedTableWrapper() const noexcept { return AsWrapper(); }
 		std::optional<UnfaMarch> Mark(std::u32string_view string, bool greey = true) const { return AsWrapper().Mark(string, greey); }
 		UnfaSerilizedTable() = default;
-		UnfaSerilizedTable(UnfaTable const& table);
 		UnfaSerilizedTable(UnfaSerilizedTable const&) = default;
 		UnfaSerilizedTable(UnfaSerilizedTable&&) = default;
 		UnfaSerilizedTable& operator=(UnfaSerilizedTable const&) = default;
 		UnfaSerilizedTable& operator=(UnfaSerilizedTable&&) = default;
 	private:
 		std::vector<std::byte> datas;
+		friend struct UnfaTable;
 	};
 
-	inline UnfaSerilizedTable SerilizedUnfaTable(UnfaTable const& table) { return { table }; }
+	struct UnfaTable
+	{
+
+		struct EAcception { uint32_t acception_index; uint32_t acception_mask; };
+		struct EEpsilon {};
+		struct ECapture { uint32_t begin; uint32_t require_index; };
+		struct EComsume { UnfaSeqIntervalT interval; };
+
+		struct Edge
+		{
+			using PropertyT = std::variant<EAcception, EEpsilon, ECapture, EComsume>;
+			uint32_t jump_state;
+			PropertyT property;
+			Edge(Edge const&) = default;
+			Edge(Edge&&) = default;
+			Edge(uint32_t js, PropertyT T) : jump_state(js), property(std::move(T)) {}
+			template<typename Type>
+			bool Is() const noexcept { return std::holds_alternative<Type>(property); }
+			template<typename Type>
+			decltype(auto) Get() const noexcept { return std::get<Type>(property); }
+			template<typename Type>
+			decltype(auto) Get() noexcept { return std::get<Type>(property); }
+			Edge& operator=(Edge&&) = default;
+			Edge& operator=(Edge const&) = default;
+		};
+		std::vector<std::vector<Edge>> nodes;
+
+		static UnfaTable CreateFromRegex(std::u32string_view rex, uint32_t state = 0, uint32_t mask = 0);
+		size_t NodeCount() const noexcept { return nodes.size(); }
+		size_t StartNodeIndex() const noexcept { return 0; }
+		//std::optional<March> Mark(std::u32string_view string, bool greey = true) const;
+		std::tuple<std::set<uint32_t>, std::vector<Edge>> SearchThroughEpsilonEdge(uint32_t const* require_state, size_t length) const;
+		std::vector<std::tuple<UnfaSeqIntervalT, std::vector<uint32_t>>> MergeComsumeEdge(Edge const* edges, size_t edges_length) const;
+		static UnfaTable Link(UnfaTable const* other_table, size_t table_size);
+		static void DefaultFilter(UnfaTable const&, std::vector<Edge>&);
+		UnfaTable Simplify(std::function<void(UnfaTable const&, std::vector<Edge>&)> edge_filter = UnfaTable::DefaultFilter) const;
+		operator bool() const noexcept { return nodes.size() >= 2; }
+		UnfaSerilizedTable Serilized() const;
+
+	};
+
+	inline UnfaTable CreateUnfaTableFromRegex(std::u32string_view rex, uint32_t state = 0, uint32_t mask = 0) { return UnfaTable::CreateFromRegex(rex, state, mask); }
+	inline UnfaTable LinkUnfaTable(UnfaTable const* other_table, size_t table_size) { return UnfaTable::Link(other_table, table_size); }
 }
 
 /*

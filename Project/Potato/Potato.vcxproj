@@ -20,7 +20,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\Potato\Private\Symbol.cpp" />
-    <ClInclude Include="..\..\Potato\Public\ConstDataForm.h" />
     <ClInclude Include="..\..\Potato\Public\Ebnf.h" />
     <ClInclude Include="..\..\Potato\Public\FileSystem.h" />
     <ClInclude Include="..\..\Potato\Public\Interval.h" />
@@ -34,12 +33,11 @@
     <ClInclude Include="..\..\Potato\Public\StrEncode.h" />
     <ClInclude Include="..\..\Potato\Public\StrFormat.h" />
     <ClInclude Include="..\..\Potato\Public\StrScanner.h" />
-    <ClInclude Include="..\..\Potato\Public\HIR.h" />
+    <ClInclude Include="..\..\Potato\Public\MiniCore.h" />
     <ClInclude Include="..\..\Potato\Public\TMP.h" />
     <ClInclude Include="..\..\Potato\Public\Unfa.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\Potato\Private\ConstDataForm.cpp" />
     <ClCompile Include="..\..\Potato\Private\Ebnf.cpp" />
     <ClCompile Include="..\..\Potato\Private\FileSystem.cpp" />
     <ClCompile Include="..\..\Potato\Private\Lexical.cpp" />
@@ -50,7 +48,7 @@
     <ClCompile Include="..\..\Potato\Private\StrEncode.cpp" />
     <ClCompile Include="..\..\Potato\Private\StrFormat.cpp" />
     <ClCompile Include="..\..\Potato\Private\StrScanner.cpp" />
-    <ClCompile Include="..\..\Potato\Private\HIR.cpp" />
+    <ClCompile Include="..\..\Potato\Private\MiniCore.cpp" />
     <ClCompile Include="..\..\Potato\Private\Unfa.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

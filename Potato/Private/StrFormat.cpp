@@ -1,7 +1,7 @@
 #include "../Public/StrFormat.h"
 #include "../Public/Lexical.h"
 #include "../Public/StrEncode.h"
-namespace Potato::StrFormat
+namespace Potato
 {
 	LexicalTable const& Analyzer()
 	{
@@ -15,33 +15,21 @@ namespace Potato::StrFormat
 		return instance;
 	}
 
-	std::span<char32_t> FormatWrapper::ConsumeBuffer(size_t require_length)
-	{
-		if(last_length >= require_length)
-		{
-			auto result = buffer + ite;
-			last_length -= require_length;
-			ite += require_length;
-			return {result, require_length};
-		}else
-			throw Error::LackOfBufferLength{ std::u32string(buffer, total_length),  require_length };
-	}
-
 	
-	PatternRef CreatePatternRef(std::u32string_view Ref)
+	FormatterPattern CreateFormatterPattern(std::u32string_view Ref)
 	{
 		try {
 			auto Result = Analyzer().Process(Ref);
-			std::vector<PatternRef::Element> patterns;
+			std::vector<FormatterPattern::Element> patterns;
 			size_t used_count = 0;
 			for (auto& ite : Result)
 			{
 				switch (ite.acception)
 				{
-					case 0:{patterns.push_back({ PatternType::NormalString, ite.capture }); } break;
+					case 0:{patterns.push_back({ FormatterPattern::Type::NormalString, ite.capture }); } break;
 					case 2:
-					case 3:{patterns.push_back({ PatternType::NormalString, {ite.capture.data(), ite.capture.size() - 1 }}); } break;
-					case 1:{patterns.push_back({ PatternType::Parameter,  {ite.capture.data() + 1, ite.capture.size() - 2} }); } break;
+					case 3:{patterns.push_back({ FormatterPattern::Type::NormalString, {ite.capture.data(), ite.capture.size() - 1 }}); } break;
+					case 1:{patterns.push_back({ FormatterPattern::Type::Parameter,  {ite.capture.data() + 1, ite.capture.size() - 2} }); } break;
 					default: assert(false);
 				}
 			}
@@ -49,69 +37,55 @@ namespace Potato::StrFormat
 		}
 		catch (Exception::LexicalUnaccaptableItem const& str)
 		{
-			throw Error::UnsupportPatternString{ std::u32string(Ref), std::u32string(str.possible_token) };
+			throw Exception::MakeExceptionTuple(Exception::FormatterUnsupportPatternString{ std::u32string(Ref), std::u32string(str.possible_token) });
 		}
 	}
-
-	namespace Implement
+	
+	size_t FormatterWrapper<>::Preformat(std::span<FormatterPattern::Element const> pars)
 	{
-
-		size_t StringLengthImpLocateParmeters(size_t& total_size, PatternRef const& pattern, size_t pattern_index)
+		size_t result = 0;
+		while (!pars.empty())
 		{
-			for (; pattern_index < pattern.patterns.size(); ++pattern_index)
-			{
-				auto& [Type, str] = pattern.patterns[pattern_index];
-				switch (Type)
-				{
-				case PatternType::NormalString: {total_size += str.size(); } break;
-				case PatternType::Parameter: {return pattern_index; } break;
-				default:
-					break;
-				}
+			auto& ref = *pars.begin();
+			if (ref.type == FormatterPattern::Type::NormalString)
+				result += PreformatNormalString(ref);
+			else {
+				throw Exception::MakeExceptionTuple(Exception::FormatterLackOfFormatParas{});
 			}
-			return pattern_index;
+			pars = pars.subspan(1);
 		}
-
-		void StringLengthImp(size_t& total_size, PatternRef const& pattern, size_t pattern_index)
-		{
-			auto PIndex = StringLengthImpLocateParmeters(total_size, pattern, pattern_index);
-			if (PIndex < pattern.patterns.size())
-				throw Error::LackOfFormatParas{ std::u32string(pattern.string), PIndex };
-		}
-
-		size_t FormatImpLocateParmeters(FormatWrapper& Wrapper, PatternRef const& pattern, size_t pattern_index)
-		{
-			size_t used = 0;
-			for (; pattern_index < pattern.patterns.size(); ++pattern_index)
-			{
-				auto& [Type, str] = pattern.patterns[pattern_index];
-				switch (Type)
-				{
-				case PatternType::NormalString:
-				{
-					auto comsume = Wrapper.ConsumeBuffer(str.size());
-					std::memcpy(comsume.data(), str.data(), str.size() * sizeof(std::u32string_view::value_type));
-				} break;
-				case PatternType::Parameter: {return pattern_index; } break;
-				default:
-					break;
-				}
-			}
-			return pattern_index;
-		}
-
-		void FormatImp(FormatWrapper& Wrapper, PatternRef const& pattern, size_t pattern_index)
-		{
-			auto PIndex = FormatImpLocateParmeters(Wrapper, pattern, pattern_index);
-			if(PIndex < pattern.patterns.size())
-				throw Error::LackOfFormatParas{ std::u32string(pattern.string), PIndex };
-		}
-		
+		return result;
 	}
 
-		
+	void FormatterWrapper<>::Format(std::span<FormatterPattern::Element const> pars, std::span<char32_t>& output_buffer)
+	{
+		while (!pars.empty())
+		{
+			auto& ref = *pars.begin();
+			if (ref.type == FormatterPattern::Type::NormalString)
+			{
+				FormatNormalString(ref, output_buffer);
+			}
+			else {
+				throw Exception::MakeExceptionTuple(Exception::FormatterLackOfFormatParas{});
+			}
+			pars = pars.subspan(1);
+		}
+	}
+
+	void FormatterWrapper<>::FormatNormalString(FormatterPattern::Element const& pars, std::span<char32_t>& output_buffer)
+	{
+		if (output_buffer.size() >= pars.string.size())
+		{
+			std::memcpy(output_buffer.data(), pars.string.data(), sizeof(char32_t) * pars.string.size());
+			output_buffer = output_buffer.subspan(pars.string.size());
+		}
+		else
+			throw Exception::MakeExceptionTuple(Exception::FormatterRequireMoreSpace{});
+	}
+
 }
-namespace Potato::StrFormat
+namespace Potato
 {
 
 	static LexicalRegexInitTuple FormatRex[] = {
@@ -147,75 +121,104 @@ namespace Potato::StrFormat
 		return Result;
 	}
 
-	size_t Formatter<char32_t*>::StringLength(std::u32string_view par, char32_t const* Input)
+	size_t Formatter<char32_t*>::Preformat(std::u32string_view par, char32_t const* Input)
 	{
 		return std::u32string_view(Input).size();
 	}
 
-	void Formatter<char32_t*>::Format(FormatWrapper& wrapper, std::u32string_view par, char32_t const* Input)
+	std::optional<size_t> Formatter<char32_t*>::Format(std::span<char32_t> output, std::u32string_view par, char32_t const* Input)
 	{
-		auto size_t = StringLength(par, Input);
-		auto com = wrapper.ConsumeBuffer(size_t);
-		std::memcpy(com.data(), Input, size_t * sizeof(char32_t));
+		auto size = Preformat(par, Input);
+		if (output.size() >= size)
+		{
+			std::memcpy(output.data(), Input, size * sizeof(char32_t));
+			return size;
+		}
+		return {};
 	}
 
-	size_t Formatter<std::u32string_view>::StringLength(std::u32string_view par, std::u32string_view Input)
-	{
-		return Input.size();
-	}
-
-	void Formatter<std::u32string_view>::Format(FormatWrapper& wrapper, std::u32string_view par, std::u32string_view Input)
-	{
-		std::memcpy(wrapper.ConsumeBuffer(Input.size()).data(), Input.data(), Input.size() * sizeof(char32_t));
-	}
-
-	size_t Formatter<std::u32string>::StringLength(std::u32string_view par, std::u32string const& Input)
+	size_t Formatter<std::u32string_view>::Preformat(std::u32string_view par, std::u32string_view Input)
 	{
 		return Input.size();
 	}
 
-	void Formatter<std::u32string>::Format(FormatWrapper& wrapper, std::u32string_view par, std::u32string const& Input)
+	std::optional<size_t> Formatter<std::u32string_view>::Format(std::span<char32_t> output, std::u32string_view par, std::u32string_view Input)
 	{
-		std::memcpy(wrapper.ConsumeBuffer(Input.size()).data(), Input.data(), Input.size() * sizeof(char32_t));
+		if (output.size() >= Input.size())
+		{
+			std::memcpy(output.data(), Input.data(), Input.size() * sizeof(char32_t));
+			return Input.size();
+		}
+		return {};
 	}
 
-	size_t Formatter<char32_t>::StringLength(std::u32string_view par, char32_t Input)
+	size_t Formatter<std::u32string>::Preformat(std::u32string_view par, std::u32string const& Input)
 	{
-		return sizeof(char32_t);
+		return Input.size();
 	}
 
-	void Formatter<char32_t>::Format(FormatWrapper& wrapper, std::u32string_view par, char32_t Input)
+	std::optional<size_t> Formatter<std::u32string>::Format(std::span<char32_t> output, std::u32string_view par, std::u32string const& Input)
 	{
-		wrapper.ConsumeBuffer(1)[0] = Input;
+		if (output.size() >= Input.size())
+		{
+			std::memcpy(output.data(), Input.data(), Input.size() * sizeof(char32_t));
+			return Input.size();
+		}
+		return {};
 	}
 
-	size_t Formatter<double>::StringLength(std::u32string_view par, double Input)
+	size_t Formatter<char32_t>::Preformat(std::u32string_view par, char32_t Input)
+	{
+		return 1;
+	}
+
+	std::optional<size_t> Formatter<char32_t>::Format(std::span<char32_t> output, std::u32string_view par, char32_t Input)
+	{
+		if (output.size() >= 1)
+		{
+			output[0] = Input;
+			return 1;
+		}
+		return {};
+	}
+
+	size_t Formatter<double>::Preformat(std::u32string_view par, double Input)
 	{
 		char data[50];
 		return sprintf_s(data, "%lf", Input);
 	}
 
-	void Formatter<double>::Format(FormatWrapper& wrapper, std::u32string_view par, double Input)
+	std::optional<size_t> Formatter<double>::Format(std::span<char32_t> output, std::u32string_view par, double Input)
 	{
 		char data[50];
 		size_t used_size = sprintf_s(data, "%lf", Input);
-		StrEncode::AsWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(wrapper.ConsumeBuffer(used_size));
+		if (used_size <= output.size())
+		{
+			AsStrWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(output);
+			return used_size;
+		}
+		return {};
 	}
 
-	size_t Formatter<float>::StringLength(std::u32string_view par, float Input)
+	size_t Formatter<float>::Preformat(std::u32string_view par, float Input)
 	{
 		char data[50];
 		return sprintf_s(data, "%f", Input);
 	}
 
-	void Formatter<float>::Format(FormatWrapper& wrapper, std::u32string_view par, float Input)
+	std::optional<size_t> Formatter<float>::Format(std::span<char32_t> output, std::u32string_view par, float Input)
 	{
 		char data[50];
 		size_t used_size = sprintf_s(data,"%f", Input);
-		StrEncode::AsWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(wrapper.ConsumeBuffer(used_size));
+		if (used_size <= output.size())
+		{
+			AsStrWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(output);
+			return used_size;
+		}
+		return {};
 	}
 
-	size_t Formatter<uint32_t>::StringLength(std::u32string_view par, uint32_t Input)
+	size_t Formatter<uint32_t>::Preformat(std::u32string_view par, uint32_t Input)
 	{
 		Paras state = ParasTranslate(par);
 		std::string_view format;
@@ -227,7 +230,7 @@ namespace Potato::StrFormat
 		return sprintf_s(data, format.data(), Input);
 	}
 
-	void Formatter<uint32_t>::Format(FormatWrapper& wrapper, std::u32string_view par, uint32_t Input)
+	std::optional<size_t> Formatter<uint32_t>::Format(std::span<char32_t> output, std::u32string_view par, uint32_t Input)
 	{
 		Paras state = ParasTranslate(par);
 		std::string_view format;
@@ -237,23 +240,33 @@ namespace Potato::StrFormat
 			format = "%I32u";
 		char data[50];
 		size_t used_size = sprintf_s(data, format.data(), Input);
-		StrEncode::AsWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(wrapper.ConsumeBuffer(used_size));
+		if (used_size <= output.size())
+		{
+			AsStrWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(output);
+			return used_size;
+		}
+		return {};
 	}
 
-	size_t Formatter<int32_t>::StringLength(std::u32string_view par, int32_t Input)
+	size_t Formatter<int32_t>::Preformat(std::u32string_view par, int32_t Input)
 	{
 		char data[50];
 		return sprintf_s(data, "%I32d", Input);
 	}
 
-	void Formatter<int32_t>::Format(FormatWrapper& wrapper, std::u32string_view par, int32_t Input)
+	std::optional<size_t> Formatter<int32_t>::Format(std::span<char32_t> output, std::u32string_view par, int32_t Input)
 	{
 		char data[50];
 		size_t used_size = sprintf_s(data, 50, "%I32d", Input);
-		StrEncode::AsWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(wrapper.ConsumeBuffer(used_size));
+		if (used_size <= output.size())
+		{
+			AsStrWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(output);
+			return used_size;
+		}
+		return {};
 	}
 
-	size_t Formatter<uint64_t>::StringLength(std::u32string_view par, uint64_t Input)
+	size_t Formatter<uint64_t>::Preformat(std::u32string_view par, uint64_t Input)
 	{
 		Paras state = ParasTranslate(par);
 		std::string_view format;
@@ -265,7 +278,7 @@ namespace Potato::StrFormat
 		return sprintf_s(data, format.data(), Input);
 	}
 
-	void Formatter<uint64_t>::Format(FormatWrapper& wrapper, std::u32string_view par, uint64_t Input)
+	std::optional<size_t> Formatter<uint64_t>::Format(std::span<char32_t> output, std::u32string_view par, uint64_t Input)
 	{
 		Paras state = ParasTranslate(par);
 		std::string_view format;
@@ -275,20 +288,30 @@ namespace Potato::StrFormat
 			format = "%I64u";
 		char data[50];
 		size_t used_size = sprintf_s(data, 50, format.data(), Input);
-		StrEncode::AsWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(wrapper.ConsumeBuffer(used_size));
+		if (used_size <= output.size())
+		{
+			AsStrWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(output);
+			return used_size;
+		}
+		return {};
 	}
 	
-	size_t Formatter<int64_t>::StringLength(std::u32string_view par, int64_t Input)
+	size_t Formatter<int64_t>::Preformat(std::u32string_view par, int64_t Input)
 	{
 		char data[50];
 		return sprintf_s(data, "%I64d", Input);
 	}
 
-	void Formatter<int64_t>::Format(FormatWrapper& wrapper, std::u32string_view par, int64_t Input)
+	std::optional<size_t> Formatter<int64_t>::Format(std::span<char32_t> output, std::u32string_view par, int64_t Input)
 	{
 		char data[50];
 		size_t used_size = sprintf_s(data, 50, "%I64d", Input);
-		StrEncode::AsWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(wrapper.ConsumeBuffer(used_size));
+		if (used_size <= output.size())
+		{
+			AsStrWrapper(reinterpret_cast<char8_t*>(data), used_size).To<char32_t>(output);
+			return used_size;
+		}
+		return {};
 	}
 	
 }

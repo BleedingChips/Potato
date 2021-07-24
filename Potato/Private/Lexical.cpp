@@ -72,7 +72,7 @@ namespace Potato
 		auto result = LinkUnfaTable(unfas.data(), unfas.size());
 		if(ignore_controller)
 			MakeUpUnfaTable(result);
-		return { result.Simplify(LexicalFilter) };
+		return {result.Simplify(LexicalFilter).Serilized()};
 	}
 
 	LexicalTable LexicalTable::CreateFromRegexsReverse(LexicalRegexInitTuple const* adress, size_t length, bool ignore_controller)
@@ -84,7 +84,7 @@ namespace Potato
 		auto result = LinkUnfaTable(unfas.data(), unfas.size());
 		if(ignore_controller)
 			MakeUpUnfaTable(result);
-		return { result.Simplify(LexicalFilter) };
+		return {result.Simplify(LexicalFilter).Serilized()};
 	}
 
 	std::optional<LexicalMarch> LexicalTable::ProcessOnce(std::u32string_view code) const

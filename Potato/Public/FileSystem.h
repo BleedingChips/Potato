@@ -76,7 +76,7 @@ namespace Potato
 	private:
 
 		template<typename InputType>
-		decltype(auto) ToStringImp(ItSelf<InputType>) const { return StrEncode::AsWrapper(path.data(), path.size()).ToString<InputType>(); }
+		decltype(auto) ToStringImp(ItSelf<InputType>) const { return AsStrWrapper(path.data(), path.size()).ToString<InputType>(); }
 		decltype(auto) ToStringImp(ItSelf<char32_t>) const { return path; }
 
 		struct Element

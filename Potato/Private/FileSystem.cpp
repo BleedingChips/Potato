@@ -456,7 +456,7 @@ namespace Potato
 	{
 		if (ref.GetType() == Path::Style::DosAbsolute || ref.GetType() == Path::Style::UnixAbsolute)
 		{
-			std::filesystem::path tar(ref.ToString<wchar_t>());
+			std::filesystem::path tar(ref.ToString<char32_t>());
 			std::ifstream file(tar, std::ios::binary);
 			if (file.good()) 
 			{

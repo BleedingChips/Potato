@@ -33,8 +33,6 @@ namespace Potato
 		FLOAT32,
 		FLOAT64,
 
-		BOOL,
-
 		CUSTOM,
 	};
 	
@@ -81,56 +79,48 @@ namespace Potato
 		size_t index = 0;
 		bool IsCustomType() const noexcept { return storage_type == MemoryDescription::CUSTOM; }
 		size_t Index() const noexcept { return index; }
+	};
 
-		template<typename Type> struct DefaultTypeWrapper { static constexpr bool Value = false; };
-		template<> struct DefaultTypeWrapper<uint8_t> {
-			static constexpr bool Value = true;
-			TypeIndex operator()() const noexcept { return TypeIndex{ MemoryDescription::UINT8, 0 }; }
-		};
-		template<> struct DefaultTypeWrapper<uint16_t> {
-			static constexpr bool Value = true;
-			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::UINT16, 0 }; }
-		};
-		template<> struct DefaultTypeWrapper<uint32_t> {
-			static constexpr bool Value = true;
-			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::UINT32, 0 }; }
-		};
-		template<> struct DefaultTypeWrapper<uint64_t> {
-			static constexpr bool Value = true;
-			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::UINT64, 0 }; }
-		};
-		template<> struct DefaultTypeWrapper<int8_t> {
-			static constexpr bool Value = true;
-			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::INT8, 0 }; }
-		};
-		template<> struct DefaultTypeWrapper<int16_t> {
-			static constexpr bool Value = true;
-			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::INT16, 0 }; }
-		};
-		template<> struct DefaultTypeWrapper<int32_t> {
-			static constexpr bool Value = true;
-			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::INT32, 0 }; }
-		};
-		template<> struct DefaultTypeWrapper<int64_t> {
-			static constexpr bool Value = true;
-			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::INT64, 0 }; }
-		};
-		template<> struct DefaultTypeWrapper<bool> {
-			static constexpr bool Value = true;
-			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::BOOL, 0 }; }
-		};
-		template<> struct DefaultTypeWrapper<float> {
-			static constexpr bool Value = true;
-			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::FLOAT32, 0 }; }
-		};
-		template<> struct DefaultTypeWrapper<double> {
-			static constexpr bool Value = true;
-			constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::FLOAT32, 0 }; }
-		};
-
-
-		template<typename Input>
-		static TypeIndex DefaultType() noexcept requires(DefaultTypeWrapper<Input>::Value) { return  DefaultTypeWrapper<Input>{}(); }
+	template<typename Type> struct DefaultTypeIndex { static constexpr bool Value = false; };
+	template<> struct DefaultTypeIndex<uint8_t> {
+		static constexpr bool Value = true;
+		TypeIndex operator()() const noexcept { return TypeIndex{ MemoryDescription::UINT8, 0 }; }
+	};
+	template<> struct DefaultTypeIndex<uint16_t> {
+		static constexpr bool Value = true;
+		constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::UINT16, 0 }; }
+	};
+	template<> struct DefaultTypeIndex<uint32_t> {
+		static constexpr bool Value = true;
+		constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::UINT32, 0 }; }
+	};
+	template<> struct DefaultTypeIndex<uint64_t> {
+		static constexpr bool Value = true;
+		constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::UINT64, 0 }; }
+	};
+	template<> struct DefaultTypeIndex<int8_t> {
+		static constexpr bool Value = true;
+		constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::INT8, 0 }; }
+	};
+	template<> struct DefaultTypeIndex<int16_t> {
+		static constexpr bool Value = true;
+		constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::INT16, 0 }; }
+	};
+	template<> struct DefaultTypeIndex<int32_t> {
+		static constexpr bool Value = true;
+		constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::INT32, 0 }; }
+	};
+	template<> struct DefaultTypeIndex<int64_t> {
+		static constexpr bool Value = true;
+		constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::INT64, 0 }; }
+	};
+	template<> struct DefaultTypeIndex<float> {
+		static constexpr bool Value = true;
+		constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::FLOAT32, 0 }; }
+	};
+	template<> struct DefaultTypeIndex<double> {
+		static constexpr bool Value = true;
+		constexpr TypeIndex operator()() const noexcept { return { MemoryDescription::FLOAT32, 0 }; }
 	};
 
 	using TypeMask = std::optional<TypeIndex>;
@@ -155,6 +145,7 @@ namespace Potato
 		Category type;
 		MemoryDescription storage_type = MemoryDescription::CUSTOM;
 		uint64_t index;
+
 	};
 
 	using RegisterMask = std::optional<RegisterIndex>;
@@ -179,7 +170,6 @@ namespace Potato
 	static RegisterMask AsImmediateAdressingRegister(int64_t input) { return RegisterIndex{ RegisterIndex::Category::IMMEDIATE_ADRESSING, MemoryDescription::INT64, Implement::Transfer(input) }; };
 	static RegisterMask AsImmediateAdressingRegister(float input) { return RegisterIndex{ RegisterIndex::Category::IMMEDIATE_ADRESSING, MemoryDescription::FLOAT32, Implement::Transfer(input) }; };
 	static RegisterMask AsImmediateAdressingRegister(double input) { return RegisterIndex{ RegisterIndex::Category::IMMEDIATE_ADRESSING, MemoryDescription::FLOAT64, Implement::Transfer(input) }; };
-	static RegisterMask AsImmediateAdressingRegister(bool input) { return RegisterIndex{ RegisterIndex::Category::IMMEDIATE_ADRESSING, MemoryDescription::UINT8, Implement::Transfer(input) }; };
 	
 
 	struct TypeProperty
@@ -202,36 +192,50 @@ namespace Potato
 		std::vector<Member> members;
 	};
 
-	struct HIRForm
+	namespace Implement
 	{
-		struct Setting
+		struct ConstDataStorageTable
+		{
+			RegisterMask InserConstData(TypeProperty desc, TypeLayout layout, std::span<std::byte const> data);
+		private:
+			struct Element
+			{
+				TypeProperty type_reference;
+				IndexSpan<> datas;
+				TypeLayout layout;
+			};
+			std::vector<Element> elements;
+			std::vector<std::byte> datas;
+		};
+	}
+
+	
+
+	struct MiniCore
+	{
+
+		struct MemoryModel
 		{
 			size_t min_alignas;
 			TypeLayout pointer_layout;
 			std::optional<size_t> member_feild;
 		};
+
 		TypeMask ForwardDefineType();
 		bool MarkTypeDefineStart(TypeMask Input);
 		bool MarkTypeDefineStart() { return MarkTypeDefineStart(ForwardDefineType()); }
 		bool InsertMember(TypeProperty type_reference);
-		TypeMask FinishTypeDefine(Setting const& setting);
+		TypeMask FinishTypeDefine(MemoryModel const& setting);
 		Potato::ObserverPtr<std::optional<TypeProperty>> FindType(TypeMask tag) noexcept;
-		RegisterMask InserConstData(TypeProperty desc, TypeLayout layout, std::span<std::byte const> data);
+		RegisterMask InserConstData(TypeProperty desc, TypeLayout layout, std::span<std::byte const> data){ 
+			return const_data_table.InserConstData(std::move(desc), std::move(layout), data);
+		}
 	private:
+		Implement::ConstDataStorageTable const_data_table;
 		std::optional<TypeLayout> CalculateTypeLayout(TypeMask const& ref) const;
-		std::optional<TypeLayout> CalculateTypeLayout(TypeProperty const& ref, Setting const& setting) const;
+		std::optional<TypeLayout> CalculateTypeLayout(TypeProperty const& ref, MemoryModel const& setting) const;
 		std::vector<TypeDescription::Member> temporary_member_type;
 		std::vector<std::optional<TypeProperty>> defined_types;
 		std::vector<std::tuple<TypeMask, size_t>> define_stack_record;
-		std::vector<std::byte> datas;
-
-		struct Element
-		{
-			TypeProperty type_reference;
-			IndexSpan<> datas;
-			TypeLayout layout;
-		};
-
-		std::vector<Element> elements;
 	};
 }

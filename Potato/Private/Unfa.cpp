@@ -257,35 +257,35 @@ namespace Potato
 				}
 				case 3:
 				{
-					return tra[3].Consume();
+					auto Node1 = tra[3].Consume<TemNode>();
+					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
+					uint32_t NewNodeOut = NewNodeIn + 1;
+					temporary_node.push_back({ Edge{Node1.in, ECapture{true, acception_index }} });
+					temporary_node.emplace_back();
+					temporary_node[Node1.out].emplace_back(Edge{ NewNodeOut, ECapture{false, acception_index } });
+					return TemNode{ NewNodeIn, NewNodeOut };
 				}
 				case 4:
 				{
-					auto Node1 = tra[1].Consume<TemNode>();
-					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
-					uint32_t NewNodeOut = NewNodeIn + 1;
-					temporary_node.push_back({Edge{Node1.in, ECapture{true, acception_index }}});
-					temporary_node.emplace_back();
-					temporary_node[Node1.out].emplace_back(Edge{NewNodeOut, ECapture{false, acception_index }});
-					return TemNode{ NewNodeIn, NewNodeOut };
+					return tra[1].Consume();
 				}
 				case 19:
-				{
-					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
-					uint32_t NewNodeOut = NewNodeIn + 1;
-					temporary_node.push_back({Edge{NewNodeOut, EEpsilon{}}});
-					temporary_node.emplace_back();
-					return TemNode{ NewNodeIn, NewNodeOut };
-				}
-				case 20:
 				{
 					uint32_t NewNode1 = static_cast<uint32_t>(temporary_node.size());
 					uint32_t NewNode2 = NewNode1 + 1;
 					uint32_t NewNode3 = NewNode2 + 1;
-					temporary_node.push_back({Edge{NewNode2, ECapture{true, acception_index}}});
-					temporary_node.push_back({Edge{NewNode3, ECapture{false, acception_index}}});
+					temporary_node.push_back({ Edge{NewNode2, ECapture{true, acception_index}} });
+					temporary_node.push_back({ Edge{NewNode3, ECapture{false, acception_index}} });
 					temporary_node.emplace_back();
 					return TemNode{ NewNode1, NewNode3 };
+				}
+				case 20:
+				{
+					uint32_t NewNodeIn = static_cast<uint32_t>(temporary_node.size());
+					uint32_t NewNodeOut = NewNodeIn + 1;
+					temporary_node.push_back({ Edge{NewNodeOut, EEpsilon{}} });
+					temporary_node.emplace_back();
+					return TemNode{ NewNodeIn, NewNodeOut };
 				}
 				case 5: {return UnfaSeqIntervalT{}; }
 				case 6:
@@ -641,17 +641,18 @@ namespace Potato
 
 	struct SENode{ uint32_t edge_start_offset; uint32_t edge_count; };
 
-	UnfaSerilizedTable::UnfaSerilizedTable(UnfaTable const& table)
+	UnfaSerilizedTable UnfaTable::Serilized() const
 	{
-		if(table)
+		UnfaSerilizedTable result;
+		if(*this)
 		{
 			size_t total_space = sizeof(uint32_t);
-			total_space += table.nodes.size() * sizeof(SENode);
-			for (auto& ite : table.nodes)
+			total_space += nodes.size() * sizeof(SENode);
+			for (auto& ite : nodes)
 			{
 				for (auto& ite2 : ite)
 				{
-					total_space += sizeof(SEEdgeDescription);
+					total_space += sizeof(UnfaSerilizedTable::SEEdgeDescription);
 					if (ite2.Is<UnfaTable::EAcception>())
 						total_space += sizeof(SEAcception);
 					else if (ite2.Is<UnfaTable::ECapture>())
@@ -665,25 +666,25 @@ namespace Potato
 				}
 			}
 
-			datas.resize(total_space);
-			uint32_t& node_count = *reinterpret_cast<uint32_t*>(datas.data());
-			node_count = static_cast<uint32_t>(table.nodes.size());
-			SENode *node_adress = reinterpret_cast<SENode*>(datas.data() + sizeof(uint32_t));
+			result.datas.resize(total_space);
+			uint32_t& node_count = *reinterpret_cast<uint32_t*>(result.datas.data());
+			node_count = static_cast<uint32_t>(nodes.size());
+			SENode *node_adress = reinterpret_cast<SENode*>(result.datas.data() + sizeof(uint32_t));
 			std::byte *edges_adress = reinterpret_cast<std::byte*>(node_adress + node_count);
-			for(auto& ite : table.nodes)
+			for(auto& ite : nodes)
 			{
 				*(node_adress++) = {
-					static_cast<uint32_t>((reinterpret_cast<size_t>(edges_adress) - reinterpret_cast<size_t>(datas.data())) / sizeof(uint32_t)),
+					static_cast<uint32_t>((reinterpret_cast<size_t>(edges_adress) - reinterpret_cast<size_t>(result.datas.data())) / sizeof(uint32_t)),
 					static_cast<uint32_t>(ite.size())
 				};
 				for(auto& ite2 : ite)
 				{
-					auto& edge_desc = *reinterpret_cast<SEEdgeDescription*>(edges_adress);
-					edges_adress += sizeof(SEEdgeDescription);
+					auto& edge_desc = *reinterpret_cast<UnfaSerilizedTable::SEEdgeDescription*>(edges_adress);
+					edges_adress += sizeof(UnfaSerilizedTable::SEEdgeDescription);
 					edge_desc.jump_state = ite2.jump_state;
 					if(ite2.Is<UnfaTable::EAcception>())
 					{
-						edge_desc.type = SEdgeType::Acception;
+						edge_desc.type = UnfaSerilizedTable::SEdgeType::Acception;
 						auto& acception = *reinterpret_cast<SEAcception*>(edges_adress);
 						edges_adress += sizeof(SEAcception);
 						auto& ref = ite2.Get<UnfaTable::EAcception>();
@@ -693,15 +694,15 @@ namespace Potato
 					{
 						auto& ref = ite2.Get<UnfaTable::ECapture>();
 						if (ref.begin)
-							edge_desc.type = SEdgeType::CaptureBegin;
+							edge_desc.type = UnfaSerilizedTable::SEdgeType::CaptureBegin;
 						else
-							edge_desc.type = SEdgeType::CaptureEnd;
+							edge_desc.type = UnfaSerilizedTable::SEdgeType::CaptureEnd;
 						auto& capture = *reinterpret_cast<SECapture*>(edges_adress);
 						edges_adress += sizeof(SECapture);
 						capture.require_index = ref.require_index;
 					}else if(ite2.Is<UnfaTable::EComsume>())
 					{
-						edge_desc.type = SEdgeType::Comsume;
+						edge_desc.type = UnfaSerilizedTable::SEdgeType::Comsume;
 						auto& comsume = *reinterpret_cast<SEComsume*>(edges_adress);
 						edges_adress += sizeof(SEComsume);
 						auto& ref = ite2.Get<UnfaTable::EComsume>();
@@ -709,9 +710,14 @@ namespace Potato
 						std::memcpy(edges_adress, ref.interval.AsWrapper().data(), sizeof(UnfaIntervalT) * comsume.count);
 						edges_adress += sizeof(UnfaIntervalT) * comsume.count;
 					}
+					else if (ite2.Is<UnfaTable::EEpsilon>())
+					{
+						edge_desc.type = UnfaSerilizedTable::SEdgeType::Epsilon;
+					}
 				}
 			}
 		}
+		return result;
 	}
 
 	std::optional<UnfaMarch> UnfaSerilizedTableWrapper::Mark(std::u32string_view string, bool greey) const

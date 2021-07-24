@@ -45,16 +45,13 @@
     <ClInclude Include="..\..\Potato\Public\StrScanner.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\HIR.h">
+    <ClInclude Include="..\..\Potato\Public\MiniCore.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Potato\Public\Unfa.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Potato\Public\Types.h">
-      <Filter>Public</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\ConstDataForm.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Potato\Public\Symbol.h">
@@ -92,16 +89,13 @@
     <ClCompile Include="..\..\Potato\Private\StrScanner.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\HIR.cpp">
+    <ClCompile Include="..\..\Potato\Private\MiniCore.cpp">
       <Filter>Private</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Potato\Private\Unfa.cpp">
       <Filter>Private</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Potato\Private\Types.cpp">
-      <Filter>Private</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\ConstDataForm.cpp">
       <Filter>Private</Filter>
     </ClCompile>
   </ItemGroup>

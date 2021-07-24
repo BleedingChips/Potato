@@ -259,10 +259,9 @@ namespace Potato
 	std::u32string ExpandExe(std::vector<std::u32string_view> ts)
 	{
 		std::u32string result;
-		static auto pattern = StrFormat::CreatePatternRef(U"{} ");
 		for (auto& ite : ts)
 		{
-			result += StrFormat::Process(pattern, ite);
+			result += DirectFormat(U"", ite);
 		}
 		return result;
 	}
@@ -333,6 +332,82 @@ namespace Potato
 		return { std::move(R1), std::move(R2) };
 	}
 
+
+	std::u32string_view Sperate(std::u32string_view& input)
+	{
+		size_t state = 0;
+		std::optional<size_t> last_index;
+		for (size_t index = 0; index < input.size(); ++index)
+		{
+			auto cur = input[index];
+			switch (state)
+			{
+			case 0:
+				switch (cur)
+				{
+				case U'%':
+					state = 1;
+				case U'\f':
+				case U'\t':
+				case U'\v':
+				case U'\r':
+					if (!last_index)
+						last_index = index;
+					break;
+				case U'\n':
+					last_index = {};
+					break;
+				default:
+					state = 4;
+					break;
+				}
+				break;
+			case 1:
+			case 2:
+				switch (cur)
+				{
+				case U'%':
+					state = state + 1;
+					break;
+				default:
+					state = 4;
+					break;
+				}
+				break;
+			case 3:
+				switch (cur)
+				{
+				case U'\f':
+				case U'\t':
+				case U'\v':
+				case U'\r':
+					break;
+				case U'\n':
+				{
+					auto P = input.substr(0, *last_index);
+					input = input.substr(index + 1);
+					return P;
+				}
+					break;
+				default:
+					state = 4;
+					break;
+				}
+				break;
+			case 4:
+				if(cur == U'\n')
+					state = 0;
+				break;
+			default:
+				assert(false);
+				break;
+			}
+		}
+		auto old = input;
+		input = {};
+		return old;
+	}
+
 	EbnfTable CreateEbnfTable(std::u32string_view code)
 	{
 
@@ -357,7 +432,7 @@ namespace Potato
 			{T::Command, UR"(/\*.*?\*/|//.*?\n)"},
 		};
 
-		static UnfaSerilizedTable sperator = CreateUnfaTableFromRegex(UR"((.*?(?:\r\n|\n))[\f\t\v\r]*?%%%[\s]*?\n|()[\f\t\v\r]*?%%%[\s]*?\n)").Simplify();
+		static UnfaSerilizedTable sperator = CreateUnfaTableFromRegex(UR"((.*?(?:\r\n|\n))[\f\t\v\r]*?%%%[\s]*?\n|()[\f\t\v\r]*?%%%[\s]*?\n)").Simplify().Serilized();
 		auto end_point = CalculateSectionPoint(code);
 		struct SperatedCode
 		{
@@ -366,6 +441,24 @@ namespace Potato
 		};
 		SperatedCode sperated_code[3];
 		{
+			size_t index = 0;
+			SectionPoint last_point;
+			while (index < 3)
+			{
+				auto re = Sperate(code);
+				if (!re.empty())
+				{
+					auto current_point = CalculateSectionPoint(re);
+					SperatedCode code{re, {last_point, current_point} };
+					sperated_code[index] = code;
+					++index;
+					last_point = current_point;
+				}else
+					break;
+			}
+			if(index < 2 || ( index > 3 && !code.empty()))
+				throw Exception::MakeExceptionTuple(Exception::EbnfUncompleteEbnf{ index });
+			/*
 			size_t used = 0;
 			SectionPoint Point;
 			while (!code.empty() && used < 3)
@@ -391,6 +484,7 @@ namespace Potato
 
 			if (used < 2)
 				throw Exception::MakeExceptionTuple(Exception::EbnfUncompleteEbnf{ used });
+			*/
 		}
 		
 		std::vector<uint32_t> state_to_mask;

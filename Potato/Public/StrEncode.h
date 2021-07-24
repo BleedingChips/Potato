@@ -6,7 +6,7 @@
 #include <vector>
 #include <span>
 #include <fstream>
-namespace Potato::StrEncode
+namespace Potato
 {
 
 	template<typename Type>
@@ -277,16 +277,18 @@ namespace Potato::StrEncode
 	};
 
 	template<typename Type>
-	auto AsWrapper(std::basic_string_view<Type> in) { return StrWrapper<Type>{in};}
+	auto AsStrWrapper(std::basic_string_view<Type> in) { return StrWrapper<Type>{in};}
 
 	template<typename Type>
-	auto AsWrapper(Type const* in, size_t length) { return StrWrapper<Type>{std::basic_string_view<Type>{in, length}}; }
+	auto AsStrWrapper(Type const* in, size_t length) { return StrWrapper<Type>{std::basic_string_view<Type>{in, length}}; }
+	template<typename Type>
+	auto AsStrWrapper(Type const* in) { return StrWrapper<Type>{std::basic_string_view<Type>{in}}; }
 
 	template<typename Type>
-	auto AsWrapperReverse(std::basic_string_view<Type> in) { return StrWrapper<ReverseEndianness<Type>>{in}; }
+	auto AsStrWrapperReverse(std::basic_string_view<Type> in) { return StrWrapper<ReverseEndianness<Type>>{in}; }
 
 	template<typename Type>
-	auto AsWrapperReverse(Type const* in, size_t length) { return StrWrapper<ReverseEndianness<Type>>{std::basic_string_view<Type>(in, length)}; }
+	auto AsStrWrapperReverse(Type const* in, size_t length) { return StrWrapper<ReverseEndianness<Type>>{std::basic_string_view<Type>(in, length)}; }
 
 	enum class BomType
 	{
@@ -348,27 +350,27 @@ namespace Potato::StrEncode
 		{
 		case BomType::UTF8:
 		case BomType::UTF8_NoBom:
-			return AsWrapper(this->AsViewer<char8_t>()).ToString<Type>();
+			return AsStrWrapper(this->AsViewer<char8_t>()).ToString<Type>();
 		case BomType::UTF16LE:
 			if constexpr (std::endian::native == std::endian::little)
-				return AsWrapper(this->AsViewer<char16_t>()).ToString<Type>();
+				return AsStrWrapper(this->AsViewer<char16_t>()).ToString<Type>();
 			else
-				return AsWrapperReverse(this->AsViewer<char16_t>()).ToString<Type>();
+				return AsStrWrapperReverse(this->AsViewer<char16_t>()).ToString<Type>();
 		case BomType::UTF16BE:
 			if constexpr (std::endian::native == std::endian::big)
-				return AsWrapper(this->AsViewer<char16_t>()).ToString<Type>();
+				return AsStrWrapper(this->AsViewer<char16_t>()).ToString<Type>();
 			else
-				return AsWrapperReverse(this->AsViewer<char16_t>()).ToString<Type>();
+				return AsStrWrapperReverse(this->AsViewer<char16_t>()).ToString<Type>();
 		case BomType::UTF32LE:
 			if constexpr (std::endian::native == std::endian::little)
-				return AsWrapper(this->AsViewer<char16_t>()).ToString<Type>();
+				return AsStrWrapper(this->AsViewer<char16_t>()).ToString<Type>();
 			else
-				return AsWrapperReverse(this->AsViewer<char16_t>()).ToString<Type>();
+				return AsStrWrapperReverse(this->AsViewer<char16_t>()).ToString<Type>();
 		case BomType::UTF32BE:
 			if constexpr (std::endian::native == std::endian::big)
-				return AsWrapper(this->AsViewer<char16_t>()).ToString<Type>();
+				return AsStrWrapper(this->AsViewer<char16_t>()).ToString<Type>();
 			else
-				return AsWrapperReverse(this->AsViewer<char16_t>()).ToString<Type>();
+				return AsStrWrapperReverse(this->AsViewer<char16_t>()).ToString<Type>();
 		default:
 			return std::basic_string<Type>{};
 		};

@@ -3,8 +3,9 @@
 #include <variant>
 #include <string>
 #include <cassert>
+#include <optional>
 #include "Unfa.h"
-namespace Potato::StrScanner
+namespace Potato
 {
 	template<typename TargetType>
 	struct Scanner
@@ -16,23 +17,23 @@ namespace Potato::StrScanner
 	};
 
 	template<typename TargetType>
-	void DirectProcess(std::u32string_view code, TargetType& tar_type)
+	void DirectScan(std::u32string_view code, TargetType& tar_type)
 	{
 		Scanner<std::remove_const_t<TargetType>>{}.Scan(code, tar_type);
 	}
 
-	struct Pattern
+	struct ScanPattern
 	{
 		UnfaSerilizedTable table;
 		template<typename ...TargetType>
-		std::optional<size_t> Process(std::u32string_view code, TargetType&... all_target) const;
+		std::optional<size_t> operator()(std::u32string_view code, TargetType&... all_target) const;
 	private:
 		template<typename CurTarget, typename ...TargetType>
 		size_t ProcessImplement(UnfaMarch::Sub const* marching, size_t last_marching, CurTarget& target, TargetType&... other) const
 		{
 			if(last_marching > 0)
 			{
-				DirectProcess(marching[0].capture, target);
+				DirectScan(marching[0].capture, target);
 				return this->ProcessImplement(marching + 1, last_marching - 1, other...);
 			}
 			return 0;
@@ -41,7 +42,7 @@ namespace Potato::StrScanner
 	};
 
 	template<typename ...TargetType>
-	std::optional<size_t> Pattern::Process(std::u32string_view code, TargetType&... all_target) const
+	std::optional<size_t> ScanPattern::operator()(std::u32string_view code, TargetType&... all_target) const
 	{
 		auto result = table.Mark(code);
 		if(result)
@@ -52,21 +53,21 @@ namespace Potato::StrScanner
 		return {};
 	}
 
-	inline Pattern CreatePattern(std::u32string_view pattern){ return { CreateUnfaTableFromRegex(pattern).Simplify() }; }
+	inline ScanPattern CreateScanPattern(std::u32string_view pattern){ return { CreateUnfaTableFromRegex(pattern).Simplify().Serilized() }; }
 
 	template<typename ...TargetType>
-	std::optional<size_t> Process(Pattern const& pattern, std::u32string_view in, TargetType& ... tar_type){ return pattern.Process(in, tar_type...); }
+	std::optional<size_t> Scan(ScanPattern const& pattern, std::u32string_view in, TargetType& ... tar_type){ return pattern(in, tar_type...); }
 
 	template<typename ...TargetType>
-	std::optional<size_t> Process(std::u32string_view pattern, std::u32string_view in, TargetType& ... tar_type)
+	std::optional<size_t> Scan(std::u32string_view pattern, std::u32string_view in, TargetType& ... tar_type)
 	{
-		Pattern cur_pattern{CreateUnfaTableFromRegex(pattern)};
-		return cur_pattern.Process(in, tar_type...);
+		ScanPattern cur_pattern{CreateUnfaTableFromRegex(pattern).Serilized()};
+		return cur_pattern(in, tar_type...);
 	}
 	
 }
 
-namespace Potato::StrScanner
+namespace Potato
 {
 
 	template<>
@@ -110,13 +111,5 @@ namespace Potato::StrScanner
 	{
 		void Scan(std::u32string_view par, double& Input);
 	};
-
-	/*
-	template<>
-	struct Scanner<int32_t>
-	{
-		void Scan(std::u32string_view par, int32_t& Input);
-	};
-	*/
 	
 }

@@ -5,240 +5,260 @@
 #include <cassert>
 #include <typeinfo>
 #include <span>
-namespace Potato::StrFormat
+#include <optional>
+#include "Misc.h"
+namespace Potato
 {
-
-	namespace Error
-	{
-		struct UnsupportPatternString {
-			std::u32string pattern;
-			std::u32string total_str;
-		};
-
-		struct LackOfFormatParas {
-			std::u32string pattern;
-			size_t index;
-		};
-
-		struct LackOfBufferLength
-		{
-			std::u32string current_result;
-			size_t require_length;
-		};
-	}
-
-	struct FormatWrapper
-	{
-		size_t TotalLength() const noexcept { return total_length; }
-		std::span<char32_t> ConsumeBuffer(size_t require_length);
-		size_t LastLength() const noexcept { return last_length; }
-		FormatWrapper(std::u32string& out_buffer) : buffer(out_buffer.data()), last_length(out_buffer.size()), total_length(out_buffer.size()) {}
-	private:
-		char32_t* buffer = nullptr;;
-		size_t last_length = 0;
-		size_t ite = 0;
-		size_t total_length = 0;
-	};
-	
-	//std::u32string operator()(std::u32string_view par, SourceType&&) { return {}; }
 	template<typename SourceType>
 	struct Formatter
 	{
-		size_t StringLength(std::u32string_view par, SourceType const& Input)
-		{
-			static_assert(false, "Undefine Formatter");
-			return 0;
-		}
-		void Format(FormatWrapper& Wraspper, std::u32string_view par, SourceType const& Input)
-		{
-			static_assert(false, "Undefine Formatter");
-		}
+		size_t Preformat(std::u32string_view par, SourceType const& Input);
+		std::optional<size_t> Format(std::span<char32_t> output, std::u32string_view par, SourceType const& Input);
+		
+		Formatter(){ static_assert(false, "unsupport formatter"); }
 	};
+}
 
-	enum class PatternType
-	{
-		NormalString,
-		Parameter,
-	};
+namespace Potato
+{
 
-	struct PatternRef
+	
+
+	struct FormatterPattern
 	{
+
+		enum class Type
+		{
+			NormalString,
+			Parameter,
+		};
+
 		struct Element
 		{
-			PatternType type;
+			Type type;
 			std::u32string_view string;
 		};
 		std::u32string_view string;
 		std::vector<Element> patterns;
+		template<typename ...AT>
+		std::u32string operator()(AT&& ...at) const;
 	};
 
-	PatternRef CreatePatternRef(std::u32string_view Ref);
+	template<typename ...AT>
+	struct FormatterWrapper;
 
-	namespace Implement
+	template<typename T, typename ...OT>
+	struct FormatterWrapper<T, OT...>
 	{
-		
-		size_t StringLengthImpLocateParmeters(size_t& total_size, PatternRef const& pattern, size_t pattern_index);
+		size_t Preformat(std::span<FormatterPattern::Element const> pars, T input, OT... o_input);
+		void Format(std::span<FormatterPattern::Element const> pars, std::span<char32_t>& output_buffer, T input, OT... o_input);
+	private:
+		Formatter<std::remove_cvref_t<T>> current_formatter;
+		FormatterWrapper<OT...> other_formatter;
+	};
 
-		void StringLengthImp(size_t& total_size, PatternRef const& pattern, size_t pattern_index);
-		
-		template<typename CurType, typename ...Type>
-		void StringLengthImp(size_t& total_size, PatternRef const& pattern, size_t pattern_index, CurType&& input1, Type&&... oinput)
-		{
-			auto PIndex = StringLengthImpLocateParmeters(total_size, pattern, pattern_index);
-			if (PIndex < pattern.patterns.size())
-			{
-				auto [type, pars] = pattern.patterns[PIndex];
-				assert(type == PatternType::Parameter);
-				size_t length = Formatter<std::remove_cv_t<std::remove_reference_t<CurType>>>{}.StringLength(pars, std::forward<CurType>(input1));
-				total_size += length;
-				StringLengthImp(total_size, pattern, PIndex + 1, std::forward<Type>(oinput)...);
-			}
-		}
-
-		size_t FormatImpLocateParmeters(FormatWrapper& Wrapper, PatternRef const& pattern, size_t pattern_index);
-
-		void FormatImp(FormatWrapper& Wrapper, PatternRef const& pattern, size_t pattern_index);
-		
-		template<typename CurType, typename ...Type>
-		void FormatImp(FormatWrapper& Wrapper, PatternRef const& pattern, size_t pattern_index, CurType&& input1, Type&&... oinput)
-		{
-			auto PIndex = FormatImpLocateParmeters(Wrapper, pattern, pattern_index);
-			if (PIndex < pattern.patterns.size())
-			{
-				auto [type, pars] = pattern.patterns[PIndex];
-				assert(type == PatternType::Parameter);
-				Formatter<std::remove_cv_t<std::remove_reference_t<CurType>>>{}.Format(Wrapper, pars, std::forward<CurType>(input1));
-				FormatImp(Wrapper, pattern, PIndex + 1, std::forward<Type>(oinput)...);
-			}
-		}
-	}
-
-	template<typename... Type>
-	size_t StringLength(std::u32string_view Pattern, Type&&... args)
+	template<>
+	struct FormatterWrapper<>
 	{
-		auto Patterns = CreatePatternRef(Pattern);
-		return StringLength(Patterns, std::forward<Type>(args)...);
-	}
+		size_t Preformat(std::span<FormatterPattern::Element const> pars);
+		void Format(std::span<FormatterPattern::Element const> pars, std::span<char32_t>& output_buffer);
+		static void FormatNormalString(FormatterPattern::Element const& pars, std::span<char32_t>& output_buffer);
+		static size_t PreformatNormalString(FormatterPattern::Element const& pars){ return pars.string.size(); }
+	};
 
-	template<typename... Type>
-	size_t StringLength(PatternRef const& Pattern, Type&&... args)
+	FormatterPattern CreateFormatterPattern(std::u32string_view Ref);
+
+	template<typename ...Type>
+	std::u32string Format(FormatterPattern const& pattern, Type&&... args)
 	{
-		size_t total_length = 0;
-		Implement::StringLengthImp(total_length, Pattern, 0, std::forward<Type>(args)...);
-		return total_length;
+		return pattern(std::forward<Type>(args)...);
 	}
 
 	template<typename ...Type>
-	void Process(FormatWrapper& Wrapper, PatternRef const& Patterns, Type&&... args)
+	std::u32string Format(std::u32string_view string, Type&&... args)
 	{
-		Implement::FormatImp(Wrapper, Patterns, 0, std::forward<Type>(args)...);
+		auto pattern = CreateFormatterPattern(string);
+		return pattern(std::forward<Type>(args)...);
 	}
 
-	template<typename ...Type>
-	void Process(FormatWrapper& Wrapper, std::u32string_view pattern, Type&&... args)
+	template<typename ...AT>
+	std::u32string FormatterPattern::operator()(AT&& ...at) const
 	{
-		auto Patterns = CreatePatternRef(pattern);
-		Process(Wrapper, Patterns, std::forward<Type>(args)...);
-	}
-
-	template<typename... Type>
-	std::u32string Process(std::u32string_view Pattern, Type&&... args)
-	{	
-		auto Patterns = CreatePatternRef(Pattern);
-		return Process(Patterns, std::forward<Type>(args)...);
-	}
-
-	template<typename... Type>
-	std::u32string Process(PatternRef const& Patterns, Type&&... args)
-	{
-		size_t total_length = 0;
-		Implement::StringLengthImp(total_length, Patterns, 0, std::forward<Type>(args)...);
-		std::u32string result(total_length, U'\0');
-		FormatWrapper wrapper(result);
-		Implement::FormatImp(wrapper, Patterns, 0, std::forward<Type>(args)...);
-		return std::move(result);
+		FormatterWrapper<AT...> wrapper;
+		auto size = wrapper.Preformat(patterns, std::forward<AT>(at)...);
+		std::u32string result;
+		result.resize(size);
+		std::span<char32_t> output_buffer(result);
+		wrapper.Format(patterns, output_buffer, std::forward<AT>(at)...);
+		return result;
 	}
 
 	template<typename Type>
-	std::u32string DirectProcess(std::u32string_view pars, Type&& args)
+	std::u32string DirectFormat(std::u32string_view par, Type&& type)
 	{
-		size_t require_size = Formatter<std::remove_reference_t<std::remove_cv_t<Type>>>{}.StringLength(pars, std::forward<Type>(args));
-		std::u32string result(require_size, U'\0');
-		FormatWrapper wrapper(result);
-		Formatter<std::remove_reference_t<std::remove_cv_t<Type>>>{}.Format(wrapper, pars, std::forward<Type>(args));
-		return std::move(result);
+		Formatter<std::remove_cvref_t<Type>> wrapper;
+		auto size = wrapper.Preformat(std::forward<Type>(type), par);
+		std::u32string result;
+		result.resize(size);
+		std::span<char32_t> output_buffer(result);
+		wrapper.Format(output_buffer, std::forward<Type>(type), par);
+		return result;
 	}
 }
 
-namespace Potato::StrFormat
+namespace Potato::Exception
+{
+
+	struct FormatterInterface
+	{
+		virtual ~FormatterInterface() = default;
+	};
+
+	struct FormatterUnsupportPatternString {
+		std::u32string pattern;
+		std::u32string total_str;
+		using ExceptionInterface = DefineInterface<FormatterInterface>;
+	};
+
+	struct FormatterLackOfFormatParas {
+		std::u32string pattern;
+		size_t index;
+		using ExceptionInterface = DefineInterface<FormatterInterface>;
+	};
+
+	struct FormatterRequireMoreSpace
+	{
+		using ExceptionInterface = DefineInterface<FormatterInterface>;
+	};
+}
+
+namespace Potato
+{
+	template<typename T, typename ...OT>
+	size_t FormatterWrapper<T, OT...>::Preformat(std::span<FormatterPattern::Element const> pars, T input, OT... o_input)
+	{
+		if (!pars.empty())
+		{
+			size_t result = 0;
+			while (!pars.empty())
+			{
+				auto& ref = *pars.begin();
+				if (ref.type == FormatterPattern::Type::NormalString)
+				{
+					result += FormatterWrapper<>::PreformatNormalString(ref);
+					pars = pars.subspan(1);
+				}
+				else {
+					result += current_formatter.Preformat(ref.string, input);
+					return result + other_formatter.Preformat(pars.subspan(1), std::forward<OT>(o_input)...);
+				}
+			}
+			return result;
+		}
+		else {
+			return 0;
+		}
+	}
+
+	template<typename T, typename ...OT>
+	void FormatterWrapper<T, OT...>::Format(std::span<FormatterPattern::Element const> pars, std::span<char32_t>& output_buffer, T input, OT... o_input)
+	{
+		if (!pars.empty())
+		{
+			while (!pars.empty())
+			{
+				auto& ref = *pars.begin();
+				if (ref.type == FormatterPattern::Type::NormalString)
+				{
+					FormatterWrapper<>::FormatNormalString(ref, output_buffer);
+					pars = pars.subspan(1);
+				}
+				else {
+					std::optional<size_t> offset = current_formatter.Format(output_buffer, ref.string, input);
+					if (offset)
+					{
+						output_buffer = output_buffer.subspan(*offset);
+						other_formatter.Format(pars.subspan(1), output_buffer, std::forward<OT>(o_input)...);
+						break;
+					}
+					else {
+						throw Exception::MakeExceptionTuple(Exception::FormatterRequireMoreSpace{});
+					}
+				}
+			}
+		}
+	}
+}
+
+namespace Potato
 {
 	template<>
 	struct Formatter<char32_t*>
 	{
-		size_t StringLength(std::u32string_view par, char32_t const* Input);
-		void Format(FormatWrapper& wrapper, std::u32string_view par, char32_t const* Input);
+		size_t Preformat(std::u32string_view par, char32_t const* Input);
+		std::optional<size_t> Format(std::span<char32_t> output, std::u32string_view par, char32_t const* Input);
 	};
 
 	template<>
 	struct Formatter<char32_t>
 	{
-		size_t StringLength(std::u32string_view par, char32_t Input);
-		void Format(FormatWrapper& wrapper, std::u32string_view par, char32_t Input);
+		size_t Preformat(std::u32string_view par, char32_t Input);
+		std::optional<size_t> Format(std::span<char32_t> output, std::u32string_view par, char32_t Input);
 	};
 
 	template<>
 	struct Formatter<std::u32string>
 	{
-		size_t StringLength(std::u32string_view par, std::u32string const& Input);
-		void Format(FormatWrapper& wrapper, std::u32string_view par, std::u32string const& Input);
+		size_t Preformat(std::u32string_view par, std::u32string const& Input);
+		std::optional<size_t> Format(std::span<char32_t> output, std::u32string_view par, std::u32string const& Input);
 	};
 
 	template<>
 	struct Formatter<std::u32string_view>
 	{
-		size_t StringLength(std::u32string_view par, std::u32string_view Input);
-		void Format(FormatWrapper& wrapper, std::u32string_view par, std::u32string_view Input);
+		size_t Preformat(std::u32string_view par, std::u32string_view Input);
+		std::optional<size_t> Format(std::span<char32_t> output, std::u32string_view par, std::u32string_view Input);
 	};
 
 	template<>
 	struct Formatter<float>
 	{
-		size_t StringLength(std::u32string_view par, float Input);
-		void Format(FormatWrapper& wrapper, std::u32string_view par, float Input);
+		size_t Preformat(std::u32string_view par, float Input);
+		std::optional<size_t> Format(std::span<char32_t> output, std::u32string_view par, float Input);
 	};
 
 	template<>
 	struct Formatter<double>
 	{
-		size_t StringLength(std::u32string_view par, double Input);
-		void Format(FormatWrapper& wrapper, std::u32string_view par, double Input);
+		size_t Preformat(std::u32string_view par, double Input);
+		std::optional<size_t> Format(std::span<char32_t> output, std::u32string_view par, double Input);
 	};
 
 	template<>
 	struct Formatter<uint32_t>
 	{
-		size_t StringLength(std::u32string_view par, uint32_t Input);
-		void Format(FormatWrapper& wrapper, std::u32string_view par, uint32_t Input);
+		size_t Preformat(std::u32string_view par, uint32_t Input);
+		std::optional<size_t> Format(std::span<char32_t> output, std::u32string_view par, uint32_t Input);
 	};
 
 	template<>
 	struct Formatter<int32_t>
 	{
-		size_t StringLength(std::u32string_view par, int32_t Input);
-		void Format(FormatWrapper& wrapper, std::u32string_view par, int32_t Input);
+		size_t Preformat(std::u32string_view par, int32_t Input);
+		std::optional<size_t> Format(std::span<char32_t> output, std::u32string_view par, int32_t Input);
 	};
 
 	template<>
 	struct Formatter<uint64_t>
 	{
-		size_t StringLength(std::u32string_view par, uint64_t Input);
-		void Format(FormatWrapper& wrapper, std::u32string_view par, uint64_t Input);
+		size_t Preformat(std::u32string_view par, uint64_t Input);
+		std::optional<size_t> Format(std::span<char32_t> output, std::u32string_view par, uint64_t Input);
 	};
 
 	template<>
 	struct Formatter<int64_t>
 	{
-		size_t StringLength(std::u32string_view par, int64_t Input);
-		void Format(FormatWrapper& wrapper, std::u32string_view par, int64_t Input);
+		size_t Preformat(std::u32string_view par, int64_t Input);
+		std::optional<size_t> Format(std::span<char32_t> output, std::u32string_view par, int64_t Input);
 	};
 }

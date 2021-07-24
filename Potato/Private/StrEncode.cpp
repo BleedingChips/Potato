@@ -1,5 +1,5 @@
 #include "../Public/StrEncode.h"
-namespace Potato::StrEncode
+namespace Potato
 {
 	
 	bool CheckUTF8(char8_t const* input, size_t space)
@@ -343,7 +343,7 @@ namespace Potato::StrEncode
 
 	HugeDocumenetReader::HugeDocumenetReader(std::u32string_view Path)
 	{
-		auto path_str = AsWrapper(Path).ToString<wchar_t>();
+		auto path_str = AsStrWrapper(Path).ToString<wchar_t>();
 		fstream.open(path_str,  std::ios::binary);
 		if (fstream.is_open())
 		{
@@ -375,31 +375,31 @@ namespace Potato::StrEncode
 		{
 			switch (bom_type)
 			{
-			case Potato::StrEncode::BomType::UTF8_NoBom:
-			case Potato::StrEncode::BomType::UTF8:
-				return Read<char8_t, 8>(fstream, StrEncode::CharWrapper<char8_t>{});
-			case Potato::StrEncode::BomType::UTF16LE:
-			case Potato::StrEncode::BomType::UTF16BE:
+			case Potato::BomType::UTF8_NoBom:
+			case Potato::BomType::UTF8:
+				return Read<char8_t, 8>(fstream, CharWrapper<char8_t>{});
+			case Potato::BomType::UTF16LE:
+			case Potato::BomType::UTF16BE:
 			{
 				auto P = DefaultBom<char16_t>();
 				if (bom_type == P)
 				{
-					return Read<char16_t, 2>(fstream, StrEncode::CharWrapper<char16_t>{});
+					return Read<char16_t, 2>(fstream, CharWrapper<char16_t>{});
 				}
 				else {
-					return Read<char16_t, 2>(fstream, StrEncode::CharWrapper<StrEncode::ReverseEndianness<char16_t>>{});
+					return Read<char16_t, 2>(fstream, CharWrapper<ReverseEndianness<char16_t>>{});
 				}
 			}
-			case Potato::StrEncode::BomType::UTF32LE:
-			case Potato::StrEncode::BomType::UTF32BE:
+			case Potato::BomType::UTF32LE:
+			case Potato::BomType::UTF32BE:
 			{
 				auto P = DefaultBom<char32_t>();
 				if (bom_type == P)
 				{
-					return Read<char32_t, 1>(fstream, StrEncode::CharWrapper<char32_t>{});
+					return Read<char32_t, 1>(fstream, CharWrapper<char32_t>{});
 				}
 				else {
-					return Read<char32_t, 1>(fstream, StrEncode::CharWrapper<StrEncode::ReverseEndianness<char32_t>>{});
+					return Read<char32_t, 1>(fstream, CharWrapper<ReverseEndianness<char32_t>>{});
 				}
 			}
 			default:

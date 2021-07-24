@@ -1,4 +1,4 @@
-#include "../Public/HIR.h"
+#include "../Public/MiniCore.h"
 
 #include <filesystem>
 #include <set>
@@ -15,6 +15,34 @@ namespace Potato
 		}
 		return false;
 	}
+
+	namespace Implement
+	{
+		RegisterMask ConstDataStorageTable::InserConstData(TypeProperty desc, TypeLayout layout, std::span<std::byte const> data)
+		{
+			if (!data.empty())
+			{
+				RegisterIndex reg{ RegisterIndex::Category::CONST, MemoryDescription::CUSTOM, elements.size() };
+				IndexSpan<> span(datas.size(), data.size());
+				datas.resize(datas.size() + data.size());
+				std::memcpy(datas.data() + span.start, data.data(), span.length);
+				elements.push_back({ std::move(desc), span, layout });
+				return reg;
+			}
+			return {};
+		}
+	}
+
+	TypeMask MiniCore::ForwardDefineType()
+	{
+		TypeMask tag{ std::in_place, MemoryDescription::CUSTOM, defined_types.size() };
+		defined_types.push_back({});
+		return tag;
+	}
+
+	
+
+	/*
 
 	TypeMask HIRForm::ForwardDefineType()
 	{
@@ -42,6 +70,7 @@ namespace Potato
 		elements.push_back({ std::move(desc), span, layout });
 		return reg;
 	}
+	*/
 
 	/*
 
