@@ -20,6 +20,7 @@ namespace Potato
 	{
 		RegisterMask ConstDataStorageTable::InserConstData(TypeProperty desc, TypeLayout layout, std::span<std::byte const> data)
 		{
+			/*
 			if (!data.empty())
 			{
 				RegisterIndex reg{ RegisterIndex::Category::CONST, MemoryDescription::CUSTOM, elements.size() };
@@ -29,6 +30,7 @@ namespace Potato
 				elements.push_back({ std::move(desc), span, layout });
 				return reg;
 			}
+			*/
 			return {};
 		}
 	}

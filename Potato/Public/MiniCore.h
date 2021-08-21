@@ -35,17 +35,6 @@ namespace Potato
 
 		CUSTOM,
 	};
-	
-	/*
-	template<typename Type> struct StorageTypeEnum { static inline constexpr StorageType value = StorageType::CUSTOM; };
-	template<> struct StorageTypeEnum<int32_t> { static inline constexpr StorageType value = StorageType::INT32; };
-	template<> struct StorageTypeEnum<uint32_t> { static inline constexpr StorageType value = StorageType::UINT32; };
-	template<> struct StorageTypeEnum<float> { static inline constexpr StorageType value = StorageType::FLOAT32; };
-	template<> struct StorageTypeEnum<double> { static inline constexpr StorageType value = StorageType::FLOAT64; };
-	template<> struct StorageTypeEnum<int64_t> { static inline constexpr StorageType value = StorageType::INT64; };
-	template<> struct StorageTypeEnum<uint64_t> { static inline constexpr StorageType value = StorageType::UINT64; };
-	template<typename Type> constexpr StorageType StorageTypeEnumV = StorageTypeEnum<Type>::value;
-	*/
 
 	struct TypeLayout
 	{
@@ -133,23 +122,6 @@ namespace Potato
 
 	using FunctionMask = std::optional<FunctionIndex>;
 
-	struct RegisterIndex
-	{
-		enum class Category
-		{
-			CONST,
-			STACK,
-			MEMORY,
-			IMMEDIATE_ADRESSING,
-		};
-		Category type;
-		MemoryDescription storage_type = MemoryDescription::CUSTOM;
-		uint64_t index;
-
-	};
-
-	using RegisterMask = std::optional<RegisterIndex>;
-
 	namespace Implement
 	{
 		template<typename Input>
@@ -160,17 +132,41 @@ namespace Potato
 		}
 	}
 
-	static RegisterMask AsImmediateAdressingRegister(uint8_t input) { return RegisterIndex{ RegisterIndex::Category::IMMEDIATE_ADRESSING, MemoryDescription::UINT8, Implement::Transfer(input) }; };
-	static RegisterMask AsImmediateAdressingRegister(uint16_t input) { return RegisterIndex{ RegisterIndex::Category::IMMEDIATE_ADRESSING, MemoryDescription::UINT16, Implement::Transfer(input) }; };
-	static RegisterMask AsImmediateAdressingRegister(uint32_t input) { return RegisterIndex{ RegisterIndex::Category::IMMEDIATE_ADRESSING, MemoryDescription::UINT32, Implement::Transfer(input) }; };
-	static RegisterMask AsImmediateAdressingRegister(uint64_t input) { return RegisterIndex{ RegisterIndex::Category::IMMEDIATE_ADRESSING, MemoryDescription::UINT64, Implement::Transfer(input) }; };
-	static RegisterMask AsImmediateAdressingRegister(int8_t input) { return RegisterIndex{ RegisterIndex::Category::IMMEDIATE_ADRESSING, MemoryDescription::INT8, Implement::Transfer(input) }; };
-	static RegisterMask AsImmediateAdressingRegister(int16_t input) { return RegisterIndex{ RegisterIndex::Category::IMMEDIATE_ADRESSING, MemoryDescription::INT16, Implement::Transfer(input) }; };
-	static RegisterMask AsImmediateAdressingRegister(int32_t input) { return RegisterIndex{ RegisterIndex::Category::IMMEDIATE_ADRESSING, MemoryDescription::INT32, Implement::Transfer(input) }; };
-	static RegisterMask AsImmediateAdressingRegister(int64_t input) { return RegisterIndex{ RegisterIndex::Category::IMMEDIATE_ADRESSING, MemoryDescription::INT64, Implement::Transfer(input) }; };
-	static RegisterMask AsImmediateAdressingRegister(float input) { return RegisterIndex{ RegisterIndex::Category::IMMEDIATE_ADRESSING, MemoryDescription::FLOAT32, Implement::Transfer(input) }; };
-	static RegisterMask AsImmediateAdressingRegister(double input) { return RegisterIndex{ RegisterIndex::Category::IMMEDIATE_ADRESSING, MemoryDescription::FLOAT64, Implement::Transfer(input) }; };
-	
+	struct RegisterIndex
+	{
+		enum class Category
+		{
+			CONST,
+			STACK,
+			MEMORY,
+			IA_UINT8,
+			IA_UINT16,
+			IA_UINT32,
+			IA_UINT64,
+			IA_INT8,
+			IA_INT16,
+			IA_INT32,
+			IA_INT64,
+			IA_FLOAT32,
+			IA_FLOAT64,
+		};
+
+		Category type;
+		uint64_t index;
+		RegisterIndex(Category input_type, uint64_t input_index) : type(input_type), index(input_index){}
+		explicit RegisterIndex(uint8_t ia) : RegisterIndex(Category::IA_UINT8, Implement::Transfer(ia)) {}
+		explicit RegisterIndex(uint16_t ia) : RegisterIndex(Category::IA_UINT16, Implement::Transfer(ia)) {}
+		explicit RegisterIndex(uint32_t ia) : RegisterIndex(Category::IA_UINT32, Implement::Transfer(ia)) {}
+		explicit RegisterIndex(uint64_t ia) : RegisterIndex(Category::IA_UINT64, Implement::Transfer(ia)) {}
+		explicit RegisterIndex(int8_t ia) : RegisterIndex(Category::IA_INT8, Implement::Transfer(ia)) {}
+		explicit RegisterIndex(int16_t ia) : RegisterIndex(Category::IA_INT16, Implement::Transfer(ia)) {}
+		explicit RegisterIndex(int32_t ia) : RegisterIndex(Category::IA_INT32, Implement::Transfer(ia)) {}
+		explicit RegisterIndex(int64_t ia) : RegisterIndex(Category::IA_INT64, Implement::Transfer(ia)) {}
+		explicit RegisterIndex(float ia) : RegisterIndex(Category::IA_FLOAT32, Implement::Transfer(ia)) {}
+		explicit RegisterIndex(double ia) : RegisterIndex(Category::IA_FLOAT64, Implement::Transfer(ia)) {}
+	};
+
+	using RegisterMask = std::optional<RegisterIndex>;
 
 	struct TypeProperty
 	{
@@ -209,8 +205,6 @@ namespace Potato
 		};
 	}
 
-	
-
 	struct MiniCore
 	{
 
@@ -230,12 +224,47 @@ namespace Potato
 		RegisterMask InserConstData(TypeProperty desc, TypeLayout layout, std::span<std::byte const> data){ 
 			return const_data_table.InserConstData(std::move(desc), std::move(layout), data);
 		}
+
+		enum class CommandType
+		{
+			Sub,
+			Add,
+			Mulity,
+			Divide,
+			Mod,
+			And,
+			Or,
+			Move,
+			Call,
+		};
+
+		struct TAC
+		{
+			CommandType Type;
+			RegisterIndex Parameter1;
+			RegisterIndex Parameter2;
+			RegisterIndex Result;
+		};
+
+		struct SerilizedTAC
+		{
+			CommandType Type;
+			RegisterIndex::Category ParameterCategory1;
+			RegisterIndex::Category ParameterCategory2;
+			RegisterIndex::Category ResultCategory;
+			uint64_t Parameter1;
+			uint64_t Parameter2;
+			uint64_t Result;
+		};
+
 	private:
+
 		Implement::ConstDataStorageTable const_data_table;
 		std::optional<TypeLayout> CalculateTypeLayout(TypeMask const& ref) const;
 		std::optional<TypeLayout> CalculateTypeLayout(TypeProperty const& ref, MemoryModel const& setting) const;
 		std::vector<TypeDescription::Member> temporary_member_type;
 		std::vector<std::optional<TypeProperty>> defined_types;
 		std::vector<std::tuple<TypeMask, size_t>> define_stack_record;
+
 	};
 }
