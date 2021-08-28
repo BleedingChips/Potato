@@ -60,7 +60,7 @@
     <ClInclude Include="..\..\Potato\Private\Symbol.cpp">
       <Filter>Private</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\LowLevelCore.h">
+    <ClInclude Include="..\..\Potato\Public\LowLevelVirtualCore.h">
       <Filter>Public</Filter>
     </ClInclude>
   </ItemGroup>
@@ -101,7 +101,7 @@
     <ClCompile Include="..\..\Potato\Private\Types.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\LowLevelCore.cpp">
+    <ClCompile Include="..\..\Potato\Private\LowLevelVirtualCore.cpp">
       <Filter>Private</Filter>
     </ClCompile>
   </ItemGroup>
