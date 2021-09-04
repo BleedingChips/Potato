@@ -25,6 +25,7 @@
     <ClInclude Include="..\..\Potato\Public\Interval.h" />
     <ClInclude Include="..\..\Potato\Public\IntrusivePointer.h" />
     <ClInclude Include="..\..\Potato\Public\Lexical.h" />
+    <ClInclude Include="..\..\Potato\Public\IntermediateRepresentation.h" />
     <ClInclude Include="..\..\Potato\Public\LowLevelVirtualCore.h" />
     <ClInclude Include="..\..\Potato\Public\Lr.h" />
     <ClInclude Include="..\..\Potato\Public\Lr0.h" />
@@ -42,6 +43,7 @@
     <ClCompile Include="..\..\Potato\Private\Ebnf.cpp" />
     <ClCompile Include="..\..\Potato\Private\FileSystem.cpp" />
     <ClCompile Include="..\..\Potato\Private\Lexical.cpp" />
+    <ClCompile Include="..\..\Potato\Private\IntermediateRepresentation.cpp" />
     <ClCompile Include="..\..\Potato\Private\LowLevelVirtualCore.cpp" />
     <ClCompile Include="..\..\Potato\Private\Lr.cpp" />
     <ClCompile Include="..\..\Potato\Private\Lr0.cpp" />

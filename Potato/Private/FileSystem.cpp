@@ -255,14 +255,30 @@ namespace Potato
 		return {};
 	}
 
-	std::u32string_view Path::Last() const
+	std::u32string_view Path::Filename() const
 	{
-		if(elements.size() > 0)
+		if (elements.size() > 0)
 		{
 			auto ref = *elements.rbegin();
 			return ref(path);
 		}
 		return {};
+	}
+
+	std::u32string_view Path::FilenameWithoutExtension() const
+	{
+		return std::get<0>(FilenameWithoutExtensionAndExtension());
+	}
+	std::u32string_view Path::Extension() const
+	{
+		return std::get<1>(FilenameWithoutExtensionAndExtension());
+	}
+
+	std::tuple<std::u32string_view, std::u32string_view> Path::FilenameWithoutExtensionAndExtension() const
+	{
+		auto result = Filename();
+		auto file_index = result.find_last_of(U'.');
+		return { result.substr(0, file_index), result.substr(file_index + 1) };
 	}
 	
 	bool PathMapping::Regedit(std::u32string_view name, Path path)

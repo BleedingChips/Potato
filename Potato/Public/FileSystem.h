@@ -63,7 +63,10 @@ namespace Potato
 		std::vector<Path> FindAllChildDirectory(std::function<bool(Path&)> funcobj, size_t stack = std::numeric_limits<size_t>::max()) const;
 		std::vector<Path> FindAllParentDirectory(std::function<bool(Path&)> funcobj, size_t stack = std::numeric_limits<size_t>::max()) const;
 
-		std::u32string_view Last() const;
+		std::u32string_view Filename() const;
+		std::u32string_view FilenameWithoutExtension() const;
+		std::u32string_view Extension() const;
+		std::tuple<std::u32string_view, std::u32string_view> FilenameWithoutExtensionAndExtension() const;
 
 		template<typename CharType>
 		decltype(auto) ToString() const { return ToStringImp(ItSelf<CharType>{}); }

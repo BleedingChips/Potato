@@ -139,7 +139,7 @@ namespace Potato
 				input = *(begin++);
 				switch (input)
 				{
-				case U'd': return { T::Char, UnfaSeqIntervalT({U'0', U'9' + 1}) };
+				case U'd': return { T::Char, UnfaSeqIntervalT({{U'0', U'9' + 1}}) };
 				case U'D': {
 					UnfaSeqIntervalT Tem{{ {1, U'0'},{U'9' + 1, MaxChar()} }};
 					return { T::Char, std::move(Tem) };

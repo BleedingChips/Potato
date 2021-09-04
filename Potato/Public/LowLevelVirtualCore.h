@@ -4,8 +4,7 @@
 #include <optional>
 namespace Potato::LowLevelVirtualCore
 {
-
-	enum class CommandT : uint8_t
+	enum class CommandType : uint8_t
 	{
 		ADD,
 		SUB,
@@ -34,7 +33,7 @@ namespace Potato::LowLevelVirtualCore
 		IFJUMP,
 	};
 
-	enum class DataT : uint8_t
+	enum class DataType : uint8_t
 	{
 		UI8,
 		UI16,
@@ -52,45 +51,51 @@ namespace Potato::LowLevelVirtualCore
 		POINTER,
 	};
 
-	enum class DataSourceT : uint8_t
+	size_t operator*(DataType Type);
+
+	enum class DataSource : uint8_t
 	{
 		UnKnow,
 		Const,
 		Stack,
-		Member,
+		Memory, // do not support yet
 		ImmediateAddressing,
 	};
 
-	/*
-
-	struct LowLevelScriptTAC
+	struct ThreeAdressCode
 	{
-		LowLevelScriptCommandType type;
-		LowLevelScriptDataType sub_type;
-		LowLevelScriptDataType sub_type2;
-		LowLevelScriptSourceType p1t;
-		LowLevelScriptSourceType p2t;
-		LowLevelScriptSourceType p3t;
-		uint64_t p1;
-		uint64_t p2;
-		uint64_t p3;
+		CommandType Type;
+		DataType SType1 : 4;
+		DataType SType2 : 4;
+		DataSource P1T : 4;
+		DataSource P2T : 4;
+		DataSource P3T : 4;
+		uint64_t P1;
+		uint64_t P2;
+		uint64_t P3;
 	};
 
-	struct LowLevelScriptTable
+	struct Table
 	{
-		using TAC = LowLevelScriptTAC;
-		using CommandT = LowLevelScriptCommandType;
-		using DataT = LowLevelScriptDataType;
-		using SourceT = LowLevelScriptSourceType;
-		std::vector<uint64_t> const_buffer;
-		std::vector<LowLevelScriptTAC> commands;
-		std::optional<uint64_t> start_ptr;
+		using ThreeAdressCode = ThreeAdressCode;
+		std::vector<uint64_t> ConstBuffer;
+		std::vector<ThreeAdressCode> Commands;
+		uint64_t EnterFunctionOutputStackLength = 0;
+		uint64_t EnterFunctionTotalStack = 0;
 	};
 
-	struct LowLevelScriptCore
+	struct ProgramCounter
 	{
-		
-		bool operator()(LowLevelScriptTable const& Table);
+		uint64_t CommandOffset = 0;
+		uint64_t LocalStackOffset = 0;
+		uint64_t CurrentStackUsingLength = 0;
+		uint64_t CurrentStackTotalLength = 0;
+	};
+
+	struct Executor
+	{
+
+		bool operator()(Table const& CommandTable);
 		
 	private:
 		
@@ -100,12 +105,13 @@ namespace Potato::LowLevelVirtualCore
 			size_t stack_offset;
 		};
 
-		std::vector<uint64_t> stack_buffer;
-		std::vector<uint64_t> member_buffer;
-		std::vector<PCContent> pc_contents;
-		void Command_Add(LowLevelScriptTAC const& Tac);
-		void Command_Sub(LowLevelScriptTAC const& Tac);
+		std::vector<uint64_t> StackBuffer;
+		//std::vector<uint64_t> MemberBuffer;
+		std::vector<ProgramCounter> ProgramCounters;
+		void ReadData(uint64_t& BufferTarget, size_t Length, DataSource Source, uint64_t Data, Table const& Table);
+		void SaveData(uint64_t BufferSource, size_t Length, DataSource Source, uint64_t Data);
+		void Command_Add(ThreeAdressCode const& Tac, Table const& CommandTable);
+		void Command_Sub(ThreeAdressCode const& Tac, Table const& CommandTable);
 	};
-	*/
 
 }
