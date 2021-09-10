@@ -1,8 +1,12 @@
 #pragma once
 #include "LowLevelVirtualCore.h"
+#include "Misc.h"
 #include <assert.h>
+#include <span>
 namespace Potato::IntermediateRepresentation
 {
+	using namespace LowLevelVirtualCore;
+
 	struct UserTypeLayout
 	{
 		size_t Align = 1;
@@ -71,5 +75,46 @@ namespace Potato::IntermediateRepresentation
 		std::vector<std::optional<TypeDescription>> AllDescriptions;
 		std::vector<DefineStack> DefineStack;
 		static std::tuple<UserTypeLayout, size_t> FixLayout(MemberModel const& MM, UserTypeLayout Main, UserTypeLayout Member, size_t ElementCount);
+	};
+
+	struct ConstBufferProducer
+	{	
+		//void InsertData();
+		struct Element
+		{
+			TypeIndex Index;
+			UserTypeLayout ElementLayout;
+			size_t ElementCount = 1;
+		};
+		size_t Insert(Element Element, std::span<std::byte const> Data);
+	private:
+		struct ElementStorage
+		{
+			Element Element;
+			Potato::IndexSpan<> Data;
+		};
+		std::vector<uint64_t> ConstBuffer;
+		std::vector<ElementStorage> Elements;
+		size_t CurrentUsedInByte = 0;
+	};
+
+	struct RegisterIndex
+	{
+		TypeIndex Type;
+		DataSource Source;
+		size_t Index;
+	};
+
+	struct FunctionProducer
+	{
+		struct TAC
+		{
+			CommandType Type;
+			RegisterIndex P1;
+			RegisterIndex P2;
+			RegisterIndex P3;
+		};
+		std::vector<TAC> AllFunctionScore;
+
 	};
 }

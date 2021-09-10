@@ -90,5 +90,25 @@ namespace Potato::IntermediateRepresentation
 		Main.Size += Sub.Size * ElementCount;
 		return {Main, offset};
 	}
+
+	size_t ConstBufferProducer::Insert(Element Element, std::span<std::byte const> Data)
+	{
+		size_t CurrentIndex = Elements.size();
+		size_t RequireAlign = std::min(Element.ElementLayout.Align, sizeof(uint64_t));
+		size_t Space = CurrentUsedInByte % RequireAlign;
+		if(Space != 0)
+			CurrentUsedInByte += RequireAlign - Space;
+		size_t StartInByte = CurrentUsedInByte;
+		size_t TotalInByte = StartInByte + Data.size();
+		using ValueType = decltype(ConstBuffer)::value_type;
+		size_t RequireBufferCount = TotalInByte / sizeof(ValueType);
+		if(TotalInByte % sizeof(ValueType) != 0)
+			RequireBufferCount += 1;
+		ConstBuffer.resize(RequireBufferCount, 0);
+		std::memcpy(ConstBuffer.data(), Data.data(), TotalInByte);
+		CurrentUsedInByte = TotalInByte;
+		Elements.push_back({ Element, {StartInByte, Data.size()}});
+		return CurrentIndex;
+	}
 }
 
