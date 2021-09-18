@@ -1,5 +1,6 @@
 #include "../Public/Lr0.h"
 #include <optional>
+
 namespace Potato
 {
 
@@ -12,7 +13,6 @@ namespace Potato
 
 	bool HandleInputToken(Lr0Table const& Table, std::vector<LrStep>& Steps, SearchElement& SE, LrSymbol Sym, size_t token_index)
 	{
-
 		auto CurState = *SE.State.rbegin();
 		auto Nodes = Table.nodes[CurState];
 		for (size_t i = 0; i < Nodes.shift_count; ++i)
@@ -124,6 +124,131 @@ namespace Potato
 			}
 		}
 		throw Exception::MakeExceptionTuple(Exception::LrUnaccableSymbol{ MaxTokenUsed, MaxTokenUsed < TokenLength ? TokenArray[MaxTokenUsed] : LrSymbol::EndOfFile(), std::move(BackupSteps) });
+	}
+	/*
+	void ExpandProductions2(Lr0Table const& Table, size_t Index, std::vector<SearchStackElement>& SearchStack)
+	{
+		SearchElement Pros = std::move(SearchStack[Index].search);
+		auto CurNode = Table.nodes[*Pros.State.rbegin()];
+		for (size_t i = 0; i < CurNode.reduce_count; ++i)
+		{
+			size_t reduce_index = CurNode.reduce_count - 1 - i;
+			auto Reduce = Table.reduces[CurNode.reduce_adress + reduce_index];
+			auto Production = Table.productions[Reduce.production_index];
+			auto NewPros = Pros;
+			SearchStack.push_back({ Pros, true, CurNode.reduce_count - 1 - i, Production.production_count, Production.mask, Production.value });
+		}
+		SearchStack[Index] = { std::move(Pros), false, 0, 0, 0, 0 };
+	}
+
+	LrHistory Process2(Lr0Table const& Table, LrSymbol const* TokenArray, size_t TokenLength)
+	{
+		std::vector<SearchStackElement> SearchStack;
+		SearchStack.push_back(SearchStackElement{{0, {0}, 0}, true, 0, 0, 0, 0});
+		while (!SearchStack.empty())
+		{
+			for (size_t index = 0; index < SearchStack.size(); ++index)
+			{
+				if (SearchStack[index].is_reduce)
+				{
+					ExpandProductions2(Table, index, SearchStack);
+				}
+			}
+			volatile int i =0;
+		}
+		return {};
+	}
+	*/
+
+	Lr0ProcessContent::Lr0ProcessContent(Lr0Table const& InputTable)
+		: Table(InputTable)
+	{
+		Cores.push_back({ UsedBranch++, 0, 0, 1});
+		States.push_back(0);
+		ExpandSearchCore();
+	}
+
+	void Lr0ProcessContent::ExpandSearchCore()
+	{
+		struct ExpandStack
+		{
+			size_t Branche;
+			size_t StateCount;
+			size_t DependenceBranche;
+			std::optional<size_t> ProductionIndex;
+			bool Accepted;
+		};
+		TemporaryStates = States;
+		std::deque<ExpandStack> ExpandBackups;
+		for (size_t I = 0; I < Cores.size(); ++I)
+		{
+			SearchCore Cur = Cores[I];
+			ExpandBackups.push_back(ExpandStack{Cur.CurrentBranch, Cur.StateCount, Cur.DependentedBranch, {}, true});
+		}
+		size_t StateOffset = 0;
+		for (size_t I = 0; I < ExpandBackups.size(); ++I)
+		{
+			ExpandStack Cur = ExpandBackups[I];
+			if(!Cur.Accepted)
+				continue;
+			States.clear();
+			States.insert(States.end(), TemporaryStates.begin() + StateOffset, TemporaryStates.begin() + StateOffset + Cur.StateCount);
+			do
+			{
+				assert(!States.empty());
+				if (Cur.ProductionIndex.has_value())
+				{
+					assert(*Cur.ProductionIndex < Table.productions.size());
+					Lr0Table::Production Pro = Table.productions[*Cur.ProductionIndex];
+					States.resize(States.size() - Pro.production_count);
+					uint32_t LastState = *States.rbegin();
+					assert(Table.nodes.size() > LastState);
+					auto Node = Table.nodes[LastState];
+					assert(Table.shifts.size() >= Node.shift_adress + Node.shift_count);
+					bool Find = false;
+					for (size_t I2 = 0; I2 < Node.shift_count; ++I2)
+					{
+						auto ShiftNode = Table.shifts[I2 + Node.shift_adress];
+						if (ShiftNode.require_symbol == Pro.value)
+						{
+							Find = true;
+							States.push_back(ShiftNode.shift_state);
+							break;
+						}
+					}
+					Cur.ProductionIndex = {};
+					if (!Find)
+					{
+						Cur.Accepted = false;
+						break;
+					}
+				}
+				uint32_t LastState = *States.rbegin();
+				assert(Table.nodes.size() > LastState);
+				auto Node = Table.nodes[LastState];
+				assert(Node.reduce_adress + Node.reduce_count <= Table.reduces.size());
+				for (size_t i = 0; i < Node.reduce_count; ++i)
+				{
+					auto production_index = Table.reduces[Node.reduce_adress + i].production_index;
+					if (Node.shift_count == 0 && !Cur.ProductionIndex)
+					{
+						Cur.ProductionIndex = production_index;
+					}
+					else {
+						TemporaryStates.insert(TemporaryStates.end(), States.begin(), States.end());
+						ExpandBackups.push_back({UsedBranch++, States.size(), Cur.Branche, production_index, true});
+					}
+				}
+			}while(Cur.ProductionIndex.has_value());
+			if (Cur.Accepted)
+			{
+				if (Cur.StateCount == States.size())
+				{
+					for(size_t Index = 0; Index < Cur.StateCount; ++Index)
+						TemporaryStates[Index + StateOffset] = States[Index];
+				}else if(Cur.StateCount < States.size())
+			}
+		}
 	}
 
 	std::set<LrSymbol> CalNullableSet(const std::vector<LrProductionInput>& production)

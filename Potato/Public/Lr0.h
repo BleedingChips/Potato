@@ -1,11 +1,13 @@
 #include <vector>
 #include <map>
 #include <set>
-
+#include <deque>
 #include "Lr.h"
 
 namespace Potato
 {
+
+	using StorageT = LrSymbolStorageT;
 
 	struct Lr0Table {
 
@@ -42,6 +44,7 @@ namespace Potato
 	};
 
 	LrHistory Process(Lr0Table const& Table, LrSymbol const* TokenArray, size_t TokenLength);
+	LrHistory Process2(Lr0Table const& Table, LrSymbol const* TokenArray, size_t TokenLength);
 
 	inline std::any Process(Lr0Table const& Table, LrSymbol const* TokenArray, size_t TokenLength, std::function<std::any(LrNTElement&)> NTFunc, std::function<std::any(LrTElement&)> TFun)
 	{
@@ -50,4 +53,42 @@ namespace Potato
 	}
 
 	Lr0Table CreateLr0Table(LrSymbol start_symbol, std::vector<LrProductionInput> const& production, std::vector<LrOpePriority> const& priority);
+
+	struct Lr0ProcessContent
+	{
+		struct SearchCore
+		{
+			uint32_t CurrentBranch = 0;
+			uint32_t DependentedBranch = 0;
+			uint32_t BranchStepOffset = 0;
+			uint32_t StateCount = 0;
+		};
+
+		struct StepTuple
+		{
+			LrStep Step;
+			uint32_t OwneredBranch = 0;
+			uint32_t StepCount = 0;
+		};
+
+		void InsertTerminalSymbol(LrSymbol InputSymbol);
+		LrHistory EndOfFile();
+		Lr0ProcessContent(Lr0Table const& Table);
+
+		private:
+
+		void ExpandSearchCore();
+
+		bool TryInsertTerminalSymbol(SearchCore& Core, LrSymbol InputSymbol);
+
+		void Expand();
+
+		Lr0Table const& Table;
+		std::vector<StepTuple> Steps;
+		std::vector<SearchCore> Cores;
+		std::vector<uint32_t> States;
+		std::vector<uint32_t> TemporaryStates;
+		uint32_t UsedBranch = 1;
+		uint32_t TokenIndex = 0;
+	};
 }
