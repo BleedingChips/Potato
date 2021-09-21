@@ -50,7 +50,7 @@ int main()
 			if (Ite.acception == 0)
 			{
 				int data = 0;
-				StrScanner::DirectProcess(Ite.capture, data);
+				DirectScan(Ite.capture, data);
 				Datas.push_back(data);
 			}
 			else
@@ -69,6 +69,12 @@ int main()
 	);
 
 	auto His = Process(tab, Syms.data(), Syms.size());
+
+	Lr0ProcessContent Content(tab);
+	for (auto& Ite : Syms)
+	{
+		Content.InsertTerminalSymbol(Ite);
+	}
 
 	int result = std::any_cast<int>(Process(His, [&](LrNTElement& E) -> std::any {
 		switch (E.mask)
@@ -114,7 +120,7 @@ int main()
 		if (e.mask == 1)
 		{
 			int Data;
-			StrScanner::DirectProcess(e.capture, Data);
+			DirectScan(e.capture, Data);
 			return Data;
 		}
 		return {};

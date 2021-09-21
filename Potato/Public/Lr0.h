@@ -59,9 +59,11 @@ namespace Potato
 		struct SearchCore
 		{
 			uint32_t CurrentBranch = 0;
+			uint32_t StepCount = 0;
 			uint32_t DependentedBranch = 0;
-			uint32_t BranchStepOffset = 0;
+			uint32_t DependentedStepCount = 0;
 			uint32_t StateCount = 0;
+			std::optional<LrSymbol> InputSymbol;
 		};
 
 		struct StepTuple
@@ -79,16 +81,15 @@ namespace Potato
 
 		void ExpandSearchCore();
 
-		bool TryInsertTerminalSymbol(SearchCore& Core, LrSymbol InputSymbol);
-
-		void Expand();
+		void RemoveStep(uint32_t RemoveBranch, std::optional<uint32_t> OverwriteBranch, size_t MaxOverwriteStepCount);
 
 		Lr0Table const& Table;
 		std::vector<StepTuple> Steps;
 		std::vector<SearchCore> Cores;
 		std::vector<uint32_t> States;
+		std::vector<SearchCore> TemporaryCores;
 		std::vector<uint32_t> TemporaryStates;
-		uint32_t UsedBranch = 1;
+		uint32_t UsedBranch = 0;
 		uint32_t TokenIndex = 0;
 	};
 }

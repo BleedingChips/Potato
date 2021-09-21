@@ -163,63 +163,122 @@ namespace Potato
 	Lr0ProcessContent::Lr0ProcessContent(Lr0Table const& InputTable)
 		: Table(InputTable)
 	{
-		Cores.push_back({ UsedBranch++, 0, 0, 1});
+		Cores.push_back({ ++UsedBranch, 0, 0, 0, 1});
 		States.push_back(0);
+		ExpandSearchCore();
+	}
+
+	void Lr0ProcessContent::InsertTerminalSymbol(LrSymbol InputSymbol)
+	{
+		assert(InputSymbol.IsTerminal());
+		for (auto& Ite : Cores)
+		{
+			Ite.InputSymbol = InputSymbol;
+		}
 		ExpandSearchCore();
 	}
 
 	void Lr0ProcessContent::ExpandSearchCore()
 	{
-		struct ExpandStack
-		{
-			size_t Branche;
-			size_t StateCount;
-			size_t DependenceBranche;
-			std::optional<size_t> ProductionIndex;
-			bool Accepted;
-		};
-		TemporaryStates = States;
-		std::deque<ExpandStack> ExpandBackups;
-		for (size_t I = 0; I < Cores.size(); ++I)
-		{
-			SearchCore Cur = Cores[I];
-			ExpandBackups.push_back(ExpandStack{Cur.CurrentBranch, Cur.StateCount, Cur.DependentedBranch, {}, true});
-		}
+		TemporaryStates.clear();
+		TemporaryCores.clear();
 		size_t StateOffset = 0;
-		for (size_t I = 0; I < ExpandBackups.size(); ++I)
+		for (size_t I = Cores.size(); I > 0; --I)
 		{
-			ExpandStack Cur = ExpandBackups[I];
-			if(!Cur.Accepted)
-				continue;
-			States.clear();
-			States.insert(States.end(), TemporaryStates.begin() + StateOffset, TemporaryStates.begin() + StateOffset + Cur.StateCount);
+			SearchCore Cur = Cores[I-1];
+			TemporaryStates.insert(TemporaryStates.end(), States.end() - StateOffset - Cur.StateCount, States.end() - StateOffset);
+			TemporaryCores.push_back(Cur);
+			StateOffset += Cur.StateCount;
+		}
+		Cores.clear();
+		States.clear();
+		StateOffset = 0;
+		while (!TemporaryCores.empty())
+		{
+			SearchCore Cur = *TemporaryCores.rbegin();
+			TemporaryCores.pop_back();
+			auto TempStart = TemporaryStates.end() - Cur.StateCount;
+			States.insert(States.end(), TempStart, TemporaryStates.end());
+			TemporaryStates.erase(TempStart, TemporaryStates.end());
 			do
 			{
-				assert(!States.empty());
-				if (Cur.ProductionIndex.has_value())
+				assert(States.size() > StateOffset);
+				if (Cur.InputSymbol.has_value())
 				{
-					assert(*Cur.ProductionIndex < Table.productions.size());
-					Lr0Table::Production Pro = Table.productions[*Cur.ProductionIndex];
-					States.resize(States.size() - Pro.production_count);
 					uint32_t LastState = *States.rbegin();
-					assert(Table.nodes.size() > LastState);
+					assert(LastState < Table.nodes.size());
 					auto Node = Table.nodes[LastState];
 					assert(Table.shifts.size() >= Node.shift_adress + Node.shift_count);
 					bool Find = false;
 					for (size_t I2 = 0; I2 < Node.shift_count; ++I2)
 					{
 						auto ShiftNode = Table.shifts[I2 + Node.shift_adress];
-						if (ShiftNode.require_symbol == Pro.value)
+						if (LrSymbol::MakeSymbol(ShiftNode.require_symbol) == *Cur.InputSymbol)
 						{
 							Find = true;
 							States.push_back(ShiftNode.shift_state);
+							++Cur.StateCount;
+							LrStep Ste;
+							Ste.value = LrSymbol::MakeSymbol(ShiftNode.require_symbol);
+							Ste.shift.token_index = TokenIndex;
+							StepTuple Tup{ Ste, Cur.CurrentBranch, Cur.StepCount};
+							Steps.push_back(Tup);
+							++Cur.StepCount;
+							Cur.InputSymbol = {};
 							break;
 						}
 					}
-					Cur.ProductionIndex = {};
+					if (Find)
+					{
+						size_t CurStateCount = 0;
+						for (auto& Ite : Cores)
+						{
+							if (Ite.StateCount == Cur.StateCount)
+							{
+								bool Same = true;
+								for (uint32_t Index = 0; Index < Ite.StateCount; ++Index)
+								{
+									if (States[Index + CurStateCount] != States[Index + StateOffset])
+									{
+										Same = false;
+										break;
+									}
+								}
+								if (Same)
+								{
+									Find = false;
+									break;
+								}
+							}
+							CurStateCount += Ite.StateCount;
+						}
+					}
 					if (!Find)
 					{
-						Cur.Accepted = false;
+						std::optional<uint32_t> OverwriteBranch;
+						for (auto Ite2 = TemporaryCores.rbegin(); Ite2 != TemporaryCores.rend(); ++Ite2)
+						{
+							if (Ite2->DependentedBranch == Cur.CurrentBranch)
+							{
+								if (OverwriteBranch.has_value())
+									Ite2->DependentedBranch = *OverwriteBranch;
+								else
+								{
+									OverwriteBranch = Ite2->CurrentBranch;
+									Ite2->DependentedBranch = 0;
+									RemoveStep(Cur.CurrentBranch, OverwriteBranch, Ite2->StepCount);
+								}
+							}
+						}
+						if (!OverwriteBranch.has_value())
+						{
+							if (TemporaryCores.empty())
+							{
+								assert(false);
+							}
+							RemoveStep(Cur.CurrentBranch, OverwriteBranch, Cur.StepCount);
+						}
+							
 						break;
 					}
 				}
@@ -230,25 +289,40 @@ namespace Potato
 				for (size_t i = 0; i < Node.reduce_count; ++i)
 				{
 					auto production_index = Table.reduces[Node.reduce_adress + i].production_index;
-					if (Node.shift_count == 0 && !Cur.ProductionIndex)
+					assert(production_index < Table.productions.size());
+					auto Symbol = LrSymbol::MakeSymbol(Table.productions[production_index].value);
+					if (Node.shift_count == 0 && !Cur.InputSymbol)
 					{
-						Cur.ProductionIndex = production_index;
+						Cur.InputSymbol = Symbol;
 					}
 					else {
-						TemporaryStates.insert(TemporaryStates.end(), States.begin(), States.end());
-						ExpandBackups.push_back({UsedBranch++, States.size(), Cur.Branche, production_index, true});
+						SearchCore NewExpand {
+							++UsedBranch, Cur.StepCount, Cur.CurrentBranch, Cur.StepCount, Cur.StateCount,
+							Symbol
+							};
+						TemporaryCores.push_back(NewExpand);
+						TemporaryStates.insert(TemporaryStates.end(), States.begin() + StateOffset, States.end());
 					}
 				}
-			}while(Cur.ProductionIndex.has_value());
-			if (Cur.Accepted)
-			{
-				if (Cur.StateCount == States.size())
-				{
-					for(size_t Index = 0; Index < Cur.StateCount; ++Index)
-						TemporaryStates[Index + StateOffset] = States[Index];
-				}else if(Cur.StateCount < States.size())
-			}
+			} while (Cur.InputSymbol.has_value());
+			Cores.push_back(Cur);
+			StateOffset += Cur.StateCount;
 		}
+	}
+
+	void Lr0ProcessContent::RemoveStep(uint32_t RemoveBranch, std::optional<uint32_t> OverwriteBranch, size_t MaxOverwriteStepCount)
+	{
+		Steps.erase(std::remove_if(Steps.begin(), Steps.end(), [&](StepTuple& Tuple) -> bool{
+			if (Tuple.OwneredBranch == RemoveBranch)
+			{
+				if (OverwriteBranch.has_value() && Tuple.StepCount < MaxOverwriteStepCount)
+				{
+					Tuple.OwneredBranch = *OverwriteBranch;
+				}else
+					return true;
+			}
+			return false;
+		}), Steps.end());
 	}
 
 	std::set<LrSymbol> CalNullableSet(const std::vector<LrProductionInput>& production)
