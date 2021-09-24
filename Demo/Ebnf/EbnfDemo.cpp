@@ -75,6 +75,7 @@ int main()
 	{
 		Content.InsertTerminalSymbol(Ite);
 	}
+	Content.EndOfSymbolStream();
 
 	int result = std::any_cast<int>(Process(His, [&](LrNTElement& E) -> std::any {
 		switch (E.mask)

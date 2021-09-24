@@ -74,14 +74,15 @@ namespace Potato
 		};
 
 		void InsertTerminalSymbol(LrSymbol InputSymbol);
-		LrHistory EndOfFile();
+		LrHistory EndOfSymbolStream();
 		Lr0ProcessContent(Lr0Table const& Table);
 
 		private:
 
-		void ExpandSearchCore();
+		void ExpandSearchCore(bool IsFinalSymbol);
 
-		void RemoveStep(uint32_t RemoveBranch, std::optional<uint32_t> OverwriteBranch, size_t MaxOverwriteStepCount);
+		void RemoveStepFromTemporaryCores(uint32_t RemoveBranch);
+		LrHistory GeneratorHistory(uint32_t RequireBranch);
 
 		Lr0Table const& Table;
 		std::vector<StepTuple> Steps;
