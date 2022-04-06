@@ -1,0 +1,72 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Implement">
+      <UniqueIdentifier>{25e9f3b3-5744-47d1-91dc-0e042e62f13e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Include">
+      <UniqueIdentifier>{5e8ef671-3d97-48fc-8e1f-c748034688ca}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\Potato\Include\PotatoMisc.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Include\PotatoTMP.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Include\PotatoDLr.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Include\PotatoInterval.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Include\PotatoReg.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Include\PotatoStrEncode.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Include\PotatoStrFormat.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Include\PotatoPath.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Include\PotatoEbnf.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Include\PotatoMiniCore.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Potato\Include\PotatoIntrusivePointer.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\Potato\Implement\PotatoMisc.cpp">
+      <Filter>Implement</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Potato\Implement\PotatoDLr.cpp">
+      <Filter>Implement</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Potato\Implement\PotatoReg.cpp">
+      <Filter>Implement</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Potato\Implement\PotatoStrEncode.cpp">
+      <Filter>Implement</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Potato\Implement\PotatoStrFormat.cpp">
+      <Filter>Implement</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Potato\Implement\PotatoPath.cpp">
+      <Filter>Implement</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Potato\Implement\PotatoEbnf.cpp">
+      <Filter>Implement</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Potato\Implement\PotatoMiniCore.cpp">
+      <Filter>Implement</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>
