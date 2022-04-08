@@ -216,7 +216,7 @@ namespace Potato::Reg
 					return false;
 				}
 				default:
-					PushSymbolData(T::CharSet, SeqIntervalT{IntervalT{InputSymbol, InputSymbol + 1}}, LastTokenIndex);
+					PushSymbolData(T::SingleChar, InputSymbol, LastTokenIndex);
 					CurrentState = State::Normal;
 					return true;
 				}
@@ -415,6 +415,7 @@ namespace Potato::Reg
 			{
 				{*NT::AcceptableSingleChar, {*T::SingleChar}, 40},
 				{*NT::AcceptableSingleChar, {*T::Num}, 40},
+				{*NT::AcceptableSingleChar, {*T::Min}, 40},
 				{*NT::AcceptableSingleChar, {*T::Comma}, 40},
 				{*NT::AcceptableSingleChar, {*T::Colon}, 40},
 				{*NT::CharList, {*NT::AcceptableSingleChar}, 41},
@@ -747,7 +748,7 @@ namespace Potato::Reg
 		}
 		catch (DLr::Exception::UnaccableSymbol const& Symbol)
 		{
-			Exception::UnaccaptableRegex NewReg(Symbol.TokenIndex, AcceptData);
+			throw Exception::UnaccaptableRegex{Symbol.TokenIndex, AcceptData};
 		}
 		catch (...)
 		{
@@ -994,7 +995,7 @@ namespace Potato::Reg
 					{
 						auto& Ref = Ite.Edges[Index];
 						auto& Ref2 = Ite.Edges[Index2];
-						if (Ref.ToNode == Ref2.ToNode)
+						if (Ref.ToNode == Ref2.ToNode && !Nodes[Ref.ToNode].Edges.empty())
 						{
 							if (Ref.Propertys.ConsumeChars == Ref2.Propertys.ConsumeChars)
 							{

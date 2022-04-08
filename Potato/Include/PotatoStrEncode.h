@@ -6,6 +6,8 @@
 #include <vector>
 #include <span>
 #include <fstream>
+#include <filesystem>
+
 namespace Potato::StrEncode
 {
 	/*
@@ -459,7 +461,7 @@ namespace Potato::StrEncode
 	struct StrInfo
 	{
 		std::size_t SourceSpace = 0;
-		std::size_t RequireSpace = 0;
+		std::size_t TargetSpace = 0;
 	};
 
 	template<typename SourceT, typename TargetT>
@@ -544,6 +546,16 @@ namespace Potato::StrEncode
 	};
 
 	template<>
+	struct CoreEncoder<char8_t, char8_t>
+	{
+		using SourceT = char8_t;
+		using TargetT = char8_t;
+		static StrInfo RequireSpaceOnceUnSafe(std::span<SourceT const> Source);
+		static StrInfo RequireSpaceOnce(std::span<SourceT const> Source);
+		static StrInfo EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target);
+	};
+
+	template<>
 	struct CoreEncoder<wchar_t, char32_t>
 	{
 		using SourceT = wchar_t;
@@ -566,5 +578,145 @@ namespace Potato::StrEncode
 		}
 	};
 
+	struct StrEncodeInfo
+	{
+		std::size_t CharacterCount = 0;
+		std::size_t TargetSpace = 0;
+		std::size_t SourceSpace = 0;
+	};
 
+	template<typename SourceT, typename TargetT>
+	struct StrCodeEncoder
+	{
+		static StrEncodeInfo RequireSpaceUnSafe(std::span<SourceT const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max()) {
+			StrEncodeInfo Result;
+			while (!Source.empty() && Result.CharacterCount < MaxCharacter)
+			{
+				auto Res = CoreEncoder<SourceT, TargetT>::RequireSpaceOnceUnSafe(Source);
+				Result.CharacterCount += 1;
+				Result.TargetSpace += Res.TargetSpace;
+				Result.SourceSpace += Res.SourceSpace;
+				Source = Source.subspan(Res.SourceSpace);
+			}
+			return Result;
+		}
+		static StrEncodeInfo EncodeUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max()) {
+			StrEncodeInfo Result;
+			while (!Source.empty() && Result.CharacterCount < MaxCharacter)
+			{
+				auto Res = CoreEncoder<SourceT, TargetT>::EncodeOnceUnSafe(Source, Target);
+				Result.CharacterCount += 1;
+				Result.TargetSpace += Res.TargetSpace;
+				Result.SourceSpace += Res.SourceSpace;
+				Source = Source.subspan(Res.SourceSpace);
+				Target = Target.subspan(Res.TargetSpace);
+			}
+			return Result;
+		}
+	};
+
+
+	enum class DocumenetBomT
+	{
+		NoBom,
+		UTF8,
+		UTF16LE,
+		UTF16BE,
+		UTF32LE,
+		UTF32BE
+	};
+
+	constexpr bool IsNativeEndian(DocumenetBomT T)
+	{
+		switch (T)
+		{
+		case Potato::StrEncode::DocumenetBomT::UTF16LE:
+		case Potato::StrEncode::DocumenetBomT::UTF32LE:
+			return std::endian::native == std::endian::little;
+			break;
+		case Potato::StrEncode::DocumenetBomT::UTF16BE:
+		case Potato::StrEncode::DocumenetBomT::UTF32BE:
+			return std::endian::native == std::endian::big;
+			break;
+		default:
+			return true;
+			break;
+		}
+	}
+
+	template<typename UnicodeT>
+	struct UnicodeTypeToBom;
+
+	template<>
+	struct UnicodeTypeToBom<char32_t> {
+		static constexpr  DocumenetBomT Value = (std::endian::native == std::endian::little ? DocumenetBomT::UTF32LE : DocumenetBomT::UTF32BE);
+	};
+
+	template<>
+	struct UnicodeTypeToBom<char16_t> {
+		static constexpr  DocumenetBomT Value = (std::endian::native == std::endian::little ? DocumenetBomT::UTF16LE : DocumenetBomT::UTF16BE);
+	};
+
+	template<>
+	struct UnicodeTypeToBom<wchar_t> : UnicodeTypeToBom<std::conditional_t<sizeof(wchar_t) == sizeof(char32_t), char32_t, char16_t>> {};
+
+	template<>
+	struct UnicodeTypeToBom<char8_t> {
+		static constexpr  DocumenetBomT Value = DocumenetBomT::NoBom;
+	};
+
+	DocumenetBomT DetectBom(std::span<std::byte const> bom) noexcept;
+	std::span<std::byte const> ToBinary(DocumenetBomT type) noexcept;
+
+	struct DocumentReaderWrapper
+	{
+		DocumentReaderWrapper(std::filesystem::path path);
+		DocumentReaderWrapper(DocumentReaderWrapper const&) = default;
+		DocumentReaderWrapper& operator=(DocumentReaderWrapper const&) = default;
+		explicit operator bool() const { return File.is_open(); }
+
+		template<typename UnicodeT, typename CharTrai, typename Allocator>
+		void ReadString(std::basic_string<UnicodeT, CharTrai, Allocator>& Output, std::size_t MaxCharactor);
+
+		void ResetIterator(){
+			assert(*this);
+			File.seekg(TextOffset, File.beg);
+		}
+
+	private:
+
+		std::size_t ReadSingle(std::span<std::byte> Output);
+
+		DocumenetBomT Type = DocumenetBomT::NoBom;
+		std::ifstream File;
+		std::size_t TextOffset = 0;
+	};
+
+	struct DocumenetBinaryWrapper
+	{
+
+		DocumenetBinaryWrapper(std::span<std::byte const> Documenet);
+		DocumenetBinaryWrapper(DocumenetBinaryWrapper const&) = default;
+		DocumenetBinaryWrapper& operator=(DocumenetBinaryWrapper const&) = default;
+
+		DocumenetBomT Type = DocumenetBomT::NoBom;
+		std::span<std::byte const> TotalBinary;
+		std::span<std::byte const> Text;
+
+		static StrEncodeInfo PreCalculateSpaceUnSafe(DocumenetBomT SourceBomT, DocumenetBomT TargetBom, std::span<std::byte const> Source, std::size_t CharacterCount);
+		static StrEncodeInfo TranslateUnSafe(DocumenetBomT SourceBomT, std::span<std::byte const> Source, DocumenetBomT TargetBom, std::span<std::byte> Target, std::size_t MinCharacterCount);
+
+		template<typename UnicodeT, typename CodeTrair, typename Allocator>
+		StrEncodeInfo TranslateToUnSafe(std::basic_string<UnicodeT, CodeTrair, Allocator>& Output, std::size_t MaxCharactor = std::numeric_limits<std::size_t>::max())
+		{
+			auto Result = PreCalculateSpaceUnSafe(Type, UnicodeTypeToBom<UnicodeT>::Value, Text, MaxCharactor);
+			auto OldSize = Output.size();
+			Output.resize(OldSize + Result.TargetSpace);
+			auto TargetTemp = std::span(Output).subspan(OldSize);
+			std::span<std::byte> Target{ reinterpret_cast<std::byte*>(TargetTemp.data()), TargetTemp.size() * sizeof(decltype(TargetTemp)::value_type)};
+			auto Result2 = TranslateUnSafe(Type, Text, UnicodeTypeToBom<UnicodeT>::Value, Target, MaxCharactor);
+			Result2.TargetSpace /= sizeof(UnicodeT);
+			return Result2;
+		}
+	};
 }

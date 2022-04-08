@@ -264,7 +264,7 @@ namespace Potato::StrFormat
 			while (!Par.empty())
 			{
 				auto P = StrEncode::CoreEncoder<UnicodeType, wchar_t>::EncodeOnceUnSafe(std::span(Par), { Buffer, 2});
-				wss.write(Buffer, P.RequireSpace);
+				wss.write(Buffer, P.TargetSpace);
 				Par = Par.substr(P.SourceSpace);
 			}
 			wss >> Input;

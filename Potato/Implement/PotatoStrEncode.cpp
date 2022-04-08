@@ -1,4 +1,5 @@
 #include "../Include/PotatoStrEncode.h"
+#include <array>
 namespace Potato::StrEncode
 {
 
@@ -446,9 +447,9 @@ namespace Potato::StrEncode
 		assert(!Source.empty());
 		if (Source[0] <= 0x1000)
 		{
-			Info.RequireSpace += 1;
+			Info.TargetSpace += 1;
 		}else
-			Info.RequireSpace += 2;
+			Info.TargetSpace += 2;
 		Info.SourceSpace += 1;
 		return Info;
 	}
@@ -460,9 +461,9 @@ namespace Potato::StrEncode
 		{
 			auto Ite = Source[0];
 			if (Ite <= 0x01000)
-				Info.RequireSpace = 1;
+				Info.TargetSpace = 1;
 			else if (Ite < 0x110000)
-				Info.RequireSpace = 2;
+				Info.TargetSpace = 2;
 			else
 				return Info;
 			Info.SourceSpace = 1;
@@ -473,7 +474,7 @@ namespace Potato::StrEncode
 	StrInfo CoreEncoder<char32_t, char16_t>::EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
 	{
 		auto Info = RequireSpaceOnceUnSafe(Source);
-		switch (Info.RequireSpace)
+		switch (Info.TargetSpace)
 		{
 			case 1:
 				assert(Target.size() >= 1);
@@ -497,13 +498,13 @@ namespace Potato::StrEncode
 		assert(!Source.empty());
 		auto Ite = Source[0];
 		if (Ite <= 0x7F)
-			Info.RequireSpace = 1;
+			Info.TargetSpace = 1;
 		else if (Ite <= 0x7FF)
-			Info.RequireSpace = 2;
+			Info.TargetSpace = 2;
 		else if (Ite <= 0xFFFF)
-			Info.RequireSpace = 3;
+			Info.TargetSpace = 3;
 		else
-			Info.RequireSpace = 4;
+			Info.TargetSpace = 4;
 		Info.SourceSpace = 1;
 		return Info;
 	}
@@ -515,13 +516,13 @@ namespace Potato::StrEncode
 		{
 			auto Ite = Source[0];
 			if (Ite <= 0x7F)
-				Info.RequireSpace = 1;
+				Info.TargetSpace = 1;
 			else if (Ite <= 0x7FF)
-				Info.RequireSpace = 2;
+				Info.TargetSpace = 2;
 			else if (Ite <= 0xFFFF)
-				Info.RequireSpace = 3;
+				Info.TargetSpace = 3;
 			else if (Ite < 0x110000)
-				Info.RequireSpace = 4;
+				Info.TargetSpace = 4;
 			else
 				return Info;
 			Info.SourceSpace = 1;
@@ -543,7 +544,7 @@ namespace Potato::StrEncode
 	{
 		auto Info = RequireSpaceOnceUnSafe(Source);
 		auto Cur = Source[0];
-		switch (Info.RequireSpace)
+		switch (Info.TargetSpace)
 		{
 		case 1:
 			assert(Target.size() >= 1);
@@ -686,4 +687,260 @@ namespace Potato::StrEncode
 		return Info;
 	}
 
+	StrInfo CoreEncoder<char8_t, char8_t>::RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
+	{
+		assert(!Source.empty());
+		auto Cur = Source[0];
+		if ((Cur & 0x80) == 0)
+			return { 1, 1 };
+		else if ((Cur & 0xE0) == 0xC0)
+			return { 2, 2 };
+		else if ((Cur & 0xF0) == 0xE0)
+			return { 3, 3 };
+		else
+			return { 4, 4 };
+	}
+
+	StrInfo CoreEncoder<char8_t, char8_t>::RequireSpaceOnce(std::span<SourceT const> Source)
+	{
+		if (!Source.empty())
+		{
+			auto Cur = Source[0];
+			std::size_t Count = 0;
+			if ((Cur & 0x80) == 0)
+				Count = 1;
+			else if ((Cur & 0xE0) == 0xC0)
+				Count = 2;
+			else if ((Cur & 0xF0) == 0xE0)
+				Count = 3;
+			else if ((Cur & 0xF8) == 0xF0)
+				Count = 4;
+			if (Count < Source.size() && Count != 0)
+			{
+				bool Succeed = true;
+				for (std::size_t Index = 1; Index < Count; ++Index)
+				{
+					auto Ite = Source[Index];
+					if ((Ite & 0x80) != 0x80)
+					{
+						Succeed = false;
+						break;
+					}
+				}
+				if (Succeed)
+					return { Count, Count };
+			}
+		}
+		return { 0, 0 };
+	}
+
+	StrInfo CoreEncoder<char8_t, char8_t>::EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
+	{
+		auto Info = RequireSpaceOnceUnSafe(Source);
+		std::memcpy(Target.data(), Source.data(), Info.SourceSpace * sizeof(SourceT));
+		return Info;
+	}
+
+
+	const unsigned char utf8_bom[] = { 0xEF, 0xBB, 0xBF };
+	const unsigned char utf16_le_bom[] = { 0xFF, 0xFE };
+	const unsigned char utf16_be_bom[] = { 0xFE, 0xFF };
+	const unsigned char utf32_le_bom[] = { 0x00, 0x00, 0xFE, 0xFF };
+	const unsigned char utf32_be_bom[] = { 0xFF, 0xFe, 0x00, 0x00 };
+
+	DocumenetBomT DetectBom(std::span<std::byte const> bom) noexcept {
+		if (bom.size() >= std::size(utf8_bom) && std::memcmp(bom.data(), utf8_bom, std::size(utf8_bom)) == 0)
+			return DocumenetBomT::UTF8;
+		if (bom.size() >= std::size(utf16_le_bom) && std::memcmp(bom.data(), utf16_le_bom, std::size(utf16_le_bom)) == 0)
+			return DocumenetBomT::UTF16LE;
+		if (bom.size() >= std::size(utf32_le_bom) && std::memcmp(bom.data(), utf32_le_bom, std::size(utf32_le_bom)) == 0)
+			return DocumenetBomT::UTF32LE;
+		if (bom.size() >= std::size(utf16_be_bom) && std::memcmp(bom.data(), utf16_be_bom, std::size(utf16_be_bom)) == 0)
+			return DocumenetBomT::UTF16BE;
+		if (bom.size() >= std::size(utf32_be_bom) && std::memcmp(bom.data(), utf32_be_bom, std::size(utf32_be_bom)) == 0)
+			return DocumenetBomT::UTF32BE;
+		return DocumenetBomT::NoBom;
+	}
+
+	std::span<std::byte const> ToBinary(DocumenetBomT type) noexcept 
+	{
+		switch (type)
+		{
+		case DocumenetBomT::UTF8: return { reinterpret_cast<std::byte const*>(utf8_bom), std::size(utf8_bom) };
+		case DocumenetBomT::UTF16LE: return { reinterpret_cast<std::byte const*>(utf16_le_bom), std::size(utf16_le_bom) };
+		case DocumenetBomT::UTF32LE: return { reinterpret_cast<std::byte const*>(utf32_le_bom), std::size(utf32_le_bom) };
+		case DocumenetBomT::UTF16BE: return { reinterpret_cast<std::byte const*>(utf16_be_bom), std::size(utf16_be_bom) };
+		case DocumenetBomT::UTF32BE: return { reinterpret_cast<std::byte const*>(utf32_be_bom), std::size(utf32_be_bom) };
+		default: return {};
+		}
+	}
+
+	DocumentReaderWrapper::DocumentReaderWrapper(std::filesystem::path path)
+		: File(path, std::ios::binary)
+	{
+		if (File.is_open())
+		{
+			File.seekg(0, File.end);
+			std::size_t FileSize = File.tellg();
+			auto ReadBuffer = std::min(FileSize, std::size_t(4));
+			std::array<std::byte, 4> Buffer;
+			File.read(reinterpret_cast<char*>(Buffer.size()), FileSize);
+			File.seekg(0, File.beg);
+			Type = DetectBom(std::span(Buffer));
+			auto Bom = ToBinary(Type);
+			TextOffset = Bom.size();
+			File.seekg(TextOffset, File.beg);
+		}
+	}
+
+	std::size_t DocumentReaderWrapper::ReadSingle(std::span<std::byte> Output)
+	{
+		switch (Type)
+		{
+		case Potato::StrEncode::DocumenetBomT::NoBom:
+		case Potato::StrEncode::DocumenetBomT::UTF8:
+		{
+			assert(Output.size() >= 6 * sizeof(char8_t));
+			auto OldIte = File.tellg();
+			File.read(reinterpret_cast<char*>(Output.data()), 6 * sizeof(char8_t));
+			std::span<char8_t const> Tem(reinterpret_cast<char8_t*>(Output.data()), 6);
+			auto Index = CoreEncoder<char8_t, char8_t>::RequireSpaceOnce(Tem.subspan(0, 6 * sizeof(char8_t)));
+			break;
+		}
+		case Potato::StrEncode::DocumenetBomT::UTF16LE:
+			break;
+		case Potato::StrEncode::DocumenetBomT::UTF16BE:
+			break;
+		case Potato::StrEncode::DocumenetBomT::UTF32LE:
+			break;
+		case Potato::StrEncode::DocumenetBomT::UTF32BE:
+			break;
+		default:
+			break;
+		}
+		return 0;
+	}
+
+
+	DocumenetBinaryWrapper::DocumenetBinaryWrapper(std::span<std::byte const> Documenet)
+		: TotalBinary(Documenet)
+	{
+		Type = DetectBom(Documenet);
+		Text = TotalBinary.subspan(ToBinary(Type).size());
+	}
+
+	auto DocumenetBinaryWrapper::PreCalculateSpaceUnSafe(DocumenetBomT SourceBomT, DocumenetBomT TargetBom, std::span<std::byte const> Source, std::size_t CharacterCount) ->StrEncodeInfo
+	{
+		// todo
+		if (IsNativeEndian(SourceBomT) && IsNativeEndian(TargetBom))
+		{
+			switch (SourceBomT)
+			{
+			case DocumenetBomT::UTF32LE:
+			case DocumenetBomT::UTF32BE:
+			{
+				assert(Source.size() % sizeof(char32_t) == 0);
+				std::span<char32_t const> Buffer{reinterpret_cast<char32_t const*>(Source.data()), Source.size() / sizeof(char32_t)};
+				switch (TargetBom)
+				{
+				case DocumenetBomT::UTF32LE:
+				case DocumenetBomT::UTF32BE:
+				{
+					std::size_t Min = std::min(Buffer.size(), CharacterCount) * sizeof(char32_t);
+					return {Min, Min, Min};
+				}
+				case DocumenetBomT::UTF8:
+				case DocumenetBomT::NoBom:
+				{
+					auto Result = StrCodeEncoder<char32_t, char8_t>::RequireSpaceUnSafe(Buffer, CharacterCount);
+					Result.SourceSpace *= sizeof(char32_t);
+					Result.TargetSpace *= sizeof(char8_t);
+					return Result;
+				}
+				};
+				break;
+			}
+			case DocumenetBomT::NoBom:
+			case DocumenetBomT::UTF8:
+			{
+				assert(Source.size() % sizeof(char8_t) == 0);
+				std::span<char8_t const> Buffer{ reinterpret_cast<char8_t const*>(Source.data()), Source.size() / sizeof(char8_t) };
+				switch (TargetBom)
+				{
+				case DocumenetBomT::UTF32LE:
+				case DocumenetBomT::UTF32BE:
+				{
+					auto Result = StrCodeEncoder<char8_t, char32_t>::RequireSpaceUnSafe(Buffer, CharacterCount);
+					Result.TargetSpace *= sizeof(char32_t);
+					Result.SourceSpace *= sizeof(char8_t);
+					return Result;
+				}
+				}
+				break;
+			}
+			default:
+			{
+				break;
+			}
+			}
+		};
+		return {};
+	}
+
+	StrEncodeInfo DocumenetBinaryWrapper::TranslateUnSafe(DocumenetBomT SourceBomT, std::span<std::byte const> Source, DocumenetBomT TargetBom, std::span<std::byte> Target, std::size_t MaxCharacter)
+	{
+		// todo
+		if (IsNativeEndian(SourceBomT) && IsNativeEndian(TargetBom))
+		{
+			switch (SourceBomT)
+			{
+			case DocumenetBomT::UTF32LE:
+			case DocumenetBomT::UTF32BE:
+			{
+				assert(Source.size() % sizeof(char32_t) == 0);
+				std::span<char32_t const> Buffer{ reinterpret_cast<char32_t const*>(Source.data()), Source.size() / sizeof(char32_t) };
+				switch (TargetBom)
+				{
+				case DocumenetBomT::UTF32LE:
+				case DocumenetBomT::UTF32BE:
+				{
+					std::size_t Min = std::min(MaxCharacter, Buffer.size()) * sizeof(char32_t);
+					std::memcpy(Target.data(), Source.data(), Min);
+					return {Min, Min, Min};
+				}
+				case DocumenetBomT::UTF8:
+				case DocumenetBomT::NoBom:
+				{
+					std::span<char8_t> TemBuffer{ reinterpret_cast<char8_t*>(Target.data()), Target.size() / sizeof(char8_t) };
+					auto Result = StrCodeEncoder<char32_t, char8_t>::EncodeUnSafe(Buffer, TemBuffer, MaxCharacter);
+					Result.TargetSpace *= sizeof(char32_t);
+					Result.SourceSpace *= sizeof(char8_t);
+					return Result;
+				}
+				};
+			}
+			case DocumenetBomT::NoBom:
+			case DocumenetBomT::UTF8:
+			{
+				assert(Source.size() % sizeof(char8_t) == 0);
+				std::span<char8_t const> Buffer{ reinterpret_cast<char8_t const*>(Source.data()), Source.size() / sizeof(char8_t) };
+				switch (TargetBom)
+				{
+				case DocumenetBomT::UTF32LE:
+				case DocumenetBomT::UTF32BE:
+				{
+					std::span<char32_t> TemBuffer{ reinterpret_cast<char32_t*>(Target.data()), Target.size() / sizeof(char8_t) };
+					auto Result = StrCodeEncoder<char8_t, char32_t>::EncodeUnSafe(Buffer, TemBuffer, MaxCharacter);
+					Result.TargetSpace *= sizeof(char8_t);
+					Result.SourceSpace *= sizeof(char32_t);
+					return Result;
+				}
+				}
+			}
+			default:
+				break;
+			}
+		};
+		return {};
+	}
 }

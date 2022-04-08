@@ -1,12 +1,9 @@
 #pragma once
-#include <filesystem>
-#include <shared_mutex>
+
 #include <optional>
-#include <thread>
-#include <future>
 #include <map>
 #include <deque>
-
+#include <string_view>
 #include "PotatoMisc.h"
 #include "PotatoIntrusivePointer.h"
 
@@ -19,8 +16,7 @@ namespace Potato::Path
 		{
 			Unknow = 0,
 
-			DosAbsolute,
-			UnixAbsolute,
+			Absolute,
 			Relative,
 			Mapping,
 		};
@@ -34,6 +30,7 @@ namespace Potato::Path
 		};
 
 		Path(std::wstring_view InputPath);
+		/*
 		Path(Path&&) = default;
 		Path(Path const&) = default;
 		Path& operator=(Path const&) = default;
@@ -53,10 +50,14 @@ namespace Potato::Path
 		size_t LocateFile(std::wstring String) const;
 		Path SubPath(size_t start, size_t count = std::numeric_limits<size_t>::max()) const;
 		Path Parent() const;
+		*/
 
+		/*
 		Path FindCurentDirectory(std::function<bool (Path&)> funcobj) const;
 		Path FindChildDirectory(std::function<bool(Path&)> funcobj, size_t stack = std::numeric_limits<size_t>::max()) const;
 		Path FindParentDirectory(std::function<bool(Path&)> funcobj, size_t stack = std::numeric_limits<size_t>::max()) const;
+		*/
+		/*
 		std::vector<Path> FindAllCurentDirectory(std::function<bool(Path&)> funcobj) const;
 		std::vector<Path> FindAllChildDirectory(std::function<bool(Path&)> funcobj, size_t stack = std::numeric_limits<size_t>::max()) const;
 		std::vector<Path> FindAllParentDirectory(std::function<bool(Path&)> funcobj, size_t stack = std::numeric_limits<size_t>::max()) const;
@@ -64,6 +65,7 @@ namespace Potato::Path
 		std::wstring_view GetFilename() const;
 		std::wstring_view GetFilenameWithoutExtension() const;
 		std::wstring_view GetExtension() const;
+		*/
 
 		static std::vector<std::byte> LoadEntireFile(Path const& ref);
 		static bool SaveFile(Path const& ref, std::span<std::byte const> data);
