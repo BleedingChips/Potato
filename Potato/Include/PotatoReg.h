@@ -443,6 +443,13 @@ namespace Potato::Reg
 			RegexOutOfRange(RegexOutOfRange const&) = default;
 			virtual char const* what() const override;
 		};
+
+		struct CircleShifting : public Interface
+		{
+			CircleShifting() = default;
+			CircleShifting(CircleShifting const&) = default;
+			virtual char const* what() const override;
+		};
 	}
 
 	template<typename CharT>

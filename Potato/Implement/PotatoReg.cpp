@@ -834,11 +834,8 @@ namespace Potato::Reg
 			{
 				auto& Ite = *EdgeIte;
 				++EdgeIte;
-				/*
-				if(std::find(Result.ContainNodes.begin(), Result.ContainNodes.end(), Ite.ShiftNode) != Result.ContainNodes.end()) [[unlikely]]
-					continue;
-				*/
-				//assert(std::find(Result.ContainNodes.begin(), Result.ContainNodes.end(), Ite.ShiftNode) == Result.ContainNodes.end());
+
+				bool CirculDependenc = std::find(Result.ContainNodes.begin(), Result.ContainNodes.end(), Ite.ShiftNode) != Result.ContainNodes.end();
 				
 				Cur.ToNode = Ite.ShiftNode;
 				if(!Cur.Block.has_value())
@@ -853,6 +850,8 @@ namespace Potato::Reg
 					case UnfaTable::EdgeType::Consume:
 						if (Ite.ConsumeChars.empty())
 						{
+							if(CirculDependenc) [[unlikely]]
+								throw Exception::CircleShifting{};
 							Result.ContainNodes.push_back(Ite.ShiftNode);
 							SearchStack.push_back(std::move(Cur));
 						}
@@ -866,6 +865,8 @@ namespace Potato::Reg
 						}
 						break;
 					default:
+						if (CirculDependenc) [[unlikely]]
+							throw Exception::CircleShifting{};
 						Result.ContainNodes.push_back(Ite.ShiftNode);
 						Cur.Propertys.push_back(TranslateSpecialEdge(Ite));
 						SearchStack.push_back(std::move(Cur));
@@ -879,6 +880,8 @@ namespace Potato::Reg
 					case UnfaTable::EdgeType::Consume:
 						if (Ite.ConsumeChars.empty())
 						{
+							if (CirculDependenc) [[unlikely]]
+								throw Exception::CircleShifting{};
 							Result.ContainNodes.push_back(Ite.ShiftNode);
 							SearchStack.push_back(Cur);
 						}
@@ -893,6 +896,8 @@ namespace Potato::Reg
 						break;
 					default:
 					{
+						if (CirculDependenc) [[unlikely]]
+							throw Exception::CircleShifting{};
 						Result.ContainNodes.push_back(Ite.ShiftNode);
 						auto NewCore = Cur;
 						NewCore.Propertys.push_back(TranslateSpecialEdge(Ite));
@@ -1298,39 +1303,48 @@ namespace Potato::Reg
 
 			if (ShouldKeepViewer && !Viewer.CounterData.empty())
 			{
-				std::vector<std::size_t> TemporaryRecord = ConuterRecord;
+				std::size_t LastCounterCount = ConuterRecord.size();
 				std::size_t CounterIndex = 0;
+				bool MeetContinue = false;
+				bool MeetEnd = false;
 				for (auto Ite : Viewer.Property)
 				{
 					switch (Ite)
 					{
 					case decltype(Ite)::CounterBegin:
-						TemporaryRecord.push_back(0);
+						LastCounterCount += 1;
 						break;
 					case decltype(Ite)::CounterContinue:
 					{
+						MeetContinue = true;
+						assert(!MeetEnd);
 						assert(CounterIndex < Viewer.CounterData.size());
 						auto Range = Viewer.CounterData[CounterIndex];
 						++CounterIndex;
-						assert(!TemporaryRecord.empty());
-						auto& CurCount = *TemporaryRecord.rbegin();
+						std::size_t CurCount = 0;
+						assert(LastCounterCount >= 1);
+						if(LastCounterCount <= ConuterRecord.size())
+							CurCount = ConuterRecord[LastCounterCount - 1];
 						if (CurCount < Range.Min || CurCount >= Range.Max)
 							ShouldKeepViewer = false;
-						else
-							++CurCount;
 						break;
 					}
 					case decltype(Ite)::CounterEnd:
 					{
+						MeetEnd = true;
+						assert(!MeetContinue);
 						assert(CounterIndex < Viewer.CounterData.size());
 						auto Range = Viewer.CounterData[CounterIndex];
 						++CounterIndex;
-						assert(!TemporaryRecord.empty());
-						auto& CurCount = *TemporaryRecord.rbegin();
+						assert(LastCounterCount >= 1);
+						std::size_t CurCount = 0;
+						assert(LastCounterCount >= 1);
+						if (LastCounterCount <= ConuterRecord.size())
+							CurCount = ConuterRecord[LastCounterCount - 1];
 						if (CurCount < Range.Min || CurCount >= Range.Max)
 							ShouldKeepViewer = false;
 						else
-							TemporaryRecord.pop_back();
+							--LastCounterCount;
 						break;
 					}
 					}
@@ -1749,6 +1763,11 @@ namespace Potato::Reg
 		char const* RegexOutOfRange::what() const
 		{
 			return "PotatoRegException::RegexOutOfRange";
+		}
+
+		char const* CircleShifting::what() const
+		{
+			return "PotatoRegException::CircleShifting";
 		}
 	}
 }
