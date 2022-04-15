@@ -19,13 +19,45 @@ namespace Potato::StrFormat
 		bool Scan(std::span<UnicodeType const> Par, SourceType& Input);
 	};
 
+	template<typename TargetType>
+	bool DirectScan(std::u32string_view Parameter, TargetType& tar_type)
+	{
+		return Scanner<std::remove_cvref_t<TargetType>, char32_t>{}.Scan(Parameter, tar_type);
+	}
 
-	template<typename UnicodeType, typename TargetType>
-	bool DirectScan(std::basic_string_view<UnicodeType> Parameter, TargetType& tar_type)
+	template<typename TargetType>
+	bool DirectScan(std::u16string_view Parameter, TargetType& tar_type)
+	{
+		return Scanner<std::remove_cvref_t<TargetType>, char16_t>{}.Scan(Parameter, tar_type);
+	}
+
+	template<typename TargetType>
+	bool DirectScan(std::u8string_view Parameter, TargetType& tar_type)
+	{
+		return Scanner<std::remove_cvref_t<TargetType>, char8_t>{}.Scan(Parameter, tar_type);
+	}
+
+	template<typename TargetType>
+	bool DirectScan(std::wstring_view Parameter, TargetType& tar_type)
+	{
+		return Scanner<std::remove_cvref_t<TargetType>, wchar_t>{}.Scan(Parameter, tar_type);
+	}
+
+	/*
+	template<typename UnicodeType, typename CharTrai, typename TargetType>
+	bool DirectScan(std::basic_string_view<UnicodeType, CharTrai> Parameter, TargetType& tar_type)
 	{
 		return Scanner<std::remove_cvref_t<TargetType>, UnicodeType>{}.Scan(Parameter, tar_type);
 	}
-
+	*/
+	
+	/*
+	template<typename UnicodeType, typename CharTrai, typename Allocator, typename TargetType>
+	bool DirectScan(std::basic_string<UnicodeType, CharTrai, Allocator> Parameter, TargetType& tar_type)
+	{
+		return DirectScan(std::basic_string_view(Parameter), tar_type);
+	}
+	*/
 
 	struct ScanPattern
 	{
@@ -37,57 +69,75 @@ namespace Potato::StrFormat
 		};
 
 		template<typename UnicodeT, typename ...TargetType>
-		std::optional<size_t> March(std::span<UnicodeT const> code, TargetType&... all_target) const;
+		std::optional<size_t> March(std::basic_string_view<UnicodeT> code, TargetType&... all_target) const;
 
 		template<typename UnicodeT, typename ...TargetType>
-		std::optional<ScanResult> Search(std::span<UnicodeT const> code, TargetType&... all_target) const;
-
-		ScanPattern(std::vector<Reg::TableWrapper::StorageT> Tables) : Tables(std::move(Tables)) {};
+		std::optional<ScanResult> Search(std::basic_string_view<UnicodeT> code, TargetType&... all_target) const;
+		
 		ScanPattern(ScanPattern&&) = default;
 		ScanPattern(ScanPattern const&) = default;
-		ScanPattern(std::u32string_view Pattern) : ScanPattern(Create(Pattern)) {}
+		ScanPattern(std::vector<Reg::TableWrapper::StorageT> Tables) : Tables(std::move(Tables)) {};
 
-		static ScanPattern Create(std::span<char32_t const> pattern) { return { Reg::TableWrapper::Create(pattern) }; }
+		template<typename UnicodeT>
+		ScanPattern(std::basic_string_view<UnicodeT> Pattern) : ScanPattern(Create(Pattern)) {}
+
+		template<typename UnicodeT>
+		static ScanPattern Create(std::basic_string_view<UnicodeT> pattern) { 
+			return { Reg::TableWrapper::Create(pattern)};
+		}
+
+		template<typename UnicodeT, typename CurTarget, typename ...TargetType>
+		static std::optional<std::size_t> CaptureScan(Reg::CaptureWrapper TopCapture, std::basic_string_view<UnicodeT> Chars, CurTarget& Target, TargetType&... OTarget)
+		{
+			if(TopCapture.HasSubCapture())
+				return Dispatch(0, TopCapture.GetTopSubCapture(), Chars, Target, OTarget...);
+			return {};
+		}
 		
 	private:
+
 		std::vector<Reg::TableWrapper::StorageT> Tables;
 
-		template<typename CurTarget, typename ...TargetType>
-		static std::optional<std::size_t> Dispatch(std::size_t Record, std::span<Reg::Capture const> Records, std::span<char32_t const> Chars, CurTarget& target, TargetType&... other)
+		template<typename UnicodeT, typename CurTarget, typename ...TargetType>
+		static std::optional<std::size_t> Dispatch(std::size_t Record, Reg::CaptureWrapper Wrapper, std::basic_string_view<UnicodeT> Chars, CurTarget& Target, TargetType&... OTarget)
 		{
-			auto Result = TranslateCapture(Records, Chars);
-			if (Result.has_value())
+			if (Wrapper.HasCapture())
 			{
-				auto [Str, Span] = *Result;
-				if(DirectScan(Str, target))
-					return Dispatch(Record + 1, Span, Chars, other...);
+				auto Capture = Wrapper.GetCapture();
+				if (DirectScan(Chars.substr(Capture.Begin(), Capture.Count()), Target))
+				{
+					if(Wrapper.HasNextCapture())
+						return Dispatch(Record + 1, Wrapper.GetNextCapture(), Chars, OTarget...);
+					else
+						return Record;
+				}
 				else
 					return {};
 			}
 			return Record;
 		}
-		static std::optional<std::size_t> Dispatch(std::size_t Record, std::span<Reg::Capture const> Records, std::span<char32_t const> Chars) { return Record; }
-		static std::optional<std::tuple<std::span<char32_t const>, std::span<Reg::Capture const>>> TranslateCapture(std::span<Reg::Capture const> Records, std::span<char32_t const> Str);
+		template<typename UnicodeT>
+		static std::optional<std::size_t> Dispatch(std::size_t Record, Reg::CaptureWrapper Wrapper, std::basic_string_view<UnicodeT> Chars) { return Record; }
 	};
 
 	template<typename UnicodeT, typename ...TargetType>
-	std::optional<size_t> ScanPattern::March(std::span<UnicodeT const> code, TargetType&... all_target) const
+	std::optional<size_t> ScanPattern::March(std::basic_string_view<UnicodeT> code, TargetType&... all_target) const
 	{
-		auto result = Reg::MarchProcessor::Process(Reg::TableWrapper(Tables), std::span(code));
+		auto result = Reg::ProcessMarch(Reg::TableWrapper(Tables), std::span(code));
 		if (result)
 		{
-			return ScanPattern::Dispatch(0, std::span(result->Captures), code, all_target...);
+			return ScanPattern::Dispatch(0, result->GetCaptureWrapper().GetTopSubCapture(), code, all_target...);
 		}
 		return {};
 	}
 
 	template<typename UnicodeT, typename ...TargetType>
-	std::optional<ScanPattern::ScanResult> ScanPattern::Search(std::span<UnicodeT const> code, TargetType&... all_target) const
+	std::optional<ScanPattern::ScanResult> ScanPattern::Search(std::basic_string_view<UnicodeT> code, TargetType&... all_target) const
 	{
-		auto result = Reg::SearchProcessor::Process(Reg::TableWrapper(Tables), std::span(code));
+		auto result = Reg::ProcessSearch(Reg::TableWrapper(Tables), std::span(code));
 		if (result)
 		{
-			auto re2 = ScanPattern::Dispatch(0, std::span(result->Captures), code, all_target...);
+			auto re2 = ScanPattern::Dispatch(0, result->GetCaptureWrapper().GetTopSubCapture(), code, all_target...);
 			if (re2.has_value())
 			{
 				return ScanResult{*re2, result->MainCapture.End()};
@@ -96,29 +146,86 @@ namespace Potato::StrFormat
 		return {};
 	}
 
-
-	template<typename UnicodeT, typename ...TargetType>
-	std::optional<size_t> MarchScan(ScanPattern const& pattern, std::span<UnicodeT const> in, TargetType& ... tar_type) { return pattern.March(in, tar_type...); }
-	template<typename UnicodeT, typename ...TargetType>
-	std::optional<size_t> MarchScan(std::span<UnicodeT const> pattern, std::span<UnicodeT const> in, TargetType& ... tar_type) {
-		ScanPattern cur_pattern{ pattern };
-		return cur_pattern.March(in, tar_type...);
+	template<typename ...TargetType>
+	auto MarchScan(std::u32string_view PatternStr, std::u32string_view Code, TargetType& ... tar_type) {
+		return ScanPattern{ PatternStr }.March(Code, tar_type...);
 	}
 
-	template<typename UnicodeT, typename ...TargetType>
-	std::optional<ScanPattern::ScanResult> SearchScan(ScanPattern const& pattern, std::span<UnicodeT const> in, TargetType& ... tar_type) { return pattern.Search(in, tar_type...); }
-	template<typename UnicodeT, typename ...TargetType>
-	std::optional<ScanPattern::ScanResult> SearchScan(std::span<UnicodeT const> pattern, std::span<UnicodeT const> in, TargetType& ... tar_type) {
-		ScanPattern cur_pattern{ pattern };
-		return cur_pattern.Search(in, tar_type...);
+	template<typename ...TargetType>
+	auto MarchScan(std::u16string_view PatternStr, std::u16string_view Code, TargetType& ... tar_type) {
+		return ScanPattern{ PatternStr }.March(Code, tar_type...);
 	}
+
+	template<typename ...TargetType>
+	auto MarchScan(std::u8string_view PatternStr, std::u8string_view Code, TargetType& ... tar_type) {
+		return ScanPattern{ PatternStr }.March(Code, tar_type...);
+	}
+
+	template<typename ...TargetType>
+	auto MarchScan(std::wstring_view PatternStr, std::wstring_view Code, TargetType& ... tar_type) {
+		return ScanPattern{ PatternStr }.March(Code, tar_type...);
+	}
+
+
+	template<typename ...TargetType>
+	auto SearchScan(std::u32string_view PatternStr, std::u32string_view Code, TargetType& ... tar_type) {
+		return ScanPattern{ PatternStr }.Search(Code, tar_type...);
+	}
+	template<typename ...TargetType>
+	auto SearchScan(std::u16string_view PatternStr, std::u16string_view Code, TargetType& ... tar_type) {
+		return ScanPattern{ PatternStr }.Search(Code, tar_type...);
+	}
+	template<typename ...TargetType>
+	auto SearchScan(std::u8string_view PatternStr, std::u8string_view Code, TargetType& ... tar_type) {
+		return ScanPattern{ PatternStr }.Search(Code, tar_type...);
+	}
+	template<typename ...TargetType>
+	auto SearchScan(std::wstring_view PatternStr, std::wstring_view Code, TargetType& ... tar_type) {
+		return ScanPattern{ PatternStr }.Search(Code, tar_type...);
+	}
+
+	template<typename ...TargetType>
+	auto CaptureScan(Reg::CaptureWrapper Wrapper, std::u32string_view Code, TargetType& ... tar_type) {
+		return ScanPattern::CaptureScan(Wrapper, Code, tar_type...);
+	}
+	template<typename ...TargetType>
+	auto CaptureScan(Reg::CaptureWrapper Wrapper, std::u16string_view Code, TargetType& ... tar_type) {
+		return ScanPattern::CaptureScan(Wrapper, Code, tar_type...);
+	}
+	template<typename ...TargetType>
+	auto CaptureScan(Reg::CaptureWrapper Wrapper, std::u8string_view Code, TargetType& ... tar_type) {
+		return ScanPattern::CaptureScan(Wrapper, Code, tar_type...);
+	}
+	template<typename ...TargetType>
+	auto CaptureScan(Reg::CaptureWrapper Wrapper, std::wstring_view Code, TargetType& ... tar_type) {
+		return ScanPattern::CaptureScan(Wrapper, Code, tar_type...);
+	}
+
 
 	template<typename SourceType, typename UnicodeType>
 	struct Formatter
 	{
-		bool Format(std::span<UnicodeType> Output, SourceType const& Input);
-		std::optional<std::size_t> FormatSize(std::span<UnicodeType const> Parameter, SourceType const& Input);
+		void Format(std::span<UnicodeType> Output, SourceType const& Input);
+		std::optional<std::size_t> FormatSize(std::basic_string_view<UnicodeType> Parameter, SourceType const& Input);
 	};
+
+	/*
+	template<typename Function, typename UnicodeType, typename CharTria, typename TargetType>
+	std::optional<std::size_t> DirectFormat(Function&& Func, std::basic_string_view<UnicodeType, CharTria> Par, TargetType const& Type)
+		requires(std::is_invocable_r_v<std::span<UnicodeType>, Function, std::size_t>)
+	{
+		Formatter<std::remove_cvref_t<TargetType>, UnicodeType> Matter;
+		auto Size = Matter.FormatSize(Str, Type);
+		if (Size.has_value())
+		{
+			auto OutputSpan = Func(*Size);
+			if (!OutputSpan.empty())
+			{
+				
+			}
+		}
+	}
+	*/
 
 
 	template<typename UnicodeType, typename TargetType>
@@ -139,6 +246,7 @@ namespace Potato::StrFormat
 		return false;
 	}
 
+	/*
 	template<typename UnicodeType, typename TargetType>
 	std::basic_string<UnicodeType> DirectoFormat(std::basic_string_view<UnicodeType> Str, TargetType const& Type)
 	{
@@ -147,6 +255,7 @@ namespace Potato::StrFormat
 			return Result;
 		return {};
 	}
+	*/
 
 	struct CoreFormatPattern
 	{
@@ -163,7 +272,10 @@ namespace Potato::StrFormat
 		};
 
 		CoreFormatPattern(Misc::IndexSpan<> Index, Reg::CodePoint(*F1)(std::size_t Index, void* Data), void* Data);
-		CoreFormatPattern(std::u32string_view Str);
+		CoreFormatPattern(std::u32string_view Str) : CoreFormatPattern({0, std::numeric_limits<std::size_t>::max()}, Reg::StringViewWrapper<char32_t>{}, & Str){}
+		CoreFormatPattern(std::u16string_view Str) : CoreFormatPattern({ 0, std::numeric_limits<std::size_t>::max() }, Reg::StringViewWrapper<char16_t>{}, & Str) {}
+		CoreFormatPattern(std::u8string_view Str) : CoreFormatPattern({ 0, std::numeric_limits<std::size_t>::max() }, Reg::StringViewWrapper<char8_t>{}, & Str) {}
+		CoreFormatPattern(std::wstring_view Str) : CoreFormatPattern({ 0, std::numeric_limits<std::size_t>::max() }, Reg::StringViewWrapper<wchar_t>{}, & Str) {}
 		CoreFormatPattern(CoreFormatPattern&&) = default;
 		CoreFormatPattern(CoreFormatPattern const&) = default;
 
@@ -180,21 +292,15 @@ namespace Potato::StrFormat
 		FormatPattern(FormatPattern const&) = default;
 		FormatPattern(std::basic_string_view<UnicodeT> Str) : string(Str), Elements(Str) {}
 
-		template<typename ...AT>
-		bool FormatTo(std::u32string& Output, AT&& ...at) const;
-
-		template<typename ...AT>
-		std::optional<std::u32string> Format(AT&& ...at) const
-		{
-			std::u32string Result;
-			if (FormatTo(Result, std::forward<AT>(at)...))
-			{
-				return Result;
-			}
-			return {};
-		}	
+		template<typename UnicodeT, typename FuncT, typename TargetType>
+		std::optional<std::size_t> Format(FuncT&& Func, )
 
 	private:
+
+		
+
+
+
 
 		/*
 		template<typename CT, typename ...OT>
@@ -203,7 +309,7 @@ namespace Potato::StrFormat
 		static bool Dispatch(std::span<Element const> Elements, std::u32string& Output);
 		*/
 
-		std::basic_string_view<UnicodeT> string;
+		std::basic_string_view<UnicodeT> String;
 		CoreFormatPattern Elements;
 	};
 
@@ -272,20 +378,34 @@ namespace Potato::StrFormat
 		}
 	};
 
-	template<>
-	struct Scanner<float, char32_t> : BuildInNumberScanner<float, char32_t> {};
+	template<typename UnicodeT>
+	struct Scanner<float, UnicodeT> : BuildInNumberScanner<float, UnicodeT> {};
 
-	template<>
-	struct Scanner<int32_t, char32_t> : BuildInNumberScanner<int32_t, char32_t> {};
+	template<typename UnicodeT>
+	struct Scanner<int32_t, UnicodeT> : BuildInNumberScanner<int32_t, UnicodeT> {};
 
-	template<>
-	struct Scanner<uint32_t, char32_t> : BuildInNumberScanner<uint32_t, char32_t> {};
+	template<typename UnicodeT>
+	struct Scanner<uint32_t, UnicodeT> : BuildInNumberScanner<uint32_t, UnicodeT> {};
 
-	template<>
-	struct Scanner<uint64_t, char32_t> : BuildInNumberScanner<uint64_t, char32_t> {};
+	template<typename UnicodeT>
+	struct Scanner<uint64_t, UnicodeT> : BuildInNumberScanner<uint64_t, UnicodeT> {};
 
-	template<>
-	struct Scanner<int64_t, char32_t> : BuildInNumberScanner<int64_t, char32_t> {};
+	template<typename UnicodeT>
+	struct Scanner<int64_t, UnicodeT> : BuildInNumberScanner<int64_t, UnicodeT> {};
+
+	template<typename TargetType, typename CharaTrai, typename Allocator, typename UnicodeT>
+	struct Scanner<std::basic_string<TargetType, CharaTrai, Allocator>, UnicodeT> : BuildInNumberScanner<int64_t, UnicodeT>
+	{
+		bool Scan(std::basic_string_view<UnicodeT> Par, std::basic_string<TargetType, CharaTrai, Allocator>& Output)
+		{
+			std::size_t OldSize = Output.size();
+			StrEncode::EncodeStrInfo Str = StrEncode::StrCodeEncoder<UnicodeT, TargetType>::RequireSpaceUnSafe(Par);
+			Output.resize(Output.size() + Str.TargetSpace);
+			auto OutputSpan = std::span(Output).subspan(OldSize);
+			StrEncode::StrCodeEncoder<UnicodeT, TargetType>::EncodeUnSafe(Par, OutputSpan);
+			return true;
+		}
+	};
 
 	template<typename NumberType, typename UnicodeType>
 	struct BuildInNumberFormatter
@@ -308,7 +428,7 @@ namespace Potato::StrFormat
 			}
 			return true;
 		}
-		std::optional<std::size_t> FormatSize(std::span<UnicodeType const> Parameter, NumberType Input) {
+		std::optional<std::size_t> FormatSize(std::basic_string_view<UnicodeType> Parameter, NumberType Input) {
 			wss << Input;
 			return static_cast<std::size_t>(wss.tellp());
 		}

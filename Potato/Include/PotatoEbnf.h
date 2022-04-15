@@ -84,8 +84,7 @@ namespace Potato::Ebnf
 	}
 
 	inline std::vector<EbnfSymbolTuple> ProcessSymbol(TableWrapper Wrapper, std::u32string_view Str){
-		Reg::CodePointGenerator<char32_t> Gene(Str);
-		return ProcessSymbol(Wrapper, 0, Reg::CodePointGenerator<char32_t>::Function, &Gene);
+		return ProcessSymbol(Wrapper, 0, Reg::StringViewWrapper<char32_t>::Function, &Str);
 	}
 
 	struct TElement

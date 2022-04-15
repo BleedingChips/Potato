@@ -6,34 +6,9 @@ using namespace Potato::StrEncode;
 
 namespace Potato::StrFormat
 {
-	
-	std::optional<std::tuple<std::span<char32_t const>, std::span<Reg::Capture const>>>
-		ScanPattern::TranslateCapture(std::span<Reg::Capture const> Records, std::span<char32_t const> Str)
-	{
-		std::size_t Stack = 0;
-		std::size_t LastRecord = 0;
-		for (std::size_t Index = 0; Index < Records.size(); ++Index)
-		{
-			auto Ite = Records[Index];
-			if (Ite.IsBegin)
-			{
-				if (Stack == 0)
-					LastRecord = Ite.Index;
-				Stack += 1;
-			}
-			else
-			{
-				assert(Stack > 0);
-				Stack -= 1;
-				if (Stack == 0)
-					return std::tuple<std::span<char32_t const>, std::span<Reg::Capture const>>{ Str.subspan(LastRecord, Ite.Index - LastRecord), Records.subspan(Index + 1)};
-			}
-		}
-		return {};
-	}
 
 	Reg::TableWrapper FormatPatternWrapper() {
-		static std::vector<Reg::TableWrapper::StorageT> Datas = Reg::TableWrapper::Create(UR"(\{([^\{\}]*?)\})");
+		static std::vector<Reg::TableWrapper::StorageT> Datas = Reg::TableWrapper::Create(std::u32string_view{UR"(\{([^\{\}]*?)\})"});
 		return Reg::TableWrapper(Datas);
 	}
 
@@ -60,16 +35,6 @@ namespace Potato::StrFormat
 				break;
 			}
 		}
-	}
-
-	CoreFormatPattern::CoreFormatPattern(std::u32string_view Str)
-		: CoreFormatPattern({ 0, Str.size()}, [](std::size_t Index, void* Data)->Reg::CodePoint{
-			auto Str = *reinterpret_cast<std::u32string_view*>(Data);
-			if(Index < Str.size())
-				return {Str[Index], 1};
-			return Reg::CodePoint::EndOfFile();
-		}, & Str)
-	{
 	}
 
 	/*

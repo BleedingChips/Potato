@@ -34,6 +34,26 @@ namespace Potato::Reg
 		bool IsEndOfFile() const { return UnicodeCodePoint == MaxChar(); }
 	};
 
+	template<typename CharT>
+	struct StringViewWrapper
+	{
+		static CodePoint Function(std::size_t Index, void* InputStringView)
+		{
+			auto StringView = *reinterpret_cast<std::basic_string_view<CharT>*>(InputStringView);
+			if (Index < StringView.size())
+			{
+				char32_t Temporary;
+				auto EncodeResult = StrEncode::CoreEncoder<CharT, char32_t>::EncodeOnceUnSafe(StringView.substr(Index), { &Temporary, 1 });
+				return { Temporary, EncodeResult.SourceSpace};
+			}else
+				return CodePoint::EndOfFile();
+		}
+
+		using FuncT = CodePoint(*)(std::size_t Index, void* StringView);
+
+		operator FuncT() const { return &Function; }
+	};
+
 	struct RawString {};
 
 	struct UnfaTable
@@ -85,9 +105,15 @@ namespace Potato::Reg
 		UnfaTable(CodePoint(*F1)(std::size_t Index, void* Data), void* Data, Accept AcceptData) :
 			UnfaTable(0, std::numeric_limits<std::size_t>::max(), F1, Data, AcceptData){}
 
+		UnfaTable(std::u32string_view View, Accept AcceptData)
+			: UnfaTable(StringViewWrapper<char32_t>{}, &View, AcceptData) {}
+
 		UnfaTable(RawString, std::size_t Start, std::size_t End, CodePoint(*F1)(std::size_t Index, void* Data), void* Data, Accept AcceptData);
 		UnfaTable(RawString, CodePoint(*F1)(std::size_t Index, void* Data), void* Data, Accept AcceptData) :
 			UnfaTable(RawString{}, 0, std::numeric_limits<std::size_t>::max(), F1, Data, AcceptData) {}
+
+		UnfaTable(RawString, std::u32string_view View, Accept AcceptData)
+			: UnfaTable(RawString{}, StringViewWrapper<char32_t>{}, & View, AcceptData) {}
 
 		std::size_t NewNode();
 		void AddComsumeEdge(std::size_t From, std::size_t To, std::vector<IntervalT> Acceptable);
@@ -228,21 +254,16 @@ namespace Potato::Reg
 		StorageT StartupNodeOffset() const { return  Wrapper[1]; }
 
 		static std::vector<StorageT> Create(UnserilizedTable const& Table);
+
 		static std::vector<StorageT> Create(std::u32string_view Str, std::size_t Index = 0, std::size_t Mask = 0);
+		static std::vector<StorageT> Create(std::u16string_view Str, std::size_t Index = 0, std::size_t Mask = 0);
+		static std::vector<StorageT> Create(std::u8string_view Str, std::size_t Index = 0, std::size_t Mask = 0);
+		static std::vector<StorageT> Create(std::wstring_view Str, std::size_t Index = 0, std::size_t Mask = 0);
 
 		NodeViewer operator[](StorageT Offset) const;
 		
 		static EdgeViewer ReadEdgeViewer(std::span<StorageT const> Span);
 		static constexpr std::size_t MaxMaskAndIndexValue() { return std::numeric_limits<decltype(ZipAcceptableData::Index)>::max(); }
-		/*
-		StorageT NodeCount() const noexcept { return Wrapper.empty() ? 0 : Wrapper[0]; }
-		//std::size_t ComsumeCharactor(TableStorageT NodeOffset, char32_t Symbol, TableStorageT SymbolIndex, std::vector<TableStorageT>& Output, std::vector<TableStorageT>& AllreadyNode) const;
-		NodeViewer ReadNodeViewer(StorageT Offset) const;
-		static NodeViewer ReadNodeViewer(std::span<SubStorageT const> Ptr);
-		static PropertyViewer ReadPropertyViewer(std::span<SubStorageT const> Ptr);
-		TableStorageT StartupOffset() const noexcept {return 1;};
-		static std::vector<SubStorageT> Create(UnfaTable const& Input);
-		*/
 
 	private:
 
@@ -254,7 +275,14 @@ namespace Potato::Reg
 	{
 		Table(Table&&) = default;
 		Table(Table const&) = default;
-		Table(std::u32string_view Regex, std::size_t State = 0, std::size_t Mask = 0) : Storage(TableWrapper::Create(Regex, State, Mask)) {}
+
+		template<typename UnicodeT>
+		Table(std::basic_string_view<UnicodeT> Regex, std::size_t State = 0, std::size_t Mask = 0) : Storage(TableWrapper::Create(Regex, State, Mask)) {}
+		
+		template<typename UnicodeT>
+		Table(UnicodeT const* Regex, std::size_t State = 0, std::size_t Mask = 0) : Storage(TableWrapper::Create(Regex, State, Mask)) {}
+		
+		
 		Table& operator=(Table&&) = default;
 		Table& operator=(Table const&) = default;
 
@@ -339,6 +367,30 @@ namespace Potato::Reg
 		}, &Obj);
 	}
 
+	struct CaptureWrapper
+	{
+		CaptureWrapper() = default;
+		CaptureWrapper(std::span<Capture const> SubCaptures)
+			: SubCaptures(SubCaptures) {}
+		CaptureWrapper(CaptureWrapper const&) = default;
+		CaptureWrapper& operator=(CaptureWrapper const&) = default;
+		bool HasSubCapture() const { return !SubCaptures.empty(); }
+		bool HasNextCapture() const { return !NextCaptures.empty(); }
+		bool HasCapture() const { return CurrentCapture.has_value(); }
+		Misc::IndexSpan<> GetCapture() const { return *CurrentCapture; }
+
+		CaptureWrapper GetTopSubCapture() const;
+		CaptureWrapper GetNextCapture() const;
+
+		static std::optional<Misc::IndexSpan<>> FindFirstCapture(std::span<Capture const> Captures);
+
+	private:
+
+		std::span<Capture const> SubCaptures;
+		std::span<Capture const> NextCaptures;
+		std::optional<Misc::IndexSpan<>> CurrentCapture;
+	};
+
 	struct MarchProcessor
 	{
 
@@ -347,6 +399,7 @@ namespace Potato::Reg
 			Misc::IndexSpan<> MainCapture;
 			std::optional<Accept> AcceptData;
 			std::vector<Capture> Captures;
+			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ Captures };};
 		};
 	};
 
@@ -369,6 +422,7 @@ namespace Potato::Reg
 			Reg::Accept AcceptData;
 			std::vector<Reg::Capture> Captures;
 			bool IsEndOfFile;
+			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ Captures }; };
 		};
 	};
 
@@ -392,6 +446,7 @@ namespace Potato::Reg
 			Misc::IndexSpan<> MainCapture;
 			std::vector<Capture> Captures;
 			bool IsEndOfFile;
+			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ Captures }; };
 		};
 
 		struct SearchCore
@@ -451,21 +506,5 @@ namespace Potato::Reg
 			virtual char const* what() const override;
 		};
 	}
-
-	template<typename CharT>
-	struct CodePointGenerator
-	{
-		static CodePoint Function(std::size_t Index, void* Self) {
-			auto This = reinterpret_cast<CodePointGenerator*>(Self);
-			if (Index < This->Str.size())
-			{
-				CharT Result;
-				auto EncodeResult = StrEncode::CoreEncoder<CharT, char32_t>::EncodeOnceUnSafe(This->Str.subspan(Index), {&Result, 1});
-				return {Result, EncodeResult.SourceSpace};
-			}else
-				return CodePoint::EndOfFile();
-		}
-		std::span<CharT const> Str;
-	};
 
 }

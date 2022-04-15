@@ -284,7 +284,7 @@ namespace Potato::Ebnf
 	#if _DEBUG
 		auto NStr = Str.substr(Ebnf.TokenIndex);
 	#endif
-		throw;
+		throw Ebnf;
 	}
 
 	UnserilizeTable::UnserilizeTable(std::size_t Offset, Reg::CodePoint(*F1)(std::size_t Index, void* Data), void* Data)
@@ -372,7 +372,8 @@ namespace Potato::Ebnf
 						case T::Number:
 						{
 							std::size_t Index = 0;
-							StrFormat::DirectScan<char32_t>(Translate(SymbolTuple[TRef.TokenIndex].StrIndex, F1, Data), Index);
+							auto Buffer = Translate(SymbolTuple[TRef.TokenIndex].StrIndex, F1, Data);
+							StrFormat::DirectScan(Buffer, Index);
 							return Index;
 						}
 						default:
@@ -606,7 +607,8 @@ namespace Potato::Ebnf
 					case T::Number:
 					{
 						std::size_t Index = 0;
-						StrFormat::DirectScan<char32_t>(Translate(SymbolTuple[Ref.TokenIndex].StrIndex, F1, Data), Index);
+						auto Buffer = Translate(SymbolTuple[Ref.TokenIndex].StrIndex, F1, Data);
+						StrFormat::DirectScan(Buffer, Index);
 						return Index;
 					}
 					case T::Terminal:

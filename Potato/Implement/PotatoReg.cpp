@@ -1221,10 +1221,27 @@ namespace Potato::Reg
 		return Result;
 	}
 
-	auto TableWrapper::Create(std::u32string_view Str, std::size_t Index, std::size_t Mask) ->std::vector<StorageT>
+	std::vector<TableWrapper::StorageT> TableWrapper::Create(std::u32string_view Str, std::size_t Index, std::size_t Mask)
 	{
-		CodePointGenerator<char32_t> Gen(Str);
-		Reg::UnfaTable Tab1(&decltype(Gen)::Function, &Gen, Accept{Index, Mask});
+		Reg::UnfaTable Tab1(StringViewWrapper<char32_t>{}, & Str, Accept{ Index, Mask });
+		UnserilizedTable Tab2(Tab1);
+		return Create(Tab2);
+	}
+	std::vector<TableWrapper::StorageT> TableWrapper::Create(std::u16string_view Str, std::size_t Index, std::size_t Mask)
+	{
+		Reg::UnfaTable Tab1(StringViewWrapper<char16_t>{}, & Str, Accept{ Index, Mask });
+		UnserilizedTable Tab2(Tab1);
+		return Create(Tab2);
+	}
+	std::vector<TableWrapper::StorageT> TableWrapper::Create(std::u8string_view Str, std::size_t Index, std::size_t Mask)
+	{
+		Reg::UnfaTable Tab1(StringViewWrapper<char8_t>{}, & Str, Accept{ Index, Mask });
+		UnserilizedTable Tab2(Tab1);
+		return Create(Tab2);
+	}
+	std::vector<TableWrapper::StorageT> TableWrapper::Create(std::wstring_view Str, std::size_t Index, std::size_t Mask)
+	{
+		Reg::UnfaTable Tab1(StringViewWrapper<wchar_t>{}, & Str, Accept{ Index, Mask });
 		UnserilizedTable Tab2(Tab1);
 		return Create(Tab2);
 	}
@@ -1273,14 +1290,12 @@ namespace Potato::Reg
 
 	std::size_t MulityRegexCreator::PushRegex(std::u32string_view Reg, Accept AccData)
 	{
-		CodePointGenerator<char32_t> Generator{Reg};
-		return PushRegex(0, std::numeric_limits<std::size_t>::max(), & decltype(Generator)::Function, &Generator, AccData);
+		return PushRegex(0, std::numeric_limits<std::size_t>::max(), Reg::StringViewWrapper<char32_t>::Function, &Reg, AccData);
 	}
 
 	std::size_t MulityRegexCreator::PushRawString(std::u32string_view Reg, Accept AccData)
 	{
-		CodePointGenerator<char32_t> Generator(Reg);
-		return PushRawString(0, std::numeric_limits<std::size_t>::max(), &decltype(Generator)::Function, &Generator, AccData);
+		return PushRawString(0, std::numeric_limits<std::size_t>::max(), Reg::StringViewWrapper<char32_t>::Function, &Reg, AccData);
 	}
 
 	std::vector<TableWrapper::StorageT> MulityRegexCreator::Generate() const
@@ -1526,6 +1541,63 @@ namespace Potato::Reg
 			}
 		}
 		return FlushResult{ {ForwardIndex, Index - ForwardIndex}, {} };
+	}
+
+	std::optional<Misc::IndexSpan<>> CaptureWrapper::FindFirstCapture(std::span<Capture const> Captures)
+	{
+		std::size_t Stack = 0;
+		Misc::IndexSpan<> First;
+		for (std::size_t Index = 0; Index < Captures.size(); ++Index)
+		{
+			auto Cur = Captures[Index];
+			if (Cur.IsBegin)
+			{
+				if (Stack == 0)
+					First.Offset = Index;
+				++Stack;
+			}
+			else {
+				--Stack;
+				if (Stack == 0)
+				{
+					First.Length = Index - First.Offset + 1;
+					return First;
+				}
+			}
+		}
+		return First;
+	}
+
+	CaptureWrapper CaptureWrapper::GetNextCapture() const
+	{
+		auto First = FindFirstCapture(NextCaptures);
+		if (First.has_value())
+		{
+			CaptureWrapper Result;
+			Result.SubCaptures = First->Sub(1, First->Length - 2).Slice(NextCaptures);
+			Result.NextCaptures = NextCaptures.subspan(First->End());
+			auto Start = NextCaptures[First->Begin()];
+			auto End = NextCaptures[First->End() - 1];
+			Result.CurrentCapture = { Start.Index, End.Index - Start.Index};
+			return Result;
+		}
+		return {};
+	}
+
+	CaptureWrapper CaptureWrapper::GetTopSubCapture() const
+	{
+		auto First = FindFirstCapture(SubCaptures);
+		if (First.has_value())
+		{
+			auto Start = SubCaptures[First->Begin()];
+			auto End = SubCaptures[First->End() - 1];
+			CaptureWrapper Result;
+			Result.SubCaptures = First->Sub(1, First->Length - 2).Slice(SubCaptures);
+			Result.NextCaptures = SubCaptures.subspan(First->End());
+			Result.CurrentCapture = { Start.Index, End.Index - Start.Index };
+			return Result;
+		}
+		return {};
 	}
 
 	template<typename Char>
