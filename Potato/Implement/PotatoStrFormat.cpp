@@ -6,7 +6,7 @@ using namespace Potato::StrEncode;
 
 namespace Potato::StrFormat
 {
-
+	/*
 	Reg::TableWrapper FormatPatternWrapper() {
 		static std::vector<Reg::TableWrapper::StorageT> Datas = Reg::TableWrapper::Create(std::u32string_view{UR"(\{([^\{\}]*?)\})"});
 		return Reg::TableWrapper(Datas);
@@ -36,6 +36,7 @@ namespace Potato::StrFormat
 			}
 		}
 	}
+	*/
 
 	/*
 	FormatPattern::FormatPattern(std::u32string_view Str)

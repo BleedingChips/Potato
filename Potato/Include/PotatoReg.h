@@ -414,7 +414,7 @@ namespace Potato::Reg
 			}, &FO);
 	}
 
-	struct GreedyMarchProcessor
+	struct FrontMarchProcessor
 	{
 		struct Result
 		{
@@ -427,17 +427,17 @@ namespace Potato::Reg
 	};
 
 	template<typename Func>
-	std::optional<GreedyMarchProcessor::Result> ProcessGreedMarch(TableWrapper Wrapper, std::size_t Startup, Func&& FO)
+	std::optional<FrontMarchProcessor::Result> ProcessFrontMarch(TableWrapper Wrapper, std::size_t Startup, Func&& FO)
 		requires(std::is_invocable_r_v<CodePoint, Func, std::size_t>)
 	{
-		return ProcessGreedMarch(Wrapper, Startup, [](std::size_t Index, void* Data) -> CodePoint {
+		return ProcessFrontMarch(Wrapper, Startup, [](std::size_t Index, void* Data) -> CodePoint {
 			return (*reinterpret_cast<std::remove_reference_t<Func>*>(Data))(Index);
 			}, &FO);
 	}
 
-	std::optional<GreedyMarchProcessor::Result> ProcessGreedMarch(TableWrapper Wrapper, std::size_t Startup, CodePoint(*F1)(std::size_t Index, void*), void* Data);
-	std::optional<GreedyMarchProcessor::Result> ProcessGreedMarch(TableWrapper Wrapper, std::u32string_view SpanView);
-	std::optional<GreedyMarchProcessor::Result> ProcessGreedMarch(TableWrapper Wrapper, std::wstring_view SpanView);
+	std::optional<FrontMarchProcessor::Result> ProcessFrontMarch(TableWrapper Wrapper, std::size_t Startup, CodePoint(*F1)(std::size_t Index, void*), void* Data);
+	std::optional<FrontMarchProcessor::Result> ProcessFrontMarch(TableWrapper Wrapper, std::u32string_view SpanView);
+	std::optional<FrontMarchProcessor::Result> ProcessFrontMarch(TableWrapper Wrapper, std::wstring_view SpanView);
 
 	struct SearchProcessor
 	{

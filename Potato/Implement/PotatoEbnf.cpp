@@ -144,7 +144,7 @@ namespace Potato::Ebnf
 		auto StepReg = EbnfStepReg();
 		while (true)
 		{
-			auto Re = Reg::ProcessGreedMarch(StepReg, Offset, F1, Data);
+			auto Re = Reg::ProcessFrontMarch(StepReg, Offset, F1, Data);
 			if (Re.has_value())
 			{
 				Offset = Re->MainCapture.End();
@@ -939,7 +939,7 @@ namespace Potato::Ebnf
 		std::vector<EbnfSymbolTuple> Tuples;
 		while (true)
 		{
-			auto Result = Reg::ProcessGreedMarch(RegWrapper, Start, F, Data);
+			auto Result = Reg::ProcessFrontMarch(RegWrapper, Start, F, Data);
 			if (Result.has_value())
 			{
 				Start = Result->MainCapture.End();

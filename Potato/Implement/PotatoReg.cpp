@@ -1651,20 +1651,20 @@ namespace Potato::Reg
 		return {};
 	}
 
-	std::optional<GreedyMarchProcessor::Result> ProcessGreedMarch(TableWrapper Wrapper, std::u32string_view SpanView)
+	std::optional<FrontMarchProcessor::Result> ProcessFrontMarch(TableWrapper Wrapper, std::u32string_view SpanView)
 	{
-		return ProcessGreedMarch(Wrapper, 0, StringViewFlushInput<std::u32string_view>::Process, &SpanView);
+		return ProcessFrontMarch(Wrapper, 0, StringViewFlushInput<std::u32string_view>::Process, &SpanView);
 	}
 
-	std::optional<GreedyMarchProcessor::Result> ProcessGreedMarch(TableWrapper Wrapper, std::wstring_view SpanView)
+	std::optional<FrontMarchProcessor::Result> ProcessFrontMarch(TableWrapper Wrapper, std::wstring_view SpanView)
 	{
-		return ProcessGreedMarch(Wrapper, 0, StringViewFlushInput<std::wstring_view>::Process, &SpanView);
+		return ProcessFrontMarch(Wrapper, 0, StringViewFlushInput<std::wstring_view>::Process, &SpanView);
 	}
 
-	std::optional<GreedyMarchProcessor::Result> ProcessGreedMarch(TableWrapper Wrapper, std::size_t Startup, CodePoint(*F1)(std::size_t Index, void*), void* Data)
+	std::optional<FrontMarchProcessor::Result> ProcessFrontMarch(TableWrapper Wrapper, std::size_t Startup, CodePoint(*F1)(std::size_t Index, void*), void* Data)
 	{
 		Reg::CoreProcessor Cp(Wrapper);
-		std::optional<GreedyMarchProcessor::Result> Re;
+		std::optional<FrontMarchProcessor::Result> Re;
 		std::optional<std::size_t> Ite = Startup;
 		while (true)
 		{
@@ -1686,7 +1686,7 @@ namespace Potato::Reg
 						continue;
 					}
 					else {
-						GreedyMarchProcessor::Result NewResult;
+						FrontMarchProcessor::Result NewResult;
 						NewResult.MainCapture = { Startup, Fe->LastToken.Begin() - Startup};
 						NewResult.AcceptData = *Fe->AcceptData;
 						NewResult.Captures = Cp.CaptureRecord;
