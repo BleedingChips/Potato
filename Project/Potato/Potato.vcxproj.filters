@@ -1,72 +1,72 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Implement">
-      <UniqueIdentifier>{25e9f3b3-5744-47d1-91dc-0e042e62f13e}</UniqueIdentifier>
+    <Filter Include="Public">
+      <UniqueIdentifier>{bceb18c0-7245-4b7b-834d-934aacbee0a9}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Include">
-      <UniqueIdentifier>{5e8ef671-3d97-48fc-8e1f-c748034688ca}</UniqueIdentifier>
+    <Filter Include="Private">
+      <UniqueIdentifier>{1329a691-70de-4754-b3d9-1a5536093e55}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\Potato\Include\PotatoMisc.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="..\..\Potato\Public\PotatoDLr.h">
+      <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Include\PotatoTMP.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="..\..\Potato\Public\PotatoEbnf.h">
+      <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Include\PotatoDLr.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="..\..\Potato\Public\PotatoInterval.h">
+      <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Include\PotatoInterval.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="..\..\Potato\Public\PotatoIntrusivePointer.h">
+      <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Include\PotatoReg.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="..\..\Potato\Public\PotatoIR.h">
+      <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Include\PotatoStrEncode.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="..\..\Potato\Public\PotatoMisc.h">
+      <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Include\PotatoStrFormat.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="..\..\Potato\Public\PotatoPath.h">
+      <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Include\PotatoPath.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="..\..\Potato\Public\PotatoReg.h">
+      <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Include\PotatoEbnf.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="..\..\Potato\Public\PotatoStrEncode.h">
+      <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Include\PotatoMiniCore.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="..\..\Potato\Public\PotatoStrFormat.h">
+      <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Include\PotatoIntrusivePointer.h">
-      <Filter>Include</Filter>
+    <ClInclude Include="..\..\Potato\Public\PotatoTMP.h">
+      <Filter>Public</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\Potato\Implement\PotatoMisc.cpp">
-      <Filter>Implement</Filter>
+    <ClCompile Include="..\..\Potato\Private\PotatoDLr.cpp">
+      <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Implement\PotatoDLr.cpp">
-      <Filter>Implement</Filter>
+    <ClCompile Include="..\..\Potato\Private\PotatoEbnf.cpp">
+      <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Implement\PotatoReg.cpp">
-      <Filter>Implement</Filter>
+    <ClCompile Include="..\..\Potato\Private\PotatoIR.cpp">
+      <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Implement\PotatoStrEncode.cpp">
-      <Filter>Implement</Filter>
+    <ClCompile Include="..\..\Potato\Private\PotatoMisc.cpp">
+      <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Implement\PotatoStrFormat.cpp">
-      <Filter>Implement</Filter>
+    <ClCompile Include="..\..\Potato\Private\PotatoPath.cpp">
+      <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Implement\PotatoPath.cpp">
-      <Filter>Implement</Filter>
+    <ClCompile Include="..\..\Potato\Private\PotatoReg.cpp">
+      <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Implement\PotatoEbnf.cpp">
-      <Filter>Implement</Filter>
+    <ClCompile Include="..\..\Potato\Private\PotatoStrEncode.cpp">
+      <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Implement\PotatoMiniCore.cpp">
-      <Filter>Implement</Filter>
+    <ClCompile Include="..\..\Potato\Private\PotatoStrFormat.cpp">
+      <Filter>Private</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

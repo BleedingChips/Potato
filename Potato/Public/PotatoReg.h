@@ -445,6 +445,7 @@ namespace Potato::Reg
 		{
 			Misc::IndexSpan<> MainCapture;
 			std::vector<Capture> Captures;
+			Accept AcceptData;
 			bool IsEndOfFile;
 			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ Captures }; };
 		};
@@ -458,6 +459,9 @@ namespace Potato::Reg
 	};
 
 	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::u32string_view Span);
+	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::u16string_view Span);
+	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::u8string_view Span);
+	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::wstring_view Span);
 
 	template<typename Func>
 	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::size_t Start, Func&& FO)

@@ -301,7 +301,6 @@ namespace Potato::Misc
 
 	struct ClassLayoutSetting
 	{
-		bool IsMulityOf8 = true;
 		std::size_t MinAlign = 1;
 		std::optional<std::size_t> MemebrFiledAlign;
 	};
@@ -310,10 +309,12 @@ namespace Potato::Misc
 	{
 		ClassLayoutSetting Setting;
 		ClassLayout CurrentLayout;
-		ClassLayoutAssembler(ClassLayoutSetting const& Setting) : Setting{Setting}, CurrentLayout{Setting.MinAlign, 0}{}
+		ClassLayoutAssembler(ClassLayoutSetting Setting);
 		ClassLayoutAssembler(ClassLayoutAssembler const&) = default;
 		ClassLayoutAssembler& operator=(ClassLayoutAssembler const&) = default;
 		std::size_t InsertMember(ClassLayout MemberLayout);
 		ClassLayout GetFinalLayout() const;
 	};
+
+
 }

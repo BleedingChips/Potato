@@ -575,54 +575,31 @@ namespace Potato::StrEncode
 		std::size_t TextOffset = 0;
 	};
 
-	struct DocumentWriter
+	struct DocumentEncoder
 	{
-		static std::vector<std::byte> Encode(std::u32string_view Str, DocumenetBomT Bom, bool WriteBom = false) {
-			std::vector<std::byte> Tem;
-			EncodeDocument(Tem, Str, Bom, WriteBom);
-			return Tem;
-		}
-		static std::vector<std::byte> Encode(std::u16string_view Str, DocumenetBomT Bom, bool WriteBom = false) {
-			std::vector<std::byte> Tem;
-			EncodeDocument(Tem, Str, Bom, WriteBom);
-			return Tem;
-		}
-		static std::vector<std::byte> Encode(std::u8string_view Str, DocumenetBomT Bom, bool WriteBom = false) {
-			std::vector<std::byte> Tem;
-			EncodeDocument(Tem, Str, Bom, WriteBom);
-			return Tem;
-		}
-		static std::vector<std::byte> Encode(std::wstring_view Str, DocumenetBomT Bom, bool WriteBom = false) {
-			std::vector<std::byte> Tem;
-			EncodeDocument(Tem, Str, Bom, WriteBom);
-			return Tem;
-		}
 
-		template<typename AllocatorType, typename UnicodeT>
-		static EncodeStrInfo EncodeDocument(std::vector<std::byte, AllocatorType>& Output, std::basic_string_view<UnicodeT> Str, DocumenetBomT Bom, bool WriteBom = false);
+		static EncodeStrInfo RequireSpaceUnsafe(std::u32string_view Str, DocumenetBomT Bom, bool WriteBom = false);
+		static EncodeStrInfo RequireSpaceUnsafe(std::u16string_view Str, DocumenetBomT Bom, bool WriteBom = false);
+		static EncodeStrInfo RequireSpaceUnsafe(std::u8string_view Str, DocumenetBomT Bom, bool WriteBom = false);
+		static EncodeStrInfo RequireSpaceUnsafe(std::wstring_view Str, DocumenetBomT Bom, bool WriteBom = false);
+
+		static EncodeStrInfo EncodeUnsafe(std::span<std::byte> Span, std::u32string_view Str, DocumenetBomT Bom, bool WriteBom = false);
+		static EncodeStrInfo EncodeUnsafe(std::span<std::byte> Span, std::u16string_view Str, DocumenetBomT Bom, bool WriteBom = false);
+		static EncodeStrInfo EncodeUnsafe(std::span<std::byte> Span, std::u8string_view Str, DocumenetBomT Bom, bool WriteBom = false);
+		static EncodeStrInfo EncodeUnsafe(std::span<std::byte> Span, std::wstring_view Str, DocumenetBomT Bom, bool WriteBom = false);
 	};
 
-	template<typename AllocatorType, typename UnicodeT>
-	EncodeStrInfo DocumentWriter::EncodeDocument(std::vector<std::byte, AllocatorType>& Output, std::basic_string_view<UnicodeT> Str, DocumenetBomT Bom, bool WriteBom)
+	struct DocumenetWriter
 	{
-		std::span<std::byte const> BomSpan;
-		if (WriteBom)
-			BomSpan = ToBinary(Bom);
-		switch (Bom)
-		{
-		case DocumenetBomT::NoBom:
-		case DocumenetBomT::UTF8:
-		{
-			EncodeStrInfo Info = StrCodeEncoder<UnicodeT, char8_t>::RequireSpaceUnSafe(Str);
-			std::size_t OldSize = Output.size();
-			Output.resize(OldSize + BomSpan.size() + Info.TargetSpace * sizeof(char8_t));
-			std::memcpy(Output.data() + OldSize, BomSpan.data(), BomSpan.size());
-			std::span<char8_t> Sp = { reinterpret_cast<char8_t*>(Output.data() + BomSpan.size() + OldSize), Info.TargetSpace * sizeof(char8_t) };
-			return StrCodeEncoder<UnicodeT, char8_t>::EncodeUnSafe(Str, Sp);
-		}
-		default:
-			break;
-		}
-		return {};
-	}
+		DocumenetWriter(std::filesystem::path Path, DocumenetBomT BomType = DocumenetBomT::NoBom);
+		explicit operator bool() const { return File.is_open(); }
+		EncodeStrInfo Write(std::u32string_view Str);
+		EncodeStrInfo Write(std::u16string_view Str);
+		EncodeStrInfo Write(std::u8string_view Str);
+		EncodeStrInfo Write(std::wstring_view Str);
+	private:
+		std::ofstream File;
+		DocumenetBomT BomType;
+		std::vector<std::byte> TemporaryBuffer;
+	};
 }

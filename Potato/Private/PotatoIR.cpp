@@ -1,5 +1,5 @@
-#include "../Include/PotatoMiniCore.h"
-namespace Potato::MiniCore
+#include "../Public/PotatoIR.h"
+namespace Potato::IR
 {
 	auto SymbolTable::InsertSymbol(std::u32string Name, std::size_t FeedbackIndex, std::any Data) -> std::size_t
 	{

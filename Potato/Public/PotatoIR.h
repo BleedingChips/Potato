@@ -3,7 +3,7 @@
 #include <optional>
 #include <vector>
 #include "PotatoIntrusivePointer.h"
-namespace Potato::MiniCore
+namespace Potato::IR
 {
 
 	struct SymbolTable

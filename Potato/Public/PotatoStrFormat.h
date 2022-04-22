@@ -43,22 +43,6 @@ namespace Potato::StrFormat
 		return Scanner<std::remove_cvref_t<TargetType>, wchar_t>{}.Scan(Parameter, tar_type);
 	}
 
-	/*
-	template<typename UnicodeType, typename CharTrai, typename TargetType>
-	bool DirectScan(std::basic_string_view<UnicodeType, CharTrai> Parameter, TargetType& tar_type)
-	{
-		return Scanner<std::remove_cvref_t<TargetType>, UnicodeType>{}.Scan(Parameter, tar_type);
-	}
-	*/
-	
-	/*
-	template<typename UnicodeType, typename CharTrai, typename Allocator, typename TargetType>
-	bool DirectScan(std::basic_string<UnicodeType, CharTrai, Allocator> Parameter, TargetType& tar_type)
-	{
-		return DirectScan(std::basic_string_view(Parameter), tar_type);
-	}
-	*/
-
 	struct ScanPattern
 	{
 
@@ -254,79 +238,75 @@ namespace Potato::StrFormat
 		}, Str, Type);
 	}
 
-	/*
-	template<typename UnicodeType, typename TargetType>
-	std::basic_string<UnicodeType> DirectoFormat(std::basic_string_view<UnicodeType> Str, TargetType const& Type)
+	enum class PatternElementType
 	{
-		std::basic_string<UnicodeType> Result;
-		if(DirectoFormatTo(Result, Str, Type))
-			return Result;
-		return {};
-	}
-	*/
-
-	/*
-	struct CoreFormatPattern
-	{
-		enum class TypeT
-		{
-			NormalString = 0,
-			Parameter,
-		};
-
-		struct Element
-		{
-			TypeT Type;
-			Misc::IndexSpan<> Index;
-		};
-
-		CoreFormatPattern(Misc::IndexSpan<> Index, Reg::CodePoint(*F1)(std::size_t Index, void* Data), void* Data);
-		CoreFormatPattern(std::u32string_view Str) : CoreFormatPattern({0, std::numeric_limits<std::size_t>::max()}, Reg::StringViewWrapper<char32_t>{}, & Str){}
-		CoreFormatPattern(std::u16string_view Str) : CoreFormatPattern({ 0, std::numeric_limits<std::size_t>::max() }, Reg::StringViewWrapper<char16_t>{}, & Str) {}
-		CoreFormatPattern(std::u8string_view Str) : CoreFormatPattern({ 0, std::numeric_limits<std::size_t>::max() }, Reg::StringViewWrapper<char8_t>{}, & Str) {}
-		CoreFormatPattern(std::wstring_view Str) : CoreFormatPattern({ 0, std::numeric_limits<std::size_t>::max() }, Reg::StringViewWrapper<wchar_t>{}, & Str) {}
-		CoreFormatPattern(CoreFormatPattern&&) = default;
-		CoreFormatPattern(CoreFormatPattern const&) = default;
-
-		std::vector<Element> Elements;
+		NormalString = 0,
+		Parameter,
 	};
 
-	template<typename UnicodeType, typename ...HoldingType>
-	struct FormatterWrapper
+	template<typename UnicodeT>
+	struct PatternElement;
+
+	template<>
+	struct PatternElement<char32_t>
 	{
-		std::optional<std::size_t> FormatSize(std::size_t TotalCount, std::basic_string_view<UnicodeType> Str, std::span<CoreFormatPattern::Element const> Patterns)
+		PatternElementType Type;
+		std::basic_string_view<char32_t> String;
+		static std::size_t FlushSize(std::size_t Count, std::span<PatternElement<char32_t> const>& Source);
+		static void FlushBuffer(std::span<PatternElement<char32_t> const>& Source, std::span<char32_t>& Output);
+		static std::vector<PatternElement<char32_t>> Create(std::u32string_view Str);
+	};
+
+	template<>
+	struct PatternElement<char16_t>
+	{
+		PatternElementType Type;
+		std::basic_string_view<char16_t> String;
+		static std::size_t FlushSize(std::size_t Count, std::span<PatternElement<char16_t> const>& Source);
+		static void FlushBuffer(std::span<PatternElement<char16_t> const>& Source, std::span<char16_t>& Output);
+		static std::vector<PatternElement<char16_t>> Create(std::u16string_view Str);
+	};
+
+	template<>
+	struct PatternElement<char8_t>
+	{
+		PatternElementType Type;
+		std::basic_string_view<char8_t> String;
+		static std::size_t FlushSize(std::size_t Count, std::span<PatternElement<char8_t> const>& Source);
+		static void FlushBuffer(std::span<PatternElement<char8_t> const>& Source, std::span<char8_t>& Output);
+		static std::vector<PatternElement<char8_t>> Create(std::u8string_view Str);
+	};
+
+	template<>
+	struct PatternElement<wchar_t>
+	{
+		PatternElementType Type;
+		std::basic_string_view<wchar_t> String;
+		static std::size_t FlushSize(std::size_t Count, std::span<PatternElement<wchar_t> const>& Source);
+		static void FlushBuffer(std::span<PatternElement<wchar_t> const>& Source, std::span<wchar_t>& Output);
+		static std::vector<PatternElement<wchar_t>> Create(std::wstring_view Str);
+	};
+
+
+	template<typename UnicodeT, typename ...HoldingType>
+	struct FormatterWrapper;;
+
+	template<typename UnicodeT>
+	struct FormatterWrapper<UnicodeT>
+	{
+		std::optional<std::size_t> FormatSize(std::size_t TotalCount, std::span<PatternElement<UnicodeT> const> Patterns)
 		{
-			for (auto Ite : Patterns)
-			{
-				switch (Ite.Type)
-				{
-				case CoreFormatPattern::TypeT::NormalString:
-					TotalCount += Cur.Index.size();
-					break;
-				case CoreFormatPattern::TypeT::Parameter:
-					return {};
-				}
-			}
-			return TotalCount;
+			auto Result = PatternElement<UnicodeT>::FlushSize(TotalCount, Patterns);
+			if (Patterns.empty())
+				return Result;
+			else
+				return {};
 		}
-		void Format(std::span<UnicodeType> OutputBuffer, std::basic_string_view<UnicodeType> Str, std::span<CoreFormatPattern::Element const> Patterns)
+
+		void Format(std::span<UnicodeT> OutputBuffer, std::span<PatternElement<UnicodeT> const> Patterns)
 		{
-			for (std::size_t Index = 0; Index < Patterns.size(); ++Index)
-			{
-				auto Cur = Patterns[Index];
-				switch (Cur.Type)
-				{
-				case CoreFormatPattern::TypeT::NormalString:
-				{
-					auto CurStr = Str.substr(Cur.Index.Begin(), Cur.Index.Count());
-					std::memcpy(OutputBuffer.data(), CurStr.data(), sizeof(UnicodeType) * CurStr.size());
-					OutputBuffer = OutputBuffer.subspan(CurStr.size());
-					break;
-				}
-				case CoreFormatPattern::TypeT::Parameter:
-					return;
-				}
-			}
+			PatternElement<UnicodeT>::FlushBuffer(Patterns, OutputBuffer);
+			assert(Patterns.empty());
 		}
 	};
 
@@ -337,55 +317,34 @@ namespace Potato::StrFormat
 		std::size_t LastSize = 0;
 		FormatterWrapper<UnicodeType, HoldingType...> OtherFormatter;
 
-		std::optional<std::size_t> FormatSize(std::size_t TotalCount, std::basic_string_view<UnicodeType> Str, std::span<CoreFormatPattern::Element const> Patterns, CurType const& C, HoldingType const& ...HT)
+		std::optional<std::size_t> FormatSize(std::size_t TotalCount, std::span<PatternElement<UnicodeType> const> Patterns, CurType const& C, HoldingType const& ...HT)
 		{
-			for (std::size_t Index = 0; Index < Patterns.size(); ++Index)
-			{
-				auto Cur = Patterns[Index];
-				switch (Cur.Type)
+			auto Result = PatternElement<UnicodeType>::FlushSize(TotalCount, Patterns);
+			if (Patterns.empty())
+				return Result;
+			else {
+				auto Top = Patterns[0];
+				auto Re = CurFormatter.FormatSize(Top.String, C);
+				if (Re.has_value())
 				{
-				case CoreFormatPattern::TypeT::NormalString:
-				{
-					TotalCount += Cur.Index.Count();
-					break;
-				}
-				case CoreFormatPattern::TypeT::Parameter:
-				{
-					auto CurStr = Str.substr(Cur.Index.Begin(), Cur.Index.Count());
-					auto Re = CurFormatter.FormatSize(CurStr, C);
-					if(!Re.has_value())
-						return {};
-					LastSize = Re;
-					TotalCount += *Re;
-					return OtherFormatter.FormatSize(TotalCount + *Re, Str, Patterns.subspan(Index + 1), HT...);	
-				}
-				}
+					LastSize = *Re;
+					Patterns = Patterns.subspan(1);
+					return OtherFormatter.FormatSize(Result + LastSize, Patterns, HT...);
+				}else
+					return {};
 			}
-			return TotalCount;
 		}
 
-		void Format(std::span<UnicodeType> OutputBuffer, std::basic_string_view<UnicodeType> Str, std::span<CoreFormatPattern::Element const> Patterns, CurType const& C, HoldingType const& ...HT)
+		void Format(std::span<UnicodeType> OutputBuffer, std::span<PatternElement<UnicodeType> const> Patterns, CurType const& C, HoldingType const& ...HT)
 		{
-			for (std::size_t Index = 0; Index < Patterns.size(); ++Index)
+			PatternElement<UnicodeType>::FlushBuffer(Patterns, OutputBuffer);
+			if (!Patterns.empty())
 			{
-				auto Cur = Patterns[Index];
-				switch (Cur.Type)
-				{
-				case CoreFormatPattern::TypeT::NormalString:
-				{
-					auto CurStr = Str.substr(Cur.Index.Begin(), Cur.Index.Count());
-					std::memcpy(OutputBuffer.data(), CurStr.data(), sizeof(UnicodeType) * CurStr.size());
-					OutputBuffer = OutputBuffer.subspan(CurStr.size());
-					break;
-				}
-				case CoreFormatPattern::TypeT::Parameter:
-				{
-					auto Writed = OutputBuffer.subspan(0, LastSize);
-					OutputBuffer = OutputBuffer.subspan(LastSize);
-					CurFormatter.Format(Writed, C);
-					return OtherFormatter.Format(OutputBuffer, Str, Patterns.subspan(Index + 1), HT...);
-				}
-				}
+				auto Writed = OutputBuffer.subspan(0, LastSize);
+				OutputBuffer = OutputBuffer.subspan(LastSize);
+				CurFormatter.Format(Writed, C);
+				Patterns = Patterns.subspan(1);
+				return OtherFormatter.Format(OutputBuffer, Patterns, HT...);
 			}
 		}
 	};
@@ -394,22 +353,61 @@ namespace Potato::StrFormat
 	struct FormatPattern
 	{
 
+		FormatPattern(std::basic_string_view<UnicodeT> Str) : Elements(PatternElement<UnicodeT>::Create(Str)) {}
+
+		template<typename FuncT, typename ...OTarget>
+		bool Format(FuncT&& F, OTarget const& ...OT) requires(std::is_invocable_r_v<std::span<UnicodeT>, FuncT, std::size_t>)
+		{
+			FormatterWrapper<UnicodeT, std::remove_cvref_t<OTarget>...> Wrapper;
+			auto Re = Wrapper.FormatSize(0, Elements, OT...);
+			if (Re.has_value())
+			{
+				std::span<UnicodeT> Span = F(*Re);
+				if(!Span.empty())
+					Wrapper.Format(Span, Elements, OT...);
+				return true;
+			}
+			return false;
+		}
+
+		template<typename CharTrai, typename Allocator, typename ...OTarget>
+		bool Format(std::basic_string<UnicodeT, CharTrai, Allocator>& Output, OTarget const& ...OT)
+		{
+			std::size_t Old = Output.size();
+			return Format([&](std::size_t Index) -> std::span<UnicodeT>{
+				Output.resize(Old + Index);
+				return std::span(Output).subspan(Old);
+			}, OT...);
+		}
+
+		std::vector<PatternElement<UnicodeT>> Elements;
+	};
+
+	
+
+	/*
+	template<typename UnicodeT>
+	struct FormatPattern
+	{
+
 		static FormatPattern Create(std::basic_string_view<UnicodeT> Str){ return FormatPattern(Str); }
 
 		FormatPattern(FormatPattern&&) = default;
 		FormatPattern(FormatPattern const&) = default;
-		FormatPattern(std::basic_string_view<UnicodeT> Str) : string(Str), Elements(Str) {}
+		FormatPattern(std::basic_string_view<UnicodeT> Str) : String(Str), Elements(Str) {}
 
 		template<typename FuncT, typename ...TargetType>
-		std::optional<std::size_t> Format(FuncT&& Func, std::basic_string_view<UnicodeT> Str, TargetType const&... TT) 
+		std::optional<std::size_t> Format(FuncT&& Func, TargetType const&... TT) 
 			requires(std::is_invocable_r_v<std::span<UnicodeT>, FuncT, std::size_t>);
 
 		template<typename CharT, typename Allocator, typename ...TargetType>
-		std::optional<std::size_t> Format(std::basic_string<UnicodeT, CharT, Allocator>&& Func, std::basic_string_view<UnicodeT> Str, TargetType const&... TT)
-			requires(std::is_invocable_r_v<std::span<UnicodeT>, FuncT, std::size_t>)
+		std::optional<std::size_t> Format(std::basic_string<UnicodeT, CharT, Allocator>& Output, TargetType const&... TT)
 		{
-			std::size_t OldSize = Func.size();
-			return Format([]()->std::span<UnicodeT>);
+			std::size_t OldSize = Output.size();
+			return Format([&](std::size_t Index)->std::span<UnicodeT>{
+				Output.resize(OldSize + Index);
+				return std::span(Output).subspan(OldSize);
+			});
 		}
 
 	private:
@@ -419,17 +417,17 @@ namespace Potato::StrFormat
 	};
 
 	template<typename UnicodeT> template<typename FuncT, typename ...TargetType>
-	std::optional<std::size_t> FormatPattern<UnicodeT>::Format(FuncT&& Func, std::basic_string_view<UnicodeT> Str, TargetType const&... TT)
+	std::optional<std::size_t> FormatPattern<UnicodeT>::Format(FuncT&& Func, TargetType const&... TT)
 		requires(std::is_invocable_r_v<std::span<UnicodeT>, FuncT, std::size_t>)
 	{
 		FormatterWrapper<UnicodeT, std::remove_cvref_t<TargetType>...> Wrapper;
-		auto Re = Wrapper.FormatSize(0, Str, Elements, TT...);
+		auto Re = Wrapper.FormatSize(0, String, Elements.Elements, TT...);
 		if (Re.has_value())
 		{
 			auto Span = Func(*Re);
 			if(!Span.empty())
-				Wrapper.Format(*Span, Str, Elements, TT...);
-			return true;
+				Wrapper.Format(*Span, String, Elements.Elements, TT...);
+			return Re;
 		}
 		return {};
 	}
@@ -575,6 +573,21 @@ namespace Potato::StrFormat
 	struct Formatter<float, UnicodeType> : BuildInNumberFormatter<float, UnicodeType> {};
 	template<typename UnicodeType>
 	struct Formatter<double, UnicodeType> : BuildInNumberFormatter<double, UnicodeType> {};
+
+	template<typename SUnicodeT, typename CharTrais, typename UnicodeType>
+	struct Formatter<std::basic_string_view<SUnicodeT, CharTrais>, UnicodeType>
+	{
+		void Format(std::span<UnicodeType> Output, std::basic_string_view<SUnicodeT, CharTrais> const& Input) {
+			auto Info = StrEncode::StrCodeEncoder<SUnicodeT, UnicodeType>::EncodeUnSafe(Input, Output);
+		}
+		std::optional<std::size_t> FormatSize(std::basic_string_view<UnicodeType> Parameter, std::basic_string_view<SUnicodeT, CharTrais> const& Input) {
+			auto Info = StrEncode::StrCodeEncoder<SUnicodeT, UnicodeType>::RequireSpaceUnSafe(Input);
+			return Info.TargetSpace;
+		}
+	};
+
+	template<typename SUnicodeT, typename CharTrais, typename Allocator, typename UnicodeType>
+	struct Formatter<std::basic_string<SUnicodeT, CharTrais, Allocator>, UnicodeType>: Formatter<std::basic_string_view<SUnicodeT, CharTrais>, UnicodeType> {};;
 
 }
 

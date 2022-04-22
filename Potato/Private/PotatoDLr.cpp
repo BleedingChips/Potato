@@ -1,4 +1,4 @@
-#include "../Include/PotatoDLr.h"
+#include "../Public/PotatoDLr.h"
 #include <algorithm>
 #include <cassert>
 #include <numbers>

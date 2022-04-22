@@ -1,6 +1,6 @@
-#include "../Include/PotatoReg.h"
-#include "../Include/PotatoDLr.h"
-#include "../Include/PotatoStrEncode.h"
+#include "../Public/PotatoReg.h"
+#include "../Public/PotatoDLr.h"
+#include "../Public/PotatoStrEncode.h"
 #include <deque>
 namespace Potato::Reg
 {
@@ -1600,31 +1600,16 @@ namespace Potato::Reg
 		return {};
 	}
 
-	template<typename Char>
-	struct StringViewFlushInput;
-
-	template<>
-	struct StringViewFlushInput<std::u32string_view>
+	template<typename UnicodeT>
+	struct StringViewFlushInput
 	{
 		static CodePoint Process(std::size_t Index, void* Data) {
-			auto View = reinterpret_cast<std::u32string_view const*>(Data);
-			if(Index < View->size())
-				return CodePoint{ (*View)[Index], 1};
-			else
-				return CodePoint::EndOfFile();
-		}
-	};
-
-	template<>
-	struct StringViewFlushInput<std::wstring_view>
-	{
-		static CodePoint Process(std::size_t Index, void* Data) {
-			auto View = reinterpret_cast<std::wstring_view const*>(Data);
-			if (Index < View->size())
+			auto View = *reinterpret_cast<std::basic_string_view<UnicodeT> const*>(Data);
+			if (Index < View.size())
 			{
-				char32_t Source;
-				auto Re = StrEncode::CoreEncoder<wchar_t, char32_t>::EncodeOnceUnSafe(View->substr(Index), {&Source, 1});
-				return CodePoint{ Source, Re.SourceSpace };
+				char32_t Buffer;
+				auto Info = StrEncode::CoreEncoder<UnicodeT, char32_t>::EncodeOnceUnSafe(View.substr(Index), {&Buffer, 1});
+				return CodePoint{Buffer, Info.SourceSpace};
 			}
 			else
 				return CodePoint::EndOfFile();
@@ -1633,7 +1618,7 @@ namespace Potato::Reg
 
 	std::optional<MarchProcessor::Result> ProcessMarch(TableWrapper Wrapper, std::u32string_view Span)
 	{
-		return ProcessMarch(Wrapper, 0, StringViewFlushInput<std::u32string_view>::Process, &Span);
+		return ProcessMarch(Wrapper, 0, StringViewFlushInput<char32_t>::Process, &Span);
 	}
 
 	std::optional<MarchProcessor::Result> ProcessMarch(TableWrapper Wrapper, std::size_t Startup, CodePoint(*F1)(std::size_t Index, void*), void* Data)
@@ -1653,12 +1638,12 @@ namespace Potato::Reg
 
 	std::optional<FrontMarchProcessor::Result> ProcessFrontMarch(TableWrapper Wrapper, std::u32string_view SpanView)
 	{
-		return ProcessFrontMarch(Wrapper, 0, StringViewFlushInput<std::u32string_view>::Process, &SpanView);
+		return ProcessFrontMarch(Wrapper, 0, StringViewFlushInput<char32_t>::Process, &SpanView);
 	}
 
 	std::optional<FrontMarchProcessor::Result> ProcessFrontMarch(TableWrapper Wrapper, std::wstring_view SpanView)
 	{
-		return ProcessFrontMarch(Wrapper, 0, StringViewFlushInput<std::wstring_view>::Process, &SpanView);
+		return ProcessFrontMarch(Wrapper, 0, StringViewFlushInput<wchar_t>::Process, &SpanView);
 	}
 
 	std::optional<FrontMarchProcessor::Result> ProcessFrontMarch(TableWrapper Wrapper, std::size_t Startup, CodePoint(*F1)(std::size_t Index, void*), void* Data)
@@ -1705,7 +1690,20 @@ namespace Potato::Reg
 
 	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::u32string_view Span)
 	{
-		return ProcessSearch(Wrapper, 0, StringViewFlushInput<std::u32string_view>::Process, &Span);
+		return ProcessSearch(Wrapper, 0, StringViewFlushInput<char32_t>::Process, &Span);
+	}
+
+	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::u16string_view Span)
+	{
+		return ProcessSearch(Wrapper, 0, StringViewFlushInput<char16_t>::Process, &Span);
+	}
+	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::u8string_view Span)
+	{
+		return ProcessSearch(Wrapper, 0, StringViewFlushInput<char8_t>::Process, &Span);
+	}
+	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::wstring_view Span)
+	{
+		return ProcessSearch(Wrapper, 0, StringViewFlushInput<wchar_t>::Process, &Span);
 	}
 
 	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::size_t Start, CodePoint(*F1)(std::size_t Index, void* Data), void* Data)
@@ -1746,6 +1744,7 @@ namespace Potato::Reg
 						SearchProcessor::Result SearchResult;
 						SearchResult.MainCapture = SearchRange;
 						SearchResult.Captures = std::move(Core.CaptureRecord);
+						SearchResult.AcceptData = *Re->AcceptData;
 						SearchResult.IsEndOfFile = Re->IsEndOfFile();
 						return std::move(SearchResult);
 					}
@@ -1781,12 +1780,12 @@ namespace Potato::Reg
 				Node.ReadEdge([&](TableWrapper::EdgeViewer Viewer) -> bool {
 					if ((Viewer.ToNode != Core.CurrentState || Core.ConuterRecord.empty()) && Acceptable(Sym.UnicodeCodePoint, Viewer.ConsumeChars))
 					{
-						bool Find = Core.ConuterRecord.empty();
+						bool Find = !Core.ConuterRecord.empty();
 						if (!Find)
 						{
 							for (auto Ite = Core.AmbiguousPoints.rbegin(); Ite != Core.AmbiguousPoints.rend(); ++Ite)
 							{
-								if (Ite->NextTokenIndex == NextTokenIndex && Ite->Viewer.ToNode == Viewer.ToNode)
+								if (Ite->NextTokenIndex == NextTokenIndex && Ite->Viewer.ToNode == Viewer.ToNode && Ite->CounterIndex.Count() == 0)
 								{
 									Find = true;
 									break;

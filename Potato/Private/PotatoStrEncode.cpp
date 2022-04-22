@@ -1,4 +1,4 @@
-#include "../Include/PotatoStrEncode.h"
+#include "../Public/PotatoStrEncode.h"
 #include <array>
 namespace Potato::StrEncode
 {
@@ -600,4 +600,90 @@ namespace Potato::StrEncode
 			return FlushResult::UnSupport;
 		}
 	}
+
+	template<typename UnocideT>
+	EncodeStrInfo DecumentRequireSpaceUnsafe(std::basic_string_view<UnocideT> Str, DocumenetBomT Bom, bool WriteBom)
+	{
+		switch (Bom)
+		{
+		case DocumenetBomT::NoBom:
+		case DocumenetBomT::UTF8:
+		{
+			auto Info = StrCodeEncoder<UnocideT, char8_t>::RequireSpaceUnSafe(Str);
+			Info.TargetSpace = Info.TargetSpace * sizeof(char8_t);
+			if (WriteBom)
+			{
+				Info.TargetSpace += ToBinary(Bom).size();
+			}
+			return Info;
+		}
+		}
+		return {};
+	}
+
+	template<typename UnocideT>
+	EncodeStrInfo DocumentEncodeUnsafe(std::span<std::byte> OutputBuffer, std::basic_string_view<UnocideT> Str, DocumenetBomT Bom, bool WriteBom = false)
+	{
+		if (WriteBom)
+		{
+			auto BomSpan = ToBinary(Bom);
+			std::memcpy(OutputBuffer.data(), BomSpan.data(), BomSpan.size());
+			OutputBuffer = OutputBuffer.subspan(BomSpan.size());
+		}
+		switch (Bom)
+		{
+		case DocumenetBomT::NoBom:
+		case DocumenetBomT::UTF8:
+		{
+			std::span<char8_t> Buffer = {reinterpret_cast<char8_t*>(OutputBuffer.data()), OutputBuffer .size() / sizeof(char8_t)};
+			auto Info = StrCodeEncoder<UnocideT, char8_t>::EncodeUnSafe(Str, Buffer);
+			Info.TargetSpace = Info.TargetSpace * sizeof(char8_t);
+			if (WriteBom)
+			{
+				Info.TargetSpace += ToBinary(Bom).size();
+			}
+			return Info;
+		}
+		}
+		return {};
+	}
+
+	EncodeStrInfo DocumentEncoder::RequireSpaceUnsafe(std::u32string_view Str, DocumenetBomT Bom, bool WriteBom){ return DecumentRequireSpaceUnsafe(Str, Bom, WriteBom);}
+	EncodeStrInfo DocumentEncoder::RequireSpaceUnsafe(std::u16string_view Str, DocumenetBomT Bom, bool WriteBom) { return DecumentRequireSpaceUnsafe(Str, Bom, WriteBom); }
+	EncodeStrInfo DocumentEncoder::RequireSpaceUnsafe(std::u8string_view Str, DocumenetBomT Bom, bool WriteBom) { return DecumentRequireSpaceUnsafe(Str, Bom, WriteBom); }
+	EncodeStrInfo DocumentEncoder::RequireSpaceUnsafe(std::wstring_view Str, DocumenetBomT Bom, bool WriteBom) { return DecumentRequireSpaceUnsafe(Str, Bom, WriteBom); }
+
+	EncodeStrInfo DocumentEncoder::EncodeUnsafe(std::span<std::byte> Span, std::u32string_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
+	EncodeStrInfo DocumentEncoder::EncodeUnsafe(std::span<std::byte> Span, std::u16string_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
+	EncodeStrInfo DocumentEncoder::EncodeUnsafe(std::span<std::byte> Span, std::u8string_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
+	EncodeStrInfo DocumentEncoder::EncodeUnsafe(std::span<std::byte> Span, std::wstring_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
+
+	template<typename UnicodeT>
+	EncodeStrInfo WriteFile(std::ofstream& File, DocumenetBomT Bom, std::vector<std::byte>& Buffer, std::basic_string_view<UnicodeT> Re)
+	{
+		auto Info = DocumentEncoder::RequireSpaceUnsafe(Re, Bom, false);
+		Buffer.resize(Info.TargetSpace);
+		auto Info2 = DocumentEncoder::EncodeUnsafe(Buffer, Re, Bom, false);
+		File.write(reinterpret_cast<char const*>(Buffer.data()), Info2.TargetSpace / sizeof(char));
+		Buffer.clear();
+		return Info;
+	}
+
+	DocumenetWriter::DocumenetWriter(std::filesystem::path Path, DocumenetBomT BomType)
+		: File(Path, std::ios::binary), BomType(BomType)
+	{
+		if (File.is_open())
+		{
+			auto BomSpan = ToBinary(BomType);
+			if (!BomSpan.empty())
+			{
+				File.write(reinterpret_cast<char const*>(BomSpan.data()), BomSpan.size() / sizeof(char));
+			}
+		}
+	}
+
+	EncodeStrInfo DocumenetWriter::Write(std::u32string_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
+	EncodeStrInfo DocumenetWriter::Write(std::u16string_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
+	EncodeStrInfo DocumenetWriter::Write(std::u8string_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
+	EncodeStrInfo DocumenetWriter::Write(std::wstring_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
 }

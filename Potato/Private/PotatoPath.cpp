@@ -1,6 +1,6 @@
-#include "../Include/PotatoReg.h"
-#include "../Include/PotatoDLr.h"
-#include "../Include/PotatoPath.h"
+#include "../Public/PotatoReg.h"
+#include "../Public/PotatoDLr.h"
+#include "../Public/PotatoPath.h"
 
 #include <filesystem>
 #include <fstream>

@@ -18,9 +18,9 @@ namespace Potato::TMP
 	template<typename T, typename ...AT> constexpr bool IsNotOneOfV = IsNotOneOf<T, AT...>::Value;
 
 	/* IsRepeat */
-	template<typename ...AT> struct IsPrpeat { static constexpr bool Value = false; };
+	template<typename ...AT> struct IsRepeat { static constexpr bool Value = false; };
 	template<typename T, typename ...AT>
-	struct IsPrpeat <T, AT...> {
+	struct IsRepeat <T, AT...> {
 		static constexpr bool Value = IsOneOf<T, AT...>::Value || IsPrpeat<AT...>::Value;
 	};
 

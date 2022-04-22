@@ -1,5 +1,5 @@
 #pragma once
-#include "../Include/PotatoMisc.h"
+#include "PotatoMisc.h"
 #include <compare>
 #include <optional>
 #include <functional>

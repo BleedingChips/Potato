@@ -19,27 +19,27 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\Potato\Include\PotatoDLr.h" />
-    <ClInclude Include="..\..\Potato\Include\PotatoEbnf.h" />
-    <ClInclude Include="..\..\Potato\Include\PotatoIntrusivePointer.h" />
-    <ClInclude Include="..\..\Potato\Include\PotatoPath.h" />
-    <ClInclude Include="..\..\Potato\Include\PotatoInterval.h" />
-    <ClInclude Include="..\..\Potato\Include\PotatoMisc.h" />
-    <ClInclude Include="..\..\Potato\Include\PotatoReg.h" />
-    <ClInclude Include="..\..\Potato\Include\PotatoStrEncode.h" />
-    <ClInclude Include="..\..\Potato\Include\PotatoStrFormat.h" />
-    <ClInclude Include="..\..\Potato\Include\PotatoMiniCore.h" />
-    <ClInclude Include="..\..\Potato\Include\PotatoTMP.h" />
+    <ClInclude Include="..\..\Potato\Public\PotatoDLr.h" />
+    <ClInclude Include="..\..\Potato\Public\PotatoEbnf.h" />
+    <ClInclude Include="..\..\Potato\Public\PotatoInterval.h" />
+    <ClInclude Include="..\..\Potato\Public\PotatoIntrusivePointer.h" />
+    <ClInclude Include="..\..\Potato\Public\PotatoIR.h" />
+    <ClInclude Include="..\..\Potato\Public\PotatoMisc.h" />
+    <ClInclude Include="..\..\Potato\Public\PotatoPath.h" />
+    <ClInclude Include="..\..\Potato\Public\PotatoReg.h" />
+    <ClInclude Include="..\..\Potato\Public\PotatoStrEncode.h" />
+    <ClInclude Include="..\..\Potato\Public\PotatoStrFormat.h" />
+    <ClInclude Include="..\..\Potato\Public\PotatoTMP.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\Potato\Implement\PotatoDLr.cpp" />
-    <ClCompile Include="..\..\Potato\Implement\PotatoEbnf.cpp" />
-    <ClCompile Include="..\..\Potato\Implement\PotatoPath.cpp" />
-    <ClCompile Include="..\..\Potato\Implement\PotatoMisc.cpp" />
-    <ClCompile Include="..\..\Potato\Implement\PotatoReg.cpp" />
-    <ClCompile Include="..\..\Potato\Implement\PotatoStrEncode.cpp" />
-    <ClCompile Include="..\..\Potato\Implement\PotatoStrFormat.cpp" />
-    <ClCompile Include="..\..\Potato\Implement\PotatoMiniCore.cpp" />
+    <ClCompile Include="..\..\Potato\Private\PotatoDLr.cpp" />
+    <ClCompile Include="..\..\Potato\Private\PotatoEbnf.cpp" />
+    <ClCompile Include="..\..\Potato\Private\PotatoIR.cpp" />
+    <ClCompile Include="..\..\Potato\Private\PotatoMisc.cpp" />
+    <ClCompile Include="..\..\Potato\Private\PotatoPath.cpp" />
+    <ClCompile Include="..\..\Potato\Private\PotatoReg.cpp" />
+    <ClCompile Include="..\..\Potato\Private\PotatoStrEncode.cpp" />
+    <ClCompile Include="..\..\Potato\Private\PotatoStrFormat.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>

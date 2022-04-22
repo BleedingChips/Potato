@@ -1,10 +1,10 @@
 
 
-#include "Potato/Include/PotatoDLr.h"
-#include "Potato/Include/PotatoReg.h"
-#include "Potato/Include/PotatoStrEncode.h"
-#include "Potato/Include/PotatoStrFormat.h"
-#include "Potato/Include/PotatoEbnf.h"
+#include "Potato/Public/PotatoDLr.h"
+#include "Potato/Public/PotatoReg.h"
+#include "Potato/Public/PotatoStrEncode.h"
+#include "Potato/Public/PotatoStrFormat.h"
+#include "Potato/Public/PotatoEbnf.h"
 #include <iostream>
 
 using namespace Potato;

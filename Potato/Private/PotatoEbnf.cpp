@@ -1,7 +1,7 @@
 #include <assert.h>
 #include <vector>
-#include "../Include/PotatoEbnf.h"
-#include "../Include/PotatoStrFormat.h"
+#include "../Public/PotatoEbnf.h"
+#include "../Public/PotatoStrFormat.h"
 
 namespace Potato::Ebnf
 {
