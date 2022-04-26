@@ -7,12 +7,12 @@ namespace Potato::StrEncode
 	{
 		EncodeInfo Info;
 		assert(!Source.empty());
-		if (Source[0] <= 0x1000)
+		if (Source[0] <= 0x10000)
 		{
-			Info.TargetSpace += 1;
+			Info.TargetSpace = 1;
 		}else
-			Info.TargetSpace += 2;
-		Info.SourceSpace += 1;
+			Info.TargetSpace = 2;
+		Info.SourceSpace = 1;
 		return Info;
 	}
 
@@ -22,7 +22,7 @@ namespace Potato::StrEncode
 		if (!Source.empty())
 		{
 			auto Ite = Source[0];
-			if (Ite <= 0x01000)
+			if (Ite <= 0x010000)
 				Info.TargetSpace = 1;
 			else if (Ite < 0x110000)
 				Info.TargetSpace = 2;
@@ -43,9 +43,14 @@ namespace Potato::StrEncode
 				Target[0] = static_cast<char16_t>(Source[0]);
 			break;
 			case 2:
+			{
 				assert(Target.size() >= 2);
-				Target[0] = (0xd800 & (Source[0] >> 10));
-				Target[1] = (0xdc00 & (Source[0] >> 10));
+				auto Tem = Source[0];
+				assert(Tem >= 0x10000);
+				Tem -= 0x10000;
+				Target[0] = (0xd800 | (Tem >> 10));
+				Target[1] = (0xdc00 | (Tem & 0x3FF));
+			}
 			break;
 			default:
 				assert(false);
@@ -125,7 +130,7 @@ namespace Potato::StrEncode
 		break;
 		case 4:
 			assert(Target.size() >= 4);
-			Target[0] = 0x1E | static_cast<char>((Cur & 0x1C0000) >> 18);
+			Target[0] = 0xF0 | static_cast<char>((Cur & 0x1C0000) >> 18);
 			Target[1] = 0x80 | static_cast<char>((Cur & 0x3F000) >> 12);
 			Target[2] = 0x80 | static_cast<char>((Cur & 0xFC0) >> 6);
 			Target[3] = 0x80 | static_cast<char>((Cur & 0x3F));
@@ -143,7 +148,7 @@ namespace Potato::StrEncode
 		EncodeInfo Result;
 		assert(Source.size() >= 1);
 		auto Cur = Source[0];
-		if ((Cur & 0xd800) == 0xd800 && Source.size() >= 2 && (Source[1] & 0xdc00) == 0xdc00)
+		if ((Cur >> 10) == 0x36 && Source.size() >= 2 && (Source[1] >> 10) == 0x37)
 		{
 			return {2, 1};
 		}else
@@ -163,14 +168,16 @@ namespace Potato::StrEncode
 	{
 		assert(!Source.empty());
 		assert(Target.size() >= 1);
-		auto Cur = Source[0];
-		if ((Cur & 0xd800) == 0xd800 && Source.size() >= 2 && (Source[1] & 0xdc00) == 0xdc00)
+		auto Info = RequireSpaceOnceUnSafe(Source);
+		switch (Info.SourceSpace)
 		{
-			Target[0] = (static_cast<char32_t>(Cur | 0x3FF) << 10) + (Source[1] | 0x3FF) + 0x10000;
-			return {2, 1};
+		case 2:
+		{
+			Target[0] = (static_cast<char32_t>(Source[0] & 0x3FF) << 10) + (Source[1] & 0x3FF) + 0x10000;
+			return { 2, 1 };
 		}
-		else {
-			Target[0] = Cur;
+		default:
+			Target[0] = Source[0];
 			return { 1, 1 };
 		}
 	}
@@ -185,7 +192,7 @@ namespace Potato::StrEncode
 			auto Cur = Source[0];
 			if(Cur <= 0x7f) return {1, 1};
 			else if(Cur <= 0x7ff) return {1, 2};
-			else if(Cur <= 0xfff) return {1, 3};
+			else if(Cur <= 0xffff) return {1, 3};
 			else {
 				assert(false);
 				return {};
@@ -204,7 +211,7 @@ namespace Potato::StrEncode
 				auto Cur = Source[0];
 				if (Cur <= 0x7f) return { 1, 1 };
 				else if (Cur <= 0x7ff) return { 1, 2 };
-				else if (Cur <= 0xfff) return { 1, 3 };
+				else if (Cur <= 0xffff) return { 1, 3 };
 				else {
 					return {};
 				}
@@ -316,60 +323,6 @@ namespace Potato::StrEncode
 		default:
 			assert(false);
 		}
-		return Info;
-	}
-
-	EncodeInfo CoreEncoder<char8_t, char8_t>::RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
-	{
-		assert(!Source.empty());
-		auto Cur = Source[0];
-		if ((Cur & 0x80) == 0)
-			return { 1, 1 };
-		else if ((Cur & 0xE0) == 0xC0)
-			return { 2, 2 };
-		else if ((Cur & 0xF0) == 0xE0)
-			return { 3, 3 };
-		else
-			return { 4, 4 };
-	}
-
-	EncodeInfo CoreEncoder<char8_t, char8_t>::RequireSpaceOnce(std::span<SourceT const> Source)
-	{
-		if (!Source.empty())
-		{
-			auto Cur = Source[0];
-			std::size_t Count = 0;
-			if ((Cur & 0x80) == 0)
-				Count = 1;
-			else if ((Cur & 0xE0) == 0xC0)
-				Count = 2;
-			else if ((Cur & 0xF0) == 0xE0)
-				Count = 3;
-			else if ((Cur & 0xF8) == 0xF0)
-				Count = 4;
-			if (Count <= Source.size() && Count != 0)
-			{
-				bool Succeed = true;
-				for (std::size_t Index = 1; Index < Count; ++Index)
-				{
-					auto Ite = Source[Index];
-					if ((Ite & 0x80) != 0x80)
-					{
-						Succeed = false;
-						break;
-					}
-				}
-				if (Succeed)
-					return { Count, Count };
-			}
-		}
-		return { 0, 0 };
-	}
-
-	EncodeInfo CoreEncoder<char8_t, char8_t>::EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
-	{
-		auto Info = RequireSpaceOnceUnSafe(Source);
-		std::memcpy(Target.data(), Source.data(), Info.SourceSpace * sizeof(SourceT));
 		return Info;
 	}
 

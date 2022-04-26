@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -18,45 +18,22 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="..\..\Potato\Public\PotatoDLr.h" />
-    <ClInclude Include="..\..\Potato\Public\PotatoEbnf.h" />
-    <ClInclude Include="..\..\Potato\Public\PotatoInterval.h" />
-    <ClInclude Include="..\..\Potato\Public\PotatoIntrusivePointer.h" />
-    <ClInclude Include="..\..\Potato\Public\PotatoIR.h" />
-    <ClInclude Include="..\..\Potato\Public\PotatoMisc.h" />
-    <ClInclude Include="..\..\Potato\Public\PotatoPath.h" />
-    <ClInclude Include="..\..\Potato\Public\PotatoReg.h" />
-    <ClInclude Include="..\..\Potato\Public\PotatoStrEncode.h" />
-    <ClInclude Include="..\..\Potato\Public\PotatoStrFormat.h" />
-    <ClInclude Include="..\..\Potato\Public\PotatoTMP.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\..\Potato\Private\PotatoDLr.cpp" />
-    <ClCompile Include="..\..\Potato\Private\PotatoEbnf.cpp" />
-    <ClCompile Include="..\..\Potato\Private\PotatoIR.cpp" />
-    <ClCompile Include="..\..\Potato\Private\PotatoMisc.cpp" />
-    <ClCompile Include="..\..\Potato\Private\PotatoPath.cpp" />
-    <ClCompile Include="..\..\Potato\Private\PotatoReg.cpp" />
-    <ClCompile Include="..\..\Potato\Private\PotatoStrEncode.cpp" />
-    <ClCompile Include="..\..\Potato\Private\PotatoStrFormat.cpp" />
-  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{2815d62d-2759-4a71-be0a-01f5d43c0e12}</ProjectGuid>
+    <ProjectGuid>{ed0dbfd3-a7c9-44ff-a907-f1b41c1e8042}</ProjectGuid>
     <RootNamespace>Potato</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -111,7 +88,6 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -126,7 +102,6 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -165,6 +140,29 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\Public\PotatoDLr.h" />
+    <ClInclude Include="..\..\Public\PotatoEbnf.h" />
+    <ClInclude Include="..\..\Public\PotatoInterval.h" />
+    <ClInclude Include="..\..\Public\PotatoIntrusivePointer.h" />
+    <ClInclude Include="..\..\Public\PotatoIR.h" />
+    <ClInclude Include="..\..\Public\PotatoMisc.h" />
+    <ClInclude Include="..\..\Public\PotatoPath.h" />
+    <ClInclude Include="..\..\Public\PotatoReg.h" />
+    <ClInclude Include="..\..\Public\PotatoStrEncode.h" />
+    <ClInclude Include="..\..\Public\PotatoStrFormat.h" />
+    <ClInclude Include="..\..\Public\PotatoTMP.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\Private\PotatoDLr.cpp" />
+    <ClCompile Include="..\..\Private\PotatoEbnf.cpp" />
+    <ClCompile Include="..\..\Private\PotatoIR.cpp" />
+    <ClCompile Include="..\..\Private\PotatoMisc.cpp" />
+    <ClCompile Include="..\..\Private\PotatoPath.cpp" />
+    <ClCompile Include="..\..\Private\PotatoReg.cpp" />
+    <ClCompile Include="..\..\Private\PotatoStrEncode.cpp" />
+    <ClCompile Include="..\..\Private\PotatoStrFormat.cpp" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

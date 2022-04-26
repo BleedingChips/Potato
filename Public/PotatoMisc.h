@@ -278,7 +278,9 @@ namespace Potato::Misc
 		template<typename PODType, typename StorageT>
 		static ReadArrayResult<PODType, StorageT> ReadObjectArray(std::span<StorageT> Input, std::size_t ObjectCount)
 		{
-			std::span<PODType> Readed = { reinterpret_cast<PODType*>(Input.data()), ObjectCount };
+			
+			auto Ptr = reinterpret_cast<PODType*>(Input.data());
+			std::span<PODType> Readed{ Ptr, Ptr + ObjectCount };
 			std::size_t AlignedLength = AlignedSize<StorageT>(sizeof(std::remove_cvref_t<PODType>) * ObjectCount);
 			Input = Input.subspan(AlignedLength);
 			return { Readed, AlignedLength, Input };
@@ -299,19 +301,10 @@ namespace Potato::Misc
 		std::size_t Size = 0;
 	};
 
-	struct ClassLayoutSetting
+	struct ClassLayoutAssemblerCpp
 	{
-		std::size_t MinAlign = 1;
-		std::optional<std::size_t> MemebrFiledAlign;
-	};
-
-	struct ClassLayoutAssembler
-	{
-		ClassLayoutSetting Setting;
 		ClassLayout CurrentLayout;
-		ClassLayoutAssembler(ClassLayoutSetting Setting);
-		ClassLayoutAssembler(ClassLayoutAssembler const&) = default;
-		ClassLayoutAssembler& operator=(ClassLayoutAssembler const&) = default;
+		ClassLayoutAssemblerCpp& operator=(ClassLayoutAssemblerCpp const&) = default;
 		std::size_t InsertMember(ClassLayout MemberLayout);
 		ClassLayout GetFinalLayout() const;
 	};

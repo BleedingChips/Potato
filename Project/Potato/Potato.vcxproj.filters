@@ -1,71 +1,75 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
     <Filter Include="Public">
-      <UniqueIdentifier>{bceb18c0-7245-4b7b-834d-934aacbee0a9}</UniqueIdentifier>
+      <UniqueIdentifier>{0fa6e20c-4633-4ed4-821c-378b953f5354}</UniqueIdentifier>
     </Filter>
     <Filter Include="Private">
-      <UniqueIdentifier>{1329a691-70de-4754-b3d9-1a5536093e55}</UniqueIdentifier>
+      <UniqueIdentifier>{80c27a7d-cb23-4edb-9177-ec76baee081f}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\Potato\Public\PotatoDLr.h">
+    <ClInclude Include="..\..\Public\PotatoDLr.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\PotatoEbnf.h">
+    <ClInclude Include="..\..\Public\PotatoEbnf.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\PotatoInterval.h">
+    <ClInclude Include="..\..\Public\PotatoInterval.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\PotatoIntrusivePointer.h">
+    <ClInclude Include="..\..\Public\PotatoIntrusivePointer.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\PotatoIR.h">
+    <ClInclude Include="..\..\Public\PotatoIR.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\PotatoMisc.h">
+    <ClInclude Include="..\..\Public\PotatoMisc.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\PotatoPath.h">
+    <ClInclude Include="..\..\Public\PotatoPath.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\PotatoReg.h">
+    <ClInclude Include="..\..\Public\PotatoReg.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\PotatoStrEncode.h">
+    <ClInclude Include="..\..\Public\PotatoStrEncode.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\PotatoStrFormat.h">
+    <ClInclude Include="..\..\Public\PotatoStrFormat.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Potato\Public\PotatoTMP.h">
+    <ClInclude Include="..\..\Public\PotatoTMP.h">
       <Filter>Public</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\Potato\Private\PotatoDLr.cpp">
+    <ClCompile Include="..\..\Private\PotatoDLr.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\PotatoEbnf.cpp">
+    <ClCompile Include="..\..\Private\PotatoEbnf.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\PotatoIR.cpp">
+    <ClCompile Include="..\..\Private\PotatoIR.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\PotatoMisc.cpp">
+    <ClCompile Include="..\..\Private\PotatoMisc.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\PotatoPath.cpp">
+    <ClCompile Include="..\..\Private\PotatoPath.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\PotatoReg.cpp">
+    <ClCompile Include="..\..\Private\PotatoReg.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\PotatoStrEncode.cpp">
+    <ClCompile Include="..\..\Private\PotatoStrEncode.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Potato\Private\PotatoStrFormat.cpp">
+    <ClCompile Include="..\..\Private\PotatoStrFormat.cpp">
       <Filter>Private</Filter>
     </ClCompile>
   </ItemGroup>

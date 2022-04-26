@@ -612,7 +612,7 @@ namespace Potato::DLr
 		Misc::SerilizerHelper::TryCrossTypeSet(ResultBuffer[0], Table.Nodes.size(), OutOfRange{ OutOfRange ::TypeT::NodeCount, Table.Nodes.size() });
 
 		std::vector<SerlizedReduce> SerlizedReduces;
-		std::vector<HalfHalfSeilizeT> AcceptableProductionIndex;
+		std::vector<HalfSeilizeT> AcceptableProductionIndex;
 
 		for (auto& Ite : Table.Nodes)
 		{
