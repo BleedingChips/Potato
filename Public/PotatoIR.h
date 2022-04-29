@@ -5,6 +5,24 @@
 #include "PotatoIntrusivePointer.h"
 namespace Potato::IR
 {
+	struct ClassLayout
+	{
+		std::size_t Align = 1;
+		std::size_t Size = 0;
+		template<typename Type>
+		static constexpr ClassLayout Get() { return {alignof(std::remove_cvref_t<Type>), sizeof(std::remove_cvref_t<Type>)}; }
+	};
+
+	struct ClassLayoutAssemblerCpp
+	{
+		ClassLayoutAssemblerCpp() = default;
+		ClassLayoutAssemblerCpp(ClassLayoutAssemblerCpp const&) = default;
+		ClassLayoutAssemblerCpp& operator=(ClassLayoutAssemblerCpp const&) = default;
+		std::optional<std::size_t> InsertMember(ClassLayout MemberLayout);
+		ClassLayout GetFinalLayout() const;
+	private:
+		ClassLayout CurrentLayout;
+	};
 
 	struct SymbolTable
 	{

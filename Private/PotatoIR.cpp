@@ -1,6 +1,31 @@
 #include "../Public/PotatoIR.h"
 namespace Potato::IR
 {
+
+	std::optional<std::size_t> ClassLayoutAssemblerCpp::InsertMember(ClassLayout MemberLayout)
+	{
+		assert(MemberLayout.Size % MemberLayout.Align == 0);
+		assert((MemberLayout.Align % 2) == 0);
+		if (CurrentLayout.Align < MemberLayout.Align)
+			CurrentLayout.Align = MemberLayout.Align;
+		assert(CurrentLayout.Size % MemberLayout.Align == 0);
+		if (CurrentLayout.Size % MemberLayout.Align != 0)
+			CurrentLayout.Size += MemberLayout.Align - (CurrentLayout.Size % MemberLayout.Align);
+		std::size_t Offset = CurrentLayout.Size;
+		CurrentLayout.Size += MemberLayout.Size;
+		return Offset;
+	}
+
+	ClassLayout ClassLayoutAssemblerCpp::GetFinalLayout() const
+	{
+		ClassLayout Result = CurrentLayout;
+		auto ModedSize = (Result.Size % Result.Align);
+		if (ModedSize != 0)
+			Result.Size += Result.Align - ModedSize;
+		return Result;
+	}
+
+
 	auto SymbolTable::InsertSymbol(std::u32string Name, std::size_t FeedbackIndex, std::any Data) -> std::size_t
 	{
 		std::size_t Index = Mappings.size();

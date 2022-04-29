@@ -295,19 +295,5 @@ namespace Potato::Misc
 		}
 	};
 
-	struct ClassLayout
-	{
-		std::size_t Align = 1;
-		std::size_t Size = 0;
-	};
-
-	struct ClassLayoutAssemblerCpp
-	{
-		ClassLayout CurrentLayout;
-		ClassLayoutAssemblerCpp& operator=(ClassLayoutAssemblerCpp const&) = default;
-		std::size_t InsertMember(ClassLayout MemberLayout);
-		ClassLayout GetFinalLayout() const;
-	};
-
 
 }
