@@ -1608,7 +1608,7 @@ namespace Potato::Reg
 			if (Index < View.size())
 			{
 				char32_t Buffer;
-				auto Info = StrEncode::CoreEncoder<UnicodeT, char32_t>::EncodeOnceUnSafe(View.substr(Index), {&Buffer, 1});
+				auto Info = StrEncode::CharEncoder<UnicodeT, char32_t>::EncodeOnceUnSafe(View.substr(Index), {&Buffer, 1});
 				return CodePoint{Buffer, Info.SourceSpace};
 			}
 			else

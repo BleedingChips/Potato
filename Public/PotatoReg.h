@@ -43,7 +43,7 @@ namespace Potato::Reg
 			if (Index < StringView.size())
 			{
 				char32_t Temporary;
-				auto EncodeResult = StrEncode::CoreEncoder<CharT, char32_t>::EncodeOnceUnSafe(StringView.substr(Index), { &Temporary, 1 });
+				auto EncodeResult = StrEncode::CharEncoder<CharT, char32_t>::EncodeOnceUnSafe(StringView.substr(Index), { &Temporary, 1 });
 				return { Temporary, EncodeResult.SourceSpace};
 			}else
 				return CodePoint::EndOfFile();

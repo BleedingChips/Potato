@@ -56,10 +56,10 @@ struct StrEncodeTesting
 	bool operator()(std::basic_string_view<ST> Source, std::basic_string_view<TT> Target)
 	{
 		using namespace StrEncode;
-		EncodeStrInfo I1 = StrEncode::StrCodeEncoder<ST, TT>::RequireSpace(Source);
+		EncodeInfo I1 = StrEncode::StrEncoder<ST, TT>::RequireSpace(Source);
 		std::basic_string<TT> R1;
 		R1.resize(I1.TargetSpace);
-		StrEncode::StrCodeEncoder<ST, TT>::EncodeUnSafe(Source, R1, I1.CharacterCount);
+		StrEncode::StrEncoder<ST, TT>::EncodeUnSafe(Source, R1, I1.CharacterCount);
 		return R1 == Target;
 	}
 };

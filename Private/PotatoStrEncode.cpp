@@ -3,7 +3,7 @@
 namespace Potato::StrEncode
 {
 
-	EncodeInfo CoreEncoder<char32_t, char16_t>::RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
+	EncodeInfo CharEncoder<char32_t, char16_t>::RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
 	{
 		EncodeInfo Info;
 		assert(!Source.empty());
@@ -13,10 +13,11 @@ namespace Potato::StrEncode
 		}else
 			Info.TargetSpace = 2;
 		Info.SourceSpace = 1;
+		Info.CharacterCount = 1;
 		return Info;
 	}
 
-	EncodeInfo CoreEncoder<char32_t, char16_t>::RequireSpaceOnce(std::span<SourceT const> Source)
+	EncodeInfo CharEncoder<char32_t, char16_t>::RequireSpaceOnce(std::span<SourceT const> Source)
 	{
 		EncodeInfo Info;
 		if (!Source.empty())
@@ -29,11 +30,12 @@ namespace Potato::StrEncode
 			else
 				return Info;
 			Info.SourceSpace = 1;
+			Info.CharacterCount = 1;
 		}
 		return Info;
 	}
 
-	EncodeInfo CoreEncoder<char32_t, char16_t>::EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
+	EncodeInfo CharEncoder<char32_t, char16_t>::EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
 	{
 		auto Info = RequireSpaceOnceUnSafe(Source);
 		switch (Info.TargetSpace)
@@ -59,7 +61,7 @@ namespace Potato::StrEncode
 		return Info;
 	}
 
-	EncodeInfo CoreEncoder<char32_t, char8_t>::RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
+	EncodeInfo CharEncoder<char32_t, char8_t>::RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
 	{
 		EncodeInfo Info;
 		assert(!Source.empty());
@@ -73,10 +75,11 @@ namespace Potato::StrEncode
 		else
 			Info.TargetSpace = 4;
 		Info.SourceSpace = 1;
+		Info.CharacterCount = 1;
 		return Info;
 	}
 
-	EncodeInfo CoreEncoder<char32_t, char8_t>::RequireSpaceOnce(std::span<SourceT const> Source)
+	EncodeInfo CharEncoder<char32_t, char8_t>::RequireSpaceOnce(std::span<SourceT const> Source)
 	{
 		EncodeInfo Info;
 		if (!Source.empty())
@@ -91,23 +94,26 @@ namespace Potato::StrEncode
 			else if (Ite < 0x110000)
 				Info.TargetSpace = 4;
 			else
-				return Info;
+				return {false, 0, 0, 0};
 			Info.SourceSpace = 1;
+			Info.CharacterCount = 1;
 		}
 		return Info;
 	}
 
-	EncodeInfo CoreEncoder<char32_t, char32_t>::RequireSpaceOnce(std::span<SourceT const> Source)
+	EncodeInfo CharEncoder<char32_t, char32_t>::RequireSpaceOnce(std::span<SourceT const> Source)
 	{
 		if (!Source.empty())
 		{
 			if(Source[0] < 0x110000)
-				return {1, 1};
+				return {true, 1, 1, 1};
+			else
+				return {false, 0, 0, 0};
 		}
-		return {0, 0};
+		return {true, 0, 0, 0};
 	}
 
-	EncodeInfo CoreEncoder<char32_t, char8_t>::EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
+	EncodeInfo CharEncoder<char32_t, char8_t>::EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
 	{
 		auto Info = RequireSpaceOnceUnSafe(Source);
 		auto Cur = Source[0];
@@ -142,29 +148,27 @@ namespace Potato::StrEncode
 		return Info;
 	}
 
-	EncodeInfo CoreEncoder<char16_t, char32_t>::RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
+	EncodeInfo CharEncoder<char16_t, char32_t>::RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
 	{
 		assert(!Source.empty());
-		EncodeInfo Result;
 		assert(Source.size() >= 1);
 		auto Cur = Source[0];
 		if ((Cur >> 10) == 0x36 && Source.size() >= 2 && (Source[1] >> 10) == 0x37)
 		{
-			return {2, 1};
+			return {true, 1, 2, 1};
 		}else
-			return {1, 1};
-		return Result;
+			return { true, 1, 1, 1};
 	}
 
-	EncodeInfo CoreEncoder<char16_t, char32_t>::RequireSpaceOnce(std::span<SourceT const> Source)
+	EncodeInfo CharEncoder<char16_t, char32_t>::RequireSpaceOnce(std::span<SourceT const> Source)
 	{
 		if(!Source.empty())
 			return RequireSpaceOnceUnSafe(Source);
 		else
-			return {};
+			return {true, 0, 0, 0};
 	}
 
-	EncodeInfo CoreEncoder<char16_t, char32_t>::EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
+	EncodeInfo CharEncoder<char16_t, char32_t>::EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
 	{
 		assert(!Source.empty());
 		assert(Target.size() >= 1);
@@ -174,99 +178,102 @@ namespace Potato::StrEncode
 		case 2:
 		{
 			Target[0] = (static_cast<char32_t>(Source[0] & 0x3FF) << 10) + (Source[1] & 0x3FF) + 0x10000;
-			return { 2, 1 };
+			return { true, 1, 2, 1 };
 		}
 		default:
 			Target[0] = Source[0];
-			return { 1, 1 };
+			return { true, 1, 1, 1 };
 		}
 	}
 
-	EncodeInfo CoreEncoder<char16_t, char8_t>::RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
+	EncodeInfo CharEncoder<char16_t, char8_t>::RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
 	{
-		auto Re = CoreEncoder<char16_t, char32_t>::RequireSpaceOnceUnSafe(Source);
+		auto Re = CharEncoder<char16_t, char32_t>::RequireSpaceOnceUnSafe(Source);
 		assert(Re.SourceSpace != 0);
 		if(Re.SourceSpace == 2)
-			return {2, 4};
+			return {true, 1, 2, 4};
 		else {
 			auto Cur = Source[0];
-			if(Cur <= 0x7f) return {1, 1};
-			else if(Cur <= 0x7ff) return {1, 2};
-			else if(Cur <= 0xffff) return {1, 3};
+			if(Cur <= 0x7f) return {true, 1, 1, 1};
+			else if(Cur <= 0x7ff) return { true, 1, 1, 2};
+			else if(Cur <= 0xffff) return { true, 1, 1, 3};
 			else {
 				assert(false);
-				return {};
+				return {false, 0, 0, 0};
 			}
 		}
 	}
 
-	EncodeInfo CoreEncoder<char16_t, char8_t>::RequireSpaceOnce(std::span<SourceT const> Source)
+	EncodeInfo CharEncoder<char16_t, char8_t>::RequireSpaceOnce(std::span<SourceT const> Source)
 	{
-		auto Re = CoreEncoder<char16_t, char32_t>::RequireSpaceOnceUnSafe(Source);
-		if (Re.SourceSpace != 0)
+		if (!Source.empty())
 		{
+			auto Re = CharEncoder<char16_t, char32_t>::RequireSpaceOnceUnSafe(Source);
+			assert(Re.SourceSpace != 0);
 			if (Re.SourceSpace == 2)
-				return { 2, 4 };
+				return { true, 1, 2, 4 };
 			else {
 				auto Cur = Source[0];
-				if (Cur <= 0x7f) return { 1, 1 };
-				else if (Cur <= 0x7ff) return { 1, 2 };
-				else if (Cur <= 0xffff) return { 1, 3 };
+				if (Cur <= 0x7f) return { true, 1, 1, 1 };
+				else if (Cur <= 0x7ff) return { true, 1, 1, 2 };
+				else if (Cur <= 0xffff) return { true, 1, 1, 3 };
 				else {
-					return {};
+					return {false, 0, 0, 0};
 				}
 			}
 		}
-		return {};
+		else {
+			return {true, 0, 0, 0};
+		}
 	}
 
-	EncodeInfo CoreEncoder<char16_t, char8_t>::EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
+	EncodeInfo CharEncoder<char16_t, char8_t>::EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
 	{
 		std::array<char32_t, 1> Tem;
-		auto Re1 = CoreEncoder<char16_t, char32_t>::EncodeOnceUnSafe(Source, Tem);
-		auto Re2 = CoreEncoder<char32_t, char8_t>::EncodeOnceUnSafe(Tem, Target);
-		return {Re1.SourceSpace, Re2.TargetSpace};
+		auto Re1 = CharEncoder<char16_t, char32_t>::EncodeOnceUnSafe(Source, Tem);
+		auto Re2 = CharEncoder<char32_t, char8_t>::EncodeOnceUnSafe(Tem, Target);
+		return {true, 1, Re1.SourceSpace, Re2.TargetSpace};
 	}
 
-	EncodeInfo CoreEncoder<char8_t, char16_t>::RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
+	EncodeInfo CharEncoder<char8_t, char16_t>::RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
 	{
-		auto Re = CoreEncoder<char8_t, char32_t>::RequireSpaceOnceUnSafe(Source);
+		auto Re = CharEncoder<char8_t, char32_t>::RequireSpaceOnceUnSafe(Source);
 		if(Re.SourceSpace == 4)
 			Re.TargetSpace = 2;
 		return Re;
 	}
 
-	EncodeInfo CoreEncoder<char8_t, char16_t>::RequireSpaceOnce(std::span<SourceT const> Source)
+	EncodeInfo CharEncoder<char8_t, char16_t>::RequireSpaceOnce(std::span<SourceT const> Source)
 	{
-		auto Re = CoreEncoder<char8_t, char32_t>::RequireSpaceOnce(Source);
+		auto Re = CharEncoder<char8_t, char32_t>::RequireSpaceOnce(Source);
 		if(Re.SourceSpace == 4)
 			Re.TargetSpace = 2;
 		return Re;
 	}
 
-	EncodeInfo CoreEncoder<char8_t, char16_t>::EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
+	EncodeInfo CharEncoder<char8_t, char16_t>::EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
 	{
 		std::array<char32_t, 1> Tem;
-		auto Re1 = CoreEncoder<char8_t, char32_t>::EncodeOnceUnSafe(Source, Tem);
-		auto Re2 = CoreEncoder<char32_t, char16_t>::EncodeOnceUnSafe(Tem, Target);
-		return { Re1.SourceSpace, Re2.TargetSpace };
+		auto Re1 = CharEncoder<char8_t, char32_t>::EncodeOnceUnSafe(Source, Tem);
+		auto Re2 = CharEncoder<char32_t, char16_t>::EncodeOnceUnSafe(Tem, Target);
+		return { true, 1, Re1.SourceSpace, Re2.TargetSpace };
 	}
 
-	EncodeInfo CoreEncoder<char8_t, char32_t>::RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
+	EncodeInfo CharEncoder<char8_t, char32_t>::RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
 	{
 		assert(!Source.empty());
 		auto Cur = Source[0];
 		if ((Cur & 0x80) == 0)
-			return {1, 1};
+			return {true, 1, 1, 1};
 		else if((Cur & 0xE0) == 0xC0)
-			return {2, 1};
+			return { true, 1,2, 1};
 		else if((Cur & 0xF0) == 0xE0)
-			return {3, 1};
+			return { true, 1,3, 1};
 		else
-			return {4, 1};
+			return { true, 1, 4, 1};
 	}
 
-	EncodeInfo CoreEncoder<char8_t, char32_t>::RequireSpaceOnce(std::span<SourceT const> Source)
+	EncodeInfo CharEncoder<char8_t, char32_t>::RequireSpaceOnce(std::span<SourceT const> Source)
 	{
 		if (!Source.empty())
 		{
@@ -293,13 +300,15 @@ namespace Potato::StrEncode
 					}
 				}
 				if(Succeed)
-					return {Count, 1};
+					return {true, 1, Count, 1};
+				else
+					return {false, 0, 0, 0};
 			}
 		}
-		return {0, 0};
+		return {true, 0, 0, 0};
 	}
 
-	EncodeInfo CoreEncoder<char8_t, char32_t>::EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
+	EncodeInfo CharEncoder<char8_t, char32_t>::EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
 	{
 		auto Info = RequireSpaceOnceUnSafe(Source);
 		assert(!Target.empty());
@@ -362,7 +371,7 @@ namespace Potato::StrEncode
 
 	std::optional<std::size_t> ReadUtf8(std::ifstream& File, DocumenetBomT TargetBom, std::span<std::byte> Output)
 	{
-		std::array<char8_t, CoreEncoder<char8_t, char32_t>::MaxSourceBufferLength> Head;
+		std::array<char8_t, CharEncoder<char8_t, char32_t>::MaxSourceBufferLength> Head;
 		auto OldPos = File.tellg();
 		std::size_t ReadCount = File.read(reinterpret_cast<char*>(Head.data()), Head.size() * sizeof(char8_t)).gcount();
 		auto Span = std::span(Head).subspan(0, ReadCount);
@@ -375,10 +384,10 @@ namespace Potato::StrEncode
 		case DocumenetBomT::NoBom:
 		case DocumenetBomT::UTF8:
 		{
-			auto EncodeInfo = CoreEncoder<char8_t, char8_t>::RequireSpaceOnce(Span);
+			auto EncodeInfo = CharEncoder<char8_t, char8_t>::RequireSpaceOnce(Span);
 			if (EncodeInfo.SourceSpace != 0 && Output.size() / sizeof(char8_t) >= EncodeInfo.TargetSpace)
 			{
-				CoreEncoder<char8_t, char8_t>::EncodeOnceUnSafe(Head, 
+				CharEncoder<char8_t, char8_t>::EncodeOnceUnSafe(Head,
 					{reinterpret_cast<char8_t*>(Output.data()), Output.size() / sizeof(char8_t)}
 				);
 				File.seekg(std::size_t(OldPos) + EncodeInfo.SourceSpace, File.beg);
@@ -392,10 +401,10 @@ namespace Potato::StrEncode
 		case DocumenetBomT::UTF16BE:
 		case DocumenetBomT::UTF16LE:
 		{
-			auto EncodeInfo = CoreEncoder<char8_t, char16_t>::RequireSpaceOnce(Span);
+			auto EncodeInfo = CharEncoder<char8_t, char16_t>::RequireSpaceOnce(Span);
 			if (EncodeInfo.SourceSpace != 0 && Output.size() / sizeof(char16_t) >= EncodeInfo.TargetSpace)
 			{
-				CoreEncoder<char8_t, char16_t>::EncodeOnceUnSafe(Head,
+				CharEncoder<char8_t, char16_t>::EncodeOnceUnSafe(Head,
 					{ reinterpret_cast<char16_t*>(Output.data()), Output.size() / sizeof(char16_t) }
 				);
 				File.seekg(std::size_t(OldPos) + EncodeInfo.SourceSpace, File.beg);
@@ -409,10 +418,10 @@ namespace Potato::StrEncode
 		case DocumenetBomT::UTF32BE:
 		case DocumenetBomT::UTF32LE:
 		{
-			auto EncodeInfo = CoreEncoder<char8_t, char32_t>::RequireSpaceOnce(Span);
+			auto EncodeInfo = CharEncoder<char8_t, char32_t>::RequireSpaceOnce(Span);
 			if (EncodeInfo.SourceSpace != 0 && Output.size() / sizeof(char32_t) >= EncodeInfo.TargetSpace)
 			{
-				CoreEncoder<char8_t, char32_t>::EncodeOnceUnSafe(Head,
+				CharEncoder<char8_t, char32_t>::EncodeOnceUnSafe(Head,
 					{ reinterpret_cast<char32_t*>(Output.data()), Output.size() / sizeof(char32_t) }
 				);
 				File.seekg(std::size_t(OldPos) + EncodeInfo.SourceSpace, File.beg);
@@ -474,7 +483,7 @@ namespace Potato::StrEncode
 		return static_cast<std::size_t>(End - Cur);
 	}
 
-	auto DocumentReader::Flush(DocumenetReaderWrapper& Reader) ->FlushResult
+	auto DocumentReader::Flush(DocumentReaderWrapper& Reader) ->FlushResult
 	{
 		if (Reader.GetBom() == GetBom())
 		{
@@ -500,7 +509,7 @@ namespace Potato::StrEncode
 					if(NeedReverso)
 						ReversoByte<2>(ReadedSpan);
 					std::span<char16_t> Buffer{reinterpret_cast<char16_t*>(ReadedSpan.data()), ReadedSpan .size() / sizeof(char16_t)};
-					EncodeStrInfo Info = StrCodeEncoder<char16_t, char16_t>::RequireSpace(Buffer);
+					EncodeInfo Info = StrEncoder<char16_t, char16_t>::RequireSpace(Buffer);
 					Reader.Available.Length += Info.SourceSpace * sizeof(char16_t);
 					Reader.TotalCharacter += Info.CharacterCount;
 					if (!Info)
@@ -518,7 +527,7 @@ namespace Potato::StrEncode
 					if (NeedReverso)
 						ReversoByte<4>(ReadedSpan);
 					std::span<char32_t> Buffer{ reinterpret_cast<char32_t*>(ReadedSpan.data()), ReadedSpan.size() / sizeof(char32_t) };
-					EncodeStrInfo Info = StrCodeEncoder<char32_t, char32_t>::RequireSpace(Buffer);
+					EncodeInfo Info = StrEncoder<char32_t, char32_t>::RequireSpace(Buffer);
 					Reader.Available.Length += Info.SourceSpace * sizeof(char32_t);
 					Reader.TotalCharacter += Info.CharacterCount;
 					if (!Info)
@@ -533,7 +542,7 @@ namespace Potato::StrEncode
 				default:
 				{
 					std::span<char8_t> Buffer{ reinterpret_cast<char8_t*>(ReadedSpan.data()), ReadedSpan.size() / sizeof(char8_t) };
-					EncodeStrInfo Info = StrCodeEncoder<char8_t, char8_t>::RequireSpace(Buffer);
+					EncodeInfo Info = StrEncoder<char8_t, char8_t>::RequireSpace(Buffer);
 					Reader.Available.Length += Info.SourceSpace * sizeof(char8_t);
 					Reader.TotalCharacter += Info.CharacterCount;
 					if (!Info)
@@ -555,14 +564,14 @@ namespace Potato::StrEncode
 	}
 
 	template<typename UnocideT>
-	EncodeStrInfo DecumentRequireSpaceUnsafe(std::basic_string_view<UnocideT> Str, DocumenetBomT Bom, bool WriteBom)
+	EncodeInfo DocumentRequireSpaceUnsafe(std::basic_string_view<UnocideT> Str, DocumenetBomT Bom, bool WriteBom)
 	{
 		switch (Bom)
 		{
 		case DocumenetBomT::NoBom:
 		case DocumenetBomT::UTF8:
 		{
-			auto Info = StrCodeEncoder<UnocideT, char8_t>::RequireSpaceUnSafe(Str);
+			auto Info = StrEncoder<UnocideT, char8_t>::RequireSpaceUnSafe(Str);
 			Info.TargetSpace = Info.TargetSpace * sizeof(char8_t);
 			if (WriteBom)
 			{
@@ -575,7 +584,7 @@ namespace Potato::StrEncode
 	}
 
 	template<typename UnocideT>
-	EncodeStrInfo DocumentEncodeUnsafe(std::span<std::byte> OutputBuffer, std::basic_string_view<UnocideT> Str, DocumenetBomT Bom, bool WriteBom = false)
+	EncodeInfo DocumentEncodeUnsafe(std::span<std::byte> OutputBuffer, std::basic_string_view<UnocideT> Str, DocumenetBomT Bom, bool WriteBom = false)
 	{
 		if (WriteBom)
 		{
@@ -589,7 +598,7 @@ namespace Potato::StrEncode
 		case DocumenetBomT::UTF8:
 		{
 			std::span<char8_t> Buffer = {reinterpret_cast<char8_t*>(OutputBuffer.data()), OutputBuffer .size() / sizeof(char8_t)};
-			auto Info = StrCodeEncoder<UnocideT, char8_t>::EncodeUnSafe(Str, Buffer);
+			auto Info = StrEncoder<UnocideT, char8_t>::EncodeUnSafe(Str, Buffer);
 			Info.TargetSpace = Info.TargetSpace * sizeof(char8_t);
 			if (WriteBom)
 			{
@@ -601,18 +610,18 @@ namespace Potato::StrEncode
 		return {};
 	}
 
-	EncodeStrInfo DocumentEncoder::RequireSpaceUnsafe(std::u32string_view Str, DocumenetBomT Bom, bool WriteBom){ return DecumentRequireSpaceUnsafe(Str, Bom, WriteBom);}
-	EncodeStrInfo DocumentEncoder::RequireSpaceUnsafe(std::u16string_view Str, DocumenetBomT Bom, bool WriteBom) { return DecumentRequireSpaceUnsafe(Str, Bom, WriteBom); }
-	EncodeStrInfo DocumentEncoder::RequireSpaceUnsafe(std::u8string_view Str, DocumenetBomT Bom, bool WriteBom) { return DecumentRequireSpaceUnsafe(Str, Bom, WriteBom); }
-	EncodeStrInfo DocumentEncoder::RequireSpaceUnsafe(std::wstring_view Str, DocumenetBomT Bom, bool WriteBom) { return DecumentRequireSpaceUnsafe(Str, Bom, WriteBom); }
+	EncodeInfo DocumentEncoder::RequireSpaceUnsafe(std::u32string_view Str, DocumenetBomT Bom, bool WriteBom){ return DocumentRequireSpaceUnsafe(Str, Bom, WriteBom);}
+	EncodeInfo DocumentEncoder::RequireSpaceUnsafe(std::u16string_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentRequireSpaceUnsafe(Str, Bom, WriteBom); }
+	EncodeInfo DocumentEncoder::RequireSpaceUnsafe(std::u8string_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentRequireSpaceUnsafe(Str, Bom, WriteBom); }
+	EncodeInfo DocumentEncoder::RequireSpaceUnsafe(std::wstring_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentRequireSpaceUnsafe(Str, Bom, WriteBom); }
 
-	EncodeStrInfo DocumentEncoder::EncodeUnsafe(std::span<std::byte> Span, std::u32string_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
-	EncodeStrInfo DocumentEncoder::EncodeUnsafe(std::span<std::byte> Span, std::u16string_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
-	EncodeStrInfo DocumentEncoder::EncodeUnsafe(std::span<std::byte> Span, std::u8string_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
-	EncodeStrInfo DocumentEncoder::EncodeUnsafe(std::span<std::byte> Span, std::wstring_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
+	EncodeInfo DocumentEncoder::EncodeUnsafe(std::span<std::byte> Span, std::u32string_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
+	EncodeInfo DocumentEncoder::EncodeUnsafe(std::span<std::byte> Span, std::u16string_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
+	EncodeInfo DocumentEncoder::EncodeUnsafe(std::span<std::byte> Span, std::u8string_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
+	EncodeInfo DocumentEncoder::EncodeUnsafe(std::span<std::byte> Span, std::wstring_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
 
 	template<typename UnicodeT>
-	EncodeStrInfo WriteFile(std::ofstream& File, DocumenetBomT Bom, std::vector<std::byte>& Buffer, std::basic_string_view<UnicodeT> Re)
+	EncodeInfo WriteFile(std::ofstream& File, DocumenetBomT Bom, std::vector<std::byte>& Buffer, std::basic_string_view<UnicodeT> Re)
 	{
 		auto Info = DocumentEncoder::RequireSpaceUnsafe(Re, Bom, false);
 		Buffer.resize(Info.TargetSpace);
@@ -622,7 +631,7 @@ namespace Potato::StrEncode
 		return Info;
 	}
 
-	DocumenetWriter::DocumenetWriter(std::filesystem::path Path, DocumenetBomT BomType)
+	DocumentWriter::DocumentWriter(std::filesystem::path Path, DocumenetBomT BomType)
 		: File(Path, std::ios::binary), BomType(BomType)
 	{
 		if (File.is_open())
@@ -635,8 +644,8 @@ namespace Potato::StrEncode
 		}
 	}
 
-	EncodeStrInfo DocumenetWriter::Write(std::u32string_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
-	EncodeStrInfo DocumenetWriter::Write(std::u16string_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
-	EncodeStrInfo DocumenetWriter::Write(std::u8string_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
-	EncodeStrInfo DocumenetWriter::Write(std::wstring_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
+	EncodeInfo DocumentWriter::Write(std::u32string_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
+	EncodeInfo DocumentWriter::Write(std::u16string_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
+	EncodeInfo DocumentWriter::Write(std::u8string_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
+	EncodeInfo DocumentWriter::Write(std::wstring_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
 }

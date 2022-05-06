@@ -15,12 +15,15 @@ namespace Potato::StrEncode
 
 	struct EncodeInfo
 	{
+		bool GoodString = true;
+		std::size_t CharacterCount = 0;
 		std::size_t SourceSpace = 0;
 		std::size_t TargetSpace = 0;
+		explicit operator bool() const { return GoodString; }
 	};
 
 	template<typename ST, typename TT>
-	struct CoreEncoder
+	struct CharEncoder
 	{
 		using SourceT = ST;
 		using TargetT = TT;
@@ -32,7 +35,7 @@ namespace Potato::StrEncode
 	};
 
 	template<>
-	struct CoreEncoder<char32_t, char16_t>
+	struct CharEncoder<char32_t, char16_t>
 	{
 		using SourceT = char32_t;
 		using TargetT = char16_t;
@@ -44,7 +47,7 @@ namespace Potato::StrEncode
 	};
 
 	template<>
-	struct CoreEncoder<char32_t, char8_t>
+	struct CharEncoder<char32_t, char8_t>
 	{
 		using SourceT = char32_t;
 		using TargetT = char8_t;
@@ -56,19 +59,19 @@ namespace Potato::StrEncode
 	};
 
 	template<>
-	struct CoreEncoder<char32_t, char32_t>
+	struct CharEncoder<char32_t, char32_t>
 	{
 		using SourceT = char32_t;
 		using TargetT = char32_t;
 		static constexpr std::size_t MaxSourceBufferLength = 1;
 		static constexpr std::size_t MaxTargetBufferLength = 1;
-		static EncodeInfo RequireSpaceOnceUnSafe(std::span<SourceT const> Source){ return {1, 1}; }
+		static EncodeInfo RequireSpaceOnceUnSafe(std::span<SourceT const> Source){ return {true, 1, 1, 1}; }
 		static EncodeInfo RequireSpaceOnce(std::span<SourceT const> Source);
-		static EncodeInfo EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target){ Target[0] = Source[0]; return {1, 1}; }
+		static EncodeInfo EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target){ Target[0] = Source[0]; return { true, 1, 1, 1}; }
 	};
 
 	template<>
-	struct CoreEncoder<char16_t, char32_t>
+	struct CharEncoder<char16_t, char32_t>
 	{
 		using SourceT = char16_t;
 		using TargetT = char32_t;
@@ -80,7 +83,7 @@ namespace Potato::StrEncode
 	};
 
 	template<>
-	struct CoreEncoder<char16_t, char8_t>
+	struct CharEncoder<char16_t, char8_t>
 	{
 		using SourceT = char16_t;
 		using TargetT = char8_t;
@@ -92,7 +95,7 @@ namespace Potato::StrEncode
 	};
 
 	template<>
-	struct CoreEncoder<char8_t, char32_t>
+	struct CharEncoder<char8_t, char32_t>
 	{
 		using SourceT = char8_t;
 		using TargetT = char32_t;
@@ -104,7 +107,7 @@ namespace Potato::StrEncode
 	};
 
 	template<>
-	struct CoreEncoder<char8_t, char16_t>
+	struct CharEncoder<char8_t, char16_t>
 	{
 		using SourceT = char8_t;
 		using TargetT = char16_t;
@@ -116,12 +119,12 @@ namespace Potato::StrEncode
 	};
 
 	template<typename UnicodeT>
-	struct CoreEncoder<UnicodeT, wchar_t>
+	struct CharEncoder<UnicodeT, wchar_t>
 	{
 		using SourceT = UnicodeT;
 		using TargetT = wchar_t;
 	private:
-		using Wrapper = std::conditional_t<sizeof(wchar_t) == sizeof(char16_t), CoreEncoder<UnicodeT, char16_t>, CoreEncoder<UnicodeT, char32_t>>;
+		using Wrapper = std::conditional_t<sizeof(wchar_t) == sizeof(char16_t), CharEncoder<UnicodeT, char16_t>, CharEncoder<UnicodeT, char32_t>>;
 		static_assert(sizeof(wchar_t) == sizeof(char16_t) || sizeof(wchar_t) == sizeof(char32_t));
 
 	public:
@@ -144,12 +147,12 @@ namespace Potato::StrEncode
 	};
 
 	template<typename UnicodeT>
-	struct CoreEncoder<wchar_t, UnicodeT>
+	struct CharEncoder<wchar_t, UnicodeT>
 	{
 		using SourceT = wchar_t;
 		using TargetT = UnicodeT;
 	private:
-		using Wrapper = std::conditional_t<sizeof(wchar_t) == sizeof(char16_t), CoreEncoder<char16_t, UnicodeT>, CoreEncoder<char32_t, UnicodeT>>;
+		using Wrapper = std::conditional_t<sizeof(wchar_t) == sizeof(char16_t), CharEncoder<char16_t, UnicodeT>, CharEncoder<char32_t, UnicodeT>>;
 		static_assert(sizeof(wchar_t) == sizeof(char16_t) || sizeof(wchar_t) == sizeof(char32_t));
 	public:
 
@@ -171,23 +174,23 @@ namespace Potato::StrEncode
 	};
 
 	template<typename UnicodeT>
-	struct CoreEncoder<UnicodeT, UnicodeT>
+	struct CharEncoder<UnicodeT, UnicodeT>
 	{
 		using SourceT = UnicodeT;
 		using TargetT = UnicodeT;
 
-		static constexpr std::size_t MaxSourceBufferLength = CoreEncoder<UnicodeT, char32_t>::MaxSourceBufferLength;
-		static constexpr std::size_t MaxTargetBufferLength = CoreEncoder<char32_t, UnicodeT>::MaxTargetBufferLength;
+		static constexpr std::size_t MaxSourceBufferLength = CharEncoder<UnicodeT, char32_t>::MaxSourceBufferLength;
+		static constexpr std::size_t MaxTargetBufferLength = CharEncoder<char32_t, UnicodeT>::MaxTargetBufferLength;
 
 		static EncodeInfo RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
 		{
-			auto Re = CoreEncoder<UnicodeT, char32_t>::RequireSpaceOnceUnSafe(Source);
+			auto Re = CharEncoder<UnicodeT, char32_t>::RequireSpaceOnceUnSafe(Source);
 			Re.TargetSpace = Re.SourceSpace;
 			return Re;
 		}
 		static EncodeInfo RequireSpaceOnce(std::span<SourceT const> Source)
 		{
-			auto Re = CoreEncoder<UnicodeT, char32_t>::RequireSpaceOnce(Source);
+			auto Re = CharEncoder<UnicodeT, char32_t>::RequireSpaceOnce(Source);
 			if(Re.TargetSpace != 0)
 				Re.TargetSpace = Re.SourceSpace;
 			return Re;
@@ -201,12 +204,12 @@ namespace Potato::StrEncode
 	};
 
 	template<>
-	struct CoreEncoder<wchar_t, wchar_t>
+	struct CharEncoder<wchar_t, wchar_t>
 	{
 		using SourceT = wchar_t;
 		using TargetT = wchar_t;
 	private:
-		using Wrapper = std::conditional_t<sizeof(wchar_t) == sizeof(char16_t), CoreEncoder<char16_t, char16_t>, CoreEncoder<char32_t, char32_t>>;
+		using Wrapper = std::conditional_t<sizeof(wchar_t) == sizeof(char16_t), CharEncoder<char16_t, char16_t>, CharEncoder<char32_t, char32_t>>;
 		static_assert(sizeof(wchar_t) == sizeof(char16_t) || sizeof(wchar_t) == sizeof(char32_t));
 	public:
 		static EncodeInfo RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
@@ -261,23 +264,14 @@ namespace Potato::StrEncode
 		static constexpr wchar_t N = L'\n';
 	};
 
-	struct EncodeStrInfo
-	{
-		bool GoodString = true;
-		std::size_t CharacterCount = 0;
-		std::size_t TargetSpace = 0;
-		std::size_t SourceSpace = 0;
-		explicit operator bool() const { return GoodString; }
-	};
-
 	template<typename SourceT, typename TargetT>
-	struct StrCodeEncoder
+	struct StrEncoder
 	{
-		static EncodeStrInfo RequireSpaceUnSafe(std::span<SourceT const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max()) {
-			EncodeStrInfo Result;
+		static EncodeInfo RequireSpaceUnSafe(std::span<SourceT const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max()) {
+			EncodeInfo Result;
 			while (!Source.empty() && Result.CharacterCount < MaxCharacter)
 			{
-				auto Res = CoreEncoder<SourceT, TargetT>::RequireSpaceOnceUnSafe(Source);
+				auto Res = CharEncoder<SourceT, TargetT>::RequireSpaceOnceUnSafe(Source);
 				assert(Res.SourceSpace != 0);
 				Result.CharacterCount += 1;
 				Result.TargetSpace += Res.TargetSpace;
@@ -287,12 +281,12 @@ namespace Potato::StrEncode
 			return Result;
 		}
 
-		static EncodeStrInfo RequireSpace(std::span<SourceT const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())
+		static EncodeInfo RequireSpace(std::span<SourceT const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())
 		{
-			EncodeStrInfo Result;
+			EncodeInfo Result;
 			while (!Source.empty() && Result.CharacterCount < MaxCharacter)
 			{
-				auto Res = CoreEncoder<SourceT, TargetT>::RequireSpaceOnce(Source);
+				auto Res = CharEncoder<SourceT, TargetT>::RequireSpaceOnce(Source);
 				if (Res.SourceSpace == 0) [[unlikely]]
 				{
 					Result.GoodString = false;
@@ -306,13 +300,13 @@ namespace Potato::StrEncode
 			return Result;
 		}
 
-		static EncodeStrInfo RequireSpaceLineUnsafe(std::span<SourceT const> Source, bool KeepLine = true)
+		static EncodeInfo RequireSpaceLineUnsafe(std::span<SourceT const> Source, bool KeepLine = true)
 		{
-			EncodeStrInfo Result;
+			EncodeInfo Result;
 			bool MeetR = false;
 			while (!Source.empty())
 			{
-				EncodeInfo Res = CoreEncoder<SourceT, TargetT>::RequireSpaceOnceUnSafe(Source);
+				EncodeInfo Res = CharEncoder<SourceT, TargetT>::RequireSpaceOnceUnSafe(Source);
 				Result.SourceSpace += Res.SourceSpace;
 				if (Res.SourceSpace == 1)
 				{
@@ -358,11 +352,11 @@ namespace Potato::StrEncode
 			return Result;
 		}
 
-		static EncodeStrInfo EncodeUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max()) {
-			EncodeStrInfo Result;
+		static EncodeInfo EncodeUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max()) {
+			EncodeInfo Result;
 			while (!Source.empty() && Result.CharacterCount < MaxCharacter)
 			{
-				auto Res = CoreEncoder<SourceT, TargetT>::EncodeOnceUnSafe(Source, Target);
+				auto Res = CharEncoder<SourceT, TargetT>::EncodeOnceUnSafe(Source, Target);
 				Result.CharacterCount += 1;
 				Result.TargetSpace += Res.TargetSpace;
 				Result.SourceSpace += Res.SourceSpace;
@@ -426,10 +420,10 @@ namespace Potato::StrEncode
 	DocumenetBomT DetectBom(std::span<std::byte const> bom) noexcept;
 	std::span<std::byte const> ToBinary(DocumenetBomT type) noexcept;
 
-	struct DocumenetReaderWrapper
+	struct DocumentReaderWrapper
 	{
 		
-		DocumenetReaderWrapper(DocumenetReaderWrapper const&) = default;
+		DocumentReaderWrapper(DocumentReaderWrapper const&) = default;
 
 		enum class StateT
 		{
@@ -447,27 +441,27 @@ namespace Potato::StrEncode
 		};
 
 		template<typename UnicodeT, typename Function>
-		auto Read(Function&& Func, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())->ReadResult requires(std::is_invocable_r_v<std::optional<std::span<UnicodeT>>, Function, EncodeStrInfo>);
+		auto Read(Function&& Func, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())->ReadResult requires(std::is_invocable_r_v<std::optional<std::span<UnicodeT>>, Function, EncodeInfo>);
 
 		template<typename UnicodeT, typename CharTrai, typename Allocator>
 		ReadResult Read(std::basic_string<UnicodeT, CharTrai, Allocator>& Output, std::size_t MaxCharactor = std::numeric_limits<std::size_t>::max())
 		{
 			std::size_t OldSize = Output.size();
-			return this->Read<UnicodeT>([&](EncodeStrInfo Input) -> std::optional<std::span<UnicodeT>>{
+			return this->Read<UnicodeT>([&](EncodeInfo Input) -> std::optional<std::span<UnicodeT>>{
 				Output.resize(OldSize + Input.TargetSpace);
 				return std::span(Output).subspan(OldSize);
 			});
 		}
 
 		template<typename UnicodeT, typename Function>
-		auto ReadLine(Function&& Func, bool KeepLine = true)->ReadResult requires(std::is_invocable_r_v<std::optional<std::span<UnicodeT>>, Function, EncodeStrInfo>);
+		auto ReadLine(Function&& Func, bool KeepLine = true)->ReadResult requires(std::is_invocable_r_v<std::optional<std::span<UnicodeT>>, Function, EncodeInfo>);
 		
 
 		template<typename UnicodeT, typename CharTrai, typename Allocator>
 		ReadResult ReadLine(std::basic_string<UnicodeT, CharTrai, Allocator>& Output, bool KeepLine = true)
 		{
 			std::size_t OldSize = Output.size();
-			return this->ReadLine<UnicodeT>([&](EncodeStrInfo Input) -> std::optional<std::span<UnicodeT>> {
+			return this->ReadLine<UnicodeT>([&](EncodeInfo Input) -> std::optional<std::span<UnicodeT>> {
 				Output.resize(OldSize + Input.TargetSpace);
 				return std::span(Output).subspan(OldSize);
 				}, KeepLine);
@@ -479,7 +473,7 @@ namespace Potato::StrEncode
 
 	private:
 
-		DocumenetReaderWrapper(DocumenetBomT Bom, std::span<std::byte> TemporaryBuffer) : Bom(Bom), DocumentSpan(TemporaryBuffer), Available{ 0, 0 } {}
+		DocumentReaderWrapper(DocumenetBomT Bom, std::span<std::byte> TemporaryBuffer) : Bom(Bom), DocumentSpan(TemporaryBuffer), Available{ 0, 0 } {}
 
 		DocumenetBomT Bom = DocumenetBomT::NoBom;
 		std::span<std::byte> DocumentSpan;
@@ -490,7 +484,7 @@ namespace Potato::StrEncode
 	};
 
 	template<typename UnicodeT, typename Function>
-	auto DocumenetReaderWrapper::Read(Function&& Func, std::size_t MaxCharacter) ->ReadResult requires(std::is_invocable_r_v<std::optional<std::span<UnicodeT>>, Function, EncodeStrInfo>)
+	auto DocumentReaderWrapper::Read(Function&& Func, std::size_t MaxCharacter) ->ReadResult requires(std::is_invocable_r_v<std::optional<std::span<UnicodeT>>, Function, EncodeInfo>)
 	{
 		if (Available.Count() == 0)
 			return { StateT::EmptyBuffer, 0, 0 };
@@ -501,10 +495,10 @@ namespace Potato::StrEncode
 		case DocumenetBomT::UTF8:
 		{
 			std::span<char8_t> Cur{ reinterpret_cast<char8_t*>(CurSpan.data()), CurSpan.size() / sizeof(char8_t) };
-			EncodeStrInfo Info = StrCodeEncoder<char8_t, UnicodeT>::RequireSpaceUnSafe(Cur, MaxCharacter);
+			EncodeInfo Info = StrEncoder<char8_t, UnicodeT>::RequireSpaceUnSafe(Cur, MaxCharacter);
 			std::optional<std::span<UnicodeT>> OutputBuffer = Func(Info);
 			if(OutputBuffer.has_value())
-				StrCodeEncoder<char8_t, UnicodeT>::EncodeUnSafe(Cur, *OutputBuffer, MaxCharacter);
+				StrEncoder<char8_t, UnicodeT>::EncodeUnSafe(Cur, *OutputBuffer, MaxCharacter);
 			Available = Available.Sub(Info.SourceSpace);
 			TotalCharacter -= Info.CharacterCount;
 			return { StateT::Normal, Info .CharacterCount, Info.TargetSpace};
@@ -517,7 +511,7 @@ namespace Potato::StrEncode
 	}
 
 	template<typename UnicodeT, typename Function>
-	auto DocumenetReaderWrapper::ReadLine(Function&& Func, bool KeepLine)->ReadResult requires(std::is_invocable_r_v<std::optional<std::span<UnicodeT>>, Function, EncodeStrInfo>)
+	auto DocumentReaderWrapper::ReadLine(Function&& Func, bool KeepLine)->ReadResult requires(std::is_invocable_r_v<std::optional<std::span<UnicodeT>>, Function, EncodeInfo>)
 	{
 		if (Available.Count() == 0)
 			return { StateT::EmptyBuffer, 0, 0 };
@@ -528,10 +522,10 @@ namespace Potato::StrEncode
 		case DocumenetBomT::UTF8:
 		{
 			std::span<char8_t> Cur{ reinterpret_cast<char8_t*>(CurSpan.data()), CurSpan.size() / sizeof(char8_t) };
-			EncodeStrInfo Info = StrCodeEncoder<char8_t, UnicodeT>::RequireSpaceLineUnsafe(Cur, KeepLine);
+			EncodeInfo Info = StrEncoder<char8_t, UnicodeT>::RequireSpaceLineUnsafe(Cur, KeepLine);
 			std::optional<std::span<UnicodeT>> OutputBuffer = Func(Info);
 			if(OutputBuffer.has_value())
-				StrCodeEncoder<char8_t, UnicodeT>::EncodeUnSafe(Cur, *OutputBuffer, Info.CharacterCount);
+				StrEncoder<char8_t, UnicodeT>::EncodeUnSafe(Cur, *OutputBuffer, Info.CharacterCount);
 			Available = Available.Sub(Info.SourceSpace);
 			TotalCharacter -= Info.CharacterCount;
 			return { StateT::Normal, Info.CharacterCount, Info.TargetSpace };
@@ -562,11 +556,11 @@ namespace Potato::StrEncode
 			BadString
 		};
 
-		FlushResult Flush(DocumenetReaderWrapper& Reader);
+		FlushResult Flush(DocumentReaderWrapper& Reader);
 
 		std::size_t RecalculateLastSize();
 
-		DocumenetReaderWrapper CreateWrapper(std::span<std::byte> TemporaryBuffer) const { return DocumenetReaderWrapper{ Bom, TemporaryBuffer };}
+		DocumentReaderWrapper CreateWrapper(std::span<std::byte> TemporaryBuffer) const { return DocumentReaderWrapper{ Bom, TemporaryBuffer };}
 
 	private:
 
@@ -578,25 +572,25 @@ namespace Potato::StrEncode
 	struct DocumentEncoder
 	{
 
-		static EncodeStrInfo RequireSpaceUnsafe(std::u32string_view Str, DocumenetBomT Bom, bool WriteBom = false);
-		static EncodeStrInfo RequireSpaceUnsafe(std::u16string_view Str, DocumenetBomT Bom, bool WriteBom = false);
-		static EncodeStrInfo RequireSpaceUnsafe(std::u8string_view Str, DocumenetBomT Bom, bool WriteBom = false);
-		static EncodeStrInfo RequireSpaceUnsafe(std::wstring_view Str, DocumenetBomT Bom, bool WriteBom = false);
+		static EncodeInfo RequireSpaceUnsafe(std::u32string_view Str, DocumenetBomT Bom, bool WriteBom = false);
+		static EncodeInfo RequireSpaceUnsafe(std::u16string_view Str, DocumenetBomT Bom, bool WriteBom = false);
+		static EncodeInfo RequireSpaceUnsafe(std::u8string_view Str, DocumenetBomT Bom, bool WriteBom = false);
+		static EncodeInfo RequireSpaceUnsafe(std::wstring_view Str, DocumenetBomT Bom, bool WriteBom = false);
 
-		static EncodeStrInfo EncodeUnsafe(std::span<std::byte> Span, std::u32string_view Str, DocumenetBomT Bom, bool WriteBom = false);
-		static EncodeStrInfo EncodeUnsafe(std::span<std::byte> Span, std::u16string_view Str, DocumenetBomT Bom, bool WriteBom = false);
-		static EncodeStrInfo EncodeUnsafe(std::span<std::byte> Span, std::u8string_view Str, DocumenetBomT Bom, bool WriteBom = false);
-		static EncodeStrInfo EncodeUnsafe(std::span<std::byte> Span, std::wstring_view Str, DocumenetBomT Bom, bool WriteBom = false);
+		static EncodeInfo EncodeUnsafe(std::span<std::byte> Span, std::u32string_view Str, DocumenetBomT Bom, bool WriteBom = false);
+		static EncodeInfo EncodeUnsafe(std::span<std::byte> Span, std::u16string_view Str, DocumenetBomT Bom, bool WriteBom = false);
+		static EncodeInfo EncodeUnsafe(std::span<std::byte> Span, std::u8string_view Str, DocumenetBomT Bom, bool WriteBom = false);
+		static EncodeInfo EncodeUnsafe(std::span<std::byte> Span, std::wstring_view Str, DocumenetBomT Bom, bool WriteBom = false);
 	};
 
-	struct DocumenetWriter
+	struct DocumentWriter
 	{
-		DocumenetWriter(std::filesystem::path Path, DocumenetBomT BomType = DocumenetBomT::NoBom);
+		DocumentWriter(std::filesystem::path Path, DocumenetBomT BomType = DocumenetBomT::NoBom);
 		explicit operator bool() const { return File.is_open(); }
-		EncodeStrInfo Write(std::u32string_view Str);
-		EncodeStrInfo Write(std::u16string_view Str);
-		EncodeStrInfo Write(std::u8string_view Str);
-		EncodeStrInfo Write(std::wstring_view Str);
+		EncodeInfo Write(std::u32string_view Str);
+		EncodeInfo Write(std::u16string_view Str);
+		EncodeInfo Write(std::u8string_view Str);
+		EncodeInfo Write(std::wstring_view Str);
 	private:
 		std::ofstream File;
 		DocumenetBomT BomType;

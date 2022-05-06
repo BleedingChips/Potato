@@ -489,7 +489,7 @@ namespace Potato::StrFormat
 			wchar_t Buffer[2];
 			while (!Par.empty())
 			{
-				auto P = StrEncode::CoreEncoder<UnicodeType, wchar_t>::EncodeOnceUnSafe(std::span(Par), { Buffer, 2});
+				auto P = StrEncode::CharEncoder<UnicodeType, wchar_t>::EncodeOnceUnSafe(std::span(Par), { Buffer, 2});
 				wss.write(Buffer, P.TargetSpace);
 				Par = Par.substr(P.SourceSpace);
 			}
@@ -519,10 +519,10 @@ namespace Potato::StrFormat
 		bool Scan(std::basic_string_view<UnicodeT> Par, std::basic_string<TargetType, CharaTrai, Allocator>& Output)
 		{
 			std::size_t OldSize = Output.size();
-			StrEncode::EncodeStrInfo Str = StrEncode::StrCodeEncoder<UnicodeT, TargetType>::RequireSpaceUnSafe(Par);
+			StrEncode::EncodeInfo Str = StrEncode::StrEncoder<UnicodeT, TargetType>::RequireSpaceUnSafe(Par);
 			Output.resize(Output.size() + Str.TargetSpace);
 			auto OutputSpan = std::span(Output).subspan(OldSize);
-			StrEncode::StrCodeEncoder<UnicodeT, TargetType>::EncodeUnSafe(Par, OutputSpan);
+			StrEncode::StrEncoder<UnicodeT, TargetType>::EncodeUnSafe(Par, OutputSpan);
 			return true;
 		}
 	};
@@ -539,7 +539,7 @@ namespace Potato::StrFormat
 				wss.read(&Temp, 1);
 				if (wss.good())
 				{
-					auto Result = StrEncode::CoreEncoder<wchar_t, UnicodeType>::EncodeOnceUnSafe({ &Temp, 1 }, Output.subspan(Index));
+					auto Result = StrEncode::CharEncoder<wchar_t, UnicodeType>::EncodeOnceUnSafe({ &Temp, 1 }, Output.subspan(Index));
 					Index += Result.TargetSpace;
 				}
 				else {
@@ -578,10 +578,10 @@ namespace Potato::StrFormat
 	struct Formatter<std::basic_string_view<SUnicodeT, CharTrais>, UnicodeType>
 	{
 		void Format(std::span<UnicodeType> Output, std::basic_string_view<SUnicodeT, CharTrais> const& Input) {
-			auto Info = StrEncode::StrCodeEncoder<SUnicodeT, UnicodeType>::EncodeUnSafe(Input, Output);
+			auto Info = StrEncode::StrEncoder<SUnicodeT, UnicodeType>::EncodeUnSafe(Input, Output);
 		}
 		std::optional<std::size_t> FormatSize(std::basic_string_view<UnicodeType> Parameter, std::basic_string_view<SUnicodeT, CharTrais> const& Input) {
-			auto Info = StrEncode::StrCodeEncoder<SUnicodeT, UnicodeType>::RequireSpaceUnSafe(Input);
+			auto Info = StrEncode::StrEncoder<SUnicodeT, UnicodeType>::RequireSpaceUnSafe(Input);
 			return Info.TargetSpace;
 		}
 	};

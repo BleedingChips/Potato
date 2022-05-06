@@ -12,44 +12,6 @@
 
 namespace Potato::Exception
 {
-	template<typename ...InterfaceT>
-	struct DefineInterface {};
-
-	template<typename ...Interface>
-	struct ExceptionInterfaceTuple {};
-
-	template<typename CurInterface, typename ...Interface>
-	struct ExceptionInterfaceTuple<CurInterface, Interface...> : public CurInterface, ExceptionInterfaceTuple<Interface...>
-	{
-	};
-
-	template<typename Storage, std::default_initializable ...Interface>
-	struct ExceptionTuple : public ExceptionInterfaceTuple<Interface...>, public Storage
-	{
-		ExceptionTuple(Storage&& stro) : Storage(std::move(stro)) {};
-		ExceptionTuple(Storage const& stro) : Storage(stro) {}
-		ExceptionTuple(ExceptionTuple&&) = default;
-		ExceptionTuple(ExceptionTuple const&) = default;
-	};
-
-	template<typename Type> struct IsDefineInterface { static constexpr bool Value = false; };
-	template<typename ...Type> struct IsDefineInterface<DefineInterface<Type...>> { static constexpr bool Value = true; };
-	template<typename Type, typename = std::enable_if_t< IsDefineInterface<typename Type::ExceptionInterface>::Value>>
-	struct HasExceptionInterfaceTupleRole {};
-
-	template<typename ExceptionT>
-	auto MakeExceptionTuple(ExceptionT&& ET)
-	{
-		using RequireType = std::remove_all_extents_t<ExceptionT>;
-		if constexpr (TMP::Exist<RequireType, HasExceptionInterfaceTupleRole>::Value)
-		{
-			using RealType = typename TMP::Replace<typename RequireType::ExceptionInterface>::template With<TMP::Instant<ExceptionTuple, RequireType>::template AppendT>;
-			return RealType{ std::forward<ExceptionT>(ET) };
-		}
-		else {
-			return ExceptionTuple<RequireType>{std::forward<ExceptionT>(ET)};
-		}
-	}
 }
 
 namespace Potato::Misc
