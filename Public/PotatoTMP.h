@@ -21,7 +21,7 @@ namespace Potato::TMP
 	template<typename ...AT> struct IsRepeat { static constexpr bool Value = false; };
 	template<typename T, typename ...AT>
 	struct IsRepeat <T, AT...> {
-		static constexpr bool Value = IsOneOf<T, AT...>::Value || IsPrpeat<AT...>::Value;
+		static constexpr bool Value = IsOneOf<T, AT...>::Value || IsRepeat<AT...>::Value;
 	};
 
 	/* ItSelf */
@@ -97,6 +97,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter...)> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -108,6 +109,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter...) noexcept> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -119,6 +121,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter..., ...)> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -130,6 +133,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter..., ...) noexcept> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -141,6 +145,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter...) const > {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -152,6 +157,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter...) const noexcept> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = true;
@@ -163,6 +169,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter..., ...) const> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = true;
@@ -174,6 +181,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter..., ...) const noexcept> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = true;
@@ -185,6 +193,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter...) volatile> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -196,6 +205,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter...) volatile noexcept> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -207,6 +217,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter..., ...) volatile> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -218,6 +229,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter..., ...)  volatile noexcept> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -229,6 +241,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter...) volatile const > {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -240,6 +253,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter...) volatile const noexcept> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = true;
@@ -251,6 +265,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter..., ...) volatile const> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = true;
@@ -262,6 +277,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter..., ...) volatile const noexcept> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = true;
@@ -274,6 +290,7 @@ namespace Potato::TMP
 
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter...)&> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -285,6 +302,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter...) & noexcept> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -296,6 +314,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter..., ...)& > {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -307,6 +326,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter..., ...) & noexcept> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -318,6 +338,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter...) volatile&> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -329,6 +350,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter...) volatile& noexcept> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -340,6 +362,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter..., ...) volatile&> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -351,6 +374,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter..., ...)  volatile& noexcept> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -362,6 +386,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter...)&&> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -373,6 +398,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter...) && noexcept> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -384,6 +410,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter..., ...)&& > {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -395,6 +422,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter..., ...) && noexcept> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -406,6 +434,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter...) volatile&&> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -417,6 +446,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter...) volatile&& noexcept> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -428,6 +458,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter..., ...) volatile&&> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -439,6 +470,7 @@ namespace Potato::TMP
 	};
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter..., ...)  volatile&& noexcept> {
 		using ReturnType = RT;
+		using OwnerType = void;
 		template<template<typename...> class Package> using PackParameters = Package<Parameter...>;
 		template<template<typename...> class Package> using PackReturnParameters = Package<RT, Parameter...>;
 		static constexpr bool IsConst = false;
@@ -464,20 +496,20 @@ namespace Potato::TMP
 	};
 
 	template<std::size_t N>
-	struct ConstString
+	struct TempString
 	{
-		char stroage[N];
-		constexpr ConstString(const char(&str)[N]) : stroage{}
+		char Storage[N];
+		constexpr TempString(const char(&str)[N]) : Storage{}
 		{
-			std::copy_n(str, N, stroage);
+			std::copy_n(str, N, Storage);
 		}
 		template<std::size_t N2>
-		constexpr bool operator==(ConstString<N2> const& ref) const
+		constexpr bool operator==(TempString<N2> const& ref) const
 		{
 			if constexpr (N == N2)
 			{
 				for (std::size_t i = 0; i < N; ++i)
-					if (stroage[i] != ref.stroage[i])
+					if (Storage[i] != ref.Storage[i])
 						return false;
 				return true;
 			}
@@ -485,8 +517,5 @@ namespace Potato::TMP
 				return false;
 		}
 	};
-
-	template<ConstString str>
-	struct ConstStringHolder {};
 
 }
