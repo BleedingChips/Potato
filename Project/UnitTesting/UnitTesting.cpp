@@ -29,6 +29,8 @@ int main()
 		TestingStrFormat();
 
 		TestingEbnf();
+
+		TestingIntrusivePointer();
 	}
 	catch (std::exception const& E)
 	{

@@ -59,5 +59,37 @@ void TestingStrEncode()
 	if (!StrEncodeTesting<wchar_t, wchar_t>{}(TestingStr4, TestingStr4))
 		throw UnpassedUnit{ "TestingStrEncode : wchar_t To wchar_t" };
 
+	/*
+	DocumentReader Reader(L"C:/Sample.txt");
+	if(Reader)
+	{
+		// 成功打开
+		std::vector<std::byte> Tembuffer;
+		// 直接分配空间储存所有二进制数据
+		Tembuffer.resize(Reader.RecalculateLastSize());
+		// 根据缓冲区创建Wrapper，注意，此时Wrapper关联了Tembuffer，所有Tembuffer的扩缩容或者其他改变储存地址的操作都会使Wrapper的操作崩溃。
+		DocumenetReaderWrapper Wrapper = Reader.CreateWrapper(Tembuffer);
+		// Reader 将数据写入 Wrapper 中。注意，写入的数据量与 Wrapper 关联的内存大小和内容有直接关系。
+		// 该操作不保证会将所有数据写入，除非Wrapper能保证其内部的缓存空间大于或等于文件内的所有数据，并且Wrapper内部的指针位于开头。
+		FlushResult FR = Reader.Flush(Wrapper);
+
+		while(Wrapper)
+		{
+			std::u32string ReadBuffer;
+			// 消耗Wrapper内的数据，直到遇上换行符。
+			// 并将数据转成char32_t的格式写入ReadBuffer中，该操作只会往ReadBuffer的末尾添加数据。
+			Wrapper.ReadLine(ReadBuffer);
+			// ...
+		}
+	}
+	*/
+	/*
+	// 重新打开文件，写入UTF8的BOM，若文件已存在，则覆盖
+	DocumentWriter Writer(L"C:/Sample.txt", DocumenetBomT::UTF8);
+	std::u32string_view Str = U"12344";
+	// 将字符串转换成 DocumenetBomT 所对应的格式，写入文件的末尾。
+	Writer.Write(Str);
+	*/
+
 	std::cout << R"(TestingStrEncode Pass !)" << std::endl;
 }

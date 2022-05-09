@@ -17,3 +17,4 @@ void TestingDLr();
 void TestingStrFormat();
 void TestingReg();
 void TestingEbnf();
+void TestingIntrusivePointer();

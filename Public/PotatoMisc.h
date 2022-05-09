@@ -190,6 +190,7 @@ namespace Potato::Misc
 
 		template<typename StorageT, typename Allocator, typename PODType>
 		static WriteResult WriteObject(std::vector<StorageT, Allocator>& Output, PODType&& InputStoraget)
+			requires(std::is_standard_layout_v<std::remove_cvref_t<PODType>>)
 		{
 			std::size_t OldSize = Output.size();
 			std::size_t AlignedLength = AlignedSize<StorageT>(sizeof(std::remove_cvref_t<PODType>));
@@ -200,6 +201,7 @@ namespace Potato::Misc
 
 		template<typename StorageT, typename Allocator, typename PODType>
 		static WriteResult WriteObjectArray(std::vector<StorageT, Allocator>& Output, std::span<PODType> InputStoraget)
+			requires(std::is_standard_layout_v<std::remove_cvref_t<PODType>>)
 		{
 			std::size_t OldSize = Output.size();
 			std::size_t AlignedLength = AlignedSize<StorageT>(sizeof(std::remove_cvref_t<PODType>) * InputStoraget.size());
@@ -220,6 +222,7 @@ namespace Potato::Misc
 
 		template<typename PODType, typename StorageT>
 		static ReadResult<PODType, StorageT> ReadObject(std::span<StorageT> Input)
+			requires(std::is_standard_layout_v<std::remove_cvref_t<PODType>>)
 		{
 			auto Result = reinterpret_cast<PODType*>(Input.data());
 			std::size_t AlignedLength = AlignedSize<StorageT>(sizeof(std::remove_cvref_t<PODType>));
@@ -239,6 +242,7 @@ namespace Potato::Misc
 
 		template<typename PODType, typename StorageT>
 		static ReadArrayResult<PODType, StorageT> ReadObjectArray(std::span<StorageT> Input, std::size_t ObjectCount)
+			requires(std::is_standard_layout_v<std::remove_cvref_t<PODType>>)
 		{
 			
 			auto Ptr = reinterpret_cast<PODType*>(Input.data());

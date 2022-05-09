@@ -5,7 +5,6 @@ using namespace Potato::Reg;
 
 void TestingReg()
 {
-
 	{
 		std::u32string_view Str = UR"(475746)";
 		Table Tab1(UR"([^123]+)");
@@ -23,7 +22,6 @@ void TestingReg()
 		auto Result3 = ProcessSearch(Tab2.AsWrapper(), Str3);
 		if (!Result3.has_value() || Str3.substr(Result3->MainCapture.Begin(), Result3->MainCapture.Count()) != Str3.substr(3, 3))
 			throw UnpassedUnit{ "TestingReg : Bad Sample 3" };
-
 	}
 
 	std::wcout << LR"(TestingReg Pass !)" << std::endl;

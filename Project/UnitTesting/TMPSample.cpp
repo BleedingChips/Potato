@@ -23,19 +23,19 @@ void TestingTMP()
 {
 	using namespace Potato::TMP;
 
-	// IsOneOf
+	// IsOneOf 查看类型是否重复
 	static_assert(IsOneOfV<Type1, Type1, Type2, Type3>, "Tmp::IsOneOf Not Pass");
 	static_assert(!IsOneOfV<Type1, Type2, Type3>, "Tmp::IsOneOf Not Pass");
 
-	// IsNotOneOf
+	// IsNotOneOf IsOneOf 的否
 	static_assert(!IsNotOneOfV<Type1, Type1, Type2, Type3>, "Tmp::IsNotOneOfV Not Pass");
 	static_assert(IsNotOneOfV<Type1, Type2, Type3>, "Tmp::IsNotOneOfV Not Pass");
-
-	// IsRepeat
+	
+	// IsRepeat 类型是否重复
 	static_assert(IsRepeat<Type1, Type1, Type2, Type3>::Value, "Tmp::IsRepeat Not Pass");
 	static_assert(!IsRepeat<Type1, Type2, Type3>::Value, "Tmp::IsRepeat Not Pass");
 
-	// Instant
+	// Instant 对于一些template<typename ...> 类型的延迟构造，通常用在类型运算的中间
 	{
 		using T1 = Instant<TTuple, Type2>;
 		using T2 = T1:: template Append<Type3>;
@@ -51,7 +51,7 @@ void TestingTMP()
 		static_assert(std::is_same_v<T4, TTuple<Type1, Type2, Type3, Type1>>, "Tmp::Instance Not Pass");
 	}
 
-	// Replace
+	// Replace 对于一些template<typename ...> 类型的替换，通常用在类型运算的中间
 	{
 		using T1 = TTuple<Type1, Type2, Type3, Type1>;
 
@@ -60,7 +60,7 @@ void TestingTMP()
 		static_assert(std::is_same_v<T2, TTuple2<Type1, Type2, Type3, Type1>>, "Tmp::Replace Not Pass");
 	}
 
-	// Exist
+	// Exist 配合 Role 使用，判断某个类是否有某个命名为xXXX的函数或者变量
 	{
 		struct Sample1
 		{
@@ -80,7 +80,7 @@ void TestingTMP()
 		static_assert(!Exist<Sample2, ExistFun1Role>::Value, "Exist Not Pass");
 	}
 	
-	// IsFunctionObjectRole
+	// IsFunctionObjectRole 判断某个类型是否是CallableObject
 	{
 		struct Sample1
 		{
@@ -96,7 +96,7 @@ void TestingTMP()
 		static_assert(!Exist<Sample2, IsFunctionObjectRole>::Value, "IsFunctionObjectRole Not Pass");
 	}
 
-	// FunctionInfo
+	// FunctionInfo 萃取函数类型
 	{
 		struct Sample1
 		{
@@ -124,7 +124,7 @@ void TestingTMP()
 		static_assert(std::is_same_v<Info2::OwnerType, void>, "FunctionInfo Not Pass");
 	}
 
-	// TempString
+	// TempString 用于模板参数的字符串常量
 	{
 		static_assert(std::is_same_v<CST<"1234">, CST<"1234">>, "ConstString Not Pass");
 		static_assert(!std::is_same_v<CST<"12345">, CST<"1234">>, "ConstString Not Pass");
