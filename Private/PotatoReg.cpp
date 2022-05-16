@@ -1731,7 +1731,7 @@ namespace Potato::Reg
 				bool NewBegin = (Core.CurrentState == Wrapper.StartupNodeOffset());
 
 				if (NewBegin) {
-					SearchRange.Offset = Start;
+					//SearchRange.Offset = Start;
 					ForbiddenPreCheck = true;
 				}
 
@@ -1762,11 +1762,14 @@ namespace Potato::Reg
 					}
 					else {
 						ForbiddenPreCheck = true;
+						
 						if (!NewBegin)
 						{
+							SearchRange.Offset = TokenIndex;
 							CheckStart = TokenIndex;
 						}
 						else {
+							SearchRange.Offset = NextTokenIndex;
 							break;
 						}
 					}
