@@ -518,4 +518,24 @@ namespace Potato::TMP
 		}
 	};
 
+
+	template<std::size_t N>
+	struct TempStringU32
+	{
+		char32_t Storage[N];
+		constexpr TempStringU32(const char32_t(&str)[N]) : Storage{}
+		{
+			std::copy_n(str, N, Storage);
+		}
+		template<std::size_t N2>
+		constexpr bool operator==(TempString<N2> const& ref) const
+		{
+			if constexpr (N == N2)
+			{
+				return std::equal(Storage, Storage + N, ref.Storage, N);
+			}
+			else
+				return false;
+		}
+	};
 }
