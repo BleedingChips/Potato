@@ -495,42 +495,19 @@ namespace Potato::TMP
 
 	};
 
-	template<std::size_t N>
+	template<typename CharT, std::size_t N>
 	struct TempString
 	{
-		char Storage[N];
-		constexpr TempString(const char(&str)[N]) : Storage{}
+		CharT Storage[N];
+		template<typename CharT>
+		constexpr TempString(const CharT(&str)[N]) : Storage{}
 		{
 			std::copy_n(str, N, Storage);
 		}
-		template<std::size_t N2>
-		constexpr bool operator==(TempString<N2> const& ref) const
+		template<typename CharT2, std::size_t N2>
+		constexpr bool operator==(TempString<CharT2, N2> const& ref) const
 		{
-			if constexpr (N == N2)
-			{
-				for (std::size_t i = 0; i < N; ++i)
-					if (Storage[i] != ref.Storage[i])
-						return false;
-				return true;
-			}
-			else
-				return false;
-		}
-	};
-
-
-	template<std::size_t N>
-	struct TempStringU32
-	{
-		char32_t Storage[N];
-		constexpr TempStringU32(const char32_t(&str)[N]) : Storage{}
-		{
-			std::copy_n(str, N, Storage);
-		}
-		template<std::size_t N2>
-		constexpr bool operator==(TempString<N2> const& ref) const
-		{
-			if constexpr (N == N2)
+			if constexpr (std::is_same_v<CharT, CharT> && N == N2)
 			{
 				return std::equal(Storage, Storage + N, ref.Storage, N);
 			}
@@ -538,4 +515,17 @@ namespace Potato::TMP
 				return false;
 		}
 	};
+
+	template<std::size_t N>
+	TempString(const char32_t(&str)[N]) ->TempString<char32_t, N>;
+
+	template<std::size_t N>
+	TempString(const char16_t(&str)[N])->TempString<char16_t, N>;
+
+	template<std::size_t N>
+	TempString(const char8_t(&str)[N])->TempString<char8_t, N>;
+
+	template<std::size_t N>
+	TempString(const wchar_t(&str)[N])->TempString<wchar_t, N>;
+
 }
