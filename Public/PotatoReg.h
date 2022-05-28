@@ -13,10 +13,12 @@ namespace Potato::Reg
 
 	inline constexpr char32_t MaxChar() { return 0x110000; };
 
+	using SerilizeT = uint32_t;
+	using SubSerilizeT = uint16_t;
+
 	struct Accept
 	{
-		std::size_t Index = 0;
-		std::size_t Mask = 0;
+		SerilizeT Mask = 0;
 		std::strong_ordering operator<=>(Accept const&) const = default;
 	};
 
@@ -25,36 +27,6 @@ namespace Potato::Reg
 		bool IsBegin;
 		std::size_t Index;
 	};
-
-	struct CodePoint
-	{
-		char32_t UnicodeCodePoint;
-		std::size_t NextUnicodeCodePointOffset;
-		static CodePoint EndOfFile() { return { MaxChar(), 0}; }
-		bool IsEndOfFile() const { return UnicodeCodePoint == MaxChar(); }
-	};
-
-	template<typename CharT>
-	struct StringViewWrapper
-	{
-		static CodePoint Function(std::size_t Index, void* InputStringView)
-		{
-			auto StringView = *reinterpret_cast<std::basic_string_view<CharT>*>(InputStringView);
-			if (Index < StringView.size())
-			{
-				char32_t Temporary;
-				auto EncodeResult = StrEncode::CharEncoder<CharT, char32_t>::EncodeOnceUnSafe(StringView.substr(Index), { &Temporary, 1 });
-				return { Temporary, EncodeResult.SourceSpace};
-			}else
-				return CodePoint::EndOfFile();
-		}
-
-		using FuncT = CodePoint(*)(std::size_t Index, void* StringView);
-
-		operator FuncT() const { return &Function; }
-	};
-
-	struct RawString {};
 
 	struct UnfaTable
 	{
@@ -72,8 +44,8 @@ namespace Potato::Reg
 
 		struct CounterEdgeData
 		{
-			std::size_t Min = 0;
-			std::size_t Max = 0;
+			SerilizeT Min = 0;
+			SerilizeT Max = 0;
 			std::strong_ordering operator<=>(CounterEdgeData const&) const = default;
 		};
 
@@ -84,15 +56,14 @@ namespace Potato::Reg
 			std::vector<IntervalT> ConsumeChars;
 			Accept AcceptData;
 			CounterEdgeData CounterDatas;
-			std::size_t Block = 1;
-			//std::strong_ordering operator<=>(Edge const&) const = default;
-			//bool operator==(Edge const&) const = default;
+			SerilizeT UniqueID;
 		};
 
 		struct Node
 		{
 			std::size_t Index;
 			std::vector<Edge> Edges;
+			SerilizeT 
 		};
 
 		struct NodeSet
@@ -167,21 +138,27 @@ namespace Potato::Reg
 
 	struct TableWrapper
 	{
-		
-		using StorageT = uint32_t;
-		using SubStorageT = uint16_t;
 
 		struct ZipChar
 		{
 			char32_t IsSingleChar : 1;
 			char32_t Char : 31;
 			std::strong_ordering operator<=>(ZipChar const&) const = default;
-			static_assert(sizeof(StorageT) == sizeof(char32_t));
+			static_assert(sizeof(SerilizeT) == sizeof(char32_t));
 		};
 
-		struct alignas(alignof(StorageT)) ZipNode
+		struct alignas(alignof(SerilizeT)) ZipNode
 		{
-			StorageT EdgeCount;
+			SerilizeT EdgeCount;
+		};
+
+		struct alignas(alignof(SerilizeT)) ZipConsumeChar
+		{
+			SerilizeT AcceptableUniqueID;
+			SubSerilizeT CharCount;
+			SubSerilizeT PropertyOffset;
+			SubSerilizeT HasAcceptableMask;
+			SubSerilizeT HasCounter;
 		};
 
 		struct alignas(alignof(StorageT)) ZipEdge

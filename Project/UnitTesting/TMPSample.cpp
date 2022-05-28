@@ -126,8 +126,9 @@ void TestingTMP()
 
 	// TempString 用于模板参数的字符串常量
 	{
-		static_assert(std::is_same_v<CST<"1234">, CST<"1234">>, "ConstString Not Pass");
-		static_assert(!std::is_same_v<CST<"12345">, CST<"1234">>, "ConstString Not Pass");
+		static_assert(std::is_same_v<CST<u"1234">, CST<u"1234">>, "ConstString Not Pass");
+		static_assert(!std::is_same_v<CST<u"1234">, CST<"1234">>, "ConstString Not Pass");
+		static_assert(!std::is_same_v<CST<"12345">, CST<u"1234">>, "ConstString Not Pass");
 	}
 
 	std::cout << "TMP Pass !" << std::endl;

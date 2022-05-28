@@ -1313,8 +1313,8 @@ namespace Potato::Reg
 
 		Node.ReadEdge([&](TableWrapper::EdgeViewer const& Viewer)->bool{
 
-			bool ShouldKeepViewer = std::find(Walkway.begin(), Walkway.end(), Viewer.Block) == Walkway.end() 
-				&& (Acceptable(InputSymbols, Viewer.ConsumeChars) || (KeepAcceptableViewer && !Viewer.AcceptData.empty()));
+			bool ShouldKeepViewer = /*std::find(Walkway.begin(), Walkway.end(), Viewer.Block) == Walkway.end()
+				&&*/ (Acceptable(InputSymbols, Viewer.ConsumeChars) || (KeepAcceptableViewer && !Viewer.AcceptData.empty()));
 
 			if (ShouldKeepViewer && !Viewer.CounterData.empty())
 			{

@@ -528,4 +528,7 @@ namespace Potato::TMP
 	template<std::size_t N>
 	TempString(const wchar_t(&str)[N])->TempString<wchar_t, N>;
 
+	template<std::size_t N>
+	TempString(const char(&str)[N])->TempString<char, N>;
+
 }
