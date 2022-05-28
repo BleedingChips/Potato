@@ -148,13 +148,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="DLrSample.cpp" />
-    <ClCompile Include="EbnfSample.cpp" />
     <ClCompile Include="IntrusicePointerSample.cpp" />
     <ClCompile Include="MiscSample.cpp" />
-    <ClCompile Include="RegSample.cpp" />
     <ClCompile Include="StrEncodeSample.cpp" />
-    <ClCompile Include="StrFormatSample.cpp" />
-    <ClCompile Include="TMPSample.cpp" />
     <ClCompile Include="UnitTesting.cpp" />
   </ItemGroup>
   <ItemGroup>
