@@ -29,7 +29,7 @@ void TestingStrFormat()
 
 	uint64_t R2 = 0;
 
-	MarchScan(UR"(sdasdasd([0-9]+)sdasdasd)", Str, R2);
+	MatchScan(UR"(sdasdasd([0-9]+)sdasdasd)", Str, R2);
 
 	if (R2 != 12445)
 		throw UnpassedUnit{ "TestingStrFormat : Bad SearchScan Output 2" };

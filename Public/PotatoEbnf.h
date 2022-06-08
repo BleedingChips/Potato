@@ -9,15 +9,14 @@ namespace Potato::Ebnf
 
 	struct UnserilizeTable
 	{
-		UnserilizeTable(std::size_t Offset, Reg::CodePoint(*F1)(std::size_t Index, void* Data), void* Data);
+
 		UnserilizeTable(std::u32string_view Str);
-		template<typename Func>
-		UnserilizeTable(std::size_t Offset, Func&& Obj) requires(std::is_invocable_r_v<std::optional<Reg::CodePoint>, Func, std::size_t>)
-			: UnserilizeTable(Offset, [](std::size_t Index, void* Data) ->Reg::CodePoint { return reinterpret_cast<std::remove_reference_t<Func>*>(Obj)(Index); }, & Obj) {}
+		UnserilizeTable(UnserilizeTable const&) = default;
+		UnserilizeTable(UnserilizeTable&&) = default;
 
 		std::vector<std::u32string> TerminalMappings;
 		std::vector<std::u32string> NoTermialMapping;
-		std::vector<Reg::TableWrapper::StorageT> RegTable;
+		std::vector<Reg::SerilizeT> RegTable;
 		std::vector<DLr::TableWrapper::SerilizedT> DLrTable;
 
 
@@ -61,31 +60,40 @@ namespace Potato::Ebnf
 		std::span<Misc::IndexSpan<SubStorageT> const> StrIndex;
 		std::size_t TerminalCount = 0;
 		std::u32string_view TotalName;
-		std::span<Reg::TableWrapper::StorageT const> RegWrapper;
+		std::span<Reg::SerilizeT const> RegWrapper;
 		std::span<DLr::TableWrapper::SerilizedT const> DLrWrapper;
 	};
 
 	struct EbnfSymbolTuple
 	{
 		DLr::Symbol Value;
-		Misc::IndexSpan<> Input;
-		std::size_t Mask;
+		Misc::IndexSpan<> StrIndex;
+		Misc::IndexSpan<> CaptureMain;
+		Reg::TableWrapper::StorageT Mask;
 	};
 
-	std::vector<EbnfSymbolTuple> ProcessSymbol(TableWrapper Wrapper, std::size_t Start, Reg::CodePoint(*F)(std::size_t Index, void* Data), void* Data);
-
-	template<typename F>
-	std::vector<EbnfSymbolTuple> ProcessSymbol(TableWrapper Wrapper, std::size_t Start, F&& Fo) requires(std::is_invocable_r_v<Reg::CodePoint, F, std::size_t>)
+	struct SymbolProcessor
 	{
-		return ProcessSymbol(Wrapper, Start, [](std::size_t Index, void* Data) -> Reg::CodePoint{
-			auto Wrapper = reinterpret_cast<std::remove_cvref_t<F>*>(Data);
-			return (*Wrapper)(Index);
-		}, &Fo);
-	}
+		
+		struct Result
+		{
+			std::optional<EbnfSymbolTuple> Accept;
+			bool IsEndOfFile;
+		};
 
-	inline std::vector<EbnfSymbolTuple> ProcessSymbol(TableWrapper Wrapper, std::u32string_view Str){
-		return ProcessSymbol(Wrapper, 0, Reg::StringViewWrapper<char32_t>::Function, &Str);
-	}
+		std::size_t GetReuqireTokenIndex() const { return Processor.GetRequireTokenIndex(); }
+		std::optional<Result> ConsumeTokenInput(char32_t Token, std::size_t NextTokenIndex);
+
+		SymbolProcessor(TableWrapper Wrapper, std::size_t StartupTokenIndex = 0) : Processor(Wrapper.AsRegWrapper(), StartupTokenIndex) {}
+
+	private:
+
+		Reg::GreedyFrontMatchProcessor Processor;
+	};
+
+
+
+	std::vector<EbnfSymbolTuple> ProcessSymbol(TableWrapper Wrapper, std::u32string_view Str);
 
 	struct TElement
 	{

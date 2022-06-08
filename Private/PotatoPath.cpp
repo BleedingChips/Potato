@@ -68,12 +68,12 @@ namespace Potato::Path
 	Reg::TableWrapper FSRegWrapper() {
 		static auto Tables = [](){
 			Reg::MulityRegexCreator Creator;
-			Creator.PushRegex(UR"([^/\\]+(\.[^/\\])?)", static_cast<std::size_t>(T::NormalPath));
-			Creator.PushRegex(UR"($[^\./\\]+:)", static_cast<std::size_t>(T::MappingRoot) );
-			Creator.PushRegex(UR"([^\./\\]+:)", static_cast<std::size_t>(T::DosRoot));
-			Creator.PushRegex(UR"(/|\\)", static_cast<std::size_t>(T::Delimiter));
-			Creator.PushRegex(UR"(\.)", static_cast<std::size_t>(T::SelfPath));
-			Creator.PushRegex(UR"(\.\.)", static_cast<std::size_t>(T::UpperPath));
+			Creator.AddRegex(UR"([^/\\]+(\.[^/\\])?)", {static_cast<Reg::SerilizeT>(T::NormalPath)}, Creator.GetCountedUniqueID());
+			Creator.AddRegex(UR"($[^\./\\]+:)", {static_cast<Reg::SerilizeT>(T::MappingRoot)}, Creator.GetCountedUniqueID());
+			Creator.AddRegex(UR"([^\./\\]+:)", {static_cast<Reg::SerilizeT>(T::DosRoot)}, Creator.GetCountedUniqueID());
+			Creator.AddRegex(UR"(/|\\)", {static_cast<Reg::SerilizeT>(T::Delimiter)}, Creator.GetCountedUniqueID());
+			Creator.AddRegex(UR"(\.)", {static_cast<Reg::SerilizeT>(T::SelfPath)}, Creator.GetCountedUniqueID());
+			Creator.AddRegex(UR"(\.\.)", {static_cast<Reg::SerilizeT>(T::UpperPath)}, Creator.GetCountedUniqueID());
 			return Creator.Generate();
 		}();
 		return Reg::TableWrapper{Tables};

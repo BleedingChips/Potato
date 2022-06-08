@@ -53,14 +53,14 @@ namespace Potato::StrFormat
 		};
 
 		template<typename UnicodeT, typename ...TargetType>
-		std::optional<size_t> March(std::basic_string_view<UnicodeT> code, TargetType&... all_target) const;
+		std::optional<size_t> Match(std::basic_string_view<UnicodeT> code, TargetType&... all_target) const;
 
 		template<typename UnicodeT, typename ...TargetType>
 		std::optional<ScanResult> Search(std::basic_string_view<UnicodeT> code, TargetType&... all_target) const;
 		
 		ScanPattern(ScanPattern&&) = default;
 		ScanPattern(ScanPattern const&) = default;
-		ScanPattern(std::vector<Reg::TableWrapper::StorageT> Tables) : Tables(std::move(Tables)) {};
+		ScanPattern(std::vector<Reg::SerilizeT> Tables) : Tables(std::move(Tables)) {};
 
 		template<typename UnicodeT>
 		ScanPattern(std::basic_string_view<UnicodeT> Pattern) : ScanPattern(Create(Pattern)) {}
@@ -105,9 +105,9 @@ namespace Potato::StrFormat
 	};
 
 	template<typename UnicodeT, typename ...TargetType>
-	std::optional<size_t> ScanPattern::March(std::basic_string_view<UnicodeT> code, TargetType&... all_target) const
+	std::optional<size_t> ScanPattern::Match(std::basic_string_view<UnicodeT> code, TargetType&... all_target) const
 	{
-		auto result = Reg::ProcessMarch(Reg::TableWrapper(Tables), std::span(code));
+		auto result = Reg::ProcessMatch(Reg::TableWrapper(Tables), std::span(code));
 		if (result)
 		{
 			return ScanPattern::Dispatch(0, result->GetCaptureWrapper().GetTopSubCapture(), code, all_target...);
@@ -131,23 +131,23 @@ namespace Potato::StrFormat
 	}
 
 	template<typename ...TargetType>
-	auto MarchScan(std::u32string_view PatternStr, std::u32string_view Code, TargetType& ... tar_type) {
-		return ScanPattern{ PatternStr }.March(Code, tar_type...);
+	auto MatchScan(std::u32string_view PatternStr, std::u32string_view Code, TargetType& ... tar_type) {
+		return ScanPattern{ PatternStr }.Match(Code, tar_type...);
 	}
 
 	template<typename ...TargetType>
-	auto MarchScan(std::u16string_view PatternStr, std::u16string_view Code, TargetType& ... tar_type) {
-		return ScanPattern{ PatternStr }.March(Code, tar_type...);
+	auto MatchScan(std::u16string_view PatternStr, std::u16string_view Code, TargetType& ... tar_type) {
+		return ScanPattern{ PatternStr }.Match(Code, tar_type...);
 	}
 
 	template<typename ...TargetType>
-	auto MarchScan(std::u8string_view PatternStr, std::u8string_view Code, TargetType& ... tar_type) {
-		return ScanPattern{ PatternStr }.March(Code, tar_type...);
+	auto MatchScan(std::u8string_view PatternStr, std::u8string_view Code, TargetType& ... tar_type) {
+		return ScanPattern{ PatternStr }.Match(Code, tar_type...);
 	}
 
 	template<typename ...TargetType>
-	auto MarchScan(std::wstring_view PatternStr, std::wstring_view Code, TargetType& ... tar_type) {
-		return ScanPattern{ PatternStr }.March(Code, tar_type...);
+	auto MatchScan(std::wstring_view PatternStr, std::wstring_view Code, TargetType& ... tar_type) {
+		return ScanPattern{ PatternStr }.Match(Code, tar_type...);
 	}
 
 

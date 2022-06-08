@@ -13,8 +13,10 @@ namespace Potato::Reg
 
 	inline constexpr char32_t MaxChar() { return 0x110000; };
 
+	inline constexpr char32_t EndOfFile() { return MaxChar(); }
+
 	using SerilizeT = uint32_t;
-	using SubSerilizeT = uint16_t;
+	using HalfSerilizeT = uint16_t;
 
 	struct Accept
 	{
@@ -26,6 +28,13 @@ namespace Potato::Reg
 	{
 		bool IsBegin;
 		std::size_t Index;
+	};
+
+	struct Counter
+	{
+		SerilizeT Min = 0;
+		SerilizeT Max = 0;
+		std::strong_ordering operator<=>(Counter const&) const = default;
 	};
 
 	struct UnfaTable
@@ -42,12 +51,7 @@ namespace Potato::Reg
 			CounterContinue,
 		};
 
-		struct CounterEdgeData
-		{
-			SerilizeT Min = 0;
-			SerilizeT Max = 0;
-			std::strong_ordering operator<=>(CounterEdgeData const&) const = default;
-		};
+		
 
 		struct Edge
 		{
@@ -55,7 +59,7 @@ namespace Potato::Reg
 			std::size_t ShiftNode;
 			std::vector<IntervalT> ConsumeChars;
 			Accept AcceptData;
-			CounterEdgeData CounterDatas;
+			Counter CounterDatas;
 			SerilizeT UniqueID;
 		};
 
@@ -63,7 +67,6 @@ namespace Potato::Reg
 		{
 			std::size_t Index;
 			std::vector<Edge> Edges;
-			SerilizeT 
 		};
 
 		struct NodeSet
@@ -72,48 +75,36 @@ namespace Potato::Reg
 			std::size_t Out;
 		};
 
-		UnfaTable(std::size_t Start, std::size_t End, CodePoint(*F1)(std::size_t Index, void* Data), void* Data, Accept AcceptData);
-		UnfaTable(CodePoint(*F1)(std::size_t Index, void* Data), void* Data, Accept AcceptData) :
-			UnfaTable(0, std::numeric_limits<std::size_t>::max(), F1, Data, AcceptData){}
+		static UnfaTable Create(std::u32string_view Str, bool IsRaw, Accept AcceptData, SerilizeT UniqueID = 0);
 
-		UnfaTable(std::u32string_view View, Accept AcceptData)
-			: UnfaTable(StringViewWrapper<char32_t>{}, &View, AcceptData) {}
+		void Link(UnfaTable const& OtherTable, bool ThisHasHigherPriority = true);
 
-		UnfaTable(RawString, std::size_t Start, std::size_t End, CodePoint(*F1)(std::size_t Index, void* Data), void* Data, Accept AcceptData);
-		UnfaTable(RawString, CodePoint(*F1)(std::size_t Index, void* Data), void* Data, Accept AcceptData) :
-			UnfaTable(RawString{}, 0, std::numeric_limits<std::size_t>::max(), F1, Data, AcceptData) {}
+		UnfaTable(UnfaTable&&) = default;
+		UnfaTable(UnfaTable const&) = default;
+		UnfaTable& operator=(UnfaTable const&) = default;
+		UnfaTable& operator=(UnfaTable &&) = default;
 
-		UnfaTable(RawString, std::u32string_view View, Accept AcceptData)
-			: UnfaTable(RawString{}, StringViewWrapper<char32_t>{}, & View, AcceptData) {}
+		UnfaTable(SerilizeT UniqueID = 0) : TemporaryUniqueID(UniqueID) {};
 
 		std::size_t NewNode();
 		void AddComsumeEdge(std::size_t From, std::size_t To, std::vector<IntervalT> Acceptable);
 		void AddAcceptableEdge(std::size_t From, std::size_t To, Accept Data);
 		void AddCapture(NodeSet OutsideSet, NodeSet InsideSet);
-		void AddCounter(NodeSet OutsideSet, NodeSet InsideSet, CounterEdgeData Counter, bool Greedy = true);
+		void AddCounter(NodeSet OutsideSet, NodeSet InsideSet, Counter Counter, bool Greedy = true);
 		void AddEdge(std::size_t From, Edge Edge);
-		//void Expand(std::vector<SubStorageT>& Output) const;
-		void Link(UnfaTable const& OtherTable, bool ThisHasHigherPriority = true);
-		
 
 		std::vector<Node> Nodes;
+		SerilizeT TemporaryUniqueID;
 	};
 
 	struct UnserilizedTable
 	{
 
-		struct SpecialProperty
+		struct EdgeProperty
 		{
 			UnfaTable::EdgeType Type;
 			Accept AcceptData;
-			UnfaTable::CounterEdgeData CounterData;
-			std::strong_ordering operator<=>(SpecialProperty const&) const = default;
-		};
-
-		struct EdgeProperty
-		{
-			std::vector<IntervalT> ConsumeChars;
-			std::vector<SpecialProperty> Propertys;
+			Counter CounterData;
 			std::strong_ordering operator<=>(EdgeProperty const& I2) const = default;
 			bool operator==(EdgeProperty const&) const = default;
 		};
@@ -121,9 +112,9 @@ namespace Potato::Reg
 		struct Edge
 		{
 			std::size_t ToNode;
-			EdgeProperty Propertys;
-			std::size_t Block = 1;
-			bool operator ==(Edge const& I2) const { return ToNode == I2.ToNode && Propertys == I2.Propertys; }
+			std::vector<EdgeProperty> Propertys;
+			std::vector<IntervalT> ConsumeChars;
+			std::optional<SerilizeT> UniqueID;
 		};
 
 		struct Node
@@ -136,8 +127,11 @@ namespace Potato::Reg
 		UnserilizedTable(UnfaTable const& Table);
 	};
 
+	
 	struct TableWrapper
 	{
+
+		using StorageT = SerilizeT;
 
 		struct ZipChar
 		{
@@ -152,28 +146,23 @@ namespace Potato::Reg
 			SerilizeT EdgeCount;
 		};
 
-		struct alignas(alignof(SerilizeT)) ZipConsumeChar
+		struct alignas(alignof(SerilizeT)) ZipEdge
 		{
-			SerilizeT AcceptableUniqueID;
-			SubSerilizeT CharCount;
-			SubSerilizeT PropertyOffset;
-			SubSerilizeT HasAcceptableMask;
-			SubSerilizeT HasCounter;
+			SerilizeT ToNode;
+			SerilizeT UniqueID;
+			HalfSerilizeT AcceptableCharCount;
+			HalfSerilizeT HasCounter : 1;
+			HalfSerilizeT PropertyCount : 15;
+			HalfSerilizeT CounterDataCount;
+			HalfSerilizeT HasUniqueID : 1;
+			HalfSerilizeT EdgeTotalLength : 15;
+
+
+			static_assert(sizeof(HalfSerilizeT) == 2);
 		};
 
-		struct alignas(alignof(StorageT)) ZipEdge
+		enum class ZipProperty : uint8_t
 		{
-			StorageT ToNode;
-			SubStorageT AcceptableCharCount;
-			SubStorageT SpecialPropertyCount;
-			SubStorageT CounterDataCount;
-			SubStorageT AcceptableDataCount : 1;
-			SubStorageT Block : 15;
-		};
-
-		enum class ZipProperty : SubStorageT
-		{
-			Acceptable,
 			CaptureBegin,
 			CaptureEnd,
 			CounterBegin,
@@ -181,112 +170,34 @@ namespace Potato::Reg
 			CounterContinue,
 		};
 
-		struct alignas(alignof(StorageT)) ZipAcceptableData
-		{
-			StorageT Index;
-			StorageT Mask;
-		};
-
-		struct alignas(alignof(StorageT)) ZipCounterData
-		{
-			StorageT Min;
-			StorageT Max;
-		};
-
-		struct EdgeViewer
-		{
-			StorageT ToNode;
-			SubStorageT Block;
-			std::span<ZipChar const> ConsumeChars;
-			std::span<ZipProperty const> Property;
-			std::span<ZipCounterData const> CounterData;
-			std::span<ZipAcceptableData const> AcceptData;
-			std::span<StorageT const> AppendDatas;
-		};
-
 		struct NodeViewer
 		{
-			StorageT NodeOffset;
-			StorageT EdgeCount;
-			std::span<StorageT const> AppendData;
-			template<typename Func> std::size_t ReadEdge(Func&& FunObject) const requires(std::is_invocable_r_v<bool, Func, EdgeViewer>)
-			{
-				auto LastSpan = AppendData;
-				for (std::size_t Index = 0; Index < EdgeCount; ++Index)
-				{
-					auto Edge = TableWrapper::ReadEdgeViewer(LastSpan);
-					if (!std::forward<Func>(FunObject)(Edge))
-						return Index;
-					LastSpan = Edge.AppendDatas;
-				}
-				return EdgeCount;
-			}
+			SerilizeT NodeOffset;
+			SerilizeT EdgeCount;
+			std::span<SerilizeT const> AppendData;
 		};
 
-		
-
-		TableWrapper(std::span<StorageT const> Input) : Wrapper(Input) {};
+		TableWrapper(std::span<SerilizeT const> Input) : Wrapper(Input) {};
 		TableWrapper(TableWrapper const&) = default;
 		TableWrapper& operator=(TableWrapper const&) = default;
-		StorageT StartupNodeOffset() const { return  Wrapper[1]; }
+		SerilizeT StartupNodeOffset() const { return  Wrapper[1]; }
 
-		static std::vector<StorageT> Create(UnserilizedTable const& Table);
+		static std::vector<SerilizeT> Create(UnserilizedTable const& Table);
 
-		static std::vector<StorageT> Create(std::u32string_view Str, std::size_t Index = 0, std::size_t Mask = 0);
-		static std::vector<StorageT> Create(std::u16string_view Str, std::size_t Index = 0, std::size_t Mask = 0);
-		static std::vector<StorageT> Create(std::u8string_view Str, std::size_t Index = 0, std::size_t Mask = 0);
-		static std::vector<StorageT> Create(std::wstring_view Str, std::size_t Index = 0, std::size_t Mask = 0);
+		static std::vector<SerilizeT> Create(std::u32string_view Str, Accept Mask = {}, SerilizeT UniqueID = 0, bool IsRaw = false);
 
-		NodeViewer operator[](StorageT Offset) const;
-		
-		static EdgeViewer ReadEdgeViewer(std::span<StorageT const> Span);
-		static constexpr std::size_t MaxMaskAndIndexValue() { return std::numeric_limits<decltype(ZipAcceptableData::Index)>::max(); }
+		/*
+		static std::vector<SerilizeT> Create(std::u16string_view Str, std::size_t Index = 0, std::size_t Mask = 0);
+		static std::vector<SerilizeT> Create(std::u8string_view Str, std::size_t Index = 0, std::size_t Mask = 0);
+		static std::vector<SerilizeT> Create(std::wstring_view Str, std::size_t Index = 0, std::size_t Mask = 0);
+		*/
+
+		NodeViewer operator[](SerilizeT Offset) const;
 
 	private:
 
-		std::span<StorageT const> Wrapper;
+		std::span<SerilizeT const> Wrapper;
 		friend struct Table;
-	};
-
-	struct Table
-	{
-		Table(Table&&) = default;
-		Table(Table const&) = default;
-
-		template<typename UnicodeT>
-		Table(std::basic_string_view<UnicodeT> Regex, std::size_t State = 0, std::size_t Mask = 0) : Storage(TableWrapper::Create(Regex, State, Mask)) {}
-		
-		template<typename UnicodeT>
-		Table(UnicodeT const* Regex, std::size_t State = 0, std::size_t Mask = 0) : Storage(TableWrapper::Create(Regex, State, Mask)) {}
-		
-		
-		Table& operator=(Table&&) = default;
-		Table& operator=(Table const&) = default;
-
-		operator TableWrapper() const noexcept { return TableWrapper(Storage); }
-		TableWrapper AsWrapper() const noexcept { return TableWrapper(Storage); };
-	private:
-		std::vector<TableWrapper::StorageT> Storage;
-	};
-
-	struct MulityRegexCreator
-	{
-		std::size_t Push(UnfaTable const& Table);
-		std::size_t PushRegex(std::u32string_view Reg, Accept AcceptData);
-		std::size_t PushRegex(std::u32string_view Reg, std::size_t Mask) { return  PushRegex(Reg, {Count(), Mask}); }
-		std::size_t PushRegex(std::size_t Start, std::size_t End, CodePoint(*F1)(std::size_t Index, void* Data), void* Data, Accept AcceptData) {
-			return Push(UnfaTable{ Start, End, F1, Data, AcceptData });
-		}
-		std::size_t PushRawString(std::u32string_view Reg, Accept AcceptData);
-		std::size_t PushRawString(std::size_t Start, std::size_t End, CodePoint(*F1)(std::size_t Index, void* Data), void* Data, Accept AcceptData) {
-			return Push(UnfaTable{RawString{}, Start, End, F1, Data, AcceptData });
-		}
-		std::vector<TableWrapper::StorageT> Generate() const;
-		operator bool () const{return Temporary.has_value(); }
-		std::size_t Count() const { return Index; }
-	private:
-		std::size_t Index = 0;
-		std::optional<UnfaTable> Temporary;
 	};
 
 	struct CoreProcessor
@@ -294,55 +205,57 @@ namespace Potato::Reg
 
 		struct AmbiguousPoint
 		{
+			SerilizeT ToNode;
 			Misc::IndexSpan<> CounterIndex;
-			bool IsSceondory;
-			std::size_t TokenIndex;
+			std::size_t CurrentTokenIndex;
 			std::size_t NextTokenIndex;
 			std::size_t CaptureCount;
-			TableWrapper::EdgeViewer Viewer;
+			std::size_t CounterHistory;
+			std::optional<SerilizeT> UniqueID;
+			std::optional<Accept> AcceptData;
+			std::span<TableWrapper::ZipProperty const> Propertys;
 		};
+
 		std::vector<std::size_t> AmbiguousCounter;
-		std::vector<std::size_t> ConuterRecord;
+
+		std::vector<std::size_t> CounterRecord;
+		std::size_t CounterHistory = 0;
+
 		std::vector<AmbiguousPoint> AmbiguousPoints;
 		std::vector<Capture> CaptureRecord;
-		std::vector<std::size_t> Walkway;
-		TableWrapper::StorageT CurrentState;
+		SerilizeT CurrentState;
+		std::size_t StartupTokenIndex = 0;
+		std::size_t RequireTokenIndex = 0;
+		
 		TableWrapper Wrapper;
+		bool KeepAcceptableViewer = false;
+
+		CoreProcessor(TableWrapper Wrapper, bool KeepAcceptableViewer = false, std::size_t StartupTokenIndex = 0);
+		std::size_t GetRequireTokenIndex() const { return RequireTokenIndex; }
+		void SetRequireTokenIndex(std::size_t Index) { RequireTokenIndex = Index; }
+		std::size_t GetCurrentState() const { return CurrentState; };
+		void Reset(std::size_t StartupTokenIndex = 0);
+		void RemoveAmbiuosPoint(SerilizeT UniqueID);
+		TableWrapper GetWrapper() const { return Wrapper; }
+		std::size_t GetStarupTokenIndex() const { return StartupTokenIndex; }
+
+		struct AcceptResult
+		{
+			Accept AcceptData;
+			SerilizeT UniqueID;
+			std::span<Capture const> CaptureData;
+		};
 
 		struct ConsumeResult
 		{
-			std::optional<Accept> AcceptData;
+			std::optional<AcceptResult> Accept;
+			std::size_t StartupTokenIndex;
+			std::size_t CurrentTokenIndex;
+			bool IsEndOfFile;
 		};
 
-		std::optional<ConsumeResult> ConsumeCharInput(char32_t InputSymbols, std::size_t TokenIndex, std::size_t NextTokenIndex, bool KeepAcceptableViewer = false);
-		std::optional<AmbiguousPoint> PopAmbiguousPoint();
-		CoreProcessor(TableWrapper Wrapper) : Wrapper(Wrapper), CurrentState(Wrapper.StartupNodeOffset()) {}
-		void Clear() { AmbiguousCounter.clear(); ConuterRecord.clear(); AmbiguousPoints.clear(); CaptureRecord.clear(); CurrentState = Wrapper.StartupNodeOffset(); ClearWalkWay(); }
-		void ClearWalkWay() { Walkway.clear(); }
-
-		struct FlushResult
-		{
-			Misc::IndexSpan<> LastToken;
-			std::optional<Accept> AcceptData;
-			bool IsEndOfFile() const { return LastToken.Count() == 0; }
-		};
-
-		template<typename FuncO>
-		std::optional<FlushResult> Flush(std::optional<std::size_t> Start, std::size_t End, bool StopIfMeetAcceptableViewer, FuncO&& Obj)
-			requires(std::is_invocable_r_v<CodePoint, FuncO, std::size_t>);
-		std::optional<FlushResult> Flush(std::optional<std::size_t> Start, std::size_t End, bool StopIfMeetAcceptableViewer, CodePoint(*FuncO)(std::size_t, void*), void* Data);
-	private:	
-		std::optional<Accept> ApplyAmbiguousPoint(AmbiguousPoint AP);
+		std::optional<ConsumeResult> ConsumeTokenInput(char32_t InputSymbols, std::size_t NextTokenIndex);
 	};
-
-	template<typename FuncO>
-	auto CoreProcessor::Flush(std::optional<std::size_t> Start, std::size_t End, bool StopIfMeetAcceptableViewer, FuncO&& Obj)-> std::optional<FlushResult>
-		requires(std::is_invocable_r_v<CodePoint, FuncO, std::size_t>)
-	{
-		return Flush(Start, End, StopIfMeetAcceptableViewer, [](std::size_t Index, void* Data)->std::optional<CodePoint> {
-			return (*reinterpret_cast<std::remove_reference_t<FuncO>*>(Data))(Index);
-		}, &Obj);
-	}
 
 	struct CaptureWrapper
 	{
@@ -368,88 +281,143 @@ namespace Potato::Reg
 		std::optional<Misc::IndexSpan<>> CurrentCapture;
 	};
 
-	struct MarchProcessor
+	struct Table
 	{
+		Table(Table&&) = default;
+		Table(Table const&) = default;
 
-		struct Result
-		{
-			Misc::IndexSpan<> MainCapture;
-			std::optional<Accept> AcceptData;
-			std::vector<Capture> Captures;
-			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ Captures };};
-		};
+		Table(std::u32string_view Regex, Accept Mask = {}, SerilizeT UniqueID = 0, bool IsRaw = false) : Storage(TableWrapper::Create(Regex, Mask, UniqueID, IsRaw)) {}
+		
+		Table& operator=(Table&&) = default;
+		Table& operator=(Table const&) = default;
+
+		operator TableWrapper() const noexcept { return TableWrapper(Storage); }
+		TableWrapper AsWrapper() const noexcept { return TableWrapper(Storage); };
+
+	private:
+
+		std::vector<SerilizeT> Storage;
 	};
 
-	std::optional<MarchProcessor::Result> ProcessMarch(TableWrapper Wrapper, std::u32string_view Span);
-	std::optional<MarchProcessor::Result> ProcessMarch(TableWrapper Wrapper, std::size_t Startup, CodePoint(*F1)(std::size_t Index, void*), void* Data);
-	template<typename Func>
-	static std::optional<MarchProcessor::Result> ProcessMarch(TableWrapper Wrapper, std::size_t Startup, Func&& FO)
-		requires(std::is_invocable_r_v<CodePoint, Func, std::size_t>)
+	struct ProcessResult
 	{
-		return ProcessMarch(Wrapper, Startup, [](std::size_t Index, void* Data) -> std::optional<CoreProcessor::FlushInput> {
-			return (*reinterpret_cast<std::remove_reference_t<Func>*>(Data))(Index);
-			}, &FO);
-	}
+		Misc::IndexSpan<> MainCapture;
+		Accept AcceptData;
+		std::vector<Capture> Captures;
+		TableWrapper::StorageT UniqueID;
 
-	struct FrontMarchProcessor
+		CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ Captures }; };
+		ProcessResult(ProcessResult const&) = default;
+		ProcessResult(ProcessResult&&) = default;
+		ProcessResult& operator=(ProcessResult const&) = default;
+		ProcessResult& operator=(ProcessResult &&) = default;
+		ProcessResult() = default;
+		ProcessResult(CoreProcessor::ConsumeResult const& Result);
+	};
+
+	struct MatchProcessor
 	{
+
+		MatchProcessor(TableWrapper Wrapper, std::size_t StartupTokenIndex = 0) : Processor(Wrapper, false, StartupTokenIndex) {}
+		MatchProcessor(MatchProcessor const&) = default;
+		MatchProcessor(MatchProcessor&&) = default;
+		std::size_t GetRequireTokenIndex() const { return Processor.GetRequireTokenIndex(); }
+
 		struct Result
 		{
-			Misc::IndexSpan<> MainCapture;
-			Reg::Accept AcceptData;
-			std::vector<Reg::Capture> Captures;
+			std::optional<ProcessResult> Accept;
 			bool IsEndOfFile;
-			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ Captures }; };
 		};
+
+		std::optional<Result> ConsumeTokenInput(char32_t Token, std::size_t NextTokenIndex);
+
+	private:
+
+		CoreProcessor Processor;
 	};
 
-	template<typename Func>
-	std::optional<FrontMarchProcessor::Result> ProcessFrontMarch(TableWrapper Wrapper, std::size_t Startup, Func&& FO)
-		requires(std::is_invocable_r_v<CodePoint, Func, std::size_t>)
-	{
-		return ProcessFrontMarch(Wrapper, Startup, [](std::size_t Index, void* Data) -> CodePoint {
-			return (*reinterpret_cast<std::remove_reference_t<Func>*>(Data))(Index);
-			}, &FO);
-	}
+	std::optional<ProcessResult> ProcessMatch(TableWrapper Wrapper, std::u32string_view Span);
 
-	std::optional<FrontMarchProcessor::Result> ProcessFrontMarch(TableWrapper Wrapper, std::size_t Startup, CodePoint(*F1)(std::size_t Index, void*), void* Data);
-	std::optional<FrontMarchProcessor::Result> ProcessFrontMarch(TableWrapper Wrapper, std::u32string_view SpanView);
-	std::optional<FrontMarchProcessor::Result> ProcessFrontMarch(TableWrapper Wrapper, std::wstring_view SpanView);
+	struct FrontMatchProcessor
+	{
+
+		FrontMatchProcessor(TableWrapper Wrapper, std::size_t StartupTokenIndex = 0) : Processor(Wrapper, true, StartupTokenIndex) {}
+		FrontMatchProcessor(FrontMatchProcessor const&) = default;
+		FrontMatchProcessor(FrontMatchProcessor&&) = default;
+		std::size_t GetRequireTokenIndex() const { return Processor.GetRequireTokenIndex(); }
+
+		struct Result
+		{
+			std::optional<ProcessResult> Accept;
+			bool IsEndOfFile;
+		};
+
+		std::optional<Result> ConsumeTokenInput(char32_t Token, std::size_t NextTokenIndex);
+	private:
+		CoreProcessor Processor;
+	};
+
+	std::optional<ProcessResult> ProcessFrontMatch(TableWrapper Wrapper, std::u32string_view SpanView);
 
 	struct SearchProcessor
 	{
+
+		SearchProcessor(TableWrapper Wrapper, std::size_t StartupTokenIndex = 0) 
+			: Processor(Wrapper, true, StartupTokenIndex), RetryStartupTokenIndex(StartupTokenIndex + 1) {}
+		SearchProcessor(SearchProcessor const&) = default;
+		SearchProcessor(SearchProcessor&&) = default;
+		std::size_t GetRequireTokenIndex() const { return Processor.GetRequireTokenIndex(); }
+
 		struct Result
 		{
-			Misc::IndexSpan<> MainCapture;
-			std::vector<Capture> Captures;
-			Accept AcceptData;
+			std::optional<ProcessResult> Accept;
 			bool IsEndOfFile;
-			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ Captures }; };
 		};
 
-		struct SearchCore
-		{
-			std::size_t TokenIndex;
-			std::size_t NextTokenIndex;
-			TableWrapper::EdgeViewer Viewer;
-		};
+		std::optional<Result> ConsumeTokenInput(char32_t Token, std::size_t NextTokenIndex);
+	private:
+		CoreProcessor Processor;
+		std::size_t RetryStartupTokenIndex = 0;
 	};
 
-	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::u32string_view Span);
-	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::u16string_view Span);
-	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::u8string_view Span);
-	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::wstring_view Span);
+	std::optional<ProcessResult> ProcessSearch(TableWrapper Wrapper, std::u32string_view Span);
 
-	template<typename Func>
-	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::size_t Start, Func&& FO)
-		requires(std::is_invocable_r_v<CodePoint, Func, std::size_t>)
+	struct GreedyFrontMatchProcessor
 	{
-		return ProcessSearch(Wrapper, Start, [](std::size_t Index, void* Data) ->CodePoint {
-			return (*reinterpret_cast<std::remove_reference_t<Func>*>(Data))(Index);
-			}, &FO);
-	}
 
-	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::size_t Start, CodePoint(*F1)(std::size_t Index, void* Data), void* Data);
+		GreedyFrontMatchProcessor(TableWrapper Wrapper, std::size_t StartupTokenIndex = 0)
+			: Processor(Wrapper, true, StartupTokenIndex) {}
+		GreedyFrontMatchProcessor(GreedyFrontMatchProcessor const&) = default;
+		GreedyFrontMatchProcessor(GreedyFrontMatchProcessor&&) = default;
+		std::size_t GetRequireTokenIndex() const { return Processor.GetRequireTokenIndex(); }
+		void Reset(std::size_t StartUpTokenIndex = 0) { Processor.Reset(StartUpTokenIndex); }
+
+		struct Result
+		{
+			std::optional<ProcessResult> Accept;
+			bool IsEndOfFile;
+		};
+
+		std::optional<Result> ConsumeTokenInput(char32_t Token, std::size_t NextTokenIndex);
+	private:
+		CoreProcessor Processor;
+		std::optional<ProcessResult> TempResult;
+	};
+
+	std::optional<ProcessResult> ProcessGreedyFrontMatch(TableWrapper Wrapper, std::u32string_view Span);
+
+	struct MulityRegexCreator
+	{
+		SerilizeT AddRegex(std::u32string_view Regex, Accept Mask, SerilizeT UniqueID, bool IsRaw = false);
+		std::vector<SerilizeT> Generate() const;
+		operator bool() const { return Temporary.has_value(); }
+		SerilizeT GetCountedUniqueID() const { return CountedUniqueID; }
+		SerilizeT Push(UnfaTable const& Table);
+	private:
+		SerilizeT CountedUniqueID = 0;
+		std::optional<UnfaTable> Temporary;
+	};
+
 
 	namespace Exception
 	{

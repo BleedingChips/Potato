@@ -54,48 +54,42 @@ namespace Potato::Ebnf
 
 	constexpr DLr::Symbol operator*(NT sym) { return DLr::Symbol{ DLr::Symbol::ValueType::NOTERMIAL, static_cast<std::size_t>(sym) }; };
 
+	void AddRegex(Reg::MulityRegexCreator& Creator, std::u32string_view Str, T Enum)
+	{
+		Creator.AddRegex(Str, {static_cast<Reg::SerilizeT>(Enum)}, Creator.GetCountedUniqueID(), false);
+	}
+
 	Reg::TableWrapper EbnfStepReg() {
 		static auto List = []() {
 			Reg::MulityRegexCreator Creator;
-			Creator.PushRegex(UR"(%%%%)", { Creator.Count(), static_cast<std::size_t>(T::Barrier)});
-			Creator.PushRegex(UR"([0-9]+)", { Creator.Count(), static_cast<std::size_t>(T::Number)});
-			Creator.PushRegex(UR"([0-9a-zA-Z_\z]+)", { Creator.Count(), static_cast<std::size_t>(T::Terminal)});
-			Creator.PushRegex(UR"(<[0-9a-zA-Z_\z]+>)", { Creator.Count(), static_cast<std::size_t>(T::NoTerminal)});
-			Creator.PushRegex(UR"(<\$([0-9]+)>)", { Creator.Count(), static_cast<std::size_t>(T::NoProductionNoTerminal) });
-			Creator.PushRegex(UR"(:=)", { Creator.Count(), static_cast<std::size_t>(T::Equal)});
-			Creator.PushRegex(UR"(\'([^\s]+)\')", { Creator.Count(), static_cast<std::size_t>(T::Rex)});
-			Creator.PushRegex(UR"(;)", { Creator.Count(), static_cast<std::size_t>(T::Semicolon)});
-			Creator.PushRegex(UR"(:)", { Creator.Count(), static_cast<std::size_t>(T::Colon) });
-			Creator.PushRegex(UR"(\s+)", { Creator.Count(), static_cast<std::size_t>(T::Empty)});
-			Creator.PushRegex(UR"(\$)", { Creator.Count(), static_cast<std::size_t>(T::Start)});
-			Creator.PushRegex(UR"(\|)", { Creator.Count(), static_cast<std::size_t>(T::Or)});
-			Creator.PushRegex(UR"(\[)", { Creator.Count(), static_cast<std::size_t>(T::LM_Brace) });
-			Creator.PushRegex(UR"(\])", { Creator.Count(), static_cast<std::size_t>(T::RM_Brace) });
-			Creator.PushRegex(UR"(\{)", { Creator.Count(), static_cast<std::size_t>(T::LB_Brace) });
-			Creator.PushRegex(UR"(\})", { Creator.Count(), static_cast<std::size_t>(T::RB_Brace) });
-			Creator.PushRegex(UR"(\()", { Creator.Count(), static_cast<std::size_t>(T::LS_Brace) });
-			Creator.PushRegex(UR"(\))", { Creator.Count(), static_cast<std::size_t>(T::RS_Brace) });
-			Creator.PushRegex(UR"(\+\()", { Creator.Count(), static_cast<std::size_t>(T::LeftPriority) });
-			Creator.PushRegex(UR"(\)\+)", { Creator.Count(), static_cast<std::size_t>(T::RightPriority) });
-			Creator.PushRegex(UR"(/\*.*?\*/)", { Creator.Count(), static_cast<std::size_t>(T::Command) });
-			Creator.PushRegex(UR"(//[^\n]*\n)", { Creator.Count(), static_cast<std::size_t>(T::Command) });
+			AddRegex(Creator, UR"(%%%%)", T::Barrier);
+			AddRegex(Creator, UR"([0-9]+)", T::Number);
+			AddRegex(Creator, UR"([0-9a-zA-Z_\z]+)", T::Terminal);
+			AddRegex(Creator, UR"(<[0-9a-zA-Z_\z]+>)", T::NoTerminal);
+			AddRegex(Creator, UR"(<\$([0-9]+)>)", T::NoProductionNoTerminal);
+			AddRegex(Creator, UR"(:=)", T::Equal);
+			AddRegex(Creator, UR"(\'([^\s]+)\')", T::Rex);
+			AddRegex(Creator, UR"(;)", T::Semicolon);
+			AddRegex(Creator, UR"(:)", T::Colon);
+			AddRegex(Creator, UR"(\s+)", T::Empty);
+			AddRegex(Creator, UR"(\$)", T::Start);
+			AddRegex(Creator, UR"(\|)", T::Or);
+			AddRegex(Creator, UR"(\[)", T::LM_Brace);
+			AddRegex(Creator, UR"(\])", T::RM_Brace);
+			AddRegex(Creator, UR"(\{)", T::LB_Brace);
+			AddRegex(Creator, UR"(\})", T::RB_Brace);
+			AddRegex(Creator, UR"(\()", T::LS_Brace);
+			AddRegex(Creator, UR"(\))", T::RS_Brace);
+			AddRegex(Creator, UR"(\+\()", T::LeftPriority);
+			AddRegex(Creator, UR"(\)\+)", T::RightPriority);
+			AddRegex(Creator, UR"(/\*.*?\*/)", T::Command);
+			AddRegex(Creator, UR"(//[^\n]*\n)", T::Command);
 			return Creator.Generate();
 		}();
 		return Reg::TableWrapper(List);
 	}
 
-	std::u32string Translate(Misc::IndexSpan<> Index, Reg::CodePoint(*F1)(std::size_t Index, void* Data), void* Data)
-	{
-		std::u32string Result;
-		for (std::size_t Ite = Index.Begin(); Ite < Index.End();)
-		{
-			auto Cur = F1(Ite, Data);
-			Result.push_back(Cur.UnicodeCodePoint);
-			Ite += Cur.NextUnicodeCodePointOffset;
-		}
-		return Result;
-	}
-
+	/*
 	struct RegDatas
 	{
 		char32_t Value;
@@ -115,8 +109,9 @@ namespace Potato::Ebnf
 		}
 		return Result;
 	}
+	*/
 
-	std::size_t FindOrAddSymbol(std::u32string Source, std::vector<std::u32string>& Output)
+	std::size_t FindOrAddSymbol(std::u32string_view Source, std::vector<std::u32string>& Output)
 	{
 		for (std::size_t IteIndex = 0; IteIndex < Output.size(); ++IteIndex)
 		{
@@ -127,27 +122,30 @@ namespace Potato::Ebnf
 			}
 		}
 		auto OldIndex = Output.size();
-		Output.push_back(std::move(Source));
+		Output.push_back(std::u32string{Source});
 		return OldIndex;
 	}
 
 	struct LexicalTuple
 	{
 		DLr::Symbol Value;
-		Misc::IndexSpan<> StrIndex;
+		std::u32string_view Str;
+		std::size_t Offset;
 	};
 
-	std::array<Misc::IndexSpan<>, 3> ProcessLexical(std::vector<LexicalTuple>& OutputTuple, std::size_t Offset, Reg::CodePoint(*F1)(std::size_t Index, void* Data), void* Data)
+	std::array<Misc::IndexSpan<>, 3> ProcessLexical(std::vector<LexicalTuple>& OutputTuple, std::u32string_view Str)
 	{
 		std::size_t State = 0;
 		std::array<Misc::IndexSpan<>, 3> Indexs;
 		auto StepReg = EbnfStepReg();
-		while (true)
+		std::size_t Offset = 0;
+		std::u32string_view StrIte = Str;
+		while (!StrIte.empty())
 		{
-			auto Re = Reg::ProcessFrontMarch(StepReg, Offset, F1, Data);
+			auto Re = Reg::ProcessGreedyFrontMatch(StepReg, StrIte);
 			if (Re.has_value())
 			{
-				Offset = Re->MainCapture.End();
+				
 				auto Enum = static_cast<T>(Re->AcceptData.Mask);
 				switch (Enum)
 				{
@@ -157,14 +155,18 @@ namespace Potato::Ebnf
 				case T::Number:
 				case T::NoTerminal:
 				case T::Terminal:
-					OutputTuple.push_back({*Enum, Re->MainCapture});
+					OutputTuple.push_back({*Enum, StrIte.substr(0, Re->MainCapture.Count()), Offset});
 					break;
 				case T::NoProductionNoTerminal:
 				case T::Rex:
 				{
-					assert(Re->Captures.size() == 2);
-					assert(Re->Captures[0].IsBegin && !Re->Captures[1].IsBegin);
-					OutputTuple.push_back({ *Enum, { Re->Captures[0].Index, Re->Captures[1].Index - Re->Captures[0].Index} });
+					auto Wrapper = Re->GetCaptureWrapper();
+					assert(Wrapper.HasSubCapture());
+					auto SpanIndex = Wrapper.GetTopSubCapture().GetCapture();
+					OutputTuple.push_back({ *Enum, 
+						StrIte.substr(SpanIndex.Begin(), SpanIndex.Count()),
+						Offset
+						});
 				}
 					break;
 				case T::Barrier:
@@ -179,15 +181,15 @@ namespace Potato::Ebnf
 					}
 					break;
 				default:
-					OutputTuple.push_back({ *Enum, Re->MainCapture });
+					OutputTuple.push_back({ *Enum, StrIte.substr(0, Re->MainCapture.Count()), Offset });
 					break;
 				}
-				if (Re->IsEndOfFile)
+				Offset += Re->MainCapture.Count();
+				StrIte = StrIte.substr(Re->MainCapture.Count());
+				if (StrIte.empty())
 				{
 					Indexs[State].Length = OutputTuple.size() - Indexs[State].Offset;
-					break;
 				}
-					
 			}
 			else {
 				throw Exception::UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongEbnf, Offset };
@@ -269,25 +271,6 @@ namespace Potato::Ebnf
 	};
 
 	UnserilizeTable::UnserilizeTable(std::u32string_view Str)
-	try 
-		: UnserilizeTable(0, [](std::size_t Index, void* Data)-> Reg::CodePoint {
-			auto Str = *reinterpret_cast<std::u32string_view*>(Data);
-			if(Index < Str.size())
-				return Reg::CodePoint{Str[Index], 1};
-			else
-				return Reg::CodePoint::EndOfFile();
-		}, & Str)
-	{
-	}
-	catch (UnacceptableEbnf const& Ebnf)
-	{
-	#if _DEBUG
-		auto NStr = Str.substr(Ebnf.TokenIndex);
-	#endif
-		throw Ebnf;
-	}
-
-	UnserilizeTable::UnserilizeTable(std::size_t Offset, Reg::CodePoint(*F1)(std::size_t Index, void* Data), void* Data)
 	{
 		struct Storaget
 		{
@@ -300,15 +283,15 @@ namespace Potato::Ebnf
 		Reg::MulityRegexCreator Creator;
 
 		std::vector<LexicalTuple> SymbolTuple;
-		auto StepIndexs = ProcessLexical(SymbolTuple, Offset, F1, Data);
+		auto StepIndexs = ProcessLexical(SymbolTuple, Str);
 		if(StepIndexs[1].Count() == 0) [[unlikely]]
 			throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongEbnf, StepIndexs[0].End()};
 #if _DEBUG
 		{
-			std::vector<std::u32string> Strs;
+			std::vector<std::u32string_view> Strs;
 			for (auto& Ite : SymbolTuple)
 			{
-				Strs.push_back(Translate(Ite.StrIndex, F1, Data));
+				Strs.push_back(Ite.Str);
 			}
 			volatile int i  = 0;
 		}
@@ -335,25 +318,27 @@ namespace Potato::Ebnf
 						{
 						case 2:
 						{
-							auto Name = Translate(NT[1].Consume<Misc::IndexSpan<>>(), F1, Data);
-							auto Index = FindOrAddSymbol(std::move(Name), TerminalMappings);
-							auto Index2 = NT[3].Consume<Misc::IndexSpan<>>();
-							Creator.PushRegex(Index2.Begin(), Index2.End(), F1, Data, { Index + 1, 0});
+							auto Name = NT[1].Consume<std::u32string_view>();
+							auto Index = FindOrAddSymbol(Name, TerminalMappings);
+							auto Index2 = NT[3].Consume<std::u32string_view>();
+							Creator.AddRegex(Index2, {0}, static_cast<Reg::SerilizeT>(Index + 1));
 							return {};
 						}
 						case 3:
 						{
-							auto Name = Translate(NT[1].Consume<Misc::IndexSpan<>>(), F1, Data);
-							auto Index = FindOrAddSymbol(std::move(Name), TerminalMappings);
-							auto Index2 = NT[3].Consume<Misc::IndexSpan<>>();
+							auto Name = NT[1].Consume<std::u32string_view>();
+							auto Index = FindOrAddSymbol(Name, TerminalMappings);
+							auto Index2 = NT[3].Consume<std::u32string_view>();
 							std::size_t Mask = NT[6].Consume<std::size_t>();
-							Creator.PushRegex(Index2.Begin(), Index2.End(), F1, Data, { Index + 1, Mask });
+							Reg::TableWrapper::StorageT SeriMask;
+							Misc::SerilizerHelper::TryCrossTypeSet(SeriMask, Mask, Exception::OutofRange{ Exception::OutofRange::TypeT::Regex, NT.FirstTokenIndex });
+							Creator.AddRegex(Index2, { SeriMask }, static_cast<Reg::SerilizeT>(Index + 1));
 							return {};
 						}
 						case 4:
 						{
-							auto Index2 = NT[3].Consume<Misc::IndexSpan<>>();
-							Creator.PushRegex(Index2.Begin(), Index2.End(), F1, Data, { 0, 0});
+							auto Index2 = NT[3].Consume<std::u32string_view>();
+							Creator.AddRegex(Index2, {0}, 0, false);
 							return {};
 						}
 						default:
@@ -368,12 +353,11 @@ namespace Potato::Ebnf
 						{
 						case T::Terminal:
 						case T::Rex:
-							return std::move(SymbolTuple[TRef.TokenIndex].StrIndex);
+							return SymbolTuple[TRef.TokenIndex].Str;
 						case T::Number:
 						{
 							std::size_t Index = 0;
-							auto Buffer = Translate(SymbolTuple[TRef.TokenIndex].StrIndex, F1, Data);
-							StrFormat::DirectScan(Buffer, Index);
+							StrFormat::DirectScan(SymbolTuple[TRef.TokenIndex].Str, Index);
 							return Index;
 						}
 						default:
@@ -387,18 +371,18 @@ namespace Potato::Ebnf
 		{
 			std::size_t Token = 0;
 			if(SymbolTuple.size() > US.TokenIndex)
-				Token = SymbolTuple[US.TokenIndex].StrIndex.Begin();
+				Token = SymbolTuple[US.TokenIndex].Offset;
 			else if(!SymbolTuple.empty())
-				Token = SymbolTuple.rbegin()->StrIndex.End();
+				Token = SymbolTuple.rbegin()->Str.size() + SymbolTuple.rbegin()->Offset;
 			throw UnacceptableEbnf{ UnacceptableEbnf ::TypeT::WrongRegex, Token };
 		}
 		catch (Reg::Exception::UnaccaptableRegex const& US)
 		{
 			std::size_t Token = 0;
 			if (SymbolTuple.size() > US.TokenIndex)
-				Token = SymbolTuple[US.TokenIndex].StrIndex.Begin();
+				Token = SymbolTuple[US.TokenIndex].Offset;
 			else if (!SymbolTuple.empty())
-				Token = SymbolTuple.rbegin()->StrIndex.End();
+				Token = SymbolTuple.rbegin()->Str.size() + SymbolTuple.rbegin()->Offset;
 			throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongRegex, Token };
 		}
 		catch (...)
@@ -571,7 +555,7 @@ namespace Potato::Ebnf
 					{
 						if(!LastProductionStartSymbol.has_value()) [[unlikely]]
 						{
-							std::size_t TokenIndex = SymbolTuple[Ref.FirstTokenIndex].StrIndex.Begin();
+							std::size_t TokenIndex = SymbolTuple[Ref.FirstTokenIndex].Offset;
 							throw Exception::UnacceptableEbnf{ Exception::UnacceptableEbnf::TypeT::UnsetProductionHead, TokenIndex};
 						}
 						auto List = Ref[1].Consume<std::vector<DLr::ProductionBuilderElement>>();
@@ -587,7 +571,7 @@ namespace Potato::Ebnf
 					{
 						if(StartSymbol.has_value()) [[unlikely]]
 						{
-							std::size_t TokenIndex = SymbolTuple[Ref.FirstTokenIndex].StrIndex.Begin();
+							std::size_t TokenIndex = SymbolTuple[Ref.FirstTokenIndex].Offset;
 							throw Exception::UnacceptableEbnf{ Exception::UnacceptableEbnf::TypeT::StartSymbolAreadySet, TokenIndex};
 						}
 						StartSymbol = Ref[2].Consume<DLr::Symbol>();
@@ -607,13 +591,12 @@ namespace Potato::Ebnf
 					case T::Number:
 					{
 						std::size_t Index = 0;
-						auto Buffer = Translate(SymbolTuple[Ref.TokenIndex].StrIndex, F1, Data);
-						StrFormat::DirectScan(Buffer, Index);
+						StrFormat::DirectScan(SymbolTuple[Ref.TokenIndex].Str, Index);
 						return Index;
 					}
 					case T::Terminal:
 					{
-						auto Name = Translate(SymbolTuple[Ref.TokenIndex].StrIndex, F1, Data);
+						auto Name = SymbolTuple[Ref.TokenIndex].Str;
 						for (std::size_t Index = 0; Index < DefineTerminalStart; ++Index)
 						{
 							if (TerminalMappings[Index] == Name)
@@ -621,18 +604,17 @@ namespace Potato::Ebnf
 								return DLr::Symbol::AsTerminal(Index);
 							}
 						}
-						throw Exception::UnacceptableEbnf{ UnacceptableEbnf::TypeT::UnrecognizableTerminal, SymbolTuple[Ref.TokenIndex].StrIndex .Begin()};
+						throw Exception::UnacceptableEbnf{ UnacceptableEbnf::TypeT::UnrecognizableTerminal, SymbolTuple[Ref.TokenIndex].Offset};
 					}
 					case T::NoTerminal:
 					{
-						auto Name = Translate(SymbolTuple[Ref.TokenIndex].StrIndex, F1, Data);
+						auto Name = SymbolTuple[Ref.TokenIndex].Str;
 						auto Index = FindOrAddSymbol(std::move(Name), NoTermialMapping);
 						return DLr::Symbol::AsNoTerminal(Index);
 					}
 					case T::Rex:
 					{
-						auto IndexSpan = SymbolTuple[Ref.TokenIndex].StrIndex;
-						auto Name = Translate(IndexSpan, F1, Data);
+						auto Name = SymbolTuple[Ref.TokenIndex].Str;
 						for (std::size_t Index = DefineTerminalStart; Index < TerminalMappings.size(); ++Index)
 						{
 							if (TerminalMappings[Index] == Name)
@@ -641,8 +623,8 @@ namespace Potato::Ebnf
 							}
 						}
 						std::size_t Index = TerminalMappings.size();
-						TerminalMappings.push_back(std::move(Name));
-						Creator.PushRawString(IndexSpan.Begin(), IndexSpan.End(), F1, Data, { Index + 1, 0});
+						TerminalMappings.push_back(std::u32string{Name});
+						Creator.AddRegex(Name, {0}, static_cast<Reg::SerilizeT>(Index + 1), true);
 						return DLr::Symbol::AsTerminal(Index);
 					}
 					default:
@@ -656,7 +638,7 @@ namespace Potato::Ebnf
 			{
 				std::size_t Location = 0;
 				if(!SymbolTuple.empty())
-					Location = SymbolTuple.rbegin()->StrIndex.End();
+					Location = SymbolTuple.rbegin()->Str.size() + SymbolTuple.rbegin()->Offset;
 				throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::UnfindedStartSymbol, Location };
 			}
 		}
@@ -664,29 +646,10 @@ namespace Potato::Ebnf
 		{
 			std::size_t Token = 0;
 			if (SymbolTuple.size() > US.TokenIndex)
-				Token = SymbolTuple[US.TokenIndex].StrIndex.Begin();
+				Token = SymbolTuple[US.TokenIndex].Offset;
 			else if (!SymbolTuple.empty())
-				Token = SymbolTuple.rbegin()->StrIndex.End();
+				Token = SymbolTuple.rbegin()->Str.size() + SymbolTuple.rbegin()->Offset;
 
-#if _DEBUG
-			{
-				std::u32string Str;
-				std::size_t TokenIndex = Token;
-				while (true)
-				{
-					auto Sym = F1(TokenIndex, Data);
-					if(Sym.IsEndOfFile())
-						break;
-					else {
-						TokenIndex += Sym.NextUnicodeCodePointOffset;
-						Str.push_back(Sym.UnicodeCodePoint);
-					}
-
-				}
-				
-				volatile int i  =0;
-			}
-#endif
 			throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongLr, Token };
 		}
 		catch (...)
@@ -747,7 +710,7 @@ namespace Potato::Ebnf
 					{
 					case T::Terminal:
 					{
-						auto Name = Translate(SymbolTuple[TRef.TokenIndex].StrIndex, F1, Data);
+						auto Name = SymbolTuple[TRef.TokenIndex].Str;
 						for (std::size_t Index = 0; Index < DefineTerminalStart; ++Index)
 						{
 							if (TerminalMappings[Index] == Name)
@@ -755,11 +718,11 @@ namespace Potato::Ebnf
 								return DLr::Symbol::AsTerminal(Index);
 							}
 						}
-						throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::UnrecognizableTerminal, SymbolTuple[TRef.TokenIndex].StrIndex.Begin() };
+						throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::UnrecognizableTerminal, SymbolTuple[TRef.TokenIndex].Offset };
 					}
 					case T::Rex:
 					{
-						auto Name = Translate(SymbolTuple[TRef.TokenIndex].StrIndex, F1, Data);
+						auto Name = SymbolTuple[TRef.TokenIndex].Str;
 						for (std::size_t Index = DefineTerminalStart; Index < TerminalMappings.size(); ++Index)
 						{
 							if (TerminalMappings[Index] == Name)
@@ -767,7 +730,7 @@ namespace Potato::Ebnf
 								return DLr::Symbol::AsTerminal(Index);
 							}
 						}
-						throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::UnrecognizableRex, SymbolTuple[TRef.TokenIndex].StrIndex.Begin()};
+						throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::UnrecognizableRex, SymbolTuple[TRef.TokenIndex].Offset};
 					}
 						break;
 					}
@@ -779,9 +742,9 @@ namespace Potato::Ebnf
 		{
 			std::size_t Token = 0;
 			if (SymbolTuple.size() > US.TokenIndex)
-				Token = SymbolTuple[US.TokenIndex].StrIndex.Begin();
+				Token = SymbolTuple[US.TokenIndex].Offset;
 			else if (!SymbolTuple.empty())
-				Token = SymbolTuple.rbegin()->StrIndex.End();
+				Token = SymbolTuple.rbegin()->Str.size() + SymbolTuple.rbegin()->Offset;
 			throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongPriority, Token };
 		}
 		catch (...)
@@ -820,23 +783,23 @@ namespace Potato::Ebnf
 		{
 			std::size_t Token = 0;
 			if (SymbolTuple.size() > US.TokenIndex)
-				Token = SymbolTuple[US.TokenIndex].StrIndex.Begin();
+				Token = SymbolTuple[US.TokenIndex].Offset;
 			else if (!SymbolTuple.empty())
-				Token = SymbolTuple.rbegin()->StrIndex.End();
+				Token = SymbolTuple.rbegin()->Str.size() + SymbolTuple.rbegin()->Offset;
 			throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongLr, Token };
 		}
 		catch (Reg::Exception::RegexOutOfRange const&)
 		{
 			std::size_t Token = 0;
 			if(!SymbolTuple.empty())
-				Token = SymbolTuple.rbegin()->StrIndex.End();
+				Token = SymbolTuple.rbegin()->Str.size() + SymbolTuple.rbegin()->Offset;
 			throw OutofRange{ OutofRange::TypeT::Regex, Token };
 		}
 		catch (DLr::Exception::OutOfRange const&)
 		{
 			std::size_t Token = 0;
 			if (!SymbolTuple.empty())
-				Token = SymbolTuple.rbegin()->StrIndex.End();
+				Token = SymbolTuple.rbegin()->Str.size() + SymbolTuple.rbegin()->Offset;
 			throw OutofRange{ OutofRange::TypeT::DLr, Token };
 		}
 		catch (...)
@@ -933,47 +896,70 @@ namespace Potato::Ebnf
 		return {};
 	}
 
-	std::vector<EbnfSymbolTuple> ProcessSymbol(TableWrapper Wrapper, std::size_t Start, Reg::CodePoint(*F)(std::size_t Index, void* Data), void* Data)
+	auto SymbolProcessor::ConsumeTokenInput(char32_t Token, std::size_t NextTokenIndex) -> std::optional<Result>
 	{
-		auto RegWrapper = Wrapper.AsRegWrapper();
+		auto Re = Processor.ConsumeTokenInput(Token, NextTokenIndex);
+		if (Re.has_value())
+		{
+			Result Re1;
+			Re1.IsEndOfFile = Re->IsEndOfFile;
+			if (Re->Accept.has_value())
+			{
+				if (Re->Accept->UniqueID != 0)
+				{
+					EbnfSymbolTuple Re2;
+					Re2.Value = DLr::Symbol::AsTerminal(Re->Accept->UniqueID - 1);
+					Re2.Mask = Re->Accept->AcceptData.Mask;
+					auto Capture = Re->Accept->GetCaptureWrapper();
+					if (Capture.HasSubCapture())
+					{
+						Re2.StrIndex = Capture.GetTopSubCapture().GetCapture();
+					}
+					else {
+						Re2.StrIndex = Re->Accept->MainCapture;
+					}
+					Re2.CaptureMain = Re->Accept->MainCapture;
+					Re1.Accept = Re2;
+				}
+				if(Re1.IsEndOfFile)
+					return Re1;
+				Processor.Reset(Re->Accept->MainCapture.End());
+			}
+			return Re1;
+		}
+		else {
+			return {};
+		}
+	}
+
+	std::vector<EbnfSymbolTuple> ProcessSymbol(TableWrapper Wrapper, std::u32string_view StrView)
+	{
 		std::vector<EbnfSymbolTuple> Tuples;
+
+		SymbolProcessor Processor(Wrapper);
+
 		while (true)
 		{
-			auto Result = Reg::ProcessFrontMarch(RegWrapper, Start, F, Data);
-			if (Result.has_value())
+			auto RI = Processor.GetReuqireTokenIndex();
+			char32_t Token = (RI >= StrView.size() ? Reg::EndOfFile() : StrView[RI]);
+			auto Re = Processor.ConsumeTokenInput(Token, RI + 1);
+			if (Re.has_value())
 			{
-				Start = Result->MainCapture.End();
-				if (Result->AcceptData.Index != 0)
+				if (Re->Accept.has_value())
 				{
-					Misc::IndexSpan<> Span = Result->MainCapture;
-					if (!Result->Captures.empty())
-					{
-						assert(Result->Captures[0].IsBegin);
-						Span.Offset = Result->Captures[0].Index;
-						Span.Length = 0;
-						std::size_t Stack = 0;
-						for (auto& Ite : Result->Captures)
-						{
-							if(Ite.IsBegin)
-								++Stack;
-							else
-								--Stack;
-							if (Stack == 0)
-							{
-								Span.Length = Ite.Index - Span.Offset;
-								break;
-							}
-						}
-					}
-					Tuples.push_back({ DLr::Symbol::AsTerminal(Result->AcceptData.Index - 1), Span, Result->AcceptData.Mask });
+					Tuples.push_back(std::move(*Re->Accept));
 				}
-				if(Result->IsEndOfFile)
-					break;
+				if(Re->IsEndOfFile)
+					return Tuples;
 			}
-			else {
-				throw UnacceptableSymbol{ UnacceptableSymbol::TypeT::Reg, Start };
+			else if(Token == Reg::EndOfFile())
+			{
+				break;
+			}else{
+				throw UnacceptableSymbol{ UnacceptableSymbol::TypeT::Reg, RI };
 			}
 		}
+
 		return Tuples;
 	}
 
@@ -982,15 +968,15 @@ namespace Potato::Ebnf
 		if (ELe.Datas.empty())
 		{
 			if(ELe.FirstTokenIndex < InputSymbol.size())
-				return { InputSymbol[ELe.FirstTokenIndex].Input.End(), 0};
+				return { InputSymbol[ELe.FirstTokenIndex].StrIndex.End(), 0};
 			else if(!InputSymbol.empty())
-				return { InputSymbol.rbegin()->Input.End(), 0};
+				return { InputSymbol.rbegin()->StrIndex.End(), 0};
 			else
 				return {0, 0};
 		}
 		else {
-			auto Begin = InputSymbol[ELe.Datas.begin()->FirstTokenIndex].Input;
-			auto End = InputSymbol[ELe.Datas.rbegin()->FirstTokenIndex].Input;
+			auto Begin = InputSymbol[ELe.Datas.begin()->FirstTokenIndex].StrIndex;
+			auto End = InputSymbol[ELe.Datas.rbegin()->FirstTokenIndex].StrIndex;
 			return { Begin.Begin(), End.End() - Begin.Begin()};
 		}
 	}
@@ -1087,7 +1073,7 @@ namespace Potato::Ebnf
 					Ele.Value = T.Value;
 					auto& Sym = InputSymbol[T.TokenIndex];
 					Ele.Mask = Sym.Mask;
-					Ele.Index = Sym.Input;
+					Ele.Index = Sym.StrIndex;
 					return F(StepElement{ Ele }, Data);
 				}
 				return {};
@@ -1097,9 +1083,9 @@ namespace Potato::Ebnf
 		{
 			std::size_t Token = 0;
 			if(Symbol.TokenIndex < InputSymbol.size())
-				Token = InputSymbol[Symbol.TokenIndex].Input.Begin();
+				Token = InputSymbol[Symbol.TokenIndex].StrIndex.Begin();
 			else if(!InputSymbol.empty())
-				Token = InputSymbol.rbegin()->Input.End();
+				Token = InputSymbol.rbegin()->StrIndex.End();
 			throw UnacceptableInput{ Token };
 		}
 	}

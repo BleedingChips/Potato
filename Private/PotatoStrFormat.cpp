@@ -17,7 +17,7 @@ namespace Potato::StrFormat
 	{
 		std::vector<PatternElement<UnicodeT>> Elements;
 		auto Wrapper = FormatPatternWrapper();
-		while (true)
+		while (!Str.empty())
 		{
 			auto Re = Reg::ProcessSearch(Wrapper, Str);
 			if (Re.has_value())
@@ -26,8 +26,6 @@ namespace Potato::StrFormat
 					Elements.push_back({ PatternElementType::NormalString, Str.substr(0, Re->MainCapture.Begin())});
 				auto Wrapper = Re->GetCaptureWrapper().GetTopSubCapture().GetCapture();
 				Elements.push_back({ PatternElementType::Parameter, Str.substr(Wrapper.Begin(), Wrapper.Count())});
-				if (Re->IsEndOfFile)
-					break;
 				Str = Str.substr(Re->MainCapture.End());
 			}
 			else {
@@ -82,6 +80,7 @@ namespace Potato::StrFormat
 	std::size_t PatternElement<char32_t>::FlushSize(std::size_t Count, std::span<PatternElement<char32_t> const>& Source) { return FlushSizeImp(Count, Source); }
 	void PatternElement<char32_t>::FlushBuffer(std::span<PatternElement<char32_t> const>& Source, std::span<char32_t>& Output) { return FlushBufferImp(Source, Output); }
 
+	/*
 	std::vector<PatternElement<char16_t>> PatternElement<char16_t>::Create(std::u16string_view Str) { return CreateImp(Str); }
 	std::size_t PatternElement<char16_t>::FlushSize(std::size_t Count, std::span<PatternElement<char16_t> const>& Source) { return FlushSizeImp(Count, Source); }
 	void PatternElement<char16_t>::FlushBuffer(std::span<PatternElement<char16_t> const>& Source, std::span<char16_t>& Output) { return FlushBufferImp(Source, Output); }
@@ -93,6 +92,7 @@ namespace Potato::StrFormat
 	std::vector<PatternElement<wchar_t>> PatternElement<wchar_t>::Create(std::wstring_view Str) { return CreateImp(Str); }
 	std::size_t PatternElement<wchar_t>::FlushSize(std::size_t Count, std::span<PatternElement<wchar_t> const>& Source) { return FlushSizeImp(Count, Source); }
 	void PatternElement<wchar_t>::FlushBuffer(std::span<PatternElement<wchar_t> const>& Source, std::span<wchar_t>& Output) { return FlushBufferImp(Source, Output); }
+	*/
 }
 namespace Potato::StrFormat
 {

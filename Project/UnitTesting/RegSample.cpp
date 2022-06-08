@@ -7,22 +7,35 @@ void TestingReg()
 {
 
 	{
-		std::u32string_view Str = UR"(1)";
+		std::u32string_view Str = UR"(123456abcdef)";
 
-		Table T(UR"(1)");
+		Table T(UR"(123456abcdef)");
 
-		auto R = ProcessMarch(T.AsWrapper(), Str);
+		auto R = ProcessMatch(T.AsWrapper(), Str);
 
 		if (!R.has_value() || Str.substr(R->MainCapture.Begin(), R->MainCapture.Count()) != Str)
 			throw UnpassedUnit{ "TestingReg : Bad Sample 1" };
 	}
 
 	{
+		std::u32string_view Str = UR"(123456abcdef)";
+		std::u32string_view TStr = UR"(123456)";
+
+		Table T(TStr);
+
+		auto R = ProcessFrontMatch(T.AsWrapper(), Str);
+
+		if (!R.has_value() || Str.substr(R->MainCapture.Begin(), R->MainCapture.Count()) != TStr)
+			throw UnpassedUnit{ "TestingReg : Bad Sample 1" };
+	}
+
+
+	{
 		std::u32string_view Str = UR"(2)";
 
 		Table T(UR"([0-9])");
 
-		auto R = ProcessMarch(T.AsWrapper(), Str);
+		auto R = ProcessMatch(T.AsWrapper(), Str);
 
 		if (!R.has_value() || Str.substr(R->MainCapture.Begin(), R->MainCapture.Count()) != Str)
 			throw UnpassedUnit{ "TestingReg : Bad Sample 2" };
@@ -33,7 +46,7 @@ void TestingReg()
 
 		Table T(UR"(1*)");
 
-		auto R = ProcessMarch(T.AsWrapper(), Str);
+		auto R = ProcessMatch(T.AsWrapper(), Str);
 
 		if (!R.has_value() || Str.substr(R->MainCapture.Begin(), R->MainCapture.Count()) != Str)
 			throw UnpassedUnit{ "TestingReg : Bad Sample 3" };
@@ -44,7 +57,7 @@ void TestingReg()
 
 		Table T(UR"(1+)");
 
-		auto R = ProcessMarch(T.AsWrapper(), Str);
+		auto R = ProcessMatch(T.AsWrapper(), Str);
 
 		if (!R.has_value() || Str.substr(R->MainCapture.Begin(), R->MainCapture.Count()) != Str)
 			throw UnpassedUnit{ "TestingReg : Bad Sample 4" };
@@ -57,9 +70,9 @@ void TestingReg()
 
 		Table T(UR"((1*)2*)");
 
-		auto R = ProcessMarch(T.AsWrapper(), Str);
+		auto R = ProcessMatch(T.AsWrapper(), Str);
 
-		if (R.has_value())
+		if (R.has_value() && R->GetCaptureWrapper().HasSubCapture())
 		{
 			auto Capture = R->GetCaptureWrapper().GetTopSubCapture().GetCapture();
 			if(Str.substr(Capture.Begin(), Capture.Count()) != UR"(1111)")
@@ -73,7 +86,7 @@ void TestingReg()
 
 		Table T(UR"(1{1,7})");
 
-		auto R = ProcessMarch(T.AsWrapper(), Str);
+		auto R = ProcessMatch(T.AsWrapper(), Str);
 
 		if (!R.has_value())
 			throw UnpassedUnit{ "TestingReg : Bad Sample 6" };
@@ -105,11 +118,12 @@ void TestingReg()
 
 	{
 		MulityRegexCreator Crerator;
-		Crerator.PushRegex(UR"([1-4]+)", 1);
-		Crerator.PushRegex(UR"([1-9]+)", 2);
-		Crerator.PushRegex(UR"([a-z]+)", 3);
-		Crerator.PushRegex(UR"([A-Z]+)", 4);
-		Crerator.PushRegex(UR"((?:你|好|啊)+)", 5);
+		Crerator.AddRegex(UR"([1-4]+)", {1}, Crerator.GetCountedUniqueID());
+		Crerator.AddRegex(UR"([1-9]+)", { 2 }, Crerator.GetCountedUniqueID());
+		Crerator.AddRegex(UR"([a-z]+)", { 3 }, Crerator.GetCountedUniqueID());
+		Crerator.AddRegex(UR"([A-Z]+)", { 4 }, Crerator.GetCountedUniqueID());
+		Crerator.AddRegex(UR"((?:你|好|啊)+)", { 5 }, Crerator.GetCountedUniqueID());
+
 		auto TBuffer = Crerator.Generate();
 
 		std::vector<std::tuple<std::u32string_view, std::size_t>> List;
@@ -118,7 +132,7 @@ void TestingReg()
 
 		while (!IteStr.empty())
 		{
-			auto R = ProcessFrontMarch(TableWrapper(TBuffer), IteStr);
+			auto R = ProcessGreedyFrontMatch(TableWrapper(TBuffer), IteStr);
 			if (R.has_value())
 			{
 				List.push_back({ IteStr .substr(R->MainCapture.Begin(), R->MainCapture.Count()), R->AcceptData.Mask});
@@ -137,7 +151,6 @@ void TestingReg()
 			throw UnpassedUnit{ "TestingReg : Bad Sample 8" };
 		if (std::get<0>(List[3]) != UR"(你好啊)" || std::get<1>(List[3]) != 5)
 			throw UnpassedUnit{ "TestingReg : Bad Sample 8" };
-
 	}
 
 	std::wcout << LR"(TestingReg Pass !)" << std::endl;

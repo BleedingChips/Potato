@@ -66,7 +66,9 @@ namespace Potato::Reg
 		}
 		std::variant<SeqIntervalT, char32_t>& GetAccept(std::size_t Index) { return StoragedSymbol[Index].Acceptable; }
 		std::size_t GetSize() { return StoragedSymbol.size(); }
+
 	protected:
+
 		void PushSymbolData(T InputSymbol, std::variant<SeqIntervalT, char32_t> Symbol, std::size_t Index) { StoragedSymbol.emplace_back(*InputSymbol, std::move(Symbol), Index); }
 		std::vector<Storage> StoragedSymbol;
 	};
@@ -336,7 +338,7 @@ namespace Potato::Reg
 		AddEdge(InsideSet.Out, std::move(NewEdge));
 	}
 
-	void UnfaTable::AddCounter(NodeSet OutsideSet, NodeSet InsideSet, CounterEdgeData EndCounter, bool Greedy)
+	void UnfaTable::AddCounter(NodeSet OutsideSet, NodeSet InsideSet, Counter EndCounter, bool Greedy)
 	{
 		Edge Begin;
 		Begin.ShiftNode = InsideSet.Out;
@@ -345,7 +347,7 @@ namespace Potato::Reg
 		Edge Continue;
 		Continue.ShiftNode = InsideSet.In;
 		Continue.Type = EdgeType::CounterContinue;
-		Continue.CounterDatas = CounterEdgeData{ 0, EndCounter.Max - 1 };
+		Continue.CounterDatas = Counter{ 0, EndCounter.Max - 1 };
 
 		Edge End;
 		End.ShiftNode = OutsideSet.Out;
@@ -368,6 +370,7 @@ namespace Potato::Reg
 	{
 		assert(FormNodeIndex < Nodes.size());
 		auto& Cur = Nodes[FormNodeIndex];
+		Edge.UniqueID = TemporaryUniqueID;
 		Cur.Edges.push_back(std::move(Edge));
 	}
 
@@ -375,13 +378,6 @@ namespace Potato::Reg
 	{
 		if (!OtherTable.Nodes.empty())
 		{
-			for (auto& Ite : Nodes)
-			{
-				for (auto& Ite2 : Ite.Edges)
-				{
-					Ite2.Block += 1;
-				}
-			}
 			Nodes.reserve(Nodes.size() + OtherTable.Nodes.size());
 			std::size_t NodeOffset = Nodes.size();
 			for (auto& Ite : OtherTable.Nodes)
@@ -643,7 +639,10 @@ namespace Potato::Reg
 			auto T2 = Output.NewNode();
 			auto Last = NT[0].Consume<NodeSet>();
 			NodeSet Set{ T1, T2 };
-			Output.AddCounter(Set, Last, { Count, Count + 1}, NT.Datas.size() == 4);;
+			Counter Tem;
+			Misc::SerilizerHelper::TryCrossTypeSet(Tem.Min, Count, Reg::Exception::RegexOutOfRange{});
+			Misc::SerilizerHelper::TryCrossTypeSet(Tem.Max, Count + 1, Reg::Exception::RegexOutOfRange{});
+			Output.AddCounter(Set, Last, Tem, NT.Datas.size() == 4);;
 			return Set;
 		}
 		case 21:
@@ -653,7 +652,10 @@ namespace Potato::Reg
 			auto T2 = Output.NewNode();
 			auto Last = NT[0].Consume<NodeSet>();
 			NodeSet Set{ T1, T2 };
-			Output.AddCounter(Set, Last, { 0, Count + 1 } , NT.Datas.size() == 5);
+			Counter Tem;
+			Misc::SerilizerHelper::TryCrossTypeSet(Tem.Min, 0, Reg::Exception::RegexOutOfRange{});
+			Misc::SerilizerHelper::TryCrossTypeSet(Tem.Max, Count + 1, Reg::Exception::RegexOutOfRange{});
+			Output.AddCounter(Set, Last, Tem, NT.Datas.size() == 5);
 			return Set;
 		}
 		case 22:
@@ -663,7 +665,10 @@ namespace Potato::Reg
 			auto T2 = Output.NewNode();
 			auto Last = NT[0].Consume<NodeSet>();
 			NodeSet Set{ T1, T2 };
-			Output.AddCounter(Set, Last, { Count, std::numeric_limits<std::size_t>::max() }, NT.Datas.size() == 5);
+			Counter Tem;
+			Misc::SerilizerHelper::TryCrossTypeSet(Tem.Min, Count, Reg::Exception::RegexOutOfRange{});
+			Misc::SerilizerHelper::TryCrossTypeSet(Tem.Max, std::numeric_limits<SerilizeT>::max(), Reg::Exception::RegexOutOfRange{});
+			Output.AddCounter(Set, Last, Tem, NT.Datas.size() == 5);
 			return Set;
 		}
 		case 23:
@@ -678,8 +683,10 @@ namespace Potato::Reg
 			auto T2 = Output.NewNode();
 			auto Last = NT[0].Consume<NodeSet>();
 			NodeSet Set{ T1, T2 };
-			
-			Output.AddCounter(Set, Last, { Count, Count2 + 1 }, NT.Datas.size() == 6);
+			Counter Tem;
+			Misc::SerilizerHelper::TryCrossTypeSet(Tem.Min, Count, Reg::Exception::RegexOutOfRange{});
+			Misc::SerilizerHelper::TryCrossTypeSet(Tem.Max, Count2 + 1, Reg::Exception::RegexOutOfRange{});
+			Output.AddCounter(Set, Last, Tem, NT.Datas.size() == 6);
 			return Set;
 		}
 		default :
@@ -707,11 +714,15 @@ namespace Potato::Reg
 		}
 	}
 
-	UnfaTable::NodeSet CreateImp(LexerTranslater& Translater, UnfaTable& Output)
+	void CreateUnfaTable(LexerTranslater& Translater, UnfaTable& Output, Accept AcceptData)
 	{
+		auto N1 = Output.NewNode();
+		auto N2 = Output.NewNode();
+		auto N3 = Output.NewNode();
+		Output.AddComsumeEdge(N2, N3, { {MaxChar(), MaxChar() + 1} });
 		auto Wrapper = RexDLrWrapper();
 		auto Steps = DLr::ProcessSymbol(Wrapper, 0, [&](std::size_t Input){ return Translater.GetSymbol(Input); });
-		return DLr::ProcessStepWithOutputType<UnfaTable::NodeSet>(std::span(Steps), 
+		UnfaTable::NodeSet Set = DLr::ProcessStepWithOutputType<UnfaTable::NodeSet>(std::span(Steps),
 			[&](DLr::StepElement Elements)-> std::any {
 				if(Elements.IsTerminal())
 					return RegTerminalFunction(Elements.AsTerminal(), Translater);
@@ -719,89 +730,39 @@ namespace Potato::Reg
 					return RegNoTerminalFunction(Elements.AsNoTerminal(), Output);
 			}
 		);
+		Output.AddComsumeEdge(N1, Set.In, {});
+		Output.AddAcceptableEdge(Set.Out, N2, AcceptData);
 	}
 
-	UnfaTable::UnfaTable(std::size_t Start, std::size_t End, CodePoint(*F1)(std::size_t Index, void* Data), void* Data, Accept AcceptData)
+	UnfaTable UnfaTable::Create(std::u32string_view Str, bool IsRaw, Accept AcceptData, SerilizeT UniqueID)
 	{
-		auto N1 = NewNode();
-		auto N2 = NewNode();
-		auto N3 = NewNode();
-		AddComsumeEdge(N2, N3, { {MaxChar(), MaxChar() + 1} });
-		RexLexerTranslater Translater;
+		UnfaTable Result(UniqueID);
 		try {
-			while (true)
+			if(IsRaw)
 			{
-				auto Input = Start < End ? F1(Start, Data) : CodePoint::EndOfFile();
-				if (!Input.IsEndOfFile())
-				{
-					Translater.Insert(Input.UnicodeCodePoint, Start);
-					Start += Input.NextUnicodeCodePointOffset;
-				}
-				else {
-					Translater.EndOfFile();
-					break;
-				}
+				RawRexLexerTranslater Translater;
+				for (std::size_t Index = 0; Index < Str.size(); ++Index)
+					Translater.Insert(Str[Index], Index);
+				Translater.EndOfFile();
+				CreateUnfaTable(Translater, Result, AcceptData);
 			}
-			auto Last = CreateImp(Translater, *this);
-			AddComsumeEdge(N1, Last.In, {});
-			AddAcceptableEdge(Last.Out, N2, AcceptData);
+			else {
+				RexLexerTranslater Translater;
+				for (std::size_t Index = 0; Index < Str.size(); ++Index)
+					Translater.Insert(Str[Index], Index);
+				Translater.EndOfFile();
+				CreateUnfaTable(Translater, Result, AcceptData);
+			}
+			return Result;
 		}
 		catch (DLr::Exception::UnaccableSymbol const& Symbol)
 		{
-			throw Exception::UnaccaptableRegex{Symbol.TokenIndex, AcceptData};
+			throw Exception::UnaccaptableRegex{ Symbol.TokenIndex, AcceptData };
 		}
 		catch (...)
 		{
 			throw;
 		}
-	}
-
-	UnfaTable::UnfaTable(RawString, std::size_t Start, std::size_t End, CodePoint(*F1)(std::size_t Index, void* Data), void* Data, Accept AcceptData)
-	{
-		auto N1 = NewNode();
-		auto N2 = NewNode();
-		auto N3 = NewNode();
-		AddComsumeEdge(N2, N3, { {MaxChar(), MaxChar() + 1} });
-		RawRexLexerTranslater Translater;
-		try {
-			while (true)
-			{
-				auto Input = Start < End ? F1(Start, Data) : CodePoint::EndOfFile();
-				if (!Input.IsEndOfFile())
-				{
-					Translater.Insert(Input.UnicodeCodePoint, Start);
-					Start += Input.NextUnicodeCodePointOffset;
-				}
-				else {
-					Translater.EndOfFile();
-					break;
-				}
-			}
-			auto Last = CreateImp(Translater, *this);
-			AddComsumeEdge(N1, Last.In, {});
-			AddAcceptableEdge(Last.Out, N2, AcceptData);
-		}
-		catch (Exception::UnaccaptableRegex const& Reg)
-		{
-			throw Exception::UnaccaptableRegex{ Reg.TokenIndex, AcceptData };
-		}
-		catch (DLr::Exception::UnaccableSymbol const& Symbol)
-		{
-			Exception::UnaccaptableRegex NewReg(Symbol.TokenIndex, AcceptData);
-		}
-		catch (...)
-		{
-			throw;
-		}
-	}
-
-	UnserilizedTable::SpecialProperty TranslateSpecialEdge(UnfaTable::Edge const& Edge)
-	{
-		UnserilizedTable::SpecialProperty New;
-		New.Type = Edge.Type;
-		New.AcceptData = Edge.AcceptData;
-		New.CounterData = Edge.CounterDatas;
-		return New;
 	}
 
 	struct ExpandResult
@@ -810,19 +771,36 @@ namespace Potato::Reg
 		std::vector<UnserilizedTable::Edge> Edges;
 	};
 
+	struct SearchCore
+	{
+		std::size_t ToNode;
+		std::vector<UnserilizedTable::EdgeProperty> Propertys;
+		struct UniqueID
+		{
+			bool HasUniqueID;
+			SerilizeT UniqueID;
+		};
+		std::optional<UniqueID> UniqueID;
+		void AddUniqueID(SerilizeT ID)
+		{
+			if (!UniqueID.has_value())
+			{
+				UniqueID = {true, ID };
+			}
+			else {
+				if (UniqueID->HasUniqueID && UniqueID->UniqueID != ID)
+					UniqueID->HasUniqueID = false;
+			}
+		}
+	};
+
 	ExpandResult SearchEpsilonNode(UnfaTable const& Input, std::size_t SearchNode)
 	{
 		ExpandResult Result;
 
-		struct SearchCore
-		{
-			std::size_t ToNode;
-			std::vector<UnserilizedTable::SpecialProperty> Propertys;
-			std::optional<std::size_t> Block;
-		};
-
 		std::vector<SearchCore> SearchStack;
-		SearchStack.push_back({ SearchNode, {}, {} });
+		
+		SearchStack.push_back({ SearchNode, {}, {}});
 		Result.ContainNodes.push_back(SearchNode);
 		while (!SearchStack.empty())
 		{
@@ -830,81 +808,65 @@ namespace Potato::Reg
 			SearchStack.pop_back();
 			assert(Input.Nodes.size() > Cur.ToNode);
 			auto& Node = Input.Nodes[Cur.ToNode];
-			for (auto EdgeIte = Node.Edges.rbegin(); EdgeIte != Node.Edges.rend();)
+			for (auto EdgeIte = Node.Edges.rbegin(); EdgeIte != Node.Edges.rend(); ++EdgeIte)
 			{
 				auto& Ite = *EdgeIte;
-				++EdgeIte;
+
+				bool IsLast = ( EdgeIte  + 1 == Node.Edges.rend());
 
 				bool CirculDependenc = std::find(Result.ContainNodes.begin(), Result.ContainNodes.end(), Ite.ShiftNode) != Result.ContainNodes.end();
 				
 				Cur.ToNode = Ite.ShiftNode;
-				if(!Cur.Block.has_value())
-					Cur.Block = Ite.Block;
-				else if (*Cur.Block != Ite.Block)
-					Cur.Block = 0;
-				
-				if (EdgeIte == Node.Edges.rend())
+
+				if (CirculDependenc && Ite.Type != UnfaTable::EdgeType::Consume && !Ite.ConsumeChars.empty()) [[unlikely]]
 				{
-					switch (Ite.Type)
+					throw Exception::CircleShifting{};
+				}
+
+				switch (Ite.Type)
+				{
+				case UnfaTable::EdgeType::Consume:
+					if (Ite.ConsumeChars.empty())
 					{
-					case UnfaTable::EdgeType::Consume:
-						if (Ite.ConsumeChars.empty())
-						{
-							if(CirculDependenc) [[unlikely]]
-								throw Exception::CircleShifting{};
-							Result.ContainNodes.push_back(Ite.ShiftNode);
-							SearchStack.push_back(std::move(Cur));
-						}
-						else {
-							UnserilizedTable::Edge Edge;
-							Edge.Propertys.Propertys = std::move(Cur.Propertys);
-							Edge.ToNode = Ite.ShiftNode;
-							Edge.Propertys.ConsumeChars = std::move(Ite.ConsumeChars);
-							Edge.Block = *Cur.Block;
-							Result.Edges.push_back(std::move(Edge));
-						}
-						break;
-					default:
-						if (CirculDependenc) [[unlikely]]
-							throw Exception::CircleShifting{};
 						Result.ContainNodes.push_back(Ite.ShiftNode);
-						Cur.Propertys.push_back(TranslateSpecialEdge(Ite));
-						SearchStack.push_back(std::move(Cur));
-						break;
+						if(IsLast)
+							SearchStack.push_back(std::move(Cur));
+						else
+							SearchStack.push_back(Cur);
+					}
+					else {
+						Cur.AddUniqueID(Ite.UniqueID);
+						UnserilizedTable::Edge Edge;
+						Edge.ToNode = Ite.ShiftNode;
+						if (IsLast)
+							Edge.ConsumeChars = std::move(Ite.ConsumeChars);
+						else
+							Edge.ConsumeChars = Ite.ConsumeChars;
+						assert(Cur.UniqueID.has_value()); 
+						if (Cur.UniqueID->HasUniqueID)
+							Edge.UniqueID = Cur.UniqueID->UniqueID;
+						if (IsLast)
+							Edge.Propertys = std::move(Cur.Propertys);
+						else
+							Edge.Propertys = Cur.Propertys;
+						Result.Edges.push_back(std::move(Edge));
 					}
 					break;
-				}
-				else {
-					switch (Ite.Type)
+				default:
+					Result.ContainNodes.push_back(Ite.ShiftNode);
+					if (IsLast)
 					{
-					case UnfaTable::EdgeType::Consume:
-						if (Ite.ConsumeChars.empty())
-						{
-							if (CirculDependenc) [[unlikely]]
-								throw Exception::CircleShifting{};
-							Result.ContainNodes.push_back(Ite.ShiftNode);
-							SearchStack.push_back(Cur);
-						}
-						else {
-							UnserilizedTable::Edge Edge;
-							Edge.Propertys.Propertys = Cur.Propertys;
-							Edge.ToNode = Ite.ShiftNode;
-							Edge.Propertys.ConsumeChars = Ite.ConsumeChars;
-							Edge.Block = *Cur.Block;
-							Result.Edges.push_back(std::move(Edge));
-						}
-						break;
-					default:
-					{
-						if (CirculDependenc) [[unlikely]]
-							throw Exception::CircleShifting{};
-						Result.ContainNodes.push_back(Ite.ShiftNode);
-						auto NewCore = Cur;
-						NewCore.Propertys.push_back(TranslateSpecialEdge(Ite));
-						SearchStack.push_back(std::move(NewCore));
-						break;
+						Cur.AddUniqueID(Ite.UniqueID);
+						Cur.Propertys.push_back({ Ite.Type, Ite.AcceptData, Ite.CounterDatas });
+						SearchStack.push_back(std::move(Cur));
 					}
+					else {
+						auto NewCur = Cur;
+						NewCur.AddUniqueID(Ite.UniqueID);
+						NewCur.Propertys.push_back({ Ite.Type, Ite.AcceptData, Ite.CounterDatas });
+						SearchStack.push_back(std::move(NewCur));
 					}
+					break;
 				}
 			}
 		}
@@ -956,6 +918,43 @@ namespace Potato::Reg
 			Nodes.push_back({std::move(Ite.Edges)});
 		}
 
+		{
+			// For Acceptable Node
+			std::optional<std::size_t> RecordedIndex;
+			for (std::size_t Index = 0; Index < Nodes.size(); )
+			{
+				auto& Ref = Nodes[Index];
+				if (Ref.Edges.empty())
+				{
+					if (RecordedIndex.has_value())
+					{
+						for (std::size_t Index2 = 0; Index2 < Nodes.size(); ++Index2)
+						{
+							auto& Temp = Nodes[Index2];
+							for (auto& Ite : Temp.Edges)
+							{
+								if (Ite.ToNode == Index)
+								{
+									Ite.ToNode = *RecordedIndex;
+								}
+								else if (Ite.ToNode > Index)
+								{
+									Ite.ToNode -= 1;
+								}
+							}
+						}
+						Nodes.erase(Nodes.begin() + Index);
+						continue;
+					}
+					else {
+						RecordedIndex = Index;
+					}
+				}
+				++Index;
+			}
+		}
+
+		/*
 		{
 			bool ContinueCheck = true;
 			while (ContinueCheck)
@@ -1021,6 +1020,7 @@ namespace Potato::Reg
 				}
 			}
 		}
+		*/
 	}
 
 	std::size_t TranslateIntervalT(std::span<IntervalT const> Source, std::vector<TableWrapper::ZipChar>& Output)
@@ -1061,56 +1061,26 @@ namespace Potato::Reg
 		return false;
 	}
 
-	TableWrapper::ZipAcceptableData Translate(Accept Data)
+	auto TableWrapper::Create(UnserilizedTable const& Table) ->std::vector<SerilizeT>
 	{
-		TableWrapper::ZipAcceptableData Result;
-		Misc::SerilizerHelper::TryCrossTypeSet(Result.Index, Data.Index, Exception::RegexOutOfRange{});
-		Misc::SerilizerHelper::TryCrossTypeSet(Result.Mask, Data.Mask, Exception::RegexOutOfRange{});
-		return Result;
-	}
-
-	TableWrapper::ZipCounterData Translate(UnfaTable::CounterEdgeData Data)
-	{
-		TableWrapper::ZipCounterData Result;
-		if (Data.Min > std::numeric_limits<decltype(Result.Min)>::max() - 1)
-		{
-			Result.Min = std::numeric_limits<decltype(Result.Min)>::max() - 1;
-		}
-		else {
-			Result.Min = static_cast<decltype(Result.Min)>(Data.Min);
-		}
-		if (Data.Max > std::numeric_limits<decltype(Result.Max)>::max())
-		{
-			Result.Max = std::numeric_limits<decltype(Result.Max)>::max();
-		}
-		else {
-			Result.Max = static_cast<decltype(Result.Max)>(Data.Max);
-		}
-		return Result;
-	}
-
-	auto TableWrapper::Create(UnserilizedTable const& Table) ->std::vector<StorageT>
-	{
-		std::vector<StorageT> Result;
+		std::vector<SerilizeT> Result;
 		Result.resize(2);
 
-		Result[0] = static_cast<decltype(Result)::value_type>(Table.Nodes.size());
-		if(Result[0] != Table.Nodes.size())[[unlikely]]
-			throw Exception::RegexOutOfRange{};
+		Misc::SerilizerHelper::TryCrossTypeSet(Result[0], Table.Nodes.size(), Exception::RegexOutOfRange{});
 
 		struct Record
 		{
 			std::size_t EdgeOffset;
 			std::size_t MappingNode;
 		};
+
 		std::vector<Record> Records;
 
 		std::vector<std::size_t> NodeOffset;
 
 		std::vector<ZipChar> Chars;
 		std::vector<ZipProperty> Propertys;
-		std::vector<ZipAcceptableData> AccDatas;
-		std::vector<ZipCounterData> CounterDatas;
+		std::vector<SerilizeT> CounterDatas;
 
 		for (auto& Ite : Table.Nodes)
 		{
@@ -1118,62 +1088,96 @@ namespace Potato::Reg
 			Misc::SerilizerHelper::TryCrossTypeSet(NewNode.EdgeCount, Ite.Edges.size(), Exception::RegexOutOfRange{});
 			auto NodeResult = Misc::SerilizerHelper::WriteObject(Result, NewNode);
 			NodeOffset.push_back(NodeResult.StartOffset);
-			for (auto Ite22 = Ite.Edges.rbegin(); Ite22 != Ite.Edges.rend(); ++Ite22)
+			for (auto EdgeIte = Ite.Edges.rbegin(); EdgeIte != Ite.Edges.rend(); ++EdgeIte)
 			{
-				auto& Ite2 = *Ite22;
-				Chars.clear();
+				auto& Ite2 = *EdgeIte;
 				Propertys.clear();
-				AccDatas.clear();
 				CounterDatas.clear();
-				TranslateIntervalT(std::span(Ite2.Propertys.ConsumeChars), Chars);
-				for (auto& Ite3 : Ite2.Propertys.Propertys)
+				std::optional<Accept> AcceptData;
+				std::size_t CounterPropertyCount = 0;
+				for (auto& Ite3 : Ite2.Propertys)
 				{
 					switch (Ite3.Type)
 					{
-					case UnfaTable::EdgeType::Acceptable:
-						Propertys.push_back(ZipProperty::Acceptable);
-						AccDatas.push_back(Translate(Ite3.AcceptData));
+					case UnfaTable::EdgeType::CounterBegin:
+						Propertys.push_back(ZipProperty::CounterBegin);
+						++CounterPropertyCount;
 						break;
+					case UnfaTable::EdgeType::CounterContinue:
+						Propertys.push_back(ZipProperty::CounterContinue);
+						CounterDatas.push_back(Ite3.CounterData.Max);
+						++CounterPropertyCount;
+						break;
+					case UnfaTable::EdgeType::CounterEnd:
+						Propertys.push_back(ZipProperty::CounterEnd);
+						CounterDatas.push_back(Ite3.CounterData.Min);
+						CounterDatas.push_back(Ite3.CounterData.Max);
+						++CounterPropertyCount;
+						break;
+					}
+				}
+
+				for (auto& Ite3 : Ite2.Propertys)
+				{
+					switch (Ite3.Type)
+					{
 					case UnfaTable::EdgeType::CaptureBegin:
 						Propertys.push_back(ZipProperty::CaptureBegin);
 						break;
 					case UnfaTable::EdgeType::CaptureEnd:
 						Propertys.push_back(ZipProperty::CaptureEnd);
 						break;
-					case UnfaTable::EdgeType::CounterBegin:
-						Propertys.push_back(ZipProperty::CounterBegin);
-						break;
-					case UnfaTable::EdgeType::CounterContinue:
-						Propertys.push_back(ZipProperty::CounterContinue);
-						CounterDatas.push_back(Translate(Ite3.CounterData));
-						break;
-					case UnfaTable::EdgeType::CounterEnd:
-						Propertys.push_back(ZipProperty::CounterEnd);
-						CounterDatas.push_back(Translate(Ite3.CounterData));
-						break;
-					default:
-						assert(false);
+					case UnfaTable::EdgeType::Acceptable:
+						AcceptData = Ite3.AcceptData;
 						break;
 					}
 				}
-				ZipEdge Edge;
-				Misc::SerilizerHelper::TryCrossTypeSet(Edge.AcceptableCharCount, Chars.size(), Exception::RegexOutOfRange{});
-				Misc::SerilizerHelper::TryCrossTypeSet(Edge.SpecialPropertyCount, Propertys.size(), Exception::RegexOutOfRange{});
-				Misc::SerilizerHelper::TryCrossTypeSet(Edge.CounterDataCount, CounterDatas.size(), Exception::RegexOutOfRange{});
-				assert(AccDatas.size() <= 1);
-				if(!AccDatas.empty())
-					Edge.AcceptableDataCount = 1;
-				else
-					Edge.AcceptableDataCount = 0;
-				Edge.Block = Ite2.Block;
-				if (Edge.Block != Ite2.Block) [[unlikely]]
+
+				ZipEdge Edges;
+				if (AcceptData.has_value())
+					Misc::SerilizerHelper::TryCrossTypeSet(Edges.AcceptableCharCount, 0, Exception::RegexOutOfRange{});
+				else {
+					Chars.clear();
+					TranslateIntervalT(std::span(Ite2.ConsumeChars), Chars);
+					Misc::SerilizerHelper::TryCrossTypeSet(Edges.AcceptableCharCount, Chars.size(), Exception::RegexOutOfRange{});
+				}
+				
+				Edges.HasCounter = (CounterPropertyCount != 0);
+
+				Edges.PropertyCount = static_cast<decltype(Edges.PropertyCount)>(Propertys.size());
+
+				if(Edges.PropertyCount != Propertys.size())
 					throw Exception::RegexOutOfRange{};
-				auto EdgeResult = Misc::SerilizerHelper::WriteObject(Result, Edge);
-				Records.push_back({ EdgeResult .StartOffset, Ite2 .ToNode});
-				Misc::SerilizerHelper::WriteObjectArray(Result, std::span(Chars));
+
+				Misc::SerilizerHelper::TryCrossTypeSet(Edges.CounterDataCount, CounterDatas.size(), Exception::RegexOutOfRange{});
+				if (Ite2.UniqueID.has_value())
+				{
+					Edges.HasUniqueID = true;
+					Edges.UniqueID = *Ite2.UniqueID;
+				}
+				else {
+					Edges.HasUniqueID = false;
+					Edges.UniqueID = 0;
+				}
+
+				auto EdgeResult = Misc::SerilizerHelper::WriteObject(Result, Edges);
+				Records.push_back({ EdgeResult.StartOffset, Ite2.ToNode });
+				if (AcceptData.has_value())
+				{
+					Misc::SerilizerHelper::WriteObject(Result, *AcceptData);
+				}
+				else {
+					Misc::SerilizerHelper::WriteObjectArray(Result, std::span(Chars));
+				}
 				Misc::SerilizerHelper::WriteObjectArray(Result, std::span(Propertys));
 				Misc::SerilizerHelper::WriteObjectArray(Result, std::span(CounterDatas));
-				Misc::SerilizerHelper::WriteObjectArray(Result, std::span(AccDatas));
+				auto EdgeReadResult = Misc::SerilizerHelper::ReadObject<ZipEdge>(std::span(Result).subspan(EdgeResult.StartOffset));
+
+				EdgeReadResult->EdgeTotalLength = Result.size() - EdgeResult.StartOffset;
+				if (EdgeReadResult->EdgeTotalLength != Result.size() - EdgeResult.StartOffset)
+				{
+					throw Exception::RegexOutOfRange{};
+				}
 			}
 		}
 		Misc::SerilizerHelper::TryCrossTypeSet(Result[1], NodeOffset[0], Exception::RegexOutOfRange{});
@@ -1186,10 +1190,20 @@ namespace Potato::Reg
 
 #if _DEBUG
 		{
+
+			struct DebugEdge
+			{
+				std::size_t ToNode;
+				std::span<TableWrapper::ZipProperty const> Propertys;
+				std::span<SerilizeT const> CounterDatas;
+				std::span<ZipChar const> ConsumeChars;
+				std::optional<Accept> AcceptData;
+			};
+
 			struct DebugNode
 			{
-				StorageT NodeOffset;
-				std::vector<EdgeViewer> Edges;
+				SerilizeT NodeOffset;
+				std::vector<DebugEdge> Edges;
 			};
 
 			std::vector<DebugNode> DebugsNode;
@@ -1198,17 +1212,35 @@ namespace Potato::Reg
 
 			for (auto& Ite : NodeOffset)
 			{
-				StorageT Offset = static_cast<StorageT>(Ite);
+				SerilizeT Offset = static_cast<SerilizeT>(Ite);
 				auto Node = Wrapper[Offset];
 				DebugNode DNode;
 				DNode.NodeOffset = Node.NodeOffset;
 				DNode.Edges.reserve(Node.EdgeCount);
-				auto IteSpan = Node.AppendData;
+				auto EdgeSpan = Node.AppendData;
 				for (std::size_t Index = 0; Index < Node.EdgeCount; ++Index)
 				{
-					auto Viewer = ReadEdgeViewer(IteSpan);
-					IteSpan = Viewer.AppendDatas;
-					DNode.Edges.push_back(Viewer);
+					DebugEdge DebugEdges;
+					auto IteSpan = EdgeSpan;
+					auto EdgesResult = Misc::SerilizerHelper::ReadObject<ZipEdge const>(IteSpan);
+					EdgeSpan = EdgeSpan.subspan(EdgesResult->EdgeTotalLength);
+					DebugEdges.ToNode = EdgesResult->ToNode;
+					if (EdgesResult->AcceptableCharCount != 0)
+					{
+						auto ConsumeResult = Misc::SerilizerHelper::ReadObjectArray<ZipChar const>(EdgesResult.LastSpan, EdgesResult->AcceptableCharCount);
+						DebugEdges.ConsumeChars = *ConsumeResult;
+						IteSpan = ConsumeResult.LastSpan;
+					}
+					else {
+						auto AcceptResult = Misc::SerilizerHelper::ReadObject<Accept const>(EdgesResult.LastSpan);
+						DebugEdges.AcceptData = *AcceptResult;
+						IteSpan = AcceptResult.LastSpan;
+					}
+					auto PropertyResult = Misc::SerilizerHelper::ReadObjectArray<ZipProperty const>(IteSpan, EdgesResult->PropertyCount);
+					DebugEdges.Propertys = *PropertyResult;
+					auto CounterResult = Misc::SerilizerHelper::ReadObjectArray<SerilizeT const>(PropertyResult.LastSpan, EdgesResult->CounterDataCount);
+					DebugEdges.CounterDatas = *CounterResult;
+					DNode.Edges.push_back(DebugEdges);
 				}
 				std::reverse(DNode.Edges.begin(), DNode.Edges.end());
 				DebugsNode.push_back(std::move(DNode));
@@ -1221,32 +1253,7 @@ namespace Potato::Reg
 		return Result;
 	}
 
-	std::vector<TableWrapper::StorageT> TableWrapper::Create(std::u32string_view Str, std::size_t Index, std::size_t Mask)
-	{
-		Reg::UnfaTable Tab1(StringViewWrapper<char32_t>{}, & Str, Accept{ Index, Mask });
-		UnserilizedTable Tab2(Tab1);
-		return Create(Tab2);
-	}
-	std::vector<TableWrapper::StorageT> TableWrapper::Create(std::u16string_view Str, std::size_t Index, std::size_t Mask)
-	{
-		Reg::UnfaTable Tab1(StringViewWrapper<char16_t>{}, & Str, Accept{ Index, Mask });
-		UnserilizedTable Tab2(Tab1);
-		return Create(Tab2);
-	}
-	std::vector<TableWrapper::StorageT> TableWrapper::Create(std::u8string_view Str, std::size_t Index, std::size_t Mask)
-	{
-		Reg::UnfaTable Tab1(StringViewWrapper<char8_t>{}, & Str, Accept{ Index, Mask });
-		UnserilizedTable Tab2(Tab1);
-		return Create(Tab2);
-	}
-	std::vector<TableWrapper::StorageT> TableWrapper::Create(std::wstring_view Str, std::size_t Index, std::size_t Mask)
-	{
-		Reg::UnfaTable Tab1(StringViewWrapper<wchar_t>{}, & Str, Accept{ Index, Mask });
-		UnserilizedTable Tab2(Tab1);
-		return Create(Tab2);
-	}
-
-	auto TableWrapper::operator[](StorageT Offset) const ->NodeViewer
+	auto TableWrapper::operator[](SerilizeT Offset) const ->NodeViewer
 	{
 		auto Result = Misc::SerilizerHelper::ReadObject<ZipNode const>(Wrapper.subspan(Offset));
 		NodeViewer Viewer;
@@ -1256,291 +1263,278 @@ namespace Potato::Reg
 		return Viewer;
 	}
 
-	
-	auto TableWrapper::ReadEdgeViewer(std::span<StorageT const> Span) ->EdgeViewer
+	std::vector<SerilizeT> TableWrapper::Create(std::u32string_view Str, Accept Mask, SerilizeT UniqueID, bool IsRaw)
 	{
-		auto Result = Misc::SerilizerHelper::ReadObject<ZipEdge const>(Span);
-		auto AcceChar = Misc::SerilizerHelper::ReadObjectArray<ZipChar const>(Result.LastSpan, Result->AcceptableCharCount);
-		auto Propertys = Misc::SerilizerHelper::ReadObjectArray<ZipProperty const>(AcceChar.LastSpan, Result->SpecialPropertyCount);
-		auto CounterData = Misc::SerilizerHelper::ReadObjectArray<ZipCounterData const>(Propertys.LastSpan, Result->CounterDataCount);
-		auto AcceptableData = Misc::SerilizerHelper::ReadObjectArray<ZipAcceptableData const>(CounterData.LastSpan, Result->AcceptableDataCount);
-		EdgeViewer Viewer;
-		Viewer.ToNode = Result->ToNode;
-		Viewer.ConsumeChars = *AcceChar;
-		Viewer.Property = *Propertys;
-		Viewer.CounterData = *CounterData;
-		Viewer.AcceptData = *AcceptableData;
-		Viewer.AppendDatas = AcceptableData.LastSpan;
-		Viewer.Block = Result->Block;
-		return Viewer;
+		auto Tab1 = Reg::UnfaTable::Create(Str, IsRaw, Mask, UniqueID);
+		return Create(Tab1);
 	}
 
-	std::size_t MulityRegexCreator::Push(UnfaTable const& UT)
+	CoreProcessor::CoreProcessor(TableWrapper Wrapper, bool KeepAcceptableViewer, std::size_t InputStartupTokenIndex)
+		: Wrapper(Wrapper), CurrentState(Wrapper.StartupNodeOffset()), KeepAcceptableViewer(KeepAcceptableViewer) , RequireTokenIndex(InputStartupTokenIndex),
+		StartupTokenIndex(InputStartupTokenIndex)
 	{
-		if (Temporary.has_value())
-		{
-			Temporary->Link(UT, true);
-		}
-		else {
-			Temporary = std::move(UT);
-		}
-		++Index;
-		return Index;
+
 	}
 
-	std::size_t MulityRegexCreator::PushRegex(std::u32string_view Reg, Accept AccData)
+	std::optional<CoreProcessor::ConsumeResult> CoreProcessor::ConsumeTokenInput(char32_t InputSymbols, std::size_t NextTokenIndex)
 	{
-		return PushRegex(0, std::numeric_limits<std::size_t>::max(), Reg::StringViewWrapper<char32_t>::Function, &Reg, AccData);
-	}
 
-	std::size_t MulityRegexCreator::PushRawString(std::u32string_view Reg, Accept AccData)
-	{
-		return PushRawString(0, std::numeric_limits<std::size_t>::max(), Reg::StringViewWrapper<char32_t>::Function, &Reg, AccData);
-	}
-
-	std::vector<TableWrapper::StorageT> MulityRegexCreator::Generate() const
-	{
-		assert(Temporary.has_value());
-		return TableWrapper::Create(*Temporary);
-	}
-
-	auto CoreProcessor::ConsumeCharInput(char32_t InputSymbols, std::size_t TokenIndex, std::size_t NextTokenIndex, bool KeepAcceptableViewer)
-		->std::optional<ConsumeResult>
-	{
 		auto Node = Wrapper[CurrentState];
-		Misc::IndexSpan<> CounterIndex{ AmbiguousCounter.size(), ConuterRecord.size() };
-		std::optional<AmbiguousPoint> LastAP;
+		auto SpanData = Node.AppendData;
 
-		Node.ReadEdge([&](TableWrapper::EdgeViewer const& Viewer)->bool{
+		for (std::size_t Index = 0; Index < Node.EdgeCount; ++Index)
+		{
+			auto ZipEdge = Misc::SerilizerHelper::ReadObject<TableWrapper::ZipEdge const>(SpanData);
+			SpanData = SpanData.subspan(ZipEdge->EdgeTotalLength);
 
-			bool ShouldKeepViewer = /*std::find(Walkway.begin(), Walkway.end(), Viewer.Block) == Walkway.end()
-				&&*/ (Acceptable(InputSymbols, Viewer.ConsumeChars) || (KeepAcceptableViewer && !Viewer.AcceptData.empty()));
+			AmbiguousPoint Point;
+			std::optional<Accept> AcceptResult;
+			std::span<SerilizeT const> SpanIte;
 
-			if (ShouldKeepViewer && !Viewer.CounterData.empty())
+			if (ZipEdge->AcceptableCharCount == 0)
 			{
-				std::size_t LastCounterCount = ConuterRecord.size();
-				std::size_t CounterIndex = 0;
+				if (KeepAcceptableViewer || InputSymbols == MaxChar())
+				{
+					auto Acce = Misc::SerilizerHelper::ReadObject<Accept const>(ZipEdge.LastSpan);
+					Point.AcceptData = *Acce;
+					SpanIte = Acce.LastSpan;
+				}
+				else
+					continue;
+			}
+			else {
+				auto Acce = Misc::SerilizerHelper::ReadObjectArray<TableWrapper::ZipChar const>(ZipEdge.LastSpan, ZipEdge->AcceptableCharCount);
+				if (!Acceptable(InputSymbols, *Acce))
+					continue;
+				SpanIte = Acce.LastSpan;
+			}
+
+			if (ZipEdge->PropertyCount != 0)
+			{
+				auto RR = Misc::SerilizerHelper::ReadObjectArray<TableWrapper::ZipProperty const>(SpanIte, ZipEdge->PropertyCount);
+				Point.Propertys = *RR;
+				SpanIte = RR.LastSpan;
+			}
+
+			if (ZipEdge->HasCounter)
+			{
+				std::size_t Count = ZipEdge->CounterDataCount;
+				auto RR = Misc::SerilizerHelper::ReadObjectArray<SerilizeT const>(SpanIte, Count);
+				bool Pass = true;
+
+				std::size_t LastCounterCount = CounterRecord.size();
+				std::size_t CounterDataIte = 0;
 				bool MeetContinue = false;
 				bool MeetEnd = false;
-				for (auto Ite : Viewer.Property)
+
+				for (std::size_t Index = 0; Pass && Index < Point.Propertys.size(); ++Index)
 				{
-					switch (Ite)
+					switch (Point.Propertys[Index])
 					{
-					case decltype(Ite)::CounterBegin:
+					case TableWrapper::ZipProperty::CounterBegin:
 						LastCounterCount += 1;
 						break;
-					case decltype(Ite)::CounterContinue:
+					case TableWrapper::ZipProperty::CounterContinue:
 					{
 						MeetContinue = true;
 						assert(!MeetEnd);
-						assert(CounterIndex < Viewer.CounterData.size());
-						auto Range = Viewer.CounterData[CounterIndex];
-						++CounterIndex;
+						assert(CounterDataIte < RR->size());
+						auto Range = (*RR)[CounterDataIte];
+						++CounterDataIte;
 						std::size_t CurCount = 0;
 						assert(LastCounterCount >= 1);
-						if(LastCounterCount <= ConuterRecord.size())
-							CurCount = ConuterRecord[LastCounterCount - 1];
-						if (CurCount < Range.Min || CurCount >= Range.Max)
-							ShouldKeepViewer = false;
+						if (LastCounterCount <= CounterRecord.size())
+							CurCount = CounterRecord[LastCounterCount - 1];
+						if (CurCount >= Range)
+							Pass = false;
 						break;
 					}
-					case decltype(Ite)::CounterEnd:
+					case TableWrapper::ZipProperty::CounterEnd:
 					{
 						MeetEnd = true;
 						assert(!MeetContinue);
-						assert(CounterIndex < Viewer.CounterData.size());
-						auto Range = Viewer.CounterData[CounterIndex];
-						++CounterIndex;
+						assert(CounterDataIte + 1 < RR->size());
+						auto RangeMin = (*RR)[CounterDataIte];
+						++CounterDataIte;
+						auto RangeMax = (*RR)[CounterDataIte];
+						++CounterDataIte;
 						assert(LastCounterCount >= 1);
 						std::size_t CurCount = 0;
 						assert(LastCounterCount >= 1);
-						if (LastCounterCount <= ConuterRecord.size())
-							CurCount = ConuterRecord[LastCounterCount - 1];
-						if (CurCount < Range.Min || CurCount >= Range.Max)
-							ShouldKeepViewer = false;
+						if (LastCounterCount <= CounterRecord.size())
+							CurCount = CounterRecord[LastCounterCount - 1];
+						if (CurCount < RangeMin || CurCount >= RangeMax)
+							Pass = false;
 						else
 							--LastCounterCount;
 						break;
 					}
-					}
-					if(!ShouldKeepViewer)
+					default:
+						Index = Point.Propertys.size();
 						break;
-				}
-			}
-
-			if (ShouldKeepViewer)
-			{
-				AmbiguousPoint AP{
-					CounterIndex,
-					false,
-					TokenIndex,
-					NextTokenIndex,
-					CaptureRecord.size(),
-					Viewer
-				};
-
-				if (!LastAP.has_value())
-					LastAP = AP;
-				else {
-					AP.IsSceondory = true;
-					if (!LastAP->IsSceondory)
-					{
-						AmbiguousCounter.insert(AmbiguousCounter.end(), ConuterRecord.begin(), ConuterRecord.end());
-					}
-
-					AmbiguousPoints.push_back(*LastAP);
-					LastAP = AP;
-				}
-			}
-			return true;
-		});
-
-		if (LastAP.has_value())
-		{
-			return ConsumeResult{ApplyAmbiguousPoint(*LastAP)};
-		}
-		return {};
-	}
-
-	std::optional<Accept> CoreProcessor::ApplyAmbiguousPoint(AmbiguousPoint AP)
-	{
-		CurrentState = AP.Viewer.ToNode;
-		CaptureRecord.resize(AP.CaptureCount);
-		std::optional<Accept> AcceptData;
-		for (auto Ite : AP.Viewer.Property)
-		{
-			switch (Ite)
-			{
-			case decltype(Ite)::Acceptable:
-			{
-				assert(!AP.Viewer.AcceptData.empty());
-				assert(AP.Viewer.Block != 0);
-				Walkway.push_back(AP.Viewer.Block);
-				Accept Data;
-				Data.Index = AP.Viewer.AcceptData[0].Index;
-				Data.Mask = AP.Viewer.AcceptData[0].Mask;
-				AcceptData = Data;
-				break;
-			}
-			case decltype(Ite)::CaptureBegin:
-			{
-				CaptureRecord.push_back({ true, AP.TokenIndex });
-				break;
-			}
-			case decltype(Ite)::CaptureEnd:
-			{
-				CaptureRecord.push_back({ false, AP.TokenIndex });
-				break;
-			}
-			case decltype(Ite)::CounterBegin:
-			{
-				ConuterRecord.push_back(0);
-				break;
-			}
-			case decltype(Ite)::CounterContinue:
-			{
-				assert(!ConuterRecord.empty());
-				++(*ConuterRecord.rbegin());
-				break;
-			}
-			case decltype(Ite)::CounterEnd:
-			{
-				assert(!ConuterRecord.empty());
-				ConuterRecord.pop_back();
-				break;
-			}
-			}
-		}
-		return AcceptData;
-	}
-
-	auto CoreProcessor::PopAmbiguousPoint() -> std::optional<AmbiguousPoint>
-	{
-		while (!AmbiguousPoints.empty())
-		{
-			auto Last = (*AmbiguousPoints.rbegin());
-			AmbiguousPoints.pop_back();
-			auto Span = Last.CounterIndex.Slice(AmbiguousCounter);
-			ConuterRecord.clear();
-			ConuterRecord.insert(ConuterRecord.end(), Span.begin(), Span.end());
-			if (!Last.IsSceondory)
-			{
-				AmbiguousCounter.resize(Last.CounterIndex.Begin());
-			}
-			if (std::find(Walkway.begin(), Walkway.end(), Last.Viewer.Block) == Walkway.end())
-			{
-				ApplyAmbiguousPoint(Last);
-				return Last;
-			}
-		}
-		return {};
-	}
-
-	auto CoreProcessor::Flush(std::optional<std::size_t> Start, std::size_t End, bool StopIfMeetAcceptableViewer, CodePoint(*FuncO)(std::size_t, void*), void* Data)
-		-> std::optional<FlushResult>
-	{
-		bool NeedConsumeAmbiguousPoint = !Start.has_value();
-		std::size_t Index = Start.has_value() ? *Start : 0;
-		std::size_t ForwardIndex = Index;
-		std::size_t MaxFlushIndex = 0;
-		while (Index < End)
-		{
-			if (NeedConsumeAmbiguousPoint)
-			{
-				NeedConsumeAmbiguousPoint = false;
-				auto Ra = PopAmbiguousPoint();
-				if (Ra.has_value())
-				{
-					Index = Ra->NextTokenIndex;
-					ForwardIndex = Ra->TokenIndex;
-					if (StopIfMeetAcceptableViewer && !Ra->Viewer.AcceptData.empty())
-					{
-						auto& Ref = Ra->Viewer.AcceptData[0];
-						Accept Acce{Ref.Index, Ref.Mask};
-						return FlushResult{ {ForwardIndex, Index - ForwardIndex}, Acce};
 					}
 				}
-				else {
-					return {};
-				}
+
+				if(!Pass)
+					continue;
 			}
 
-			for (; Index < End;)
+			Point.ToNode = ZipEdge->ToNode;
+			Point.CaptureCount = CaptureRecord.size();
+			Point.CounterHistory = CounterHistory;
+			Point.NextTokenIndex = NextTokenIndex;
+			Point.CurrentTokenIndex = RequireTokenIndex;
+
+			if(ZipEdge->HasUniqueID)
+				Point.UniqueID = ZipEdge->UniqueID;
+
+			if (AmbiguousPoints.empty() || AmbiguousPoints.rbegin()->CounterHistory != CounterHistory)
 			{
-				CodePoint Re = (*FuncO)(Index, Data);
-				if (!Re.IsEndOfFile())
+				Point.CounterIndex = {AmbiguousCounter.size(), CounterRecord.size()};
+				AmbiguousCounter.insert(AmbiguousCounter.end(), CounterRecord.begin(), CounterRecord.end());
+			}
+			else {
+				Point.CounterIndex = AmbiguousPoints.rbegin()->CounterIndex;
+			}
+
+			AmbiguousPoints.push_back(Point);
+		}
+
+		if (AmbiguousPoints.empty())
+		{
+			return {};
+		}
+
+		auto Ite = *AmbiguousPoints.rbegin();
+		AmbiguousPoints.pop_back();
+
+		if (Ite.CounterHistory != CounterHistory)
+		{
+			CounterRecord.clear();
+			auto Require = Ite.CounterIndex.Slice(AmbiguousCounter);
+			CounterRecord.insert(CounterRecord.end(), Require.begin(), Require.end());
+		}
+
+		if (AmbiguousPoints.empty() || AmbiguousPoints.rbegin()->CounterHistory != Ite.CounterHistory)
+			AmbiguousCounter.resize(Ite.CounterIndex.Begin());
+
+		CurrentState = Ite.ToNode;
+
+		bool IsEndOfFile = (RequireTokenIndex == Ite.NextTokenIndex && InputSymbols == EndOfFile());
+
+		RequireTokenIndex = Ite.NextTokenIndex;
+
+		CaptureRecord.resize(Ite.CaptureCount);
+
+		bool CounterChange = false;
+		for (auto& Ite2 : Ite.Propertys)
+		{
+			switch (Ite2)
+			{
+			case TableWrapper::ZipProperty::CaptureBegin:
+				CaptureRecord.push_back({true, Ite.CurrentTokenIndex});
+				break;
+			case TableWrapper::ZipProperty::CaptureEnd:
+				CaptureRecord.push_back({ false, Ite.CurrentTokenIndex });
+				break;
+			case TableWrapper::ZipProperty::CounterBegin:
+				CounterRecord.push_back(0);
+				CounterChange = true;
+				break;
+			case TableWrapper::ZipProperty::CounterContinue:
+				assert(!CounterRecord.empty());
+				++(* CounterRecord.rbegin());
+				CounterChange = true;
+				break;
+			case TableWrapper::ZipProperty::CounterEnd:
+				assert(!CounterRecord.empty());
+				CounterRecord.pop_back();
+				CounterChange = true;
+				break;
+			default:
+				assert(false);
+				break;
+			}
+		}
+
+		if (CounterChange)
+		{
+			++CounterHistory;
+			if (CounterHistory == std::numeric_limits<decltype(CounterHistory)>::max())
+			{
+				if (AmbiguousPoints.empty())
 				{
-					auto CRe = ConsumeCharInput(Re.UnicodeCodePoint, Index, Index + Re.NextUnicodeCodePointOffset, StopIfMeetAcceptableViewer);
-					if (CRe.has_value())
+					CounterHistory = 0;
+				}
+				else {
+					std::size_t HistoryIte = 0;
+					std::size_t LastHistory = AmbiguousPoints.begin()->CounterHistory;
+					for (auto& Ite : AmbiguousPoints)
 					{
-						if (CRe->AcceptData.has_value())
+						if (Ite.CounterHistory != LastHistory)
 						{
-							return FlushResult{ {Index, Re.NextUnicodeCodePointOffset}, *CRe->AcceptData};
+							LastHistory = Ite.CounterHistory;
+							++HistoryIte;
 						}
-						else {
-							ForwardIndex = Index;
-							Index += Re.NextUnicodeCodePointOffset;
-						}
+						Ite.CounterHistory = HistoryIte;
 					}
-					else {
-						NeedConsumeAmbiguousPoint = true;
-						break;
-					}
-				}
-				else {
-					auto CRe2 = ConsumeCharInput(MaxChar(), Index, Index, StopIfMeetAcceptableViewer);
-					if (CRe2.has_value() && CRe2->AcceptData.has_value())
-					{
-						return FlushResult{ {Index, 0}, *CRe2->AcceptData };
-					}
-					else {
-						NeedConsumeAmbiguousPoint = true;
-						break;
-					}
+					CounterHistory = HistoryIte;
 				}
 			}
 		}
-		return FlushResult{ {ForwardIndex, Index - ForwardIndex}, {} };
+
+		ConsumeResult Result;
+		if(Ite.AcceptData.has_value())
+		{
+			Result.Accept = {*Ite.AcceptData, *Ite.UniqueID, std::span(CaptureRecord)};
+		}
+		Result.CurrentTokenIndex = Ite.CurrentTokenIndex;
+		Result.StartupTokenIndex = StartupTokenIndex;
+		Result.IsEndOfFile = IsEndOfFile;
+		return Result;
+	}
+
+	void CoreProcessor::Reset(std::size_t InputStartupTokenIndex)
+	{
+		AmbiguousCounter.clear();
+		CounterRecord.clear();
+		CounterHistory = 0;
+		AmbiguousPoints.clear();
+		CaptureRecord.clear();
+		CurrentState = Wrapper.StartupNodeOffset();
+		RequireTokenIndex = InputStartupTokenIndex;
+		StartupTokenIndex = InputStartupTokenIndex;
+	}
+
+	void CoreProcessor::RemoveAmbiuosPoint(SerilizeT UniqueID)
+	{
+		if (!AmbiguousPoints.empty())
+		{
+			for (std::size_t Index = 0; Index < AmbiguousPoints.size();)
+			{
+				auto& Cur = AmbiguousPoints[Index];
+				if (Cur.UniqueID.has_value() && *Cur.UniqueID == UniqueID)
+				{
+					bool SameHistory = false;
+					if (!SameHistory && Index > 0)
+						SameHistory = (AmbiguousPoints[Index - 1].CounterHistory == Cur.CounterHistory);
+					if(!SameHistory && Index + 1< AmbiguousPoints.size())
+						SameHistory = (AmbiguousPoints[Index + 1].CounterHistory == Cur.CounterHistory);
+					if (!SameHistory && Cur.CounterIndex.Count() != 0)
+					{
+						CounterRecord.erase(CounterRecord.begin() + Cur.CounterIndex.Begin(), CounterRecord.begin() + Cur.CounterIndex.End());
+						for (std::size_t Index2 = Index + 1; Index2 < AmbiguousPoints.size(); ++Index2)
+						{
+							AmbiguousPoints[Index2].CounterIndex.Offset -= Cur.CounterIndex.End();
+						}
+					}
+					AmbiguousPoints.erase(AmbiguousPoints.begin() + Index);
+				}
+				else {
+					++Index;
+				}
+			}
+		}
 	}
 
 	std::optional<Misc::IndexSpan<>> CaptureWrapper::FindFirstCapture(std::span<Capture const> Captures)
@@ -1578,7 +1572,7 @@ namespace Potato::Reg
 			Result.NextCaptures = NextCaptures.subspan(First->End());
 			auto Start = NextCaptures[First->Begin()];
 			auto End = NextCaptures[First->End() - 1];
-			Result.CurrentCapture = { Start.Index, End.Index - Start.Index};
+			Result.CurrentCapture = { Start.Index, End.Index - Start.Index };
 			return Result;
 		}
 		return {};
@@ -1600,226 +1594,231 @@ namespace Potato::Reg
 		return {};
 	}
 
-	template<typename UnicodeT>
-	struct StringViewFlushInput
+	ProcessResult::ProcessResult(CoreProcessor::ConsumeResult const& Result)
 	{
-		static CodePoint Process(std::size_t Index, void* Data) {
-			auto View = *reinterpret_cast<std::basic_string_view<UnicodeT> const*>(Data);
-			if (Index < View.size())
-			{
-				char32_t Buffer;
-				auto Info = StrEncode::CharEncoder<UnicodeT, char32_t>::EncodeOnceUnSafe(View.substr(Index), {&Buffer, 1});
-				return CodePoint{Buffer, Info.SourceSpace};
-			}
-			else
-				return CodePoint::EndOfFile();
-		}
-	};
-
-	std::optional<MarchProcessor::Result> ProcessMarch(TableWrapper Wrapper, std::u32string_view Span)
-	{
-		return ProcessMarch(Wrapper, 0, StringViewFlushInput<char32_t>::Process, &Span);
+		assert(Result.Accept.has_value());
+		std::vector<Capture> TempCaptures;
+		TempCaptures.insert(TempCaptures.end(), Result.Accept->CaptureData.begin(), Result.Accept->CaptureData.end());
+		Captures = std::move(TempCaptures);
+		MainCapture = { Result .StartupTokenIndex, Result .CurrentTokenIndex - Result .StartupTokenIndex};
+		AcceptData = Result.Accept->AcceptData;
+		UniqueID = Result.Accept->UniqueID;
 	}
 
-	std::optional<MarchProcessor::Result> ProcessMarch(TableWrapper Wrapper, std::size_t Startup, CodePoint(*F1)(std::size_t Index, void*), void* Data)
+	auto MatchProcessor::ConsumeTokenInput(char32_t Token, std::size_t NextTokenIndex)->std::optional<Result>
 	{
-		CoreProcessor Core{ Wrapper };
-		auto Cur = Core.Flush(0, std::numeric_limits<std::size_t>::max(), false, F1, Data);
-		if (Cur.has_value() && Cur->AcceptData.has_value())
+		auto Re1 = Processor.ConsumeTokenInput(Token, NextTokenIndex);
+		if (Re1.has_value())
 		{
-			MarchProcessor::Result Re;
-			Re.MainCapture = { Startup, Cur->LastToken.End()};
-			Re.AcceptData = *Cur->AcceptData;
-			Re.Captures = std::move(Core.CaptureRecord);
-			return std::move(Re);
+			Result ReturnResult;
+			ReturnResult.IsEndOfFile = Re1->IsEndOfFile;
+			if (Re1->Accept.has_value())
+			{
+				ReturnResult.Accept = ProcessResult{*Re1};
+			}
+			return ReturnResult;
 		}
-		return {};
+		else {
+			return {};
+		}
 	}
 
-	std::optional<FrontMarchProcessor::Result> ProcessFrontMarch(TableWrapper Wrapper, std::u32string_view SpanView)
+	std::optional<ProcessResult> ProcessMatch(TableWrapper Wrapper, std::u32string_view Span)
 	{
-		return ProcessFrontMarch(Wrapper, 0, StringViewFlushInput<char32_t>::Process, &SpanView);
-	}
-
-	std::optional<FrontMarchProcessor::Result> ProcessFrontMarch(TableWrapper Wrapper, std::wstring_view SpanView)
-	{
-		return ProcessFrontMarch(Wrapper, 0, StringViewFlushInput<wchar_t>::Process, &SpanView);
-	}
-
-	std::optional<FrontMarchProcessor::Result> ProcessFrontMarch(TableWrapper Wrapper, std::size_t Startup, CodePoint(*F1)(std::size_t Index, void*), void* Data)
-	{
-		Reg::CoreProcessor Cp(Wrapper);
-		std::optional<FrontMarchProcessor::Result> Re;
-		std::optional<std::size_t> Ite = Startup;
+		MatchProcessor Pro(Wrapper);
 		while (true)
 		{
-			auto Fe = Cp.Flush(Ite, std::numeric_limits<std::size_t>::max(), true, F1, Data);
-			if (Fe.has_value())
+			auto Re = Pro.GetRequireTokenIndex();
+			char32_t Input = (Re >= Span.size() ? EndOfFile() : Span[Re]);
+			auto Re2 = Pro.ConsumeTokenInput(Input, Re + 1);
+			if (Re2.has_value())
 			{
-				if (Fe->AcceptData.has_value())
-				{
-					if (Re.has_value())
-					{
-						Ite.reset();
-						if (Fe->LastToken.Begin() > Re->MainCapture.End())
-						{
-							Re->AcceptData = *Fe->AcceptData;
-							Re->MainCapture.Length = Fe->LastToken.Begin() - Startup;
-							Re->Captures = Cp.CaptureRecord;
-							Re->IsEndOfFile = Fe->IsEndOfFile();
-						}
-						continue;
-					}
-					else {
-						FrontMarchProcessor::Result NewResult;
-						NewResult.MainCapture = { Startup, Fe->LastToken.Begin() - Startup};
-						NewResult.AcceptData = *Fe->AcceptData;
-						NewResult.Captures = Cp.CaptureRecord;
-						NewResult.IsEndOfFile = Fe->IsEndOfFile();
-						Re = std::move(NewResult);
-						Ite.reset();
-					}
-				}
+				if(Re2->Accept.has_value())
+					return Re2->Accept;
+				if(Re2->IsEndOfFile)
+					return {};
 			}
 			else {
-				break;
+				return {};
 			}
 		}
-		return Re;
-	}
-
-	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::u32string_view Span)
-	{
-		return ProcessSearch(Wrapper, 0, StringViewFlushInput<char32_t>::Process, &Span);
-	}
-
-	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::u16string_view Span)
-	{
-		return ProcessSearch(Wrapper, 0, StringViewFlushInput<char16_t>::Process, &Span);
-	}
-	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::u8string_view Span)
-	{
-		return ProcessSearch(Wrapper, 0, StringViewFlushInput<char8_t>::Process, &Span);
-	}
-	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::wstring_view Span)
-	{
-		return ProcessSearch(Wrapper, 0, StringViewFlushInput<wchar_t>::Process, &Span);
-	}
-
-	std::optional<SearchProcessor::Result> ProcessSearch(TableWrapper Wrapper, std::size_t Start, CodePoint(*F1)(std::size_t Index, void* Data), void* Data)
-	{
-		std::deque<CoreProcessor::AmbiguousPoint> CachedStartUpPoint;
-		CoreProcessor Core{ Wrapper };
-		Misc::IndexSpan<> SearchRange{ Start, 0 };
-		while(true)
-		{
-			bool ForbiddenPreCheck = false;
-			std::optional<std::size_t> CheckStart = Start;
-			
-			std::size_t TokenIndex = Start;
-			std::size_t NextTokenIndex = Start + 1;
-			auto Sym = F1(Start, Data);
-			bool MeedEndOfFile = false;
-
-			if(!Sym.IsEndOfFile())
-				NextTokenIndex = Start + Sym.NextUnicodeCodePointOffset;
-			else
-				MeedEndOfFile = true;
-
-			while (true)
-			{
-				bool NewBegin = (Core.CurrentState == Wrapper.StartupNodeOffset());
-
-				if (NewBegin) {
-					//SearchRange.Offset = Start;
-					ForbiddenPreCheck = true;
-				}
-
-				auto Re = Core.Flush(CheckStart, NextTokenIndex, true, F1, Data);
-				if (Re.has_value())
-				{
-					if (Re->AcceptData.has_value())
-					{
-						SearchRange.Length = Re->LastToken.Begin() - SearchRange.Offset;
-						SearchProcessor::Result SearchResult;
-						SearchResult.MainCapture = SearchRange;
-						SearchResult.Captures = std::move(Core.CaptureRecord);
-						SearchResult.AcceptData = *Re->AcceptData;
-						SearchResult.IsEndOfFile = Re->IsEndOfFile();
-						return std::move(SearchResult);
-					}
-					break;
-				}
-				else {
-					Core.Clear();
-					if (!CachedStartUpPoint.empty())
-					{
-						auto Last = *CachedStartUpPoint.begin();
-						CachedStartUpPoint.pop_front();
-						Core.AmbiguousPoints.push_back(Last);
-						CheckStart.reset();
-						SearchRange.Offset = Last.TokenIndex;
-					}
-					else {
-						ForbiddenPreCheck = true;
-						
-						if (!NewBegin)
-						{
-							SearchRange.Offset = TokenIndex;
-							CheckStart = TokenIndex;
-						}
-						else {
-							SearchRange.Offset = NextTokenIndex;
-							break;
-						}
-					}
-				}
-			}
-
-			if (!ForbiddenPreCheck && !Sym.IsEndOfFile())
-			{
-				std::vector<CoreProcessor::AmbiguousPoint> Points;
-				auto Node = Wrapper[Wrapper.StartupNodeOffset()];
-				Node.ReadEdge([&](TableWrapper::EdgeViewer Viewer) -> bool {
-					if ((Viewer.ToNode != Core.CurrentState || Core.ConuterRecord.empty()) && Acceptable(Sym.UnicodeCodePoint, Viewer.ConsumeChars))
-					{
-						bool Find = !Core.ConuterRecord.empty();
-						if (!Find)
-						{
-							for (auto Ite = Core.AmbiguousPoints.rbegin(); Ite != Core.AmbiguousPoints.rend(); ++Ite)
-							{
-								if (Ite->NextTokenIndex == NextTokenIndex && Ite->Viewer.ToNode == Viewer.ToNode && Ite->CounterIndex.Count() == 0)
-								{
-									Find = true;
-									break;
-								}
-								if (Ite->NextTokenIndex < NextTokenIndex)
-									break;
-							}
-						}
-						if (!Find)
-						{
-							CoreProcessor::AmbiguousPoint AP{
-								{0, 0},
-								true,
-								TokenIndex,
-								NextTokenIndex,
-								0,
-								Viewer
-							};
-							Points.push_back(AP);
-						}
-					}
-					return true;
-					});
-				CachedStartUpPoint.insert(CachedStartUpPoint.end(), Points.rbegin(), Points.rend());
-			}
-			if(MeedEndOfFile)
-				break;
-			Start = NextTokenIndex;
-		}
-
 		return {};
+	}
+
+	auto FrontMatchProcessor::ConsumeTokenInput(char32_t Token, std::size_t NextTokenIndex) -> std::optional<Result>
+	{
+		auto Re1 = Processor.ConsumeTokenInput(Token, NextTokenIndex);
+		if (Re1.has_value())
+		{
+			Result ReturnResult;
+			ReturnResult.IsEndOfFile = Re1->IsEndOfFile;
+			if (Re1->Accept.has_value())
+			{
+				ReturnResult.Accept = ProcessResult{ *Re1 };
+			}
+			return ReturnResult;
+		}
+		else {
+			return {};
+		}
+	}
+
+	std::optional<ProcessResult> ProcessFrontMatch(TableWrapper Wrapper, std::u32string_view Span)
+	{
+		FrontMatchProcessor Pro(Wrapper);
+		while (true)
+		{
+			auto Re = Pro.GetRequireTokenIndex();
+			char32_t Input = (Re >= Span.size() ? EndOfFile() : Span[Re]);
+			auto Re2 = Pro.ConsumeTokenInput(Input, Re + 1);
+			if (Re2.has_value())
+			{
+				if (Re2->Accept.has_value())
+					return Re2->Accept;
+				if(Re2->IsEndOfFile)
+					return {};
+			}
+			else {
+				return {};
+			}
+		}
+		return {};
+	}
+
+	auto SearchProcessor::ConsumeTokenInput(char32_t Token, std::size_t NextTokenIndex) -> std::optional<Result>
+	{
+		auto R1 = Processor.ConsumeTokenInput(Token, NextTokenIndex);
+		if (R1.has_value())
+		{
+			Result ReturnResult;
+			ReturnResult.IsEndOfFile = R1->IsEndOfFile;
+			if (R1->Accept.has_value())
+			{
+				ReturnResult.Accept = ProcessResult{ *R1 };
+				return ReturnResult;
+			}
+
+			if (Processor.GetRequireTokenIndex() == RetryStartupTokenIndex && Processor.GetCurrentState() == Processor.GetWrapper().StartupNodeOffset())
+			{
+				++RetryStartupTokenIndex;
+			}
+
+			return ReturnResult;
+		}
+		else {
+			if(Token == EndOfFile())
+				return {};
+			Processor.Reset(RetryStartupTokenIndex);
+			++RetryStartupTokenIndex;
+			Result ReturnResult;
+			ReturnResult.IsEndOfFile = false;
+			return ReturnResult;
+		}
+	}
+
+	std::optional<ProcessResult> ProcessSearch(TableWrapper Wrapper, std::u32string_view Span)
+	{
+		SearchProcessor Pro(Wrapper);
+		while (true)
+		{
+			auto Re = Pro.GetRequireTokenIndex();
+			char32_t Input = (Re >= Span.size() ? EndOfFile() : Span[Re]);
+			auto Re2 = Pro.ConsumeTokenInput(Input, Re + 1);
+			if (Re2.has_value())
+			{
+				if (Re2->Accept.has_value())
+					return Re2->Accept;
+				if(Re2->IsEndOfFile)
+					return {};
+			}
+			else {
+				return {};
+			}
+		}
+		return {};
+	}
+
+	auto GreedyFrontMatchProcessor::ConsumeTokenInput(char32_t Token, std::size_t NextTokenIndex) -> std::optional<Result>
+	{
+		auto R1 = Processor.ConsumeTokenInput(Token, NextTokenIndex);
+		if (R1.has_value())
+		{
+			Result ReturnResult;
+			ReturnResult.IsEndOfFile = R1->IsEndOfFile;
+			if (R1->Accept.has_value())
+			{
+				if (!TempResult.has_value() || (TempResult->UniqueID != R1->Accept->UniqueID && TempResult->MainCapture.Count() < R1->CurrentTokenIndex))
+				{
+					TempResult = ProcessResult{ *R1 };
+				}
+				if (R1->IsEndOfFile)
+				{
+					ReturnResult.Accept = std::move(TempResult);
+					return ReturnResult;
+				}
+				Processor.RemoveAmbiuosPoint(R1->Accept->UniqueID);
+			}
+			return ReturnResult;
+		}
+		else {
+			if (TempResult.has_value())
+			{
+				Result ReturnResult;
+				ReturnResult.Accept = std::move(TempResult);
+				TempResult.reset();
+				ReturnResult.IsEndOfFile = false;
+				return ReturnResult;
+			}
+			return {};
+		}
+	}
+
+	std::optional<ProcessResult> ProcessGreedyFrontMatch(TableWrapper Wrapper, std::u32string_view Span)
+	{
+		GreedyFrontMatchProcessor Pro(Wrapper);
+		while (true)
+		{
+			auto Re = Pro.GetRequireTokenIndex();
+			char32_t Input = (Re >= Span.size() ? EndOfFile() : Span[Re]);
+			auto Re2 = Pro.ConsumeTokenInput(Input, Re + 1);
+			if (Re2.has_value())
+			{
+				if (Re2->Accept.has_value())
+					return Re2->Accept;
+				if (Re2->IsEndOfFile)
+					return {};
+			}
+			else {
+				return {};
+			}
+		}
+		return {};
+	}
+
+
+	SerilizeT MulityRegexCreator::Push(UnfaTable const& UT)
+	{
+		if (Temporary.has_value())
+		{
+			Temporary->Link(UT, true);
+		}
+		else {
+			Temporary = UT;
+		}
+		++CountedUniqueID;
+		return CountedUniqueID;
+	}
+
+	SerilizeT MulityRegexCreator::AddRegex(std::u32string_view Regex, Accept Mask, SerilizeT UniqueID, bool IsRaw)
+	{
+		return Push(UnfaTable::Create(Regex, IsRaw, Mask, UniqueID));
+	}
+
+
+	std::vector<SerilizeT> MulityRegexCreator::Generate() const
+	{
+		assert(Temporary.has_value());
+		return TableWrapper::Create(*Temporary);
 	}
 
 	namespace Exception
