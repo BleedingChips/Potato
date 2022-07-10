@@ -42,13 +42,21 @@
 3. DocumentReader / DocumenetReaderWrapper 纯字符串文档阅读器（目前只支持utf8和utf8 with bom两种文本编码格式）
 4. DocumentWriter 纯字符串文档写入器（目前支持写入utf8和utf8 with bom两种文本编码格式）
 
-## 4. PotatoDLr
+## 4. PotatoSLRX
 
-基于Lr-X的语法分析器。（namespace Potato::DLr）
+基于LR(X)的语法分析器。（namespace Potato::SLRX）
 
-支持无限回退，但性能与X强相关，对于Lr0有最好的性能。支持单步分析，不支持手动错误回退。
+SLRX是一款“柔性”的语法分析器，对于用户给定的X（默认为3），可以自动识别LR(X)的语法，并生成对应的分析表。
 
-自带有运算符优先级相关接口，也可以手动禁止深度为1的Reduce路径。
+在此基础上，通过特定的储存方式，使得表本身有着更小的体积。
+
+对于一些带有歧义的语法，也会在生成表格的时候，通过异常的方式抛出给用户，方便用户进行修改。
+
+在性能上，当X为0时有着最小的体积与最高的效率。对于越大的X，其在生成表格和在处理语法时，性能越差。在最坏情况下，其性能复杂度为指数级。
+
+为了方便构造分析表，其提供了一些功能，使得用户可以自定义运算符优先级（类似+-*/），以及防止深度为1的Reduce路径。
+
+目前该分析器是单线程，不支持错误回退，并且是非异常安全的。
 
 一般流程:
 
@@ -57,7 +65,7 @@
 3. 使用Table，对目标的Symbol序列进行分析，产生Step序列，Step序列的信息足够产生一颗AST树。
 4. 对Step序列执行分析，产生目标语言。
 
-该模块遇到错误会抛出异常，异常一般以`Potato::Ebnf::Exception::Interface`为基类。
+该模块遇到错误会抛出异常，异常一般以`Potato::SLRX::Exception::Interface`为基类。
 
 ## 5. PotatoReg
 
@@ -82,17 +90,18 @@
 
 1. Search 只需要字符串其中的一段满足正则既返回真。
 2. March 需要字符串全段满足正则才返回。
-3. FrontMarch 需要字符串的开头一段满足才返回，所有多个正则，返回最长匹配项。
+3. FrontMarch 需要字符串的开头一段满足才返回。
+4. GreedyFrontMatch 同 FrontMarch ，但会尝试匹配最长的匹配项。
 
-一般的，FrontMarch用在词法分析上。
+一般的，GreedyFrontMatch 用在词法分析上。
 
 该模块遇到错误时会抛出异常，异常一般以`Potato::Reg::Exception::Interface`为基类。
 
 ## 6. PotatoEbnf
 
-依赖于`PotatoDLr`，支持`Lr-X`的`Ebnf`范式。（namespace Potato::Ebnf）
+依赖于`PotatoSLRX`与`PotatoReg`的`Ebnf`范式。（namespace Potato::Ebnf）
 
-一般而言，除了支持从字符串构建语法分析表，并且支持`|` `()` `[]` `{}`等Ebnf范式的操作符，以及支持内置的一个词法分析器外，其余和DLr无差别。
+一般而言，除了支持从字符串构建语法分析表，并且支持`|` `()` `[]` `{}`等Ebnf范式的操作符，以及支持内置的一个词法分析器外，其余和 SLRX 无差别。
 
 ## 7. PotatoPath
 
