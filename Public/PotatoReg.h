@@ -11,16 +11,15 @@ namespace Potato::Reg
 	using SeqIntervalT = Misc::SequenceInterval<char32_t>;
 	using SeqIntervalWrapperT = Misc::SequenceIntervalWrapper<char32_t>;
 
+	using StandardT = std::uint32_t;
+
 	inline constexpr char32_t MaxChar() { return 0x110000; };
 
 	inline constexpr char32_t EndOfFile() { return MaxChar(); }
 
-	using SerilizeT = uint32_t;
-	using HalfSerilizeT = uint16_t;
-
 	struct Accept
 	{
-		SerilizeT Mask = 0;
+		StandardT Mask = 0;
 		std::strong_ordering operator<=>(Accept const&) const = default;
 	};
 
@@ -32,10 +31,11 @@ namespace Potato::Reg
 
 	struct Counter
 	{
-		SerilizeT Min = 0;
-		SerilizeT Max = 0;
+		StandardT Min = 0;
+		StandardT Max = 0;
 		std::strong_ordering operator<=>(Counter const&) const = default;
 	};
+
 
 	struct UnfaTable
 	{
@@ -51,8 +51,6 @@ namespace Potato::Reg
 			CounterContinue,
 		};
 
-		
-
 		struct Edge
 		{
 			EdgeType Type;
@@ -60,7 +58,7 @@ namespace Potato::Reg
 			std::vector<IntervalT> ConsumeChars;
 			Accept AcceptData;
 			Counter CounterDatas;
-			SerilizeT UniqueID;
+			StandardT UniqueID;
 		};
 
 		struct Node
@@ -75,7 +73,7 @@ namespace Potato::Reg
 			std::size_t Out;
 		};
 
-		static UnfaTable Create(std::u32string_view Str, bool IsRaw, Accept AcceptData, SerilizeT UniqueID = 0);
+		static UnfaTable Create(std::u32string_view Str, bool IsRaw, Accept AcceptData, StandardT UniqueID = 0);
 
 		void Link(UnfaTable const& OtherTable, bool ThisHasHigherPriority = true);
 
@@ -84,7 +82,7 @@ namespace Potato::Reg
 		UnfaTable& operator=(UnfaTable const&) = default;
 		UnfaTable& operator=(UnfaTable &&) = default;
 
-		UnfaTable(SerilizeT UniqueID = 0) : TemporaryUniqueID(UniqueID) {};
+		UnfaTable(StandardT UniqueID = 0) : TemporaryUniqueID(UniqueID) {};
 
 		std::size_t NewNode();
 		void AddComsumeEdge(std::size_t From, std::size_t To, std::vector<IntervalT> Acceptable);
@@ -94,7 +92,7 @@ namespace Potato::Reg
 		void AddEdge(std::size_t From, Edge Edge);
 
 		std::vector<Node> Nodes;
-		SerilizeT TemporaryUniqueID;
+		StandardT TemporaryUniqueID;
 	};
 
 	struct UnserilizedTable
@@ -114,7 +112,7 @@ namespace Potato::Reg
 			std::size_t ToNode;
 			std::vector<EdgeProperty> Propertys;
 			std::vector<IntervalT> ConsumeChars;
-			std::optional<SerilizeT> UniqueID;
+			std::optional<StandardT> UniqueID;
 		};
 
 		struct Node
@@ -131,34 +129,35 @@ namespace Potato::Reg
 	struct TableWrapper
 	{
 
-		using StorageT = SerilizeT;
+		using StandardT = Reg::StandardT;
+
+		using HalfStandardT = std::uint16_t;
+
+		static_assert(sizeof(HalfStandardT) * 2 == sizeof(StandardT));
 
 		struct ZipChar
 		{
 			char32_t IsSingleChar : 1;
 			char32_t Char : 31;
 			std::strong_ordering operator<=>(ZipChar const&) const = default;
-			static_assert(sizeof(SerilizeT) == sizeof(char32_t));
+			static_assert(sizeof(StandardT) == sizeof(char32_t));
 		};
 
-		struct alignas(alignof(SerilizeT)) ZipNode
+		struct alignas(alignof(StandardT)) ZipNode
 		{
-			SerilizeT EdgeCount;
+			StandardT EdgeCount;
 		};
 
-		struct alignas(alignof(SerilizeT)) ZipEdge
+		struct alignas(alignof(StandardT)) ZipEdge
 		{
-			SerilizeT ToNode;
-			SerilizeT UniqueID;
-			HalfSerilizeT AcceptableCharCount;
-			HalfSerilizeT HasCounter : 1;
-			HalfSerilizeT PropertyCount : 15;
-			HalfSerilizeT CounterDataCount;
-			HalfSerilizeT HasUniqueID : 1;
-			HalfSerilizeT EdgeTotalLength : 15;
-
-
-			static_assert(sizeof(HalfSerilizeT) == 2);
+			StandardT ToNode;
+			StandardT UniqueID;
+			HalfStandardT AcceptableCharCount;
+			HalfStandardT HasCounter : 1;
+			HalfStandardT PropertyCount : 15;
+			HalfStandardT CounterDataCount;
+			HalfStandardT HasUniqueID : 1;
+			HalfStandardT EdgeTotalLength : 15;
 		};
 
 		enum class ZipProperty : uint8_t
@@ -172,31 +171,25 @@ namespace Potato::Reg
 
 		struct NodeViewer
 		{
-			SerilizeT NodeOffset;
-			SerilizeT EdgeCount;
-			std::span<SerilizeT const> AppendData;
+			StandardT NodeOffset;
+			StandardT EdgeCount;
+			std::span<StandardT const> AppendData;
 		};
 
-		TableWrapper(std::span<SerilizeT const> Input) : Wrapper(Input) {};
+		TableWrapper(std::span<StandardT const> Input) : Wrapper(Input) {};
 		TableWrapper(TableWrapper const&) = default;
 		TableWrapper& operator=(TableWrapper const&) = default;
-		SerilizeT StartupNodeOffset() const { return  Wrapper[1]; }
+		StandardT StartupNodeOffset() const { return  Wrapper[1]; }
 
-		static std::vector<SerilizeT> Create(UnserilizedTable const& Table);
+		static std::vector<StandardT> Create(UnserilizedTable const& Table);
 
-		static std::vector<SerilizeT> Create(std::u32string_view Str, Accept Mask = {}, SerilizeT UniqueID = 0, bool IsRaw = false);
+		static std::vector<StandardT> Create(std::u32string_view Str, Accept Mask = {}, StandardT UniqueID = 0, bool IsRaw = false);
 
-		/*
-		static std::vector<SerilizeT> Create(std::u16string_view Str, std::size_t Index = 0, std::size_t Mask = 0);
-		static std::vector<SerilizeT> Create(std::u8string_view Str, std::size_t Index = 0, std::size_t Mask = 0);
-		static std::vector<SerilizeT> Create(std::wstring_view Str, std::size_t Index = 0, std::size_t Mask = 0);
-		*/
-
-		NodeViewer operator[](SerilizeT Offset) const;
+		NodeViewer operator[](StandardT Offset) const;
 
 	private:
 
-		std::span<SerilizeT const> Wrapper;
+		std::span<StandardT const> Wrapper;
 		friend struct Table;
 	};
 
@@ -205,25 +198,23 @@ namespace Potato::Reg
 
 		struct AmbiguousPoint
 		{
-			SerilizeT ToNode;
+			StandardT ToNode;
 			Misc::IndexSpan<> CounterIndex;
 			std::size_t CurrentTokenIndex;
 			std::size_t NextTokenIndex;
 			std::size_t CaptureCount;
 			std::size_t CounterHistory;
-			std::optional<SerilizeT> UniqueID;
+			std::optional<StandardT> UniqueID;
 			std::optional<Accept> AcceptData;
 			std::span<TableWrapper::ZipProperty const> Propertys;
 		};
 
 		std::vector<std::size_t> AmbiguousCounter;
-
 		std::vector<std::size_t> CounterRecord;
 		std::size_t CounterHistory = 0;
-
 		std::vector<AmbiguousPoint> AmbiguousPoints;
 		std::vector<Capture> CaptureRecord;
-		SerilizeT CurrentState;
+		StandardT CurrentState;
 		std::size_t StartupTokenIndex = 0;
 		std::size_t RequireTokenIndex = 0;
 		
@@ -235,14 +226,14 @@ namespace Potato::Reg
 		void SetRequireTokenIndex(std::size_t Index) { RequireTokenIndex = Index; }
 		std::size_t GetCurrentState() const { return CurrentState; };
 		void Reset(std::size_t StartupTokenIndex = 0);
-		void RemoveAmbiuosPoint(SerilizeT UniqueID);
+		void RemoveAmbiuosPoint(StandardT UniqueID);
 		TableWrapper GetWrapper() const { return Wrapper; }
 		std::size_t GetStarupTokenIndex() const { return StartupTokenIndex; }
 
 		struct AcceptResult
 		{
 			Accept AcceptData;
-			SerilizeT UniqueID;
+			StandardT UniqueID;
 			std::span<Capture const> CaptureData;
 		};
 
@@ -286,7 +277,7 @@ namespace Potato::Reg
 		Table(Table&&) = default;
 		Table(Table const&) = default;
 
-		Table(std::u32string_view Regex, Accept Mask = {}, SerilizeT UniqueID = 0, bool IsRaw = false) : Storage(TableWrapper::Create(Regex, Mask, UniqueID, IsRaw)) {}
+		Table(std::u32string_view Regex, Accept Mask = {}, StandardT UniqueID = 0, bool IsRaw = false) : Storage(TableWrapper::Create(Regex, Mask, UniqueID, IsRaw)) {}
 		
 		Table& operator=(Table&&) = default;
 		Table& operator=(Table const&) = default;
@@ -296,7 +287,7 @@ namespace Potato::Reg
 
 	private:
 
-		std::vector<SerilizeT> Storage;
+		std::vector<StandardT> Storage;
 	};
 
 	struct ProcessResult
@@ -304,7 +295,7 @@ namespace Potato::Reg
 		Misc::IndexSpan<> MainCapture;
 		Accept AcceptData;
 		std::vector<Capture> Captures;
-		TableWrapper::StorageT UniqueID;
+		TableWrapper::StandardT UniqueID;
 
 		CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ Captures }; };
 		ProcessResult(ProcessResult const&) = default;
@@ -408,13 +399,13 @@ namespace Potato::Reg
 
 	struct MulityRegexCreator
 	{
-		SerilizeT AddRegex(std::u32string_view Regex, Accept Mask, SerilizeT UniqueID, bool IsRaw = false);
-		std::vector<SerilizeT> Generate() const;
+		StandardT AddRegex(std::u32string_view Regex, Accept Mask, StandardT UniqueID, bool IsRaw = false);
+		std::vector<StandardT> Generate() const;
 		operator bool() const { return Temporary.has_value(); }
-		SerilizeT GetCountedUniqueID() const { return CountedUniqueID; }
-		SerilizeT Push(UnfaTable const& Table);
+		StandardT GetCountedUniqueID() const { return CountedUniqueID; }
+		StandardT Push(UnfaTable const& Table);
 	private:
-		SerilizeT CountedUniqueID = 0;
+		StandardT CountedUniqueID = 0;
 		std::optional<UnfaTable> Temporary;
 	};
 
@@ -429,12 +420,22 @@ namespace Potato::Reg
 
 		struct UnaccaptableRegex : public Interface
 		{
-			std::size_t TokenIndex;
-			Accept AcceptData;
-			UnaccaptableRegex(std::size_t TokenIndex, Accept AcceptData)
-				: TokenIndex(TokenIndex), AcceptData(AcceptData)
-			{
 
+			enum class TypeT
+			{
+				OutOfCharRange,
+				UnSupportEof,
+				UnaccaptableNumber,
+				RawRegexInNotNormalState,
+				BadRegex,
+			};
+
+			TypeT Type;
+			char32_t Character;
+			std::size_t TokenIndex;
+			UnaccaptableRegex(TypeT Type, char32_t Character, std::size_t TokenIndex)
+				: Type(Type), Character(Character), TokenIndex(TokenIndex)
+			{
 			}
 			UnaccaptableRegex() = default;
 			UnaccaptableRegex(UnaccaptableRegex const&) = default;
@@ -443,7 +444,21 @@ namespace Potato::Reg
 
 		struct RegexOutOfRange : public Interface
 		{
-			RegexOutOfRange() = default;
+			enum class TypeT
+			{
+				Counter,
+				Node,
+				EdgeCount,
+				AcceptableCharCount,
+				PropertyCount,
+				CounterCount,
+				EdgeLength,
+			};
+
+			TypeT Type;
+			std::size_t Value;
+
+			RegexOutOfRange(TypeT Type, std::size_t Value) : Type(Type), Value(Value) {}
 			RegexOutOfRange(RegexOutOfRange const&) = default;
 			virtual char const* what() const override;
 		};

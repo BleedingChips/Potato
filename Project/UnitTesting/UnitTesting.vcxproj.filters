@@ -21,10 +21,7 @@
     <ClCompile Include="MiscSample.cpp">
       <Filter>Resource Files</Filter>
     </ClCompile>
-    <ClCompile Include="StrEncodeSample.cpp">
-      <Filter>Resource Files</Filter>
-    </ClCompile>
-    <ClCompile Include="DLrSample.cpp">
+    <ClCompile Include="SLRXSample.cpp">
       <Filter>Resource Files</Filter>
     </ClCompile>
     <ClCompile Include="IntrusicePointerSample.cpp">
@@ -33,10 +30,13 @@
     <ClCompile Include="TMPSample.cpp">
       <Filter>Resource Files</Filter>
     </ClCompile>
-    <ClCompile Include="RegSample.cpp">
+    <ClCompile Include="StrEncodeSample.cpp">
       <Filter>Resource Files</Filter>
     </ClCompile>
     <ClCompile Include="StrFormatSample.cpp">
+      <Filter>Resource Files</Filter>
+    </ClCompile>
+    <ClCompile Include="RegSample.cpp">
       <Filter>Resource Files</Filter>
     </ClCompile>
     <ClCompile Include="EbnfSample.cpp">

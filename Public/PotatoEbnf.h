@@ -2,7 +2,7 @@
 
 #include <assert.h>
 #include "PotatoReg.h"
-#include "PotatoDLr.h"
+#include "PotatoSLRX.h"
 
 namespace Potato::Ebnf
 {
@@ -16,16 +16,11 @@ namespace Potato::Ebnf
 
 		std::vector<std::u32string> TerminalMappings;
 		std::vector<std::u32string> NoTermialMapping;
-		std::vector<Reg::SerilizeT> RegTable;
-		std::vector<DLr::TableWrapper::SerilizedT> DLrTable;
+		std::vector<Reg::StandardT> RegTable;
+		std::vector<SLRX::TableWrapper::StandardT> DLrTable;
 
 
-		static constexpr std::size_t SmallBrace() { return 0; }
-		static constexpr std::size_t MiddleBrace() { return 1; }
-		static constexpr std::size_t BigBrace() { return 2; }
-		static constexpr std::size_t OrLeft() { return 3; }
-		static constexpr std::size_t OrRight() { return 4; }
-		static constexpr std::size_t MinMask() { return 5; }
+		
 	};
 
 	struct TableWrapper
@@ -51,8 +46,8 @@ namespace Potato::Ebnf
 		TableWrapper(TableWrapper const&) = default;
 		TableWrapper& operator=(TableWrapper const&) = default;
 		Reg::TableWrapper AsRegWrapper() const { return RegWrapper; }
-		DLr::TableWrapper AsDLrWrapper() const { return DLrWrapper; }
-		std::u32string_view FindSymbolName(DLr::Symbol Symbol) const;
+		SLRX::TableWrapper AsSLRXWrapper() const { return SLRXWrapper; }
+		std::u32string_view FindSymbolName(SLRX::Symbol Symbol) const;
 
 	private:
 
@@ -60,16 +55,16 @@ namespace Potato::Ebnf
 		std::span<Misc::IndexSpan<SubStorageT> const> StrIndex;
 		std::size_t TerminalCount = 0;
 		std::u32string_view TotalName;
-		std::span<Reg::SerilizeT const> RegWrapper;
-		std::span<DLr::TableWrapper::SerilizedT const> DLrWrapper;
+		std::span<Reg::TableWrapper::StandardT const> RegWrapper;
+		std::span<SLRX::TableWrapper::StandardT const> SLRXWrapper;
 	};
 
 	struct EbnfSymbolTuple
 	{
-		DLr::Symbol Value;
+		SLRX::Symbol Value;
 		Misc::IndexSpan<> StrIndex;
 		Misc::IndexSpan<> CaptureMain;
-		Reg::TableWrapper::StorageT Mask;
+		Reg::TableWrapper::StandardT Mask;
 	};
 
 	struct SymbolProcessor
@@ -91,24 +86,22 @@ namespace Potato::Ebnf
 		Reg::GreedyFrontMatchProcessor Processor;
 	};
 
-
-
 	std::vector<EbnfSymbolTuple> ProcessSymbol(TableWrapper Wrapper, std::u32string_view Str);
 
 	struct TElement
 	{
-		DLr::Symbol Value;
+		SLRX::Symbol Value;
 		std::size_t Mask;
 		Misc::IndexSpan<> Index;
 	};
 
 	struct NTElement
 	{
-		DLr::Symbol Value;
+		SLRX::Symbol Value;
 		std::size_t Mask;
 		Misc::IndexSpan<> Index;
-		std::span<DLr::NTElementData> Datas;
-		DLr::NTElementData& operator[](std::size_t index) { return Datas[index]; }
+		std::span<SLRX::NTElement::DataT> Datas;
+		SLRX::NTElement::DataT& operator[](std::size_t index) { return Datas[index]; }
 	};
 
 	struct Condition
@@ -124,7 +117,7 @@ namespace Potato::Ebnf
 		TypeT Type;
 		std::size_t AppendData;
 		Misc::IndexSpan<> Index;
-		std::vector<DLr::NTElementData> Datas;
+		std::vector<SLRX::NTElement::DataT> Datas;
 	};
 
 	struct StepElement
@@ -135,6 +128,17 @@ namespace Potato::Ebnf
 		TElement& AsTerminal() { return std::get<TElement>(Element); }
 		NTElement& AsNoTerminal() { return std::get<NTElement>(Element); }
 	};
+
+	/*
+	struct StepProcrssor
+	{
+		StepProcrssor(TableWrapper Wrapper) : Processor(Wrapper.AsSLRXWrapper()), Wrapper(Wrapper){}
+		void Consume();
+	public:
+		SLRX::CoreProcessor Processor;
+		TableWrapper Wrapper;
+	};
+	*/
 
 	std::any ProcessStep(TableWrapper Wrapper, std::span<EbnfSymbolTuple const> InputSymbol, std::any(*F)(StepElement Element, void* Data), void* Data);
 
@@ -149,185 +153,10 @@ namespace Potato::Ebnf
 	template<typename FN, typename Func>
 	FN ProcessStepWithOutputType(TableWrapper Wrapper, std::span<EbnfSymbolTuple const> InputSymbol, Func&& F) requires(std::is_invocable_r_v<std::any, Func, StepElement>)
 	{
-		return std::any_cast<FN>(ProcessStep(Wrapper, InputSymbol, F));
+		auto Result = ProcessStep(Wrapper, InputSymbol, F);
+		return std::any_cast<FN>(Result);
 	}
 
-
-	/*
-	struct EbnfTable
-	{
-		std::u32string symbol_table;
-		std::vector<uint32_t> state_to_mask;
-		LexicalTable lexical_table;
-		std::vector<std::tuple<std::size_t, std::size_t>> symbol_map;
-		size_t ter_count;
-		Lr0Table lr0_table;
-		std::u32string_view FindSymbolString(size_t input, bool IsTerminal) const noexcept;
-		std::optional<size_t> FindSymbolState(std::u32string_view sym) const noexcept { bool is_terminal; return FindSymbolState(sym, is_terminal); }
-		std::optional<size_t> FindSymbolState(std::u32string_view sym, bool& Isterminal) const noexcept;
-	};
-
-	EbnfTable CreateEbnfTable(std::u32string_view Code);
-
-	enum class EbnfStepCategory
-	{
-		TERMINAL,
-		NOTERMINAL,
-		PREDEFINETERMINAL,
-		UNKNOW
-	};
-
-	struct EbnfStep
-	{
-		size_t state = 0;
-		std::u32string_view string;
-		EbnfStepCategory category = EbnfStepCategory::UNKNOW;
-		Section section;
-		union {
-			struct {
-				size_t mask = 0;
-				size_t production_count = 0;
-			}reduce;
-			struct {
-				std::u32string_view capture;
-				size_t mask = 0;
-			}shift;
-		};
-		EbnfStep(){}
-		bool IsTerminal() const noexcept { return category == EbnfStepCategory::TERMINAL; }
-		bool IsNoterminal() const noexcept { return category == EbnfStepCategory::NOTERMINAL; }
-		bool IsPreDefineNoterminal() const noexcept { return category == EbnfStepCategory::PREDEFINETERMINAL; }
-	};
-
-	struct EbnfTElement
-	{
-		size_t state = 0;
-		std::u32string_view string;
-		Section section;
-		std::u32string_view capture;
-		size_t mask = 0;
-		EbnfTElement(EbnfStep const& step) : state(step.state), string(step.string), section(step.section), capture(step.shift.capture), mask(step.shift.mask)
-		{
-			assert(step.IsTerminal());
-		}
-		EbnfTElement(EbnfTElement const&) = default;
-		EbnfTElement& operator=(EbnfTElement const&) = default;
-	};
-
-	
-
-	struct EbnfNTElement
-	{
-		struct Property : EbnfStep
-		{
-			Property() {}
-			Property(EbnfStep step, std::any datas) : EbnfStep(step), data(std::move(datas)){}
-			Property(Property const&) = default;
-			Property(Property&&) = default;
-			Property& operator=(Property&& p) = default;
-			Property& operator=(Property const& p) = default;
-			std::any data;
-			template<typename Type>
-			std::remove_reference_t<Type> Consume() { return std::move(std::any_cast<std::add_lvalue_reference_t<Type>>(data)); }
-			std::any Consume() { return std::move(data); }
-			template<typename Type>
-			std::optional<Type> TryConsume() {
-				auto P = std::any_cast<Type>(&data);
-				if (P != nullptr)
-					return std::move(*P);
-				else
-					return std::nullopt;
-			}
-		};
-
-		size_t state = 0;
-		size_t mask = 0;
-		std::u32string_view string;
-		Section section;
-		bool is_predefine = false;
-		std::span<Property> production;
-		Property& operator[](size_t index) { return production[index]; }
-		bool IsPredefine() const noexcept {return is_predefine;};
-		auto begin() { return production.begin(); }
-		auto end() { return production.end();}
-		EbnfNTElement(EbnfStep const& ref, Property* data) : state(ref.state), string(ref.string), section(ref.section), mask(ref.reduce.mask), 
-			production((ref.category == EbnfStepCategory::NOTERMINAL ? data : nullptr), ref.reduce.production_count)
-			,is_predefine(ref.category == EbnfStepCategory::PREDEFINETERMINAL)
-		{
-			assert(ref.IsNoterminal() || ref.IsPreDefineNoterminal());
-		}
-		EbnfNTElement& operator=(EbnfNTElement const&) = default;
-	};
-
-	enum class EbnfSequencerType : uint32_t
-	{
-		OR,
-		OPTIONAL,
-		REPEAT,
-	};
-
-	constexpr uint32_t operator*(EbnfSequencerType input) noexcept { return static_cast<uint32_t>(input); }
-
-	struct EbnfSequencer
-	{
-		EbnfSequencerType type;
-		std::vector<EbnfNTElement::Property> datas;
-		EbnfNTElement::Property& operator[](size_t input) { return datas[input]; }
-		decltype(auto) begin() { return datas.begin(); }
-		decltype(auto) end() { return datas.end(); }
-		decltype(auto) size() { return datas.size(); }
-		bool empty() const noexcept { return datas.empty(); }
-	};
-	*/
-
-	
-
-	/*
-	struct Element : Step
-	{
-		struct Property : Step
-		{
-			Property() {}
-			Property(Step step, std::any datas) : Step(step), data(std::move(datas)){}
-			Property(Property const&) = default;
-			Property(Property&&) = default;
-			Property& operator=(Property&& p) = default;
-			Property& operator=(Property const& p) = default;
-			std::any data;
-			template<typename Type>
-			Type GetData() { return std::any_cast<Type>(data); }
-			template<typename Type>
-			Type* TryGetData() { return std::any_cast<Type>(&data); }
-			template<typename Type>
-			std::remove_reference_t<Type> MoveData() { return std::move(std::any_cast<std::add_lvalue_reference_t<Type>>(data)); }
-			std::any MoveRawData() { return std::move(data); }
-		};
-		Property* datas = nullptr;
-		Property& operator[](size_t index) { return datas[index]; }
-		Property* begin() {assert(Step::IsNoterminal()); return datas;}
-		Property* end() {assert(Step::IsNoterminal()); return datas + reduce.production_count;}
-		Element(Step const& ref) : Step(ref) {}
-	};
-	*/
-
-	/*
-	struct EbnfHistory
-	{
-		std::vector<EbnfStep> steps;
-		std::any operator()(std::function<std::any(EbnfNTElement&)> NTFunc, std::function<std::any(EbnfTElement&)> TFunc) const;
-		std::vector<std::u32string> Expand() const;
-	};
-
-	EbnfHistory Process(EbnfTable const& Tab, std::u32string_view Code);
-	inline std::any Process(EbnfHistory const& His, std::function<std::any(EbnfNTElement&)> NTFunc, std::function<std::any(EbnfTElement&)> TFunc)
-	{
-		return His(std::move(NTFunc), std::move(TFunc));
-	}
-	template<typename RespondFunction>
-	std::any Process(EbnfHistory const& ref, RespondFunction&& Func) { return ref(std::forward<RespondFunction>(Func));}
-	template<typename RequireType, typename RespondFunction>
-	RequireType ProcessWrapper(EbnfHistory const& ref, RespondFunction&& Func) { return std::any_cast<RequireType>(ref(std::forward<RespondFunction>(Func))); }
-	*/
 }
 
 namespace Potato::Ebnf::Exception
@@ -336,6 +165,46 @@ namespace Potato::Ebnf::Exception
 	struct Interface : public std::exception
 	{
 		virtual ~Interface() = default;
+		virtual char const* what() const override;
+	};
+
+	struct IllegalEbnfProduction : public std::exception
+	{
+		SLRX::Exception::IllegalSLRXProduction::Category Type;
+		std::size_t MaxForwardDetectNum;
+		std::size_t DetectNum;
+
+		struct TMap
+		{
+			std::u32string Mapping;
+		};
+
+		struct NTMap
+		{
+			std::u32string Mapping;
+			std::size_t ProductionCount;
+			std::size_t ProductionMask;
+		};
+
+		std::vector<std::variant<TMap, NTMap>> Steps1;
+		std::vector<std::variant<TMap, NTMap>> Steps2;
+
+		/*
+		struct Productions
+		{
+			std::u32string Value;
+			std::size_t ProductionCount;
+			std::size_t ProductionMask;
+			std::size_t ProductionIndex;
+		};
+
+		std::vector<Productions> EffectProductions;
+		*/
+
+		IllegalEbnfProduction(SLRX::Exception::IllegalSLRXProduction const&, std::vector<std::u32string> const& TMapping, std::vector<std::u32string> const& NTMapping);
+		IllegalEbnfProduction(IllegalEbnfProduction const&) = default;
+		IllegalEbnfProduction(IllegalEbnfProduction&&) = default;
+		static std::vector<std::variant<TMap, NTMap>> Translate(std::span<SLRX::ParsingStep const> Steps, std::vector<std::u32string> const& TMapping, std::vector<std::u32string> const& NTMapping);
 		virtual char const* what() const override;
 	};
 
@@ -367,9 +236,13 @@ namespace Potato::Ebnf::Exception
 	{
 		enum class TypeT
 		{
-			Regex,
-			DLr,
-			Header
+			TempMaskedEmptyProduction,
+			FromRegex,
+			FromSLRX,
+			Header,
+			EbnfMask,
+			SymbolCount,
+			TerminalCount,
 		};
 		TypeT Type;
 		std::size_t Value;
@@ -395,8 +268,9 @@ namespace Potato::Ebnf::Exception
 
 	struct UnacceptableInput : public Interface
 	{
+		std::u32string Name;
 		std::size_t TokenIndex;
-		UnacceptableInput(std::size_t TokenIndex) : TokenIndex(TokenIndex) {}
+		UnacceptableInput(std::u32string Name, std::size_t TokenIndex) : Name(Name), TokenIndex(TokenIndex) {}
 		UnacceptableInput(UnacceptableInput const&) = default;
 		virtual char const* what() const override;
 	};

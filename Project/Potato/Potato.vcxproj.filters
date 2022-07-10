@@ -13,22 +13,13 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\Public\PotatoDLr.h">
+    <ClInclude Include="..\..\Public\PotatoSLRX.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Public\PotatoIntrusivePointer.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Public\PotatoIR.h">
-      <Filter>Public</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Public\PotatoMisc.h">
-      <Filter>Public</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Public\PotatoReg.h">
-      <Filter>Public</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Public\PotatoStrEncode.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Public\PotatoTMP.h">
@@ -37,36 +28,39 @@
     <ClInclude Include="..\..\Public\PotatoInterval.h">
       <Filter>Public</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Public\PotatoIR.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Public\PotatoStrEncode.h">
+      <Filter>Public</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\Public\PotatoStrFormat.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Public\PotatoReg.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Public\PotatoEbnf.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Public\PotatoPath.h">
-      <Filter>Public</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\Private\PotatoDLr.cpp">
-      <Filter>Private</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Private\PotatoIR.cpp">
+    <ClCompile Include="..\..\Private\PotatoSLRX.cpp">
       <Filter>Private</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Private\PotatoMisc.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Private\PotatoReg.cpp">
+    <ClCompile Include="..\..\Private\PotatoIR.cpp">
       <Filter>Private</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Private\PotatoStrEncode.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Private\PotatoPath.cpp">
+    <ClCompile Include="..\..\Private\PotatoStrFormat.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Private\PotatoStrFormat.cpp">
+    <ClCompile Include="..\..\Private\PotatoReg.cpp">
       <Filter>Private</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Private\PotatoEbnf.cpp">

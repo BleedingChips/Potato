@@ -13,8 +13,8 @@ struct UnpassedUnit : public std::exception
 void TestingTMP();
 void TestingMisc();
 void TestingStrEncode();
-void TestingDLr();
+void TestingSLRX();
 void TestingStrFormat();
 void TestingReg();
-void TestingEbnf();
+void TestingEbnf() noexcept;
 void TestingIntrusivePointer();

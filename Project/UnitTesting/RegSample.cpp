@@ -5,18 +5,7 @@ using namespace Potato::Reg;
 
 void TestingReg()
 {
-
-	{
-		std::u32string_view Str = UR"(123456abcdef)";
-
-		Table T(UR"(123456abcdef)");
-
-		auto R = ProcessMatch(T.AsWrapper(), Str);
-
-		if (!R.has_value() || Str.substr(R->MainCapture.Begin(), R->MainCapture.Count()) != Str)
-			throw UnpassedUnit{ "TestingReg : Bad Sample 1" };
-	}
-
+	/*
 	{
 		std::u32string_view Str = UR"(123456abcdef)";
 		std::u32string_view TStr = UR"(123456)";
@@ -28,7 +17,6 @@ void TestingReg()
 		if (!R.has_value() || Str.substr(R->MainCapture.Begin(), R->MainCapture.Count()) != TStr)
 			throw UnpassedUnit{ "TestingReg : Bad Sample 1" };
 	}
-
 
 	{
 		std::u32string_view Str = UR"(2)";
@@ -102,7 +90,7 @@ void TestingReg()
 		if (!R.has_value() || Str.substr(R->MainCapture.Begin(), R->MainCapture.Count()) != UR"(abcdefABCDEF)")
 			throw UnpassedUnit{ "TestingReg : Bad Sample 7" };
 	}
-
+	
 	{
 
 		std::u32string_view Str = UR"(abcdef{{}}ABCDEF你好啊)";
@@ -111,10 +99,12 @@ void TestingReg()
 		auto R = ProcessSearch(T.AsWrapper(), Str);
 
 		auto Str2 = Str.substr(0, R->MainCapture.Begin());
+		auto St3 = Str.substr(R->MainCapture.Begin(), R->MainCapture.Count());
 
 		if (!R.has_value() || Str.substr(0, R->MainCapture.Begin()) != UR"(abcdef{)" || Str.substr(R->MainCapture.End()) != UR"(}ABCDEF你好啊)")
 			throw UnpassedUnit{ "TestingReg : Bad Sample 9" };
 	}
+
 
 	{
 		MulityRegexCreator Crerator;
@@ -151,6 +141,25 @@ void TestingReg()
 			throw UnpassedUnit{ "TestingReg : Bad Sample 8" };
 		if (std::get<0>(List[3]) != UR"(你好啊)" || std::get<1>(List[3]) != 5)
 			throw UnpassedUnit{ "TestingReg : Bad Sample 8" };
+	}
+	*/
+
+	{
+		MulityRegexCreator Crerator;
+		Crerator.AddRegex(UR"([0-9][1-9]*)", { 2 }, Crerator.GetCountedUniqueID());
+		Crerator.AddRegex(UR"(+)", { 1 }, Crerator.GetCountedUniqueID(), true);
+		
+
+		auto TBuffer = Crerator.Generate();
+
+		std::vector<std::tuple<std::u32string_view, std::size_t>> List;
+
+		auto IteStr = UR"(1+21)";
+
+		auto R = ProcessGreedyFrontMatch(TableWrapper(TBuffer), IteStr);
+
+
+		volatile int i = 0;
 	}
 
 	std::wcout << LR"(TestingReg Pass !)" << std::endl;

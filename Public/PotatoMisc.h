@@ -252,13 +252,23 @@ namespace Potato::Misc
 			return { Readed, AlignedLength, Input };
 		}
 
-		template<typename TargetT, typename SourceT, typename Exceptable>
-		void TryCrossTypeSet(TargetT& Output, SourceT const& Input, Exceptable const& Exe)
+		template<typename ExceptionT, typename TargetT, typename SourceT, typename ...AT>
+		void TryCrossTypeSet(TargetT& Output, SourceT const& Input, AT&&... at) requires (std::is_constructible_v<ExceptionT, AT...>)
 		{
 			Output = static_cast<TargetT>(Input);
 			if(Output != Input) //[[unlikely]]
-				throw Exe;
+				throw ExceptionT{std::forward<AT>(at)...};
 		}
+
+		template<typename TargetT, typename Exceptable, typename SourceT, typename ...AT>
+		TargetT CrossType(SourceT const& Input, AT&&... at) requires (std::is_constructible_v<Exceptable, AT...>)
+		{
+			TargetT Result = static_cast<TargetT>(Input);
+			if(Result != Result)
+				throw Exceptable {std::forward<AT>(at)...};
+			return Result;
+		}
+
 	};
 
 

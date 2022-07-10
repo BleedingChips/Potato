@@ -6,21 +6,21 @@ int main()
 
 	try {
 
-		TestingTMP();
+		//TestingTMP();
 
-		TestingMisc();
+		//TestingMisc();
 
-		TestingStrEncode();
+		//TestingStrEncode();
 
-		TestingDLr();
+		//TestingSLRX();
 
-		TestingReg();
+		//TestingReg();
 
-		TestingStrFormat();
+		//TestingStrFormat();
 
 		TestingEbnf();
 
-		TestingIntrusivePointer();
+		//TestingIntrusivePointer();
 	}
 	catch (std::exception const& E)
 	{

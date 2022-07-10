@@ -4,8 +4,12 @@
 
 using namespace Potato::Ebnf;
 
-void TestingEbnf()
+using namespace Potato;
+
+
+void TestingEbnf() noexcept
 {
+	
 	std::u32string_view EbnfCode1 =
 		UR"(
 $ := '\s+'
@@ -25,6 +29,21 @@ $ := <Exp>;
 %%%%
 
 +('*' '/') +('+' '-')
+)";
+
+	std::u32string_view EbnfCode2 =
+		UR"(
+$ := '\s+'
+Num := '[1-9][0-9]*' : [1]
+
+%%%%
+
+$ := <Exp>;
+
+<Exp> := Num : [1];
+	:= <Exp> '+' <Exp> : [2];
+
+%%%%
 )";
 
 	auto TableBuffer = TableWrapper::Create(EbnfCode1);

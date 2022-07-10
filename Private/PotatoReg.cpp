@@ -1,5 +1,5 @@
 #include "../Public/PotatoReg.h"
-#include "../Public/PotatoDLr.h"
+#include "../Public/PotatoSLRX.h"
 #include "../Public/PotatoStrEncode.h"
 #include <deque>
 namespace Potato::Reg
@@ -11,10 +11,11 @@ namespace Potato::Reg
 		return Temp;
 	};
 	
+	using namespace Exception;
 
-	using DLr::Symbol;
+	using SLRX::Symbol;
 
-	enum class T
+	enum class T : SLRX::StandardT
 	{
 		SingleChar = 0, // µ¥×Ö·û
 		CharSet, // ¶à×Ö·û
@@ -35,171 +36,218 @@ namespace Potato::Reg
 		Colon, // :
 	};
 
-	constexpr Symbol operator*(T Input) { return Symbol{ Symbol::ValueType::TERMINAL, static_cast<std::size_t>(Input) }; };
+	constexpr Symbol operator*(T Input) { return Symbol{ Symbol::ValueType::TERMINAL, static_cast<SLRX::StandardT>(Input) }; };
 
-	enum class NT
+	enum class NT : SLRX::StandardT
 	{
 		AcceptableSingleChar,
+		CharListAcceptableSingleChar,
 		Statement,
 		CharList,
 		Expression,
 		ExpressionStatement,
+		CharListSingleChar,
 		Number,
+		FinalCharList,
 	};
 
-	constexpr Symbol operator*(NT Input) { return Symbol{ Symbol::ValueType::NOTERMIAL, static_cast<std::size_t>(Input) }; };
+	constexpr Symbol operator*(NT Input) { return Symbol{ Symbol::ValueType::NOTERMIAL, static_cast<SLRX::StandardT>(Input) }; };
+
+	struct LexerElement
+	{
+		T Value;
+		char32_t MappingSymbol;
+		std::variant<SeqIntervalT, char32_t> Acceptable;
+		std::size_t TokenIndex;
+	};
 
 	struct LexerTranslater
 	{
-		struct Storage
-		{
-			Symbol Value;
-			std::variant<SeqIntervalT, char32_t> Acceptable;
-			std::size_t Index;
-		};
 
-		Symbol GetSymbol(std::size_t Index) const {
-			if (Index < StoragedSymbol.size())
-				return StoragedSymbol[Index].Value;
-			else
-				return Symbol::EndOfFile();
-		}
-		std::variant<SeqIntervalT, char32_t>& GetAccept(std::size_t Index) { return StoragedSymbol[Index].Acceptable; }
-		std::size_t GetSize() { return StoragedSymbol.size(); }
+		std::span<LexerElement const> GetSpan() const { return StoragedSymbol;};
+
+		void Insert(bool IsRaw, char32_t InputSymbol);
+		void EndOfFile();
+		std::size_t GetNextTokenIndex() const { return TokenIndexIte; }
 
 	protected:
 
-		void PushSymbolData(T InputSymbol, std::variant<SeqIntervalT, char32_t> Symbol, std::size_t Index) { StoragedSymbol.emplace_back(*InputSymbol, std::move(Symbol), Index); }
-		std::vector<Storage> StoragedSymbol;
-	};
-
-	struct RexLexerTranslater : public LexerTranslater
-	{
-		bool Insert(char32_t InputSymbol, std::size_t SymbolIndex = 0);
-		bool EndOfFile();
-		RexLexerTranslater() = default;
-		RexLexerTranslater(RexLexerTranslater const&) = default;
-		RexLexerTranslater(RexLexerTranslater&&) = default;
-	protected:
 		enum class State
 		{
 			Normal,
 			Transfer,
 			BigNumber,
 			Number,
+			Done,
 		};
+
 		State CurrentState = State::Normal;
 		std::size_t Number = 0;
 		char32_t NumberChar = 0;
 		bool NumberIsBig = false;
-		std::size_t LastTokenIndex = 0;
+		char32_t RecordSymbol;
+		std::size_t RecordTokenIndex = 0;
+		std::size_t TokenIndexIte = 0;
+
+		void PushSymbolData(T InputSymbol, char32_t Character, std::variant<SeqIntervalT, char32_t> Value, std::size_t TokenIndex) { 
+			StoragedSymbol.push_back({InputSymbol, Character, std::move(Value), TokenIndex });
+		}
+		std::vector<LexerElement> StoragedSymbol;
 	};
 
-	bool RexLexerTranslater::Insert(char32_t InputSymbol, std::size_t SymbolIndex)
+	void LexerTranslater::Insert(bool IsRaw, char32_t InputSymbol)
 	{
 		if (InputSymbol < MaxChar())
 		{
+			auto TokenIndex = TokenIndexIte;
+			++TokenIndexIte;
+			if (IsRaw)
+			{
+				if (CurrentState == State::Normal)
+				{
+					PushSymbolData(T::SingleChar, InputSymbol, InputSymbol, TokenIndex);
+					return;
+				}
+				else {
+					throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::RawRegexInNotNormalState, InputSymbol, TokenIndex };
+				}
+			}
+
 			switch (CurrentState)
 			{
 			case State::Normal:
+			{
 				switch (InputSymbol)
 				{
-				case U'-': PushSymbolData(T::Min, InputSymbol, SymbolIndex); return true;
-				case U'[': PushSymbolData(T::BracketsLeft, InputSymbol, SymbolIndex); return true;
-				case U']': PushSymbolData(T::BracketsRight, InputSymbol, SymbolIndex); return true;
-				case U'{': PushSymbolData(T::CurlyBracketsLeft, InputSymbol, SymbolIndex); return true;
-				case U'}': PushSymbolData(T::CurlyBracketsRight, InputSymbol, SymbolIndex); return true;
-				case U',': PushSymbolData(T::Comma, InputSymbol, SymbolIndex); return true;
-				case U'(': PushSymbolData(T::ParenthesesLeft, InputSymbol, SymbolIndex); return true;
-				case U')': PushSymbolData(T::ParenthesesRight, InputSymbol, SymbolIndex); return true;
-				case U'*': PushSymbolData(T::Mulity, InputSymbol, SymbolIndex); return true;
-				case U'?': PushSymbolData(T::Question, InputSymbol, SymbolIndex); return true;
-				case U'.': PushSymbolData(T::CharSet, SeqIntervalT{MaxIntervalRange()}, SymbolIndex); return true;
-				case U'|': PushSymbolData(T::Or, InputSymbol, SymbolIndex); return true;
-				case U'+': PushSymbolData(T::Add, InputSymbol, SymbolIndex); return true;
-				case U'^': PushSymbolData(T::Not, InputSymbol, SymbolIndex); return true;
-				case U':': PushSymbolData(T::Colon, InputSymbol, SymbolIndex); return true;
-				case U'\\': CurrentState = State::Transfer; LastTokenIndex = SymbolIndex; return false;
+				case U'-':
+					PushSymbolData(T::Min, InputSymbol, InputSymbol, TokenIndex);
+					break;
+				case U'[':
+					PushSymbolData(T::BracketsLeft, InputSymbol, InputSymbol, TokenIndex);
+					break;
+				case U']':
+					PushSymbolData(T::BracketsRight, InputSymbol, InputSymbol, TokenIndex);
+					break;
+				case U'{':
+					PushSymbolData(T::CurlyBracketsLeft, InputSymbol, InputSymbol, TokenIndex);
+					break;
+				case U'}':
+					PushSymbolData(T::CurlyBracketsRight, InputSymbol, InputSymbol, TokenIndex);
+					break;
+				case U',':
+					PushSymbolData(T::Comma, InputSymbol, InputSymbol, TokenIndex);
+					break;
+				case U'(':
+					PushSymbolData(T::ParenthesesLeft, InputSymbol, InputSymbol, TokenIndex);
+					break;
+				case U')':
+					PushSymbolData(T::ParenthesesRight, InputSymbol, InputSymbol, TokenIndex);
+					break;
+				case U'*':
+					PushSymbolData(T::Mulity, InputSymbol, InputSymbol, TokenIndex);
+					break;
+				case U'?':
+					PushSymbolData(T::Question, InputSymbol, InputSymbol, TokenIndex);
+					break;
+				case U'.':
+					PushSymbolData(T::CharSet, InputSymbol, MaxIntervalRange(), TokenIndex);
+					break;
+				case U'|':
+					PushSymbolData(T::Or, InputSymbol, InputSymbol, TokenIndex);
+					break;
+				case U'+':
+					PushSymbolData(T::Add, InputSymbol, InputSymbol, TokenIndex);
+					break;
+				case U'^':
+					PushSymbolData(T::Not, InputSymbol, InputSymbol, TokenIndex);
+					break;
+				case U':':
+					PushSymbolData(T::Colon, InputSymbol, InputSymbol, TokenIndex);
+					break;
+				case U'\\':
+					CurrentState = State::Transfer;
+					RecordSymbol = InputSymbol;
+					RecordTokenIndex = TokenIndex;
+					break;
 				default:
 					if (InputSymbol >= U'0' && InputSymbol <= U'9')
-					{
-						PushSymbolData(T::Num, InputSymbol, SymbolIndex);
-						return true;
-					}
-					else {
-						PushSymbolData(T::SingleChar, InputSymbol, SymbolIndex);
-						return true;
-					}
+						PushSymbolData(T::Num, InputSymbol, InputSymbol, TokenIndex);
+					else
+						PushSymbolData(T::SingleChar, InputSymbol, InputSymbol, TokenIndex);
+					break;
 				}
 				break;
+			}
 			case State::Transfer:
+			{
 				switch (InputSymbol)
 				{
 				case U'd':
-					PushSymbolData(T::CharSet, SeqIntervalT{{U'0', U'9' + 1}} , LastTokenIndex);
+					PushSymbolData(T::CharSet, InputSymbol, SeqIntervalT{ {U'0', U'9' + 1} }, RecordTokenIndex);
 					CurrentState = State::Normal;
-					return true;
-				case U'D': {
+					break;
+				case U'D':
+				{
 					SeqIntervalT Tem{ { {1, U'0'},{U'9' + 1, MaxChar()} } };
-					PushSymbolData(T::CharSet, std::move(Tem), LastTokenIndex);
+					PushSymbolData(T::CharSet, InputSymbol, std::move(Tem), RecordTokenIndex);
 					CurrentState = State::Normal;
-					return true;
+					break;
 				}
 				case U'f':
-					PushSymbolData(T::SingleChar, U'\f', LastTokenIndex);
+					PushSymbolData(T::SingleChar, InputSymbol, U'\f', RecordTokenIndex);
 					CurrentState = State::Normal;
-					return true;
+					break;
 				case U'n':
-					PushSymbolData(T::SingleChar, U'\n', LastTokenIndex);
+					PushSymbolData(T::SingleChar, InputSymbol, U'\n', RecordTokenIndex);
 					CurrentState = State::Normal;
-					return true;
+					break;
 				case U'r':
-					PushSymbolData(T::SingleChar, U'\r', LastTokenIndex);
+					PushSymbolData(T::SingleChar, InputSymbol, U'\r', RecordTokenIndex);
 					CurrentState = State::Normal;
-					return true;
+					break;
 				case U't':
-					PushSymbolData(T::SingleChar, U'\t', LastTokenIndex);
+					PushSymbolData(T::SingleChar, InputSymbol, U'\t', RecordTokenIndex);
 					CurrentState = State::Normal;
-					return true;
+					break;
 				case U'v':
-					PushSymbolData(T::SingleChar, U'\v', LastTokenIndex);
+					PushSymbolData(T::SingleChar, InputSymbol, U'\v', RecordTokenIndex);
 					CurrentState = State::Normal;
-					return true;
+					break;
 				case U's':
 				{
 					SeqIntervalT tem({ IntervalT{ 1, 33 }, IntervalT{127, 128} });
-					PushSymbolData(T::CharSet, std::move(tem), LastTokenIndex);
+					PushSymbolData(T::CharSet, InputSymbol, std::move(tem), RecordTokenIndex);
 					CurrentState = State::Normal;
-					return true;
+					break;
 				}
 				case U'S':
 				{
 					SeqIntervalT tem({ IntervalT{33, 127}, IntervalT{128, MaxChar()} });
-					PushSymbolData(T::CharSet, std::move(tem), LastTokenIndex);
+					PushSymbolData(T::CharSet, InputSymbol, std::move(tem), RecordTokenIndex);
 					CurrentState = State::Normal;
-					return true;
+					break;
 				}
 				case U'w':
 				{
-					SeqIntervalT tem({ IntervalT{ U'a', U'z' + 1 }, IntervalT{ U'A', U'Z' + 1 }, IntervalT{ U'_', U'_' + 1}});
-					PushSymbolData(T::CharSet, std::move(tem), LastTokenIndex);
+					SeqIntervalT tem({ IntervalT{ U'a', U'z' + 1 }, IntervalT{ U'A', U'Z' + 1 }, IntervalT{ U'_', U'_' + 1} });
+					PushSymbolData(T::CharSet, InputSymbol, std::move(tem), RecordTokenIndex);
 					CurrentState = State::Normal;
-					return true;
+					break;
 				}
 				case U'W':
 				{
-					SeqIntervalT tem({ IntervalT{ U'a', U'z' + 1 }, IntervalT{ U'A', U'Z' + 1 }, IntervalT{ U'_', U'_' + 1}});
+					SeqIntervalT tem({ IntervalT{ U'a', U'z' + 1 }, IntervalT{ U'A', U'Z' + 1 }, IntervalT{ U'_', U'_' + 1} });
 					SeqIntervalT total({ 1, MaxChar() });
-					PushSymbolData(T::CharSet, tem.Complementary(MaxIntervalRange()), LastTokenIndex);
+					PushSymbolData(T::CharSet, InputSymbol, tem.Complementary(MaxIntervalRange()), RecordTokenIndex);
 					CurrentState = State::Normal;
-					return true;
+					break;
 				}
 				case U'z':
 				{
-					SeqIntervalT tem(IntervalT{ 256, MaxChar()});
-					PushSymbolData(T::CharSet, tem, LastTokenIndex);
+					SeqIntervalT tem(IntervalT{ 256, MaxChar() });
+					PushSymbolData(T::CharSet, InputSymbol, std::move(tem), RecordTokenIndex);
 					CurrentState = State::Normal;
-					return true;
+					break;
 				}
 				case U'u':
 				{
@@ -207,21 +255,23 @@ namespace Potato::Reg
 					NumberChar = 0;
 					Number = 0;
 					NumberIsBig = false;
-					return false;
+					break;
 				}
 				case U'U':
 				{
-					CurrentState = State::BigNumber;
+					CurrentState = State::Number;
 					NumberChar = 0;
-					Number = 0; 
+					Number = 0;
 					NumberIsBig = true;
-					return false;
+					break;
 				}
 				default:
-					PushSymbolData(T::SingleChar, InputSymbol, LastTokenIndex);
+					PushSymbolData(T::SingleChar, InputSymbol, InputSymbol, RecordTokenIndex);
 					CurrentState = State::Normal;
-					return true;
+					break;
 				}
+				break;
+			}
 			case State::Number:
 			{
 				Number += 1;
@@ -241,215 +291,138 @@ namespace Potato::Reg
 					NumberChar += InputSymbol - U'A' + 10;
 				}
 				else {
-					throw Exception::UnaccaptableRegex{ SymbolIndex, {} };
+					throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::UnaccaptableNumber, InputSymbol, TokenIndex };
 				}
 				if ((Number == 4 && !NumberIsBig) || (NumberIsBig && Number == 6))
 				{
-					if(Number >= MaxChar())
-						throw Exception::UnaccaptableRegex{ SymbolIndex, {} };
-					PushSymbolData(T::SingleChar, NumberChar, LastTokenIndex);
+					PushSymbolData(T::SingleChar, InputSymbol, NumberChar, RecordTokenIndex);
 					CurrentState = State::Normal;
-					return true;
 				}
-				else
-					return false;
+				break;
 			}
 			default:
-				throw Exception::UnaccaptableRegex{ SymbolIndex, {} };
-				return false;
+				assert(false);
 			}
-		}
-		else {
-			throw Exception::UnaccaptableRegex{ SymbolIndex, {} };
-			return false;
+		}else {
+			throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::OutOfCharRange, InputSymbol, TokenIndexIte};
 		}
 	}
 
-	bool RexLexerTranslater::EndOfFile()
+	void LexerTranslater::EndOfFile()
 	{
-		switch (CurrentState)
-		{
-		case State::Normal:
-			return false;
-		case State::Transfer:
-			throw Exception::UnaccaptableRegex{ LastTokenIndex, {} };
-		case State::Number:
-			if (Number != 4 && !NumberIsBig || Number != 6 && NumberIsBig)
-			{
-				throw Exception::UnaccaptableRegex{ LastTokenIndex, {} };
-			}
-			else {
-				PushSymbolData(T::SingleChar, NumberChar, std::numeric_limits<std::size_t>::max());
-				return true;
-			}
-		default:
-			return false;
-			break;
-		}
+		if(CurrentState == State::Normal)
+			CurrentState = State::Done;
+		else
+			throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::UnSupportEof, Reg::EndOfFile(), TokenIndexIte};
 	}
 
-	struct RawRexLexerTranslater : public LexerTranslater
+	const SLRX::TableWrapper RexSLRXWrapper()
 	{
-		bool Insert(char32_t InputSymbol, std::size_t SymbolIndex = 0) {
-			PushSymbolData(T::SingleChar, InputSymbol, SymbolIndex);
-			return true;
-		}
-		bool EndOfFile()
-		{
-			return false;
-		}
-		RawRexLexerTranslater() = default;
-		RawRexLexerTranslater(RawRexLexerTranslater const&) = default;
-		RawRexLexerTranslater(RawRexLexerTranslater&&) = default;
-	};
-
-	std::size_t UnfaTable::NewNode()
-	{
-		std::size_t Index = Nodes.size();
-		Nodes.push_back({ Index, {} });
-		return Index;
-	}
-
-	void UnfaTable::AddComsumeEdge(std::size_t From, std::size_t To, std::vector<IntervalT> Acceptable) {
-		Edge NewEdge;
-		NewEdge.Type = EdgeType::Consume;
-		NewEdge.ShiftNode = To;
-		NewEdge.ConsumeChars = std::move(Acceptable);
-		AddEdge(From, std::move(NewEdge));
-	}
-	void UnfaTable::AddAcceptableEdge(std::size_t From, std::size_t To, Accept Data)
-	{
-		Edge NewEdge;
-		NewEdge.Type = EdgeType::Acceptable;
-		NewEdge.ShiftNode = To;
-		NewEdge.AcceptData = std::move(Data);
-		AddEdge(From, std::move(NewEdge));
-	}
-
-	void UnfaTable::AddCapture(NodeSet OutsideSet, NodeSet InsideSet)
-	{
-		Edge NewEdge;
-		NewEdge.ShiftNode = InsideSet.In;
-		NewEdge.Type = EdgeType::CaptureBegin;
-		AddEdge(OutsideSet.In, std::move(NewEdge));
-
-		NewEdge.ShiftNode = OutsideSet.Out;
-		NewEdge.Type = EdgeType::CaptureEnd;
-		AddEdge(InsideSet.Out, std::move(NewEdge));
-	}
-
-	void UnfaTable::AddCounter(NodeSet OutsideSet, NodeSet InsideSet, Counter EndCounter, bool Greedy)
-	{
-		Edge Begin;
-		Begin.ShiftNode = InsideSet.Out;
-		Begin.Type = EdgeType::CounterBegin;
-
-		Edge Continue;
-		Continue.ShiftNode = InsideSet.In;
-		Continue.Type = EdgeType::CounterContinue;
-		Continue.CounterDatas = Counter{ 0, EndCounter.Max - 1 };
-
-		Edge End;
-		End.ShiftNode = OutsideSet.Out;
-		End.Type = EdgeType::CounterEnd;
-		End.CounterDatas = EndCounter;
-
-		AddEdge(OutsideSet.In, std::move(Begin));
-		if (Greedy)
-		{
-			AddEdge(InsideSet.Out, std::move(Continue));
-			AddEdge(InsideSet.Out, std::move(End));
-		}
-		else {
-			AddEdge(InsideSet.Out, std::move(End));
-			AddEdge(InsideSet.Out, std::move(Continue));
-		}
-	}
-
-	void UnfaTable::AddEdge(std::size_t FormNodeIndex, Edge Edge)
-	{
-		assert(FormNodeIndex < Nodes.size());
-		auto& Cur = Nodes[FormNodeIndex];
-		Edge.UniqueID = TemporaryUniqueID;
-		Cur.Edges.push_back(std::move(Edge));
-	}
-
-	void UnfaTable::Link(UnfaTable const& OtherTable, bool ThisHasHigherPriority)
-	{
-		if (!OtherTable.Nodes.empty())
-		{
-			Nodes.reserve(Nodes.size() + OtherTable.Nodes.size());
-			std::size_t NodeOffset = Nodes.size();
-			for (auto& Ite : OtherTable.Nodes)
-			{
-				Node NewNode{Ite.Index + NodeOffset, {}};
-				NewNode.Edges.reserve(Ite.Edges.size());
-				for (auto& Ite2 : Ite.Edges)
+	#ifdef _DEBUG
+		try {
+	#endif
+			static SLRX::Table Table(
+				*NT::ExpressionStatement,
 				{
-					auto NewEdges = Ite2;
-					NewEdges.ShiftNode += NodeOffset;
-					NewNode.Edges.push_back(NewEdges);
-				}
-				Nodes.push_back(std::move(NewNode));
-			}
-			Edge NewEdges;
-			NewEdges.Type = EdgeType::Consume;
-			NewEdges.ShiftNode = NodeOffset;
-			if(ThisHasHigherPriority)
-				Nodes[0].Edges.emplace_back(NewEdges);
-			else {
-				auto& Ref = Nodes[0].Edges;
-				Ref.emplace(Ref.begin(), NewEdges);
-			}	
+					{*NT::AcceptableSingleChar, {*T::SingleChar}, 40},
+					{*NT::AcceptableSingleChar, {*T::Num}, 40},
+					{*NT::AcceptableSingleChar, {*T::Min}, 40},
+					{*NT::AcceptableSingleChar, {*T::Comma}, 40},
+					{*NT::AcceptableSingleChar, {*T::Colon}, 40},
+					{*NT::CharListSingleChar, {*T::SingleChar}, 40},
+					{*NT::CharListSingleChar, {*T::Num}, 40},
+					{*NT::CharListSingleChar, {*T::Comma}, 40},
+					{*NT::CharListSingleChar, {*T::Colon}, 40},
+					{*NT::CharList, {*NT::CharListSingleChar}, 41},
+					{*NT::CharList, {*NT::CharListSingleChar, *T::Min, *NT::CharListSingleChar}, 42},
+					{*NT::CharList, {*T::CharSet}, 1},
+					{*NT::CharList, {*NT::CharList, *NT::CharList, 3}, 3},
+					
+					{*NT::FinalCharList, {*T::Min}, 60},
+					{*NT::FinalCharList, {*T::Min, *NT::CharList}, 61},
+					{*NT::FinalCharList, {*NT::CharList, *T::Min}, 62},
+					{*NT::FinalCharList, {*NT::CharList}, 63},
+
+					{*NT::Expression, {*T::BracketsLeft, *NT::FinalCharList, *T::BracketsRight}, 4},
+					{*NT::Expression, {*T::BracketsLeft, *T::Not, *NT::FinalCharList, *T::BracketsRight}, 5},
+					{*NT::Expression, {*T::ParenthesesLeft, *T::Question, *T::Colon, *NT::ExpressionStatement, *T::ParenthesesRight}, 6},
+					{*NT::Expression, {*T::ParenthesesLeft, *NT::ExpressionStatement, *T::ParenthesesRight}, 7 },
+					{*NT::ExpressionStatement, {*NT::ExpressionStatement,  *T::Or, *NT::ExpressionStatement, 8}, 8},
+					{*NT::Expression, {*NT::AcceptableSingleChar}, 9},
+					{*NT::Expression, {*T::CharSet}, 50},
+					{*NT::ExpressionStatement, {*NT::Expression}, 10},
+					{*NT::ExpressionStatement, {*NT::ExpressionStatement, 8, *NT::ExpressionStatement, 8, 11}, 11},
+					{*NT::ExpressionStatement, {*NT::Expression, *T::Mulity}, 12},
+					{*NT::ExpressionStatement, {*NT::Expression, *T::Add}, 13},
+					{*NT::ExpressionStatement, {*NT::Expression, *T::Mulity, *T::Question}, 14},
+					{*NT::ExpressionStatement, {*NT::Expression, *T::Add, *T::Question}, 15},
+					{*NT::ExpressionStatement, {*NT::Expression, *T::Question}, 16},
+					{*NT::ExpressionStatement, {*NT::Expression, *T::Question, *T::Question}, 17},
+					{*NT::Number, {*T::Num}, 18},
+					{*NT::Number, {*NT::Number, *T::Num}, 19},
+					{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::CurlyBracketsRight}, 20},
+					{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *T::Comma, *NT::Number, *T::CurlyBracketsRight}, 21},
+					{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::Comma, *T::CurlyBracketsRight}, 22},
+					{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::Comma, *NT::Number, *T::CurlyBracketsRight}, 23},
+
+					{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::CurlyBracketsRight, *T::Question}, 20},
+					{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *T::Comma, *NT::Number, *T::CurlyBracketsRight, *T::Question}, 21},
+					{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::Comma, *T::CurlyBracketsRight, *T::Question}, 22},
+					{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::Comma, *NT::Number, *T::CurlyBracketsRight, *T::Question}, 23},
+				}, {}
+			);
+			return Table.Wrapper;
+		#ifdef _DEBUG
 		}
-	}
+		catch (SLRX::Exception::IllegalSLRXProduction const& Pro)
+		{
+			volatile int i = 0;
 
-	const DLr::TableWrapper RexDLrWrapper()
-	{
-		static DLr::Table Table(
-			*NT::ExpressionStatement,
+			struct Ter
 			{
-				{*NT::AcceptableSingleChar, {*T::SingleChar}, 40},
-				{*NT::AcceptableSingleChar, {*T::Num}, 40},
-				{*NT::AcceptableSingleChar, {*T::Min}, 40},
-				{*NT::AcceptableSingleChar, {*T::Comma}, 40},
-				{*NT::AcceptableSingleChar, {*T::Colon}, 40},
-				{*NT::CharList, {*NT::AcceptableSingleChar}, 41},
-				{*NT::CharList, {*NT::AcceptableSingleChar, *T::Min, *NT::AcceptableSingleChar}, 42},
-				{*NT::CharList, {*T::CharSet}, 1},
-				{*NT::CharList, {*NT::CharList, *NT::CharList, 3}, 3},
-				{*NT::Expression, {*T::BracketsLeft, *NT::CharList, *T::BracketsRight}, 4},
-				{*NT::Expression, {*T::BracketsLeft, *T::Not, *NT::CharList, *T::BracketsRight}, 5},
-				{*NT::Expression, {*T::ParenthesesLeft, *T::Question, *T::Colon, *NT::ExpressionStatement, *T::ParenthesesRight}, 6},
-				{*NT::Expression, {*T::ParenthesesLeft, *NT::ExpressionStatement, *T::ParenthesesRight}, 7 },
-				{*NT::ExpressionStatement, {*NT::ExpressionStatement,  *T::Or, *NT::ExpressionStatement, 8}, 8},
-				{*NT::Expression, {*NT::AcceptableSingleChar}, 9},
-				{*NT::Expression, {*T::CharSet}, 50},
-				{*NT::ExpressionStatement, {*NT::Expression}, 10},
-				{*NT::ExpressionStatement, {*NT::ExpressionStatement, 8, *NT::ExpressionStatement, 8, 11}, 11},
-				{*NT::ExpressionStatement, {*NT::Expression, *T::Mulity}, 12},
-				{*NT::ExpressionStatement, {*NT::Expression, *T::Add}, 13},
-				{*NT::ExpressionStatement, {*NT::Expression, *T::Mulity, *T::Question}, 14},
-				{*NT::ExpressionStatement, {*NT::Expression, *T::Add, *T::Question}, 15},
-				{*NT::ExpressionStatement, {*NT::Expression, *T::Question}, 16},
-				{*NT::ExpressionStatement, {*NT::Expression, *T::Question, *T::Question}, 17},
-				{*NT::Number, {*T::Num}, 18},
-				{*NT::Number, {*NT::Number, *T::Num}, 19},
-				{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::CurlyBracketsRight}, 20},
-				{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *T::Comma, *NT::Number, *T::CurlyBracketsRight}, 21},
-				{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::Comma, *T::CurlyBracketsRight}, 22},
-				{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::Comma, *NT::Number, *T::CurlyBracketsRight}, 23},
+				T Value;
+			};
 
-				{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::CurlyBracketsRight, *T::Question}, 20},
-				{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *T::Comma, *NT::Number, *T::CurlyBracketsRight, *T::Question}, 21},
-				{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::Comma, *T::CurlyBracketsRight, *T::Question}, 22},
-				{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::Comma, *NT::Number, *T::CurlyBracketsRight, *T::Question}, 23},
-			}, {}
-		);
-		return Table.Wrapper;
+			struct NTer
+			{
+				NT Value;
+				std::size_t Count;
+				std::size_t Mask;
+			};
+
+			std::vector<std::variant<Ter, NTer>> Symbols;
+			std::vector<std::variant<Ter, NTer>> Symbols2;
+
+			for (auto& Ite : Pro.Steps1)
+			{
+				if (Ite.IsTerminal())
+				{
+					Symbols.push_back(Ter{ static_cast<T>(Ite.Value.Value) });
+				}
+				else {
+					Symbols.push_back(NTer{ static_cast<NT>(Ite.Value.Value), Ite.Reduce.ProductionCount, Ite.Reduce.Mask });
+				}
+			}
+
+			for (auto& Ite : Pro.Steps2)
+			{
+				if (Ite.IsTerminal())
+				{
+					Symbols2.push_back(Ter{ static_cast<T>(Ite.Value.Value) });
+				}
+				else {
+					Symbols2.push_back(NTer{ static_cast<NT>(Ite.Value.Value), Ite.Reduce.ProductionCount, Ite.Reduce.Mask });
+				}
+			}
+
+
+			throw;
+		}
+		#endif
+
 	}
 
-	std::any RegNoTerminalFunction(Potato::DLr::NTElement& NT, UnfaTable& Output)
+	std::any RegNoTerminalFunction(Potato::SLRX::NTElement& NT, UnfaTable& Output)
 	{
 
 		using NodeSet = UnfaTable::NodeSet;
@@ -468,13 +441,13 @@ namespace Potato::Reg
 		{
 			char32_t Cur = NT[0].Consume<char32_t>();
 			char32_t Cur2 = NT[2].Consume<char32_t>();
-			if (Cur < Cur2)
+
+			if (Cur <= Cur2)
 			{
-				SeqIntervalT Ptr({ Cur, Cur2 + 1 });
-				return Ptr;
+				return SeqIntervalT({ Cur, Cur2 + 1 });
 			}
-			else [[unlikely]] {
-				throw Exception::UnaccaptableRegex{ NT.FirstTokenIndex, {} };
+			else {
+				return SeqIntervalT({ Cur2, Cur + 1 });
 			}
 		}
 		case 1:
@@ -484,6 +457,30 @@ namespace Potato::Reg
 			auto T1 = NT[0].Consume<SeqIntervalT>();
 			auto T2 = NT[1].Consume<SeqIntervalT>();
 			return SeqIntervalT{ {T1.AsWrapper().Union(T2.AsWrapper())} };
+		}
+		case 60:
+		{
+			auto T1 = NT[0].Consume<char32_t>();
+			SeqIntervalT Ptr({ T1, T1 + 1 });
+			return Ptr;
+		}
+		case 61:
+		{
+			auto T1 = NT[0].Consume<char32_t>();
+			SeqIntervalT Ptr2({ T1, T1 + 1 });
+			auto T2 = NT[1].Consume<SeqIntervalT>();
+			return T2.AsWrapper().Union(Ptr2.AsWrapper());
+		}
+		case 62:
+		{
+			auto T1 = NT[1].Consume<char32_t>();
+			SeqIntervalT Ptr2({ T1, T1 + 1 });
+			auto T2 = NT[0].Consume<SeqIntervalT>();
+			return T2.AsWrapper().Union(Ptr2.AsWrapper());
+		}
+		case 63:
+		{
+			return NT[0].Consume();
 		}
 		case 4:
 		{
@@ -534,7 +531,7 @@ namespace Potato::Reg
 			auto T2 = Output.NewNode();
 			auto Tar = NT[0].Consume<char32_t>();
 			NodeSet Set{ T1, T2 };
-			Output.AddComsumeEdge(T1, T2, {{Tar, Tar+1}});
+			Output.AddComsumeEdge(T1, T2, { {Tar, Tar + 1} });
 			return Set;
 		}
 		case 50:
@@ -640,8 +637,8 @@ namespace Potato::Reg
 			auto Last = NT[0].Consume<NodeSet>();
 			NodeSet Set{ T1, T2 };
 			Counter Tem;
-			Misc::SerilizerHelper::TryCrossTypeSet(Tem.Min, Count, Reg::Exception::RegexOutOfRange{});
-			Misc::SerilizerHelper::TryCrossTypeSet(Tem.Max, Count + 1, Reg::Exception::RegexOutOfRange{});
+			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Min, Count, RegexOutOfRange::TypeT::Counter, Count);
+			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Max, Count + 1, RegexOutOfRange::TypeT::Counter, Count + 1);
 			Output.AddCounter(Set, Last, Tem, NT.Datas.size() == 4);;
 			return Set;
 		}
@@ -653,8 +650,8 @@ namespace Potato::Reg
 			auto Last = NT[0].Consume<NodeSet>();
 			NodeSet Set{ T1, T2 };
 			Counter Tem;
-			Misc::SerilizerHelper::TryCrossTypeSet(Tem.Min, 0, Reg::Exception::RegexOutOfRange{});
-			Misc::SerilizerHelper::TryCrossTypeSet(Tem.Max, Count + 1, Reg::Exception::RegexOutOfRange{});
+			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Min, static_cast<std::size_t>(0), RegexOutOfRange::TypeT::Counter, static_cast<std::size_t>(0));
+			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Max, Count + 1, RegexOutOfRange::TypeT::Counter, Count + 1);
 			Output.AddCounter(Set, Last, Tem, NT.Datas.size() == 5);
 			return Set;
 		}
@@ -666,8 +663,8 @@ namespace Potato::Reg
 			auto Last = NT[0].Consume<NodeSet>();
 			NodeSet Set{ T1, T2 };
 			Counter Tem;
-			Misc::SerilizerHelper::TryCrossTypeSet(Tem.Min, Count, Reg::Exception::RegexOutOfRange{});
-			Misc::SerilizerHelper::TryCrossTypeSet(Tem.Max, std::numeric_limits<SerilizeT>::max(), Reg::Exception::RegexOutOfRange{});
+			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Min, Count, RegexOutOfRange::TypeT::Counter, Count);
+			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Max, std::numeric_limits<StandardT>::max(), RegexOutOfRange::TypeT::Counter, std::numeric_limits<StandardT>::max());
 			Output.AddCounter(Set, Last, Tem, NT.Datas.size() == 5);
 			return Set;
 		}
@@ -675,30 +672,33 @@ namespace Potato::Reg
 		{
 			auto Count = NT[2].Consume<std::size_t>();
 			auto Count2 = NT[4].Consume<std::size_t>();
-			if (Count > Count2) [[unlikely]]
+			Counter Tem;
+			if (Count <= Count2)
 			{
-				throw Exception::UnaccaptableRegex{NT.FirstTokenIndex, {} };
+				Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Min, Count, RegexOutOfRange::TypeT::Counter, Count );
+				Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Max, Count2 + 1, RegexOutOfRange::TypeT::Counter, Count2 + 1 );
+			}
+			else {
+				Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Min, Count2, RegexOutOfRange::TypeT::Counter, Count2 );
+				Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Max, Count + 1, RegexOutOfRange::TypeT::Counter, Count + 1 );
 			}
 			auto T1 = Output.NewNode();
 			auto T2 = Output.NewNode();
 			auto Last = NT[0].Consume<NodeSet>();
 			NodeSet Set{ T1, T2 };
-			Counter Tem;
-			Misc::SerilizerHelper::TryCrossTypeSet(Tem.Min, Count, Reg::Exception::RegexOutOfRange{});
-			Misc::SerilizerHelper::TryCrossTypeSet(Tem.Max, Count2 + 1, Reg::Exception::RegexOutOfRange{});
 			Output.AddCounter(Set, Last, Tem, NT.Datas.size() == 6);
 			return Set;
 		}
-		default :
+		default:
 			assert(false);
 			return {};
 			break;
 		}
 	}
 
-	std::any RegTerminalFunction(Potato::DLr::TElement& Ele, LexerTranslater& Translater)
+	std::any RegTerminalFunction(Potato::SLRX::TElement& Ele, LexerTranslater& Translater)
 	{
-		auto& Ref = Translater.GetAccept(Ele.TokenIndex);
+		auto& Ref = Translater.GetSpan()[Ele.TokenIndex].Acceptable;
 		if (std::holds_alternative<char32_t>(Ref))
 		{
 			return std::get<char32_t>(Ref);
@@ -714,55 +714,162 @@ namespace Potato::Reg
 		}
 	}
 
+	std::size_t UnfaTable::NewNode()
+	{
+		std::size_t Index = Nodes.size();
+		Nodes.push_back({ Index, {} });
+		return Index;
+	}
+
+	void UnfaTable::AddComsumeEdge(std::size_t From, std::size_t To, std::vector<IntervalT> Acceptable) {
+		Edge NewEdge;
+		NewEdge.Type = EdgeType::Consume;
+		NewEdge.ShiftNode = To;
+		NewEdge.ConsumeChars = std::move(Acceptable);
+		AddEdge(From, std::move(NewEdge));
+	}
+	void UnfaTable::AddAcceptableEdge(std::size_t From, std::size_t To, Accept Data)
+	{
+		Edge NewEdge;
+		NewEdge.Type = EdgeType::Acceptable;
+		NewEdge.ShiftNode = To;
+		NewEdge.AcceptData = std::move(Data);
+		AddEdge(From, std::move(NewEdge));
+	}
+
+	void UnfaTable::AddCapture(NodeSet OutsideSet, NodeSet InsideSet)
+	{
+		Edge NewEdge;
+		NewEdge.ShiftNode = InsideSet.In;
+		NewEdge.Type = EdgeType::CaptureBegin;
+		AddEdge(OutsideSet.In, std::move(NewEdge));
+
+		NewEdge.ShiftNode = OutsideSet.Out;
+		NewEdge.Type = EdgeType::CaptureEnd;
+		AddEdge(InsideSet.Out, std::move(NewEdge));
+	}
+
+	void UnfaTable::AddCounter(NodeSet OutsideSet, NodeSet InsideSet, Counter EndCounter, bool Greedy)
+	{
+		Edge Begin;
+		Begin.ShiftNode = InsideSet.Out;
+		Begin.Type = EdgeType::CounterBegin;
+
+		Edge Continue;
+		Continue.ShiftNode = InsideSet.In;
+		Continue.Type = EdgeType::CounterContinue;
+		Continue.CounterDatas = Counter{ 0, EndCounter.Max - 1 };
+
+		Edge End;
+		End.ShiftNode = OutsideSet.Out;
+		End.Type = EdgeType::CounterEnd;
+		End.CounterDatas = EndCounter;
+
+		AddEdge(OutsideSet.In, std::move(Begin));
+		if (Greedy)
+		{
+			AddEdge(InsideSet.Out, std::move(Continue));
+			AddEdge(InsideSet.Out, std::move(End));
+		}
+		else {
+			AddEdge(InsideSet.Out, std::move(End));
+			AddEdge(InsideSet.Out, std::move(Continue));
+		}
+	}
+
+	void UnfaTable::AddEdge(std::size_t FormNodeIndex, Edge Edge)
+	{
+		assert(FormNodeIndex < Nodes.size());
+		auto& Cur = Nodes[FormNodeIndex];
+		Edge.UniqueID = TemporaryUniqueID;
+		Cur.Edges.push_back(std::move(Edge));
+	}
+
+	void UnfaTable::Link(UnfaTable const& OtherTable, bool ThisHasHigherPriority)
+	{
+		if (!OtherTable.Nodes.empty())
+		{
+			Nodes.reserve(Nodes.size() + OtherTable.Nodes.size());
+			std::size_t NodeOffset = Nodes.size();
+			for (auto& Ite : OtherTable.Nodes)
+			{
+				Node NewNode{Ite.Index + NodeOffset, {}};
+				NewNode.Edges.reserve(Ite.Edges.size());
+				for (auto& Ite2 : Ite.Edges)
+				{
+					auto NewEdges = Ite2;
+					NewEdges.ShiftNode += NodeOffset;
+					NewNode.Edges.push_back(NewEdges);
+				}
+				Nodes.push_back(std::move(NewNode));
+			}
+			Edge NewEdges;
+			NewEdges.Type = EdgeType::Consume;
+			NewEdges.ShiftNode = NodeOffset;
+			if(ThisHasHigherPriority)
+				Nodes[0].Edges.emplace_back(NewEdges);
+			else {
+				auto& Ref = Nodes[0].Edges;
+				Ref.emplace(Ref.begin(), NewEdges);
+			}	
+		}
+	}
+
 	void CreateUnfaTable(LexerTranslater& Translater, UnfaTable& Output, Accept AcceptData)
 	{
 		auto N1 = Output.NewNode();
 		auto N2 = Output.NewNode();
 		auto N3 = Output.NewNode();
 		Output.AddComsumeEdge(N2, N3, { {MaxChar(), MaxChar() + 1} });
-		auto Wrapper = RexDLrWrapper();
-		auto Steps = DLr::ProcessSymbol(Wrapper, 0, [&](std::size_t Input){ return Translater.GetSymbol(Input); });
-		UnfaTable::NodeSet Set = DLr::ProcessStepWithOutputType<UnfaTable::NodeSet>(std::span(Steps),
-			[&](DLr::StepElement Elements)-> std::any {
-				if(Elements.IsTerminal())
-					return RegTerminalFunction(Elements.AsTerminal(), Translater);
-				else
-					return RegNoTerminalFunction(Elements.AsNoTerminal(), Output);
-			}
-		);
-		Output.AddComsumeEdge(N1, Set.In, {});
-		Output.AddAcceptableEdge(Set.Out, N2, AcceptData);
-	}
+		auto Wrapper = RexSLRXWrapper();
 
-	UnfaTable UnfaTable::Create(std::u32string_view Str, bool IsRaw, Accept AcceptData, SerilizeT UniqueID)
-	{
-		UnfaTable Result(UniqueID);
 		try {
-			if(IsRaw)
+			SLRX::CoreProcessor Pro(Wrapper);
+			for (auto& Ite : Translater.GetSpan())
 			{
-				RawRexLexerTranslater Translater;
-				for (std::size_t Index = 0; Index < Str.size(); ++Index)
-					Translater.Insert(Str[Index], Index);
-				Translater.EndOfFile();
-				CreateUnfaTable(Translater, Result, AcceptData);
+				Pro.Consume(*Ite.Value);
+			}
+			auto Steps = Pro.EndOfFile();
+
+			//auto Steps = SLRX::ProcessParsingStep(Wrapper, 0, [&](std::size_t Input){ return Translater.GetSymbol(Input); });
+			UnfaTable::NodeSet Set = SLRX::ProcessParsingStepWithOutputType<UnfaTable::NodeSet>(std::span(Steps),
+				[&](SLRX::VariantElement Elements)-> std::any {
+					if (Elements.IsTerminal())
+						return RegTerminalFunction(Elements.AsTerminal(), Translater);
+					else
+						return RegNoTerminalFunction(Elements.AsNoTerminal(), Output);
+				}
+			);
+			Output.AddComsumeEdge(N1, Set.In, {});
+			Output.AddAcceptableEdge(Set.Out, N2, AcceptData);
+		}
+		catch (SLRX::Exception::UnaccableSymbol const& Symbol)
+		{
+			auto Span = Translater.GetSpan();
+			if (Span.size() > Symbol.TokenIndex)
+			{
+				auto& Ref = Span[Symbol.TokenIndex];
+				throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Ref.MappingSymbol, Ref.TokenIndex};
 			}
 			else {
-				RexLexerTranslater Translater;
-				for (std::size_t Index = 0; Index < Str.size(); ++Index)
-					Translater.Insert(Str[Index], Index);
-				Translater.EndOfFile();
-				CreateUnfaTable(Translater, Result, AcceptData);
-			}
-			return Result;
+				throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Reg::EndOfFile(), Translater.GetNextTokenIndex()};
+			}	
 		}
-		catch (DLr::Exception::UnaccableSymbol const& Symbol)
+	}
+
+	UnfaTable UnfaTable::Create(std::u32string_view Str, bool IsRaw, Accept AcceptData, StandardT UniqueID)
+	{
+		UnfaTable Result(UniqueID);
+		LexerTranslater Tran;
+
+		for (auto Ite : Str)
 		{
-			throw Exception::UnaccaptableRegex{ Symbol.TokenIndex, AcceptData };
+			Tran.Insert(IsRaw, Ite);
 		}
-		catch (...)
-		{
-			throw;
-		}
+		Tran.EndOfFile();
+		CreateUnfaTable(Tran, Result, AcceptData);
+
+		return Result;
 	}
 
 	struct ExpandResult
@@ -778,10 +885,10 @@ namespace Potato::Reg
 		struct UniqueID
 		{
 			bool HasUniqueID;
-			SerilizeT UniqueID;
+			StandardT UniqueID;
 		};
 		std::optional<UniqueID> UniqueID;
-		void AddUniqueID(SerilizeT ID)
+		void AddUniqueID(StandardT ID)
 		{
 			if (!UniqueID.has_value())
 			{
@@ -1061,12 +1168,12 @@ namespace Potato::Reg
 		return false;
 	}
 
-	auto TableWrapper::Create(UnserilizedTable const& Table) ->std::vector<SerilizeT>
+	auto TableWrapper::Create(UnserilizedTable const& Table) ->std::vector<StandardT>
 	{
-		std::vector<SerilizeT> Result;
+		std::vector<StandardT> Result;
 		Result.resize(2);
 
-		Misc::SerilizerHelper::TryCrossTypeSet(Result[0], Table.Nodes.size(), Exception::RegexOutOfRange{});
+		Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Result[0], Table.Nodes.size(), RegexOutOfRange::TypeT::Node, Table.Nodes.size());
 
 		struct Record
 		{
@@ -1080,12 +1187,12 @@ namespace Potato::Reg
 
 		std::vector<ZipChar> Chars;
 		std::vector<ZipProperty> Propertys;
-		std::vector<SerilizeT> CounterDatas;
+		std::vector<StandardT> CounterDatas;
 
 		for (auto& Ite : Table.Nodes)
 		{
 			ZipNode NewNode;
-			Misc::SerilizerHelper::TryCrossTypeSet(NewNode.EdgeCount, Ite.Edges.size(), Exception::RegexOutOfRange{});
+			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(NewNode.EdgeCount, Ite.Edges.size(), RegexOutOfRange::TypeT::EdgeCount, Ite.Edges.size());
 			auto NodeResult = Misc::SerilizerHelper::WriteObject(Result, NewNode);
 			NodeOffset.push_back(NodeResult.StartOffset);
 			for (auto EdgeIte = Ite.Edges.rbegin(); EdgeIte != Ite.Edges.rend(); ++EdgeIte)
@@ -1135,11 +1242,11 @@ namespace Potato::Reg
 
 				ZipEdge Edges;
 				if (AcceptData.has_value())
-					Misc::SerilizerHelper::TryCrossTypeSet(Edges.AcceptableCharCount, 0, Exception::RegexOutOfRange{});
+					Edges.AcceptableCharCount = 0;
 				else {
 					Chars.clear();
 					TranslateIntervalT(std::span(Ite2.ConsumeChars), Chars);
-					Misc::SerilizerHelper::TryCrossTypeSet(Edges.AcceptableCharCount, Chars.size(), Exception::RegexOutOfRange{});
+					Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Edges.AcceptableCharCount, Chars.size(), RegexOutOfRange::TypeT::AcceptableCharCount, Chars.size());
 				}
 				
 				Edges.HasCounter = (CounterPropertyCount != 0);
@@ -1147,9 +1254,9 @@ namespace Potato::Reg
 				Edges.PropertyCount = static_cast<decltype(Edges.PropertyCount)>(Propertys.size());
 
 				if(Edges.PropertyCount != Propertys.size())
-					throw Exception::RegexOutOfRange{};
+					throw Exception::RegexOutOfRange{ RegexOutOfRange::TypeT::PropertyCount, Propertys.size() };
 
-				Misc::SerilizerHelper::TryCrossTypeSet(Edges.CounterDataCount, CounterDatas.size(), Exception::RegexOutOfRange{});
+				Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Edges.CounterDataCount, CounterDatas.size(), RegexOutOfRange::TypeT::CounterCount, CounterDatas.size());
 				if (Ite2.UniqueID.has_value())
 				{
 					Edges.HasUniqueID = true;
@@ -1176,16 +1283,16 @@ namespace Potato::Reg
 				EdgeReadResult->EdgeTotalLength = Result.size() - EdgeResult.StartOffset;
 				if (EdgeReadResult->EdgeTotalLength != Result.size() - EdgeResult.StartOffset)
 				{
-					throw Exception::RegexOutOfRange{};
+					throw Exception::RegexOutOfRange{ RegexOutOfRange::TypeT::EdgeLength, Result.size() - EdgeResult.StartOffset };
 				}
 			}
 		}
-		Misc::SerilizerHelper::TryCrossTypeSet(Result[1], NodeOffset[0], Exception::RegexOutOfRange{});
+		Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Result[1], NodeOffset[0], RegexOutOfRange::TypeT::Node, NodeOffset[0]);
 
 		for (auto& Ite : Records)
 		{
 			auto Ptr = Misc::SerilizerHelper::ReadObject<ZipEdge>(std::span(Result).subspan(Ite.EdgeOffset));
-			Misc::SerilizerHelper::TryCrossTypeSet(Ptr->ToNode, NodeOffset[Ite.MappingNode], Exception::RegexOutOfRange{});
+			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Ptr->ToNode, NodeOffset[Ite.MappingNode], RegexOutOfRange::TypeT::Node , NodeOffset[Ite.MappingNode]);
 		}
 
 #if _DEBUG
@@ -1195,14 +1302,14 @@ namespace Potato::Reg
 			{
 				std::size_t ToNode;
 				std::span<TableWrapper::ZipProperty const> Propertys;
-				std::span<SerilizeT const> CounterDatas;
+				std::span<StandardT const> CounterDatas;
 				std::span<ZipChar const> ConsumeChars;
 				std::optional<Accept> AcceptData;
 			};
 
 			struct DebugNode
 			{
-				SerilizeT NodeOffset;
+				StandardT NodeOffset;
 				std::vector<DebugEdge> Edges;
 			};
 
@@ -1212,7 +1319,7 @@ namespace Potato::Reg
 
 			for (auto& Ite : NodeOffset)
 			{
-				SerilizeT Offset = static_cast<SerilizeT>(Ite);
+				StandardT Offset = static_cast<StandardT>(Ite);
 				auto Node = Wrapper[Offset];
 				DebugNode DNode;
 				DNode.NodeOffset = Node.NodeOffset;
@@ -1238,7 +1345,7 @@ namespace Potato::Reg
 					}
 					auto PropertyResult = Misc::SerilizerHelper::ReadObjectArray<ZipProperty const>(IteSpan, EdgesResult->PropertyCount);
 					DebugEdges.Propertys = *PropertyResult;
-					auto CounterResult = Misc::SerilizerHelper::ReadObjectArray<SerilizeT const>(PropertyResult.LastSpan, EdgesResult->CounterDataCount);
+					auto CounterResult = Misc::SerilizerHelper::ReadObjectArray<StandardT const>(PropertyResult.LastSpan, EdgesResult->CounterDataCount);
 					DebugEdges.CounterDatas = *CounterResult;
 					DNode.Edges.push_back(DebugEdges);
 				}
@@ -1253,7 +1360,7 @@ namespace Potato::Reg
 		return Result;
 	}
 
-	auto TableWrapper::operator[](SerilizeT Offset) const ->NodeViewer
+	auto TableWrapper::operator[](StandardT Offset) const ->NodeViewer
 	{
 		auto Result = Misc::SerilizerHelper::ReadObject<ZipNode const>(Wrapper.subspan(Offset));
 		NodeViewer Viewer;
@@ -1263,7 +1370,7 @@ namespace Potato::Reg
 		return Viewer;
 	}
 
-	std::vector<SerilizeT> TableWrapper::Create(std::u32string_view Str, Accept Mask, SerilizeT UniqueID, bool IsRaw)
+	std::vector<StandardT> TableWrapper::Create(std::u32string_view Str, Accept Mask, StandardT UniqueID, bool IsRaw)
 	{
 		auto Tab1 = Reg::UnfaTable::Create(Str, IsRaw, Mask, UniqueID);
 		return Create(Tab1);
@@ -1289,7 +1396,7 @@ namespace Potato::Reg
 
 			AmbiguousPoint Point;
 			std::optional<Accept> AcceptResult;
-			std::span<SerilizeT const> SpanIte;
+			std::span<StandardT const> SpanIte;
 
 			if (ZipEdge->AcceptableCharCount == 0)
 			{
@@ -1319,7 +1426,7 @@ namespace Potato::Reg
 			if (ZipEdge->HasCounter)
 			{
 				std::size_t Count = ZipEdge->CounterDataCount;
-				auto RR = Misc::SerilizerHelper::ReadObjectArray<SerilizeT const>(SpanIte, Count);
+				auto RR = Misc::SerilizerHelper::ReadObjectArray<StandardT const>(SpanIte, Count);
 				bool Pass = true;
 
 				std::size_t LastCounterCount = CounterRecord.size();
@@ -1506,7 +1613,7 @@ namespace Potato::Reg
 		StartupTokenIndex = InputStartupTokenIndex;
 	}
 
-	void CoreProcessor::RemoveAmbiuosPoint(SerilizeT UniqueID)
+	void CoreProcessor::RemoveAmbiuosPoint(StandardT UniqueID)
 	{
 		if (!AmbiguousPoints.empty())
 		{
@@ -1796,7 +1903,7 @@ namespace Potato::Reg
 	}
 
 
-	SerilizeT MulityRegexCreator::Push(UnfaTable const& UT)
+	StandardT MulityRegexCreator::Push(UnfaTable const& UT)
 	{
 		if (Temporary.has_value())
 		{
@@ -1809,13 +1916,13 @@ namespace Potato::Reg
 		return CountedUniqueID;
 	}
 
-	SerilizeT MulityRegexCreator::AddRegex(std::u32string_view Regex, Accept Mask, SerilizeT UniqueID, bool IsRaw)
+	StandardT MulityRegexCreator::AddRegex(std::u32string_view Regex, Accept Mask, StandardT UniqueID, bool IsRaw)
 	{
 		return Push(UnfaTable::Create(Regex, IsRaw, Mask, UniqueID));
 	}
 
 
-	std::vector<SerilizeT> MulityRegexCreator::Generate() const
+	std::vector<StandardT> MulityRegexCreator::Generate() const
 	{
 		assert(Temporary.has_value());
 		return TableWrapper::Create(*Temporary);

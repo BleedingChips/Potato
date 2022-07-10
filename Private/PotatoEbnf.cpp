@@ -8,10 +8,17 @@ namespace Potato::Ebnf
 
 	using namespace Exception;
 
-	constexpr DLr::Symbol AsNoT(std::size_t Index) { return DLr::Symbol::AsNoTerminal(Index); }
-	constexpr DLr::Symbol AsT(std::size_t Index) { return DLr::Symbol::AsTerminal(Index); }
+	static constexpr SLRX::StandardT SmallBrace = 0;
+	static constexpr SLRX::StandardT MiddleBrace = 1;
+	static constexpr SLRX::StandardT BigBrace = 2;
+	static constexpr SLRX::StandardT OrLeft = 3;
+	static constexpr SLRX::StandardT OrRight = 4;
+	static constexpr SLRX::StandardT MinMask = 5;
 
-	enum class T : std::size_t
+	constexpr SLRX::Symbol AsNoT(SLRX::StandardT Index) { return SLRX::Symbol::AsNoTerminal(Index); }
+	constexpr SLRX::Symbol AsT(SLRX::StandardT Index) { return SLRX::Symbol::AsTerminal(Index); }
+
+	enum class T : SLRX::StandardT
 	{
 		Empty = 0,
 		Terminal,
@@ -35,11 +42,12 @@ namespace Potato::Ebnf
 		Semicolon,
 		Command,
 		Barrier,
+		ItSelf,
 	};
 
-	constexpr DLr::Symbol operator*(T sym) { return DLr::Symbol{ DLr::Symbol::ValueType::TERMINAL, static_cast<std::size_t>(sym) }; };
+	constexpr SLRX::Symbol operator*(T sym) { return SLRX::Symbol::AsTerminal(static_cast<SLRX::StandardT>(sym)); };
 
-	enum class NT
+	enum class NT : SLRX::StandardT
 	{
 		Statement,
 		FunctionEnum,
@@ -47,16 +55,16 @@ namespace Potato::Ebnf
 		NTExpression,
 		ExpressionStatement,
 		ExpressionList,
-		LeftOrStatement,
+		//LeftOrStatement,
 		RightOrStatement,
 		OrStatement,
 	};
 
-	constexpr DLr::Symbol operator*(NT sym) { return DLr::Symbol{ DLr::Symbol::ValueType::NOTERMIAL, static_cast<std::size_t>(sym) }; };
+	constexpr SLRX::Symbol operator*(NT sym) { return SLRX::Symbol{ SLRX::Symbol::ValueType::NOTERMIAL, static_cast<SLRX::StandardT>(sym) }; };
 
 	void AddRegex(Reg::MulityRegexCreator& Creator, std::u32string_view Str, T Enum)
 	{
-		Creator.AddRegex(Str, {static_cast<Reg::SerilizeT>(Enum)}, Creator.GetCountedUniqueID(), false);
+		Creator.AddRegex(Str, {static_cast<SLRX::StandardT>(Enum)}, Creator.GetCountedUniqueID(), false);
 	}
 
 	Reg::TableWrapper EbnfStepReg() {
@@ -74,6 +82,7 @@ namespace Potato::Ebnf
 			AddRegex(Creator, UR"(\s+)", T::Empty);
 			AddRegex(Creator, UR"(\$)", T::Start);
 			AddRegex(Creator, UR"(\|)", T::Or);
+			AddRegex(Creator, UR"(\&)", T::ItSelf);
 			AddRegex(Creator, UR"(\[)", T::LM_Brace);
 			AddRegex(Creator, UR"(\])", T::RM_Brace);
 			AddRegex(Creator, UR"(\{)", T::LB_Brace);
@@ -128,7 +137,7 @@ namespace Potato::Ebnf
 
 	struct LexicalTuple
 	{
-		DLr::Symbol Value;
+		SLRX::Symbol Value;
 		std::u32string_view Str;
 		std::size_t Offset;
 	};
@@ -198,8 +207,8 @@ namespace Potato::Ebnf
 		return Indexs;
 	}
 
-	DLr::TableWrapper EbnfStep1DLr() {
-		static DLr::Table Table(
+	SLRX::TableWrapper EbnfStep1SLRX() {
+		static SLRX::Table Table(
 			*NT::Statement,
 			{
 				{*NT::Statement, {}, 1},
@@ -212,14 +221,15 @@ namespace Potato::Ebnf
 		return Table.Wrapper;
 	};
 
-	DLr::TableWrapper EbnfStep2DLr() {
-		static DLr::Table Table(
+	SLRX::TableWrapper EbnfStep2SLRX() {
+		static SLRX::Table Table(
 			*NT::Statement,
 			{
 				{*NT::Expression, {*T::Terminal}, 1},
 				{*NT::Expression, {*T::NoTerminal}, 1},
 				{*NT::Expression, {*T::Rex}, 4},
 				{*NT::Expression, {*T::Number}, 5},
+				{*NT::Expression, {*T::ItSelf}, 50},
 				{*NT::Expression, {*T::NoProductionNoTerminal}, 40},
 
 				{*NT::FunctionEnum, {*T::Colon, *T::LM_Brace, *T::Number, *T::RM_Brace}, 6},
@@ -232,29 +242,35 @@ namespace Potato::Ebnf
 				{*NT::Expression, {*T::LB_Brace, *NT::ExpressionStatement, *T::RB_Brace}, 11},
 				{*NT::Expression, {*T::LM_Brace, *NT::ExpressionStatement, *T::RM_Brace}, 12},
 
-				{*NT::LeftOrStatement, {*NT::LeftOrStatement, *NT::Expression}, 8},
-				{*NT::LeftOrStatement, {*NT::Expression}, 9},
+				{*NT::Expression, {*T::LS_Brace, *NT::OrStatement, *T::RS_Brace}, 10},
+				{*NT::Expression, {*T::LB_Brace, *NT::OrStatement, *T::RB_Brace}, 11},
+				{*NT::Expression, {*T::LM_Brace, *NT::OrStatement, *T::RM_Brace}, 12},
+
+				//{*NT::LeftOrStatement, {*NT::LeftOrStatement, *NT::Expression}, 8},
+				//{*NT::LeftOrStatement, {*NT::Expression}, 9},
 				{*NT::RightOrStatement, {*NT::Expression, *NT::RightOrStatement}, 15},
 				{*NT::RightOrStatement, {*NT::Expression}, 9},
-				{*NT::OrStatement, {*NT::LeftOrStatement, *T::Or, *NT::RightOrStatement}, 17},
+				{*NT::OrStatement, {*NT::ExpressionStatement, *T::Or, *NT::RightOrStatement}, 17},
 				{*NT::OrStatement, {*NT::OrStatement, *T::Or, *NT::RightOrStatement}, 30},
-				{*NT::ExpressionStatement, {*NT::OrStatement}, 31},
+				//{*NT::ExpressionStatement, {*NT::OrStatement}, 31},
 
 				{*NT::ExpressionList, {*NT::ExpressionStatement}, 18},
+				{*NT::ExpressionList, {*NT::OrStatement}, 18},
 				{*NT::ExpressionList, {}, 19},
 
 				{*NT::Statement, {*NT::Statement, *NT::Statement, 20}, 20},
 				{*NT::Statement, {*T::NoTerminal, *T::Equal, *NT::ExpressionList, *NT::FunctionEnum, *T::Semicolon}, 21},
 				{*NT::Statement, {*T::Equal, *NT::ExpressionList, *NT::FunctionEnum, *T::Semicolon}, 22},
 				{*NT::Statement, {*T::Start, *T::Equal, *T::NoTerminal, *T::Semicolon}, 23},
+				{*NT::Statement, {*T::Start, *T::Equal, *T::NoTerminal, *T::Number, *T::Semicolon}, 23},
 			},
 			{}
 		);
 		return Table.Wrapper;
 	};
 
-	DLr::TableWrapper EbnfStep3DLr() {
-		static DLr::Table Table(
+	SLRX::TableWrapper EbnfStep3SLRX() {
+		static SLRX::Table Table(
 			*NT::Statement,
 			{
 				{*NT::Expression, {*T::Terminal}, 1},
@@ -274,12 +290,12 @@ namespace Potato::Ebnf
 	{
 		struct Storaget
 		{
-			DLr::Symbol Sym;
+			SLRX::Symbol Sym;
 			std::size_t Index;
 		};
 
 		std::vector<Storaget> Mapping;
-		std::size_t TempNoTerminalCount = std::numeric_limits<std::size_t>::max();
+		SLRX::StandardT TempNoTerminalCount = std::numeric_limits<SLRX::StandardT>::max();
 		Reg::MulityRegexCreator Creator;
 
 		std::vector<LexicalTuple> SymbolTuple;
@@ -301,15 +317,16 @@ namespace Potato::Ebnf
 		try
 		{
 
-			auto Steps = DLr::ProcessSymbol(EbnfStep1DLr(), StepIndexs[0].Begin(), [&](std::size_t Index) -> DLr::Symbol {
-				if (Index < StepIndexs[0].End())
-					return SymbolTuple[Index].Value;
-				else
-					return DLr::Symbol::EndOfFile();
-				}
-			);
+			SLRX::CoreProcessor Pro(EbnfStep1SLRX());
 
-			DLr::ProcessStep(Steps, [&](DLr::StepElement Ele) -> std::any
+			for (auto Index = StepIndexs[0].Begin(); Index < StepIndexs[0].End(); ++Index)
+			{
+				Pro.Consume(SymbolTuple[Index].Value, Index);
+			}
+
+			auto Steps = Pro.EndOfFile();
+
+			SLRX::ProcessParsingStep(Steps, [&](SLRX::VariantElement Ele) -> std::any
 				{
 					if (Ele.IsNoTerminal())
 					{
@@ -319,20 +336,20 @@ namespace Potato::Ebnf
 						case 2:
 						{
 							auto Name = NT[1].Consume<std::u32string_view>();
-							auto Index = FindOrAddSymbol(Name, TerminalMappings);
+							auto Index = FindOrAddSymbol(Name, TerminalMappings) + 1;
+							auto SI = Misc::SerilizerHelper::CrossType<Reg::StandardT, OutofRange>(Index, OutofRange::TypeT::SymbolCount, Index);
 							auto Index2 = NT[3].Consume<std::u32string_view>();
-							Creator.AddRegex(Index2, {0}, static_cast<Reg::SerilizeT>(Index + 1));
+							Creator.AddRegex(Index2, { 0 }, SI);
 							return {};
 						}
 						case 3:
 						{
 							auto Name = NT[1].Consume<std::u32string_view>();
-							auto Index = FindOrAddSymbol(Name, TerminalMappings);
+							auto Index = FindOrAddSymbol(Name, TerminalMappings) + 1;
+							auto SI = Misc::SerilizerHelper::CrossType<Reg::StandardT, OutofRange>(Index, OutofRange::TypeT::SymbolCount, Index);
 							auto Index2 = NT[3].Consume<std::u32string_view>();
-							std::size_t Mask = NT[6].Consume<std::size_t>();
-							Reg::TableWrapper::StorageT SeriMask;
-							Misc::SerilizerHelper::TryCrossTypeSet(SeriMask, Mask, Exception::OutofRange{ Exception::OutofRange::TypeT::Regex, NT.FirstTokenIndex });
-							Creator.AddRegex(Index2, { SeriMask }, static_cast<Reg::SerilizeT>(Index + 1));
+							auto Mask = NT[6].Consume<Reg::StandardT>();
+							Creator.AddRegex(Index2, { Mask }, SI);
 							return {};
 						}
 						case 4:
@@ -356,7 +373,7 @@ namespace Potato::Ebnf
 							return SymbolTuple[TRef.TokenIndex].Str;
 						case T::Number:
 						{
-							std::size_t Index = 0;
+							Reg::StandardT Index = 0;
 							StrFormat::DirectScan(SymbolTuple[TRef.TokenIndex].Str, Index);
 							return Index;
 						}
@@ -367,7 +384,7 @@ namespace Potato::Ebnf
 				}
 			);
 		}
-		catch (DLr::Exception::UnaccableSymbol const& US)
+		catch (SLRX::Exception::UnaccableSymbol const& US)
 		{
 			std::size_t Token = 0;
 			if(SymbolTuple.size() > US.TokenIndex)
@@ -390,23 +407,27 @@ namespace Potato::Ebnf
 			throw;
 		}
 
-		std::vector<DLr::ProductionBuilder> Builder;
-		std::optional<DLr::Symbol> StartSymbol;
+		std::vector<SLRX::ProductionBuilder> Builder;
+		std::optional<SLRX::Symbol> StartSymbol;
 		std::size_t DefineTerminalStart = TerminalMappings.size();
+		std::optional<SLRX::StandardT> MaxForwardDetected;
 		// Step2
 		try
 		{
 
-			std::optional<DLr::Symbol> LastProductionStartSymbol;
+			std::optional<SLRX::Symbol> LastProductionStartSymbol;
 
-			auto Steps = DLr::ProcessSymbol(EbnfStep2DLr(), StepIndexs[1].Begin(), [&](std::size_t Index) -> DLr::Symbol {
-				if (Index < StepIndexs[1].End())
-					return SymbolTuple[Index].Value;
-				else
-					return DLr::Symbol::EndOfFile();
-			});
+			
 
-			DLr::ProcessStep(Steps, [&](DLr::StepElement Ele) -> std::any{
+			SLRX::CoreProcessor Pro(EbnfStep2SLRX());
+
+			for (auto Index = StepIndexs[1].Begin(); Index < StepIndexs[1].End(); ++Index)
+			{
+				Pro.Consume(SymbolTuple[Index].Value, Index);
+			}
+			auto Steps = Pro.EndOfFile();
+
+			SLRX::ProcessParsingStep(Steps, [&](SLRX::VariantElement Ele) -> std::any{
 				if (Ele.IsNoTerminal())
 				{
 					auto Ref = Ele.AsNoTerminal();
@@ -414,120 +435,122 @@ namespace Potato::Ebnf
 					{
 					case 1:
 					case 4:
-						return DLr::ProductionBuilderElement{Ref[0].Consume<DLr::Symbol>()};
+						return SLRX::ProductionBuilderElement{Ref[0].Consume<SLRX::Symbol>()};
 					case 5:
-						return DLr::ProductionBuilderElement{Ref[0].Consume<std::size_t>() + MinMask()};
+						return SLRX::ProductionBuilderElement{ Ref[0].Consume<SLRX::StandardT>() + Ebnf::MinMask };						
+					case 50:
+						return SLRX::ProductionBuilderElement{SLRX::ItSelf{}};
 					case 40:
 					{
-						auto Exp = Ref[0].Consume<std::size_t>();
-						auto CurSymbol = DLr::Symbol::AsNoTerminal(TempNoTerminalCount--);
+						auto Exp = Ref[0].Consume<SLRX::StandardT>();
+						auto CurSymbol = SLRX::Symbol::AsNoTerminal(TempNoTerminalCount--);
 						Builder.push_back({
 							CurSymbol,
-							Exp + MinMask(),
+							Exp + Ebnf::MinMask
 							});
-						return DLr::ProductionBuilderElement{ CurSymbol };
+						return SLRX::ProductionBuilderElement{ CurSymbol };
 					}
 					case 6:
-						return Ref[2].Consume<std::size_t>() + MinMask();
+						return Ref[2].Consume<SLRX::StandardT>() + Ebnf::MinMask;
 					case 7:
-						return MinMask();
+						return Ebnf::MinMask;
 					case 8:
 					{
-						auto Last = Ref[0].Consume<std::vector<DLr::ProductionBuilderElement>>();
-						Last.push_back(Ref[1].Consume<DLr::ProductionBuilderElement>());
+						auto Last = Ref[0].Consume<std::vector<SLRX::ProductionBuilderElement>>();
+						Last.push_back(Ref[1].Consume<SLRX::ProductionBuilderElement>());
 						return std::move(Last);
 					}
 					case 9:
 					{
-						std::vector<DLr::ProductionBuilderElement> Temp;
-						Temp.push_back(Ref[0].Consume<DLr::ProductionBuilderElement>());
+						std::vector<SLRX::ProductionBuilderElement> Temp;
+						Temp.push_back(Ref[0].Consume<SLRX::ProductionBuilderElement>());
 						return std::move(Temp);
 					}
 					case 10:
 					{
-						auto Exp = Ref[1].Consume<std::vector<DLr::ProductionBuilderElement>>();
-						auto CurSymbol = DLr::Symbol::AsNoTerminal(TempNoTerminalCount--);
+						auto Exp = Ref[1].Consume<std::vector<SLRX::ProductionBuilderElement>>();
+						auto CurSymbol = SLRX::Symbol::AsNoTerminal(TempNoTerminalCount--);
 						Builder.push_back({
 							CurSymbol,
 							std::move(Exp),
-							UnserilizeTable::SmallBrace()
+							Ebnf::SmallBrace
 							});
-						return DLr::ProductionBuilderElement{ CurSymbol};
+						return SLRX::ProductionBuilderElement{ CurSymbol};
 					}
 					case 11:
 					{
-						auto Exp = Ref[1].Consume<std::vector<DLr::ProductionBuilderElement>>();
-						auto CurSymbol = DLr::Symbol::AsNoTerminal(TempNoTerminalCount--);
-						Exp.insert(Exp.begin(), DLr::ProductionBuilderElement{ CurSymbol});
+						auto Exp = Ref[1].Consume<std::vector<SLRX::ProductionBuilderElement>>();
+						auto CurSymbol = SLRX::Symbol::AsNoTerminal(TempNoTerminalCount--);
+						Exp.insert(Exp.begin(), SLRX::ProductionBuilderElement{ CurSymbol});
 						Builder.push_back({
 							CurSymbol,
 							std::move(Exp),
-							UnserilizeTable::BigBrace()
+							Ebnf::BigBrace
 							});
 						Builder.push_back({
 							CurSymbol,
-							UnserilizeTable::BigBrace()
+							Ebnf::BigBrace
 							});
-						return DLr::ProductionBuilderElement{ CurSymbol};
+						return SLRX::ProductionBuilderElement{ CurSymbol};
 					}
 					case 12:
 					{
-						auto Exp = Ref[1].Consume<std::vector<DLr::ProductionBuilderElement>>();
-						auto CurSymbol = DLr::Symbol::AsNoTerminal(TempNoTerminalCount--);
+						auto Exp = Ref[1].Consume<std::vector<SLRX::ProductionBuilderElement>>();
+						auto CurSymbol = SLRX::Symbol::AsNoTerminal(TempNoTerminalCount--);
 						Builder.push_back({
 							CurSymbol,
 							std::move(Exp),
-							UnserilizeTable::MiddleBrace()
+							Ebnf::MiddleBrace
 							});
 						Builder.push_back({
 							CurSymbol,
-							UnserilizeTable::MiddleBrace()
+							Ebnf::MiddleBrace
 							});
-						return DLr::ProductionBuilderElement{ CurSymbol};
+						return SLRX::ProductionBuilderElement{ CurSymbol};
 					}
 					case 15:
 					{
-						auto Last = Ref[1].Consume<std::vector<DLr::ProductionBuilderElement>>();
-						Last.push_back(Ref[0].Consume<DLr::ProductionBuilderElement>());
+						auto Last = Ref[1].Consume<std::vector<SLRX::ProductionBuilderElement>>();
+						Last.push_back(Ref[0].Consume<SLRX::ProductionBuilderElement>());
 						return std::move(Last);
 					}
 					case 17:
 					{
-						auto Last1 = Ref[0].Consume<std::vector<DLr::ProductionBuilderElement>>();
-						auto Last2 = Ref[2].Consume<std::vector<DLr::ProductionBuilderElement>>();
+						auto Last1 = Ref[0].Consume<std::vector<SLRX::ProductionBuilderElement>>();
+						auto Last2 = Ref[2].Consume<std::vector<SLRX::ProductionBuilderElement>>();
 						std::reverse(Last2.begin(), Last2.end());
-						std::vector<std::vector<DLr::ProductionBuilderElement>> Temp;
+						std::vector<std::vector<SLRX::ProductionBuilderElement>> Temp;
 						Temp.push_back(std::move(Last1));
 						Temp.push_back(std::move(Last2));
 						return std::move(Temp);
 					}
 					case 30:
 					{
-						auto Last1 = Ref[0].Consume<std::vector<std::vector<DLr::ProductionBuilderElement>>>();
-						auto Last2 = Ref[2].Consume<std::vector<DLr::ProductionBuilderElement>>();
+						auto Last1 = Ref[0].Consume<std::vector<std::vector<SLRX::ProductionBuilderElement>>>();
+						auto Last2 = Ref[2].Consume<std::vector<SLRX::ProductionBuilderElement>>();
 						std::reverse(Last2.begin(), Last2.end());
 						Last1.push_back(std::move(Last2));
 						return std::move(Last1);
 					}
 					case 31:
 					{
-						auto Last = Ref[0].Consume<std::vector<std::vector<DLr::ProductionBuilderElement>>>();
+						auto Last = Ref[0].Consume<std::vector<std::vector<SLRX::ProductionBuilderElement>>>();
 						while (Last.size() >= 2)
 						{
 							auto L1 = std::move(*Last.rbegin());
 							Last.pop_back();
 							auto L2 = std::move(*Last.rbegin());
 							Last.pop_back();
-							auto CurSymbol = DLr::Symbol::AsNoTerminal(TempNoTerminalCount--);
+							auto CurSymbol = SLRX::Symbol::AsNoTerminal(TempNoTerminalCount--);
 							Builder.push_back({
 								CurSymbol,
 								std::move(L1),
-								UnserilizeTable::OrLeft()
+								Ebnf::OrLeft
 								});
 							Builder.push_back({
 								CurSymbol,
 								std::move(L2),
-								UnserilizeTable::OrRight()
+								Ebnf::OrRight
 								});
 							Last.push_back({CurSymbol});
 						}
@@ -536,14 +559,14 @@ namespace Potato::Ebnf
 					case 18:
 						return Ref[0].Consume();
 					case 19:
-						return std::vector<DLr::ProductionBuilderElement>{};
+						return std::vector<SLRX::ProductionBuilderElement>{};
 					case 20:
 						return {};
 					case 21:
 					{
-						LastProductionStartSymbol = Ref[0].Consume<DLr::Symbol>();
-						auto List = Ref[2].Consume<std::vector<DLr::ProductionBuilderElement>>();
-						auto Mask = Ref[3].Consume<std::size_t>();
+						LastProductionStartSymbol = Ref[0].Consume<SLRX::Symbol>();
+						auto List = Ref[2].Consume<std::vector<SLRX::ProductionBuilderElement>>();
+						auto Mask = Ref[3].Consume<SLRX::StandardT>();
 						Builder.push_back({
 							*LastProductionStartSymbol,
 							std::move(List),
@@ -558,12 +581,12 @@ namespace Potato::Ebnf
 							std::size_t TokenIndex = SymbolTuple[Ref.FirstTokenIndex].Offset;
 							throw Exception::UnacceptableEbnf{ Exception::UnacceptableEbnf::TypeT::UnsetProductionHead, TokenIndex};
 						}
-						auto List = Ref[1].Consume<std::vector<DLr::ProductionBuilderElement>>();
-						auto Mask = Ref[2].Consume<std::size_t>();
+						auto List = Ref[1].Consume<std::vector<SLRX::ProductionBuilderElement>>();
+						auto Mask = Ref[2].Consume<SLRX::StandardT>();
 						Builder.push_back({
 							*LastProductionStartSymbol,
 							std::move(List),
-							Mask,
+							Mask
 							});
 						return {};
 					}
@@ -574,7 +597,9 @@ namespace Potato::Ebnf
 							std::size_t TokenIndex = SymbolTuple[Ref.FirstTokenIndex].Offset;
 							throw Exception::UnacceptableEbnf{ Exception::UnacceptableEbnf::TypeT::StartSymbolAreadySet, TokenIndex};
 						}
-						StartSymbol = Ref[2].Consume<DLr::Symbol>();
+						StartSymbol = Ref[2].Consume<SLRX::Symbol>();
+						if(Ref.Datas.size() == 5)
+							MaxForwardDetected = Ref.Datas[3].Consume<SLRX::StandardT>();
 						return {};
 					}
 					default:
@@ -590,7 +615,7 @@ namespace Potato::Ebnf
 					case T::NoProductionNoTerminal:
 					case T::Number:
 					{
-						std::size_t Index = 0;
+						SLRX::StandardT Index = 0;
 						StrFormat::DirectScan(SymbolTuple[Ref.TokenIndex].Str, Index);
 						return Index;
 					}
@@ -601,7 +626,8 @@ namespace Potato::Ebnf
 						{
 							if (TerminalMappings[Index] == Name)
 							{
-								return DLr::Symbol::AsTerminal(Index);
+								auto SI = Misc::SerilizerHelper::CrossType<SLRX::StandardT, OutofRange>(Index, OutofRange::TypeT::TerminalCount, Index);
+								return SLRX::Symbol::AsTerminal(SI);
 							}
 						}
 						throw Exception::UnacceptableEbnf{ UnacceptableEbnf::TypeT::UnrecognizableTerminal, SymbolTuple[Ref.TokenIndex].Offset};
@@ -610,7 +636,9 @@ namespace Potato::Ebnf
 					{
 						auto Name = SymbolTuple[Ref.TokenIndex].Str;
 						auto Index = FindOrAddSymbol(std::move(Name), NoTermialMapping);
-						return DLr::Symbol::AsNoTerminal(Index);
+						auto SI = Misc::SerilizerHelper::CrossType<SLRX::StandardT, OutofRange>(Index, OutofRange::TypeT::SymbolCount, Index);
+						return SLRX::Symbol::AsNoTerminal(SI);
+
 					}
 					case T::Rex:
 					{
@@ -619,13 +647,15 @@ namespace Potato::Ebnf
 						{
 							if (TerminalMappings[Index] == Name)
 							{
-								return DLr::Symbol::AsTerminal(Index);
+								auto SI = Misc::SerilizerHelper::CrossType<SLRX::StandardT, OutofRange>(Index, OutofRange::TypeT::TerminalCount, Index);
+								return SLRX::Symbol::AsTerminal(SI);
 							}
 						}
 						std::size_t Index = TerminalMappings.size();
+						auto SI = Misc::SerilizerHelper::CrossType<SLRX::StandardT, OutofRange>(Index, OutofRange::TypeT::TerminalCount, Index);
 						TerminalMappings.push_back(std::u32string{Name});
-						Creator.AddRegex(Name, {0}, static_cast<Reg::SerilizeT>(Index + 1), true);
-						return DLr::Symbol::AsTerminal(Index);
+						Creator.AddRegex(Name, {0}, SI + 1, true);
+						return SLRX::Symbol::AsTerminal(SI);
 					}
 					default:
 						break;
@@ -642,7 +672,7 @@ namespace Potato::Ebnf
 				throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::UnfindedStartSymbol, Location };
 			}
 		}
-		catch (DLr::Exception::UnaccableSymbol const& US)
+		catch (SLRX::Exception::UnaccableSymbol const& US)
 		{
 			std::size_t Token = 0;
 			if (SymbolTuple.size() > US.TokenIndex)
@@ -652,22 +682,71 @@ namespace Potato::Ebnf
 
 			throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongLr, Token };
 		}
+#ifdef _DEBUG
+		catch (SLRX::Exception::IllegalSLRXProduction const& Pro)
+		{
+
+			struct Ter
+			{
+				T Value;
+			};
+
+			struct NTer
+			{
+				NT Value;
+				std::size_t Count;
+				std::size_t Mask;
+			};
+
+			std::vector<std::variant<Ter, NTer>> Symbols;
+			std::vector<std::variant<Ter, NTer>> Symbols2;
+
+			for (auto& Ite : Pro.Steps1)
+			{
+				if (Ite.IsTerminal())
+				{
+					Symbols.push_back(Ter{ static_cast<T>(Ite.Value.Value) });
+				}
+				else {
+					Symbols.push_back(NTer{ static_cast<NT>(Ite.Value.Value), Ite.Reduce.ProductionCount, Ite.Reduce.Mask });
+				}
+			}
+
+			for (auto& Ite : Pro.Steps2)
+			{
+				if (Ite.IsTerminal())
+				{
+					Symbols2.push_back(Ter{ static_cast<T>(Ite.Value.Value) });
+				}
+				else {
+					Symbols2.push_back(NTer{ static_cast<NT>(Ite.Value.Value), Ite.Reduce.ProductionCount, Ite.Reduce.Mask });
+				}
+			}
+
+
+			throw;
+		}
+#endif
 		catch (...)
 		{
 			throw;
 		}
 
-		std::vector<DLr::OpePriority> Priority;
+		std::vector<SLRX::OpePriority> Priority;
 		// Step3
 		try {
-			auto Steps = DLr::ProcessSymbol(EbnfStep3DLr(), StepIndexs[2].Begin(), [&](std::size_t Index) -> DLr::Symbol {
-				if (Index < StepIndexs[2].End())
-					return SymbolTuple[Index].Value;
-				else
-					return DLr::Symbol::EndOfFile();
-				});
+
+
+			SLRX::CoreProcessor Pro(EbnfStep3SLRX());
+
+			for (auto Index = StepIndexs[2].Begin(); Index < StepIndexs[2].End(); ++Index)
+			{
+				Pro.Consume(SymbolTuple[Index].Value, Index);
+			}
+
+			auto Steps = Pro.EndOfFile();
 			
-			DLr::ProcessStep(Steps, [&](DLr::StepElement Ele) -> std::any{
+			SLRX::ProcessParsingStep(Steps, [&](SLRX::VariantElement Ele) -> std::any{
 				if (Ele.IsNoTerminal())
 				{
 					auto NT = Ele.AsNoTerminal();
@@ -677,26 +756,26 @@ namespace Potato::Ebnf
 						return NT[0].Consume();
 					case 2:
 					{
-						std::vector<DLr::Symbol> Symbols;
-						Symbols.push_back(NT[0].Consume<DLr::Symbol>());
+						std::vector<SLRX::Symbol> Symbols;
+						Symbols.push_back(NT[0].Consume<SLRX::Symbol>());
 						return Symbols;
 					}
 					case 3:
 					{
-						auto Symbols = NT[0].Consume<std::vector<DLr::Symbol>>();
-						Symbols.push_back(NT[1].Consume<DLr::Symbol>());
+						auto Symbols = NT[0].Consume<std::vector<SLRX::Symbol>>();
+						Symbols.push_back(NT[1].Consume<SLRX::Symbol>());
 						return Symbols;
 					}
 					case 4:
 					{
-						auto Symbols = NT[2].Consume<std::vector<DLr::Symbol>>();
-						Priority.push_back({std::move(Symbols), DLr::Associativity::Right});
+						auto Symbols = NT[2].Consume<std::vector<SLRX::Symbol>>();
+						Priority.push_back({std::move(Symbols), SLRX::Associativity::Right});
 						return {};
 					}
 					case 5:
 					{
-						auto Symbols = NT[2].Consume<std::vector<DLr::Symbol>>();
-						Priority.push_back({ std::move(Symbols), DLr::Associativity::Left });
+						auto Symbols = NT[2].Consume<std::vector<SLRX::Symbol>>();
+						Priority.push_back({ std::move(Symbols), SLRX::Associativity::Left });
 						return {};
 					}
 					default:
@@ -715,7 +794,9 @@ namespace Potato::Ebnf
 						{
 							if (TerminalMappings[Index] == Name)
 							{
-								return DLr::Symbol::AsTerminal(Index);
+								auto SI = Misc::SerilizerHelper::CrossType<SLRX::StandardT, OutofRange>(Index, OutofRange::TypeT::TerminalCount, Index);
+
+								return SLRX::Symbol::AsTerminal(SI);
 							}
 						}
 						throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::UnrecognizableTerminal, SymbolTuple[TRef.TokenIndex].Offset };
@@ -727,7 +808,8 @@ namespace Potato::Ebnf
 						{
 							if (TerminalMappings[Index] == Name)
 							{
-								return DLr::Symbol::AsTerminal(Index);
+								auto SI = Misc::SerilizerHelper::CrossType<SLRX::StandardT, OutofRange>(Index, OutofRange::TypeT::TerminalCount, Index);
+								return SLRX::Symbol::AsTerminal(SI);
 							}
 						}
 						throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::UnrecognizableRex, SymbolTuple[TRef.TokenIndex].Offset};
@@ -738,7 +820,7 @@ namespace Potato::Ebnf
 				return {};
 			});
 		}
-		catch (DLr::Exception::UnaccableSymbol const& US)
+		catch (SLRX::Exception::UnaccableSymbol const& US)
 		{
 			std::size_t Token = 0;
 			if (SymbolTuple.size() > US.TokenIndex)
@@ -754,32 +836,45 @@ namespace Potato::Ebnf
 
 		try
 		{
-
+			/*
 			std::size_t MaxNoTerminal = NoTermialMapping.size();
 			for (auto& Ite : Builder)
 			{
 				assert(Ite.ProductionValue.IsNoTerminal());
 				if (Ite.ProductionValue.Value > MaxNoTerminal)
 				{
-					Ite.ProductionValue.Value = Ite.ProductionValue.Value - std::numeric_limits<std::size_t>::max() + MaxNoTerminal;
+					Ite.ProductionValue.Value = Ite.ProductionValue.Value - std::numeric_limits<SLRX::StandardT>::max() + MaxNoTerminal;
 				}
 				for (auto& Ite2 : Ite.Element)
 				{
-					if (!Ite2.IsMask && Ite2.ProductionValue.IsNoTerminal() && Ite2.ProductionValue.Value > MaxNoTerminal)
+					if (Ite2.Type == SLRX::ProductionBuilderElement::TypeT::IsValue && Ite2.ProductionValue.IsNoTerminal() && Ite2.ProductionValue.Value > MaxNoTerminal)
 					{
 						Ite2.ProductionValue.Value = Ite2.ProductionValue.Value - std::numeric_limits<std::size_t>::max() + MaxNoTerminal;
 					}
 				}
 			}
+			*/
 
 			RegTable = Creator.Generate();
-			DLrTable = DLr::TableWrapper::Create(
-				*StartSymbol,
-				std::move(Builder),
-				std::move(Priority)
-			);
+			if (!MaxForwardDetected.has_value())
+			{
+				DLrTable = SLRX::TableWrapper::Create(
+					*StartSymbol,
+					std::move(Builder),
+					std::move(Priority)
+				);
+			}
+			else {
+				DLrTable = SLRX::TableWrapper::Create(
+					*StartSymbol,
+					std::move(Builder),
+					std::move(Priority),
+					*MaxForwardDetected
+				);
+			}
+			
 		}
-		catch (DLr::Exception::UnaccableSymbol const& US)
+		catch (SLRX::Exception::UnaccableSymbol const& US)
 		{
 			std::size_t Token = 0;
 			if (SymbolTuple.size() > US.TokenIndex)
@@ -793,14 +888,18 @@ namespace Potato::Ebnf
 			std::size_t Token = 0;
 			if(!SymbolTuple.empty())
 				Token = SymbolTuple.rbegin()->Str.size() + SymbolTuple.rbegin()->Offset;
-			throw OutofRange{ OutofRange::TypeT::Regex, Token };
+			throw OutofRange{ OutofRange::TypeT::FromRegex, Token };
 		}
-		catch (DLr::Exception::OutOfRange const&)
+		catch (SLRX::Exception::OutOfRange const&)
 		{
 			std::size_t Token = 0;
 			if (!SymbolTuple.empty())
 				Token = SymbolTuple.rbegin()->Str.size() + SymbolTuple.rbegin()->Offset;
-			throw OutofRange{ OutofRange::TypeT::DLr, Token };
+			throw OutofRange{ OutofRange::TypeT::FromSLRX, Token };
+		}
+		catch (SLRX::Exception::IllegalSLRXProduction const& LR)
+		{
+			throw IllegalEbnfProduction{LR, TerminalMappings, NoTermialMapping};
 		}
 		catch (...)
 		{
@@ -825,16 +924,16 @@ namespace Potato::Ebnf
 		for (auto& Ite : Table.TerminalMappings)
 		{
 			Misc::IndexSpan<SubStorageT> Temp;
-			TryCrossTypeSet(Temp.Offset, NameStorage.size(), OutofRange{ OutofRange ::TypeT::Header, NameStorage.size() });
-			TryCrossTypeSet(Temp.Length, Ite.size(), OutofRange{ OutofRange::TypeT::Header, Ite.size() });
+			TryCrossTypeSet<OutofRange>(Temp.Offset, NameStorage.size(), OutofRange ::TypeT::Header, NameStorage.size());
+			TryCrossTypeSet<OutofRange>(Temp.Length, Ite.size(), OutofRange::TypeT::Header, Ite.size());
 			NameStorage.insert(NameStorage.end(), Ite.begin(), Ite.end());
 			Index.push_back(Temp);
 		}
 		for (auto& Ite : Table.NoTermialMapping)
 		{
 			Misc::IndexSpan<SubStorageT> Temp;
-			TryCrossTypeSet(Temp.Offset, NameStorage.size(), OutofRange{ OutofRange::TypeT::Header, NameStorage.size() });
-			TryCrossTypeSet(Temp.Length, Ite.size(), OutofRange{ OutofRange::TypeT::Header, Ite.size() });
+			TryCrossTypeSet<OutofRange>(Temp.Offset, NameStorage.size(), OutofRange::TypeT::Header, NameStorage.size() );
+			TryCrossTypeSet<OutofRange>(Temp.Length, Ite.size(), OutofRange::TypeT::Header, Ite.size() );
 			NameStorage.insert(NameStorage.end(), Ite.begin(), Ite.end());
 			Index.push_back(Temp);
 		}
@@ -845,11 +944,11 @@ namespace Potato::Ebnf
 		auto RegLast = WriteObjectArray(Result, std::span(Table.RegTable));
 		auto DLrLast = WriteObjectArray(Result, std::span(Table.DLrTable));
 		auto HeadPtr = ReadObject<ZipHeader>(std::span(Result));
-		TryCrossTypeSet(HeadPtr->TerminalNameCount, Table.TerminalMappings.size(), OutofRange{ OutofRange::TypeT::Header, Table.TerminalMappings.size() });
-		TryCrossTypeSet(HeadPtr->NameIndexCount, Index.size(), OutofRange{ OutofRange::TypeT::Header, Index.size() });
-		TryCrossTypeSet(HeadPtr->NameStringCount, NameStorage.size(), OutofRange{ OutofRange::TypeT::Header, NameStorage.size() });
-		TryCrossTypeSet(HeadPtr->RegCount, RegLast.WriteLength, OutofRange{ OutofRange::TypeT::Header, RegLast.WriteLength });
-		TryCrossTypeSet(HeadPtr->DLrCount, DLrLast.WriteLength, OutofRange{ OutofRange::TypeT::Header, DLrLast.WriteLength });
+		TryCrossTypeSet<OutofRange>(HeadPtr->TerminalNameCount, Table.TerminalMappings.size(), OutofRange::TypeT::Header, Table.TerminalMappings.size());
+		TryCrossTypeSet<OutofRange>(HeadPtr->NameIndexCount, Index.size(), OutofRange::TypeT::Header, Index.size());
+		TryCrossTypeSet<OutofRange>(HeadPtr->NameStringCount, NameStorage.size(), OutofRange::TypeT::Header, NameStorage.size());
+		TryCrossTypeSet<OutofRange>(HeadPtr->RegCount, RegLast.WriteLength, OutofRange::TypeT::Header, RegLast.WriteLength );
+		TryCrossTypeSet<OutofRange>(HeadPtr->DLrCount, DLrLast.WriteLength, OutofRange::TypeT::Header, DLrLast.WriteLength );
 		return Result;
 	}
 
@@ -862,17 +961,17 @@ namespace Potato::Ebnf
 			auto Head = ReadObject<ZipHeader const>(Input);
 			auto Name = ReadObjectArray<char32_t const>(Head.LastSpan, Head->NameStringCount);
 			auto Index = ReadObjectArray<Misc::IndexSpan<SubStorageT> const>(Name.LastSpan, Head->NameIndexCount);
-			auto Reg = ReadObjectArray<Reg::TableWrapper::StorageT const>(Index.LastSpan, Head->RegCount);
-			auto DLr = ReadObjectArray<Reg::TableWrapper::StorageT const>(Reg.LastSpan, Head->DLrCount);
+			auto Reg = ReadObjectArray<Reg::TableWrapper::StandardT const>(Index.LastSpan, Head->RegCount);
+			auto DLr = ReadObjectArray<Reg::TableWrapper::StandardT const>(Reg.LastSpan, Head->DLrCount);
 			TotalName = std::u32string_view(Name->data(), Name->size());
 			StrIndex = *Index;
 			TerminalCount = Head->TerminalNameCount;
 			RegWrapper = *Reg;
-			DLrWrapper = *DLr;
+			SLRXWrapper = *DLr;
 		}
 	}
 
-	std::u32string_view TableWrapper::FindSymbolName(DLr::Symbol Symbol) const
+	std::u32string_view TableWrapper::FindSymbolName(SLRX::Symbol Symbol) const
 	{
 		if (!Symbol.IsEndOfFile() && !Symbol.IsStartSymbol())
 		{
@@ -908,7 +1007,7 @@ namespace Potato::Ebnf
 				if (Re->Accept->UniqueID != 0)
 				{
 					EbnfSymbolTuple Re2;
-					Re2.Value = DLr::Symbol::AsTerminal(Re->Accept->UniqueID - 1);
+					Re2.Value = SLRX::Symbol::AsTerminal(Re->Accept->UniqueID - 1);
 					Re2.Mask = Re->Accept->AcceptData.Mask;
 					auto Capture = Re->Accept->GetCaptureWrapper();
 					if (Capture.HasSubCapture())
@@ -963,7 +1062,7 @@ namespace Potato::Ebnf
 		return Tuples;
 	}
 
-	Misc::IndexSpan<> TranslateIndex(DLr::NTElement ELe, std::span<EbnfSymbolTuple const> InputSymbol)
+	Misc::IndexSpan<> TranslateIndex(SLRX::NTElement ELe, std::span<EbnfSymbolTuple const> InputSymbol)
 	{
 		if (ELe.Datas.empty())
 		{
@@ -984,20 +1083,22 @@ namespace Potato::Ebnf
 	std::any ProcessStep(TableWrapper Wrapper, std::span<EbnfSymbolTuple const> InputSymbol, std::any(*F)(StepElement Element, void* Data), void* Data)
 	{
 		try {
-			auto Steps = DLr::ProcessSymbol(Wrapper.AsDLrWrapper(), 0, [=](std::size_t Index)->DLr::Symbol {
-				if (Index < InputSymbol.size())
-					return InputSymbol[Index].Value;
-				else
-					return DLr::Symbol::EndOfFile();
-				});
-			return DLr::ProcessStep(Steps, [=](DLr::StepElement Ele)->std::any {
+
+			SLRX::CoreProcessor Pro(Wrapper.AsSLRXWrapper());
+
+			for(auto& Ite : InputSymbol)
+				Pro.Consume(Ite.Value);
+
+			auto Steps = Pro.EndOfFile();
+
+			return *SLRX::ProcessParsingStep(Steps, [=](SLRX::VariantElement Ele)->std::any {
 				if (Ele.IsNoTerminal())
 				{
 					auto NT = Ele.AsNoTerminal();
 					Misc::IndexSpan<> Index = TranslateIndex(NT, InputSymbol);
 					switch (NT.Mask)
 					{
-					case UnserilizeTable::SmallBrace():
+					case Ebnf::SmallBrace:
 					{
 						if (NT.Datas.size() == 1)
 						{
@@ -1005,17 +1106,17 @@ namespace Potato::Ebnf
 							if (TempCondition.has_value())
 								return *TempCondition;
 						}
-						std::vector<DLr::NTElementData> TemBuffer;
+						std::vector<SLRX::NTElement::DataT> TemBuffer;
 						TemBuffer.insert(TemBuffer.end(), std::move_iterator(NT.Datas.begin()), std::move_iterator(NT.Datas.end()));
 						return Condition{ Condition::TypeT::Parentheses, 0, Index, std::move(TemBuffer) };
 					}
-					case UnserilizeTable::MiddleBrace():
+					case Ebnf::MiddleBrace:
 					{
-						std::vector<DLr::NTElementData> TemBuffer;
+						std::vector<SLRX::NTElement::DataT> TemBuffer;
 						TemBuffer.insert(TemBuffer.end(), std::move_iterator(NT.Datas.begin()), std::move_iterator(NT.Datas.end()));
 						return Condition{ Condition::TypeT::SquareBrackets, 0, Index, std::move(TemBuffer) };
 					}
-					case UnserilizeTable::BigBrace():
+					case Ebnf::BigBrace:
 					{
 						if (NT.Datas.empty())
 						{
@@ -1029,13 +1130,13 @@ namespace Potato::Ebnf
 							return std::move(Temp);
 						}
 					}
-					case UnserilizeTable::OrLeft():
+					case Ebnf::OrLeft:
 					{
-						std::vector<DLr::NTElementData> TemBuffer;
+						std::vector<SLRX::NTElement::DataT> TemBuffer;
 						TemBuffer.insert(TemBuffer.end(), std::move_iterator(NT.Datas.begin()), std::move_iterator(NT.Datas.end()));
 						return Condition{ Condition::TypeT::Or, 0, Index, std::move(TemBuffer) };
 					}
-					case UnserilizeTable::OrRight():
+					case Ebnf::OrRight:
 					{
 						if (NT.Datas.size() == 1)
 						{
@@ -1051,7 +1152,7 @@ namespace Potato::Ebnf
 									NT[0].Data = std::move(Temp);
 							}
 						}
-						std::vector<DLr::NTElementData> TemBuffer;
+						std::vector<SLRX::NTElement::DataT> TemBuffer;
 						TemBuffer.insert(TemBuffer.end(), std::move_iterator(NT.Datas.begin()), std::move_iterator(NT.Datas.end()));
 						return Condition{ Condition::TypeT::Or, 1, Index, std::move(TemBuffer) };
 					}
@@ -1059,7 +1160,7 @@ namespace Potato::Ebnf
 					{
 						NTElement NEle;
 						NEle.Value = NT.Value;
-						NEle.Mask = NT.Mask - UnserilizeTable::MinMask();
+						NEle.Mask = NT.Mask - Ebnf::MinMask;
 						NEle.Datas = NT.Datas;
 						NEle.Index = Index;
 						return F(StepElement{ NEle }, Data);
@@ -1079,14 +1180,20 @@ namespace Potato::Ebnf
 				return {};
 				});
 		}
-		catch (DLr::Exception::UnaccableSymbol const& Symbol)
+		catch (SLRX::Exception::UnaccableSymbol const& Symbol)
 		{
 			std::size_t Token = 0;
 			if(Symbol.TokenIndex < InputSymbol.size())
 				Token = InputSymbol[Symbol.TokenIndex].StrIndex.Begin();
 			else if(!InputSymbol.empty())
 				Token = InputSymbol.rbegin()->StrIndex.End();
-			throw UnacceptableInput{ Token };
+			if (Symbol.LastSymbol.IsEndOfFile())
+			{
+				throw UnacceptableInput{UR"($EndOfFile)", Token };
+			}
+			else {
+				throw UnacceptableInput{ std::u32string{Wrapper.FindSymbolName(Symbol.LastSymbol)}, Token};
+			}
 		}
 	}
 
@@ -1099,4 +1206,82 @@ namespace Potato::Ebnf::Exception
 	char const* OutofRange::what() const { return "OutofRange Exception"; }
 	char const* UnacceptableSymbol::what() const { return "UnacceptableSymbol Exception"; }
 	char const* UnacceptableInput::what() const { return "UnacceptableInput Exception"; }
+	char const* IllegalEbnfProduction::what() const { return "IllegalEbnfProduction Exception"; }
+
+	auto IllegalEbnfProduction::Translate(std::span<SLRX::ParsingStep const> Steps, std::vector<std::u32string> const& TMapping, std::vector<std::u32string> const& NTMapping) -> std::vector<std::variant<TMap, NTMap>>
+	{
+		std::vector<std::variant<TMap, NTMap>> Result;
+		Result.reserve(Steps.size());
+		for(auto Ite : Steps)
+		{
+			if (Ite.IsTerminal())
+			{
+				
+				if (Ite.Value.IsEndOfFile())
+				{
+					Result.push_back({ TMap{UR"($EndOfFile)"}});
+				}
+				else {
+					assert(Ite.Value.Value < TMapping.size());
+					Result.push_back({ TMap{TMapping[Ite.Value.Value]} });
+				}
+			}
+			else {
+				if (Ite.Value.Value < NTMapping.size())
+				{
+					assert(Ite.Reduce.Mask >= MinMask);
+					Result.push_back({ NTMap{NTMapping[Ite.Value.Value], Ite.Reduce.ProductionCount, Ite.Reduce.Mask - MinMask} });
+				}
+				else {
+					static constexpr SLRX::StandardT SmallBrace = 0;
+					static constexpr SLRX::StandardT MiddleBrace = 1;
+					static constexpr SLRX::StandardT BigBrace = 2;
+					static constexpr SLRX::StandardT OrLeft = 3;
+					static constexpr SLRX::StandardT OrRight = 4;
+					static constexpr SLRX::StandardT MinMask = 5;
+					switch (Ite.Reduce.Mask)
+					{
+						
+					case SmallBrace:
+						Result.push_back({ NTMap{UR"((...))", 0, 0}});
+						break;
+					case MiddleBrace:
+						Result.push_back({ NTMap{UR"([...])", 0, 0} });
+						break;
+					case BigBrace:
+						Result.push_back({ NTMap{UR"({...})", 0, 0} });
+						break;
+					case OrLeft:
+						Result.push_back({ NTMap{UR"(...|)", 0, 0} });
+						break;
+					case OrRight:
+						Result.push_back({ NTMap{UR"(|...)", 0, 0} });
+						break;
+					default:
+						assert(false);
+						break;
+					}
+				}
+			}
+		}
+		return Result;
+	}
+
+	IllegalEbnfProduction::IllegalEbnfProduction(SLRX::Exception::IllegalSLRXProduction const& IS, std::vector<std::u32string> const& TMapping, std::vector<std::u32string> const& NTMapping)
+		: Type(IS.Type), MaxForwardDetectNum(IS.MaxForwardDetectNum), DetectNum(IS.MaxForwardDetectNum)
+		, Steps1(Translate(IS.Steps1, TMapping, NTMapping)), Steps2(Translate(IS.Steps2, TMapping, NTMapping))
+	{
+		volatile int i = 0;
+		/*
+		for (auto& Ite : IS.EffectProductions)
+		{
+			auto FindIte = std::find_if(EffectProductions.begin(), EffectProductions.end(), [&](Productions const& P){ return Ite.ProductionIndex == P.ProductionIndex; });
+			if (FindIte == EffectProductions.end())
+			{
+				if()
+			}
+		}
+		*/
+	}
+
 }

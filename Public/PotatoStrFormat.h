@@ -60,14 +60,14 @@ namespace Potato::StrFormat
 		
 		ScanPattern(ScanPattern&&) = default;
 		ScanPattern(ScanPattern const&) = default;
-		ScanPattern(std::vector<Reg::SerilizeT> Tables) : Tables(std::move(Tables)) {};
+		ScanPattern(Reg::Table Tables) : Tables(std::move(Tables)) {};
 
 		template<typename UnicodeT>
 		ScanPattern(std::basic_string_view<UnicodeT> Pattern) : ScanPattern(Create(Pattern)) {}
 
 		template<typename UnicodeT>
 		static ScanPattern Create(std::basic_string_view<UnicodeT> pattern) { 
-			return { Reg::TableWrapper::Create(pattern)};
+			return Reg::Table{ pattern };
 		}
 
 		template<typename UnicodeT, typename CurTarget, typename ...TargetType>
@@ -80,7 +80,7 @@ namespace Potato::StrFormat
 		
 	private:
 
-		std::vector<Reg::TableWrapper::StorageT> Tables;
+		Reg::Table Tables;
 
 		template<typename UnicodeT, typename CurTarget, typename ...TargetType>
 		static std::optional<std::size_t> Dispatch(std::size_t Record, Reg::CaptureWrapper Wrapper, std::basic_string_view<UnicodeT> Chars, CurTarget& Target, TargetType&... OTarget)
