@@ -146,8 +146,9 @@ void TestingReg()
 
 	{
 		MulityRegexCreator Crerator;
-		Crerator.AddRegex(UR"([0-9][1-9]*)", { 2 }, Crerator.GetCountedUniqueID());
-		Crerator.AddRegex(UR"(+)", { 1 }, Crerator.GetCountedUniqueID(), true);
+		Crerator.AddRegex(UR"((a){1,4})", { 2 }, Crerator.GetCountedUniqueID());
+		//Crerator.AddRegex(UR"((ab){2,3}b)", { 2 }, Crerator.GetCountedUniqueID());
+		//Crerator.AddRegex(UR"(+)", { 1 }, Crerator.GetCountedUniqueID(), true);
 		
 
 		auto TBuffer = Crerator.Generate();

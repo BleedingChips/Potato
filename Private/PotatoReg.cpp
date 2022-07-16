@@ -901,6 +901,46 @@ namespace Potato::Reg
 		}
 	};
 
+	bool CheckProperty(std::vector<std::size_t>& Temp, UnserilizedTable::EdgeProperty Ite)
+	{
+		switch (Ite.Type)
+		{
+		case UnfaTable::EdgeType::CounterBegin:
+			Temp.push_back(0);
+			break;
+		case UnfaTable::EdgeType::CounterContinue:
+			if (!Temp.empty())
+				*Temp.rbegin() += 1;
+			break;
+		case UnfaTable::EdgeType::CounterEnd:
+			if (!Temp.empty())
+			{
+				auto Last = *Temp.rbegin();
+				if (Last >= Ite.CounterData.Min && Last < Ite.CounterData.Max)
+				{
+					Temp.pop_back();
+				}
+				else
+					return false;
+			}
+			break;
+		default:
+			break;
+		}
+		return true;
+	}
+
+	bool CheckPropertys(std::span<UnserilizedTable::EdgeProperty const> Source, UnserilizedTable::EdgeProperty Last)
+	{
+		std::vector<std::size_t> Temp;
+		for (auto& Ite : Source)
+		{
+			if(!CheckProperty(Temp, Ite))
+				return false;
+		}
+		return CheckProperty(Temp, Last);
+	}
+
 	ExpandResult SearchEpsilonNode(UnfaTable const& Input, std::size_t SearchNode)
 	{
 		ExpandResult Result;
@@ -959,8 +999,14 @@ namespace Potato::Reg
 						Result.Edges.push_back(std::move(Edge));
 					}
 					break;
+				case UnfaTable::EdgeType::CounterBegin:
+				case UnfaTable::EdgeType::CounterContinue:
+				case UnfaTable::EdgeType::CounterEnd:
+					if(!CheckPropertys(Cur.Propertys, {Ite.Type, {}, Ite.CounterDatas}))
+						break;
 				default:
 					Result.ContainNodes.push_back(Ite.ShiftNode);
+
 					if (IsLast)
 					{
 						Cur.AddUniqueID(Ite.UniqueID);

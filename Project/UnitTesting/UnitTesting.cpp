@@ -14,11 +14,11 @@ int main()
 
 		//TestingSLRX();
 
-		//TestingReg();
+		TestingReg();
 
 		//TestingStrFormat();
 
-		TestingEbnf();
+		//TestingEbnf();
 
 		//TestingIntrusivePointer();
 	}
