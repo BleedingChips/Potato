@@ -31,16 +31,7 @@
     <ClInclude Include="..\..\Public\PotatoIR.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Public\PotatoStrEncode.h">
-      <Filter>Public</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Public\PotatoStrFormat.h">
-      <Filter>Public</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Public\PotatoReg.h">
-      <Filter>Public</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Public\PotatoEbnf.h">
       <Filter>Public</Filter>
     </ClInclude>
   </ItemGroup>
@@ -54,16 +45,7 @@
     <ClCompile Include="..\..\Private\PotatoIR.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Private\PotatoStrEncode.cpp">
-      <Filter>Private</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Private\PotatoStrFormat.cpp">
-      <Filter>Private</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\Private\PotatoReg.cpp">
-      <Filter>Private</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Private\PotatoEbnf.cpp">
       <Filter>Private</Filter>
     </ClCompile>
   </ItemGroup>

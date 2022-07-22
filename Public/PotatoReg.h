@@ -1,9 +1,12 @@
 #pragma once
-#include <string_view>
+
 
 #include "PotatoMisc.h"
 #include "PotatoInterval.h"
 #include "PotatoStrEncode.h"
+
+#include <string_view>
+#include <variant>
 
 namespace Potato::Reg
 {
@@ -20,6 +23,7 @@ namespace Potato::Reg
 	struct Accept
 	{
 		StandardT Mask = 0;
+		StandardT SubMask = 0;
 		std::strong_ordering operator<=>(Accept const&) const = default;
 	};
 
@@ -31,13 +35,12 @@ namespace Potato::Reg
 
 	struct Counter
 	{
-		StandardT Min = 0;
-		StandardT Max = 0;
+		StandardT Target = 0;
 		std::strong_ordering operator<=>(Counter const&) const = default;
 	};
 
 
-	struct UnfaTable
+	struct EpsilonNFATable
 	{
 
 		enum class EdgeType
@@ -46,19 +49,25 @@ namespace Potato::Reg
 			Acceptable,
 			CaptureBegin,
 			CaptureEnd,
-			CounterBegin,
-			CounterEnd,
-			CounterContinue,
+			CounterPush,
+			CounterPop,
+			CounterAdd,
+			CounterEqual,
+			CounterBigEqual,
+			CounterSmallEqual,
+		};
+
+		struct PropertyT
+		{
+			EdgeType Type;
+			std::variant<std::monostate, std::vector<IntervalT>, Accept, Counter> Datas;
 		};
 
 		struct Edge
 		{
-			EdgeType Type;
+			PropertyT Property;
 			std::size_t ShiftNode;
-			std::vector<IntervalT> ConsumeChars;
-			Accept AcceptData;
-			Counter CounterDatas;
-			StandardT UniqueID;
+			StandardT UniqueID = 0;
 		};
 
 		struct Node
@@ -73,36 +82,35 @@ namespace Potato::Reg
 			std::size_t Out;
 		};
 
-		static UnfaTable Create(std::u32string_view Str, bool IsRaw, Accept AcceptData, StandardT UniqueID = 0);
+		static EpsilonNFATable Create(std::u32string_view Str, bool IsRaw, Accept AcceptData);
 
-		void Link(UnfaTable const& OtherTable, bool ThisHasHigherPriority = true);
+		void Link(EpsilonNFATable const& OtherTable, bool ThisHasHigherPriority = true);
 
-		UnfaTable(UnfaTable&&) = default;
-		UnfaTable(UnfaTable const&) = default;
-		UnfaTable& operator=(UnfaTable const&) = default;
-		UnfaTable& operator=(UnfaTable &&) = default;
+		EpsilonNFATable(EpsilonNFATable&&) = default;
+		EpsilonNFATable(EpsilonNFATable const&) = default;
+		EpsilonNFATable& operator=(EpsilonNFATable const&) = default;
+		EpsilonNFATable& operator=(EpsilonNFATable&&) = default;
 
-		UnfaTable(StandardT UniqueID = 0) : TemporaryUniqueID(UniqueID) {};
+		EpsilonNFATable() {}
 
 		std::size_t NewNode();
 		void AddComsumeEdge(std::size_t From, std::size_t To, std::vector<IntervalT> Acceptable);
 		void AddAcceptableEdge(std::size_t From, std::size_t To, Accept Data);
 		void AddCapture(NodeSet OutsideSet, NodeSet InsideSet);
-		void AddCounter(NodeSet OutsideSet, NodeSet InsideSet, Counter Counter, bool Greedy = true);
+		NodeSet AddCounter(NodeSet InSideSet, std::optional<std::size_t> Equal, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool IsGreedy);
+		//void AddCounter(EdgeType Type, std::size_t From, std::size_t To, Counter Counter);
 		void AddEdge(std::size_t From, Edge Edge);
 
 		std::vector<Node> Nodes;
-		StandardT TemporaryUniqueID;
 	};
 
-	struct UnserilizedTable
+	struct NFATable
 	{
 
 		struct EdgeProperty
 		{
-			UnfaTable::EdgeType Type;
-			Accept AcceptData;
-			Counter CounterData;
+			EpsilonNFATable::EdgeType Type;
+			std::variant<Accept, Counter> Data;
 			std::strong_ordering operator<=>(EdgeProperty const& I2) const = default;
 			bool operator==(EdgeProperty const&) const = default;
 		};
@@ -122,10 +130,34 @@ namespace Potato::Reg
 
 		std::vector<Node> Nodes;
 
-		UnserilizedTable(UnfaTable const& Table);
+		NFATable(EpsilonNFATable const& Table);
 	};
 
-	
+	struct DFATable
+	{
+
+		struct EdgeProperty
+		{
+			std::vector<NFATable::EdgeProperty> Propertys;
+		};
+		
+
+		struct Edge
+		{
+			std::size_t ToNode;
+			std::vector<IntervalT> ConsumeChars;
+			std::vector<EdgeProperty> Propertys;
+		};
+
+		struct Node
+		{
+			std::vector<Edge> Edges;
+		};
+
+		DFATable(NFATable const& Input);
+	};
+
+	/*
 	struct TableWrapper
 	{
 
@@ -408,6 +440,7 @@ namespace Potato::Reg
 		StandardT CountedUniqueID = 0;
 		std::optional<UnfaTable> Temporary;
 	};
+	*/
 
 
 	namespace Exception

@@ -5,6 +5,20 @@ using namespace Potato::Reg;
 
 void TestingReg()
 {
+
+	//Crerator.AddRegex(UR"((a){1,4})", { 2 }, Crerator.GetCountedUniqueID());
+	//Crerator.AddRegex(UR"((ab){2,3}b)", { 2 }, Crerator.GetCountedUniqueID());
+	//Crerator.AddRegex(UR"(+)", { 1 }, Crerator.GetCountedUniqueID(), true);
+
+
+	EpsilonNFATable Table = EpsilonNFATable::Create(UR"((1.*))", false, {0});
+	//Table.Link(EpsilonNFATable::Create(UR"((a){1,4})", false, { 1 }));
+	//Table.Link(EpsilonNFATable::Create(UR"(a{1,2})", false, { 0 }));
+	NFATable Ta(Table);
+
+	DFATable DT(Ta);
+
+
 	/*
 	{
 		std::u32string_view Str = UR"(123456abcdef)";
@@ -144,6 +158,7 @@ void TestingReg()
 	}
 	*/
 
+	/*
 	{
 		MulityRegexCreator Crerator;
 		Crerator.AddRegex(UR"((a){1,4})", { 2 }, Crerator.GetCountedUniqueID());
@@ -162,6 +177,7 @@ void TestingReg()
 
 		volatile int i = 0;
 	}
+	*/
 
 	std::wcout << LR"(TestingReg Pass !)" << std::endl;
 }

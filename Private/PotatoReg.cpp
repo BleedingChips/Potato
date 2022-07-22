@@ -2,6 +2,7 @@
 #include "../Public/PotatoSLRX.h"
 #include "../Public/PotatoStrEncode.h"
 #include <deque>
+
 namespace Potato::Reg
 {
 
@@ -324,6 +325,7 @@ namespace Potato::Reg
 			static SLRX::Table Table(
 				*NT::ExpressionStatement,
 				{
+
 					{*NT::AcceptableSingleChar, {*T::SingleChar}, 40},
 					{*NT::AcceptableSingleChar, {*T::Num}, 40},
 					{*NT::AcceptableSingleChar, {*T::Min}, 40},
@@ -336,7 +338,7 @@ namespace Potato::Reg
 					{*NT::CharList, {*NT::CharListSingleChar}, 41},
 					{*NT::CharList, {*NT::CharListSingleChar, *T::Min, *NT::CharListSingleChar}, 42},
 					{*NT::CharList, {*T::CharSet}, 1},
-					{*NT::CharList, {*NT::CharList, *NT::CharList, 3}, 3},
+					{*NT::CharList, {*NT::CharList, *NT::CharList, SLRX::ItSelf{}}, 3},
 					
 					{*NT::FinalCharList, {*T::Min}, 60},
 					{*NT::FinalCharList, {*T::Min, *NT::CharList}, 61},
@@ -351,24 +353,23 @@ namespace Potato::Reg
 					{*NT::Expression, {*NT::AcceptableSingleChar}, 9},
 					{*NT::Expression, {*T::CharSet}, 50},
 					{*NT::ExpressionStatement, {*NT::Expression}, 10},
-					{*NT::ExpressionStatement, {*NT::ExpressionStatement, 8, *NT::ExpressionStatement, 8, 11}, 11},
-					{*NT::ExpressionStatement, {*NT::Expression, *T::Mulity}, 12},
-					{*NT::ExpressionStatement, {*NT::Expression, *T::Add}, 13},
-					{*NT::ExpressionStatement, {*NT::Expression, *T::Mulity, *T::Question}, 14},
-					{*NT::ExpressionStatement, {*NT::Expression, *T::Add, *T::Question}, 15},
-					{*NT::ExpressionStatement, {*NT::Expression, *T::Question}, 16},
-					{*NT::ExpressionStatement, {*NT::Expression, *T::Question, *T::Question}, 17},
+					{*NT::ExpressionStatement, {*NT::ExpressionStatement, 8, *NT::Expression}, 11},
+					{*NT::Expression, {*NT::Expression, *T::Mulity}, 12},
+					{*NT::Expression, {*NT::Expression, *T::Add}, 13},
+					{*NT::Expression, {*NT::Expression, *T::Mulity, *T::Question}, 14},
+					{*NT::Expression, {*NT::Expression, *T::Add, *T::Question}, 15},
+					{*NT::Expression, {*NT::Expression, 12, 13, 20, 21, 22, 23, SLRX::ItSelf{}, *T::Question}, 16},
+					{*NT::Expression, {*NT::Expression, 12, 13, 14, 15, 16, 20, 21, 22, 23, *T::Question, *T::Question}, 17},
 					{*NT::Number, {*T::Num}, 18},
 					{*NT::Number, {*NT::Number, *T::Num}, 19},
-					{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::CurlyBracketsRight}, 20},
-					{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *T::Comma, *NT::Number, *T::CurlyBracketsRight}, 21},
-					{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::Comma, *T::CurlyBracketsRight}, 22},
-					{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::Comma, *NT::Number, *T::CurlyBracketsRight}, 23},
+					{*NT::Expression, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::CurlyBracketsRight}, 20},
+					{*NT::Expression, {*NT::Expression, *T::CurlyBracketsLeft, *T::Comma, *NT::Number, *T::CurlyBracketsRight}, 21},
+					{*NT::Expression, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::Comma, *T::CurlyBracketsRight}, 22},
+					{*NT::Expression, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::Comma, *NT::Number, *T::CurlyBracketsRight}, 23},
 
-					{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::CurlyBracketsRight, *T::Question}, 20},
-					{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *T::Comma, *NT::Number, *T::CurlyBracketsRight, *T::Question}, 21},
-					{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::Comma, *T::CurlyBracketsRight, *T::Question}, 22},
-					{*NT::ExpressionStatement, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::Comma, *NT::Number, *T::CurlyBracketsRight, *T::Question}, 23},
+					{*NT::Expression, {*NT::Expression, *T::CurlyBracketsLeft, *T::Comma, *NT::Number, *T::CurlyBracketsRight, *T::Question}, 25},
+					{*NT::Expression, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::Comma, *T::CurlyBracketsRight, *T::Question}, 26},
+					{*NT::Expression, {*NT::Expression, *T::CurlyBracketsLeft, *NT::Number, *T::Comma, *NT::Number, *T::CurlyBracketsRight, *T::Question}, 27},
 				}, {}
 			);
 			return Table.Wrapper;
@@ -422,10 +423,10 @@ namespace Potato::Reg
 
 	}
 
-	std::any RegNoTerminalFunction(Potato::SLRX::NTElement& NT, UnfaTable& Output)
+	std::any RegNoTerminalFunction(Potato::SLRX::NTElement& NT, EpsilonNFATable& Output)
 	{
 
-		using NodeSet = UnfaTable::NodeSet;
+		using NodeSet = EpsilonNFATable::NodeSet;
 
 		switch (NT.Mask)
 		{
@@ -629,66 +630,20 @@ namespace Potato::Reg
 			Te += Te2 - U'0';
 			return Te;
 		}
-		case 20:
-		{
-			auto Count = NT[2].Consume<std::size_t>();
-			auto T1 = Output.NewNode();
-			auto T2 = Output.NewNode();
-			auto Last = NT[0].Consume<NodeSet>();
-			NodeSet Set{ T1, T2 };
-			Counter Tem;
-			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Min, Count, RegexOutOfRange::TypeT::Counter, Count);
-			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Max, Count + 1, RegexOutOfRange::TypeT::Counter, Count + 1);
-			Output.AddCounter(Set, Last, Tem, NT.Datas.size() == 4);;
-			return Set;
-		}
-		case 21:
-		{
-			auto Count = NT[3].Consume<std::size_t>();
-			auto T1 = Output.NewNode();
-			auto T2 = Output.NewNode();
-			auto Last = NT[0].Consume<NodeSet>();
-			NodeSet Set{ T1, T2 };
-			Counter Tem;
-			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Min, static_cast<std::size_t>(0), RegexOutOfRange::TypeT::Counter, static_cast<std::size_t>(0));
-			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Max, Count + 1, RegexOutOfRange::TypeT::Counter, Count + 1);
-			Output.AddCounter(Set, Last, Tem, NT.Datas.size() == 5);
-			return Set;
-		}
-		case 22:
-		{
-			auto Count = NT[2].Consume<std::size_t>();
-			auto T1 = Output.NewNode();
-			auto T2 = Output.NewNode();
-			auto Last = NT[0].Consume<NodeSet>();
-			NodeSet Set{ T1, T2 };
-			Counter Tem;
-			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Min, Count, RegexOutOfRange::TypeT::Counter, Count);
-			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Max, std::numeric_limits<StandardT>::max(), RegexOutOfRange::TypeT::Counter, std::numeric_limits<StandardT>::max());
-			Output.AddCounter(Set, Last, Tem, NT.Datas.size() == 5);
-			return Set;
-		}
-		case 23:
-		{
-			auto Count = NT[2].Consume<std::size_t>();
-			auto Count2 = NT[4].Consume<std::size_t>();
-			Counter Tem;
-			if (Count <= Count2)
-			{
-				Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Min, Count, RegexOutOfRange::TypeT::Counter, Count );
-				Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Max, Count2 + 1, RegexOutOfRange::TypeT::Counter, Count2 + 1 );
-			}
-			else {
-				Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Min, Count2, RegexOutOfRange::TypeT::Counter, Count2 );
-				Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Max, Count + 1, RegexOutOfRange::TypeT::Counter, Count + 1 );
-			}
-			auto T1 = Output.NewNode();
-			auto T2 = Output.NewNode();
-			auto Last = NT[0].Consume<NodeSet>();
-			NodeSet Set{ T1, T2 };
-			Output.AddCounter(Set, Last, Tem, NT.Datas.size() == 6);
-			return Set;
-		}
+		case 20: // {num}
+			return Output.AddCounter(NT[0].Consume<NodeSet>(), NT[2].Consume<std::size_t>(), {}, {}, false);
+		case 25: // {,N}?
+			return Output.AddCounter(NT[0].Consume<NodeSet>(), {}, {}, NT[3].Consume<std::size_t>(), false);
+		case 21: // {,N}
+			return Output.AddCounter(NT[0].Consume<NodeSet>(), {}, {}, NT[3].Consume<std::size_t>(), true);
+		case 26: // {N,} ?
+			return Output.AddCounter(NT[0].Consume<NodeSet>(), NT[2].Consume<std::size_t>(), {}, {}, false);
+		case 22: // {N,}
+			return Output.AddCounter(NT[0].Consume<NodeSet>(), NT[2].Consume<std::size_t>(), {}, {}, true);
+		case 27: // {N, N} ?
+			return Output.AddCounter(NT[0].Consume<NodeSet>(), {}, NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), false);
+		case 23: // {N, N}
+			return Output.AddCounter(NT[0].Consume<NodeSet>(), {}, NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), true);
 		default:
 			assert(false);
 			return {};
@@ -714,42 +669,225 @@ namespace Potato::Reg
 		}
 	}
 
-	std::size_t UnfaTable::NewNode()
+	std::size_t EpsilonNFATable::NewNode()
 	{
 		std::size_t Index = Nodes.size();
 		Nodes.push_back({ Index, {} });
 		return Index;
 	}
 
-	void UnfaTable::AddComsumeEdge(std::size_t From, std::size_t To, std::vector<IntervalT> Acceptable) {
-		Edge NewEdge;
-		NewEdge.Type = EdgeType::Consume;
-		NewEdge.ShiftNode = To;
-		NewEdge.ConsumeChars = std::move(Acceptable);
-		AddEdge(From, std::move(NewEdge));
-	}
-	void UnfaTable::AddAcceptableEdge(std::size_t From, std::size_t To, Accept Data)
+	EpsilonNFATable::NodeSet EpsilonNFATable::AddCounter(NodeSet InSideSet, std::optional<std::size_t> Equal, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool IsGreedy)
 	{
+		if (Equal.has_value() || (Min.has_value() && Max.has_value() && *Min == *Max))
+		{
+			std::size_t Tar = Equal.has_value() ? *Equal : *Min;
+			if (Tar == 0)
+			{
+				auto T1 = NewNode();
+				auto T2 = NewNode();
+				AddComsumeEdge(T1, T2, {});
+				return NodeSet{T1, T2};
+			}
+			else if (Tar == 1)
+			{
+				return InSideSet;
+			}
+		}
+		else if (Min.has_value() && !Max.has_value() && *Min <= 1)
+		{
+			std::size_t Index = *Min;
+			auto T1 = NewNode();
+			auto T2 = NewNode();
+
+			if (Index == 0)
+			{
+				if (IsGreedy)
+				{
+					AddComsumeEdge(T1, InSideSet.In, {});
+					AddComsumeEdge(T1, T2, {});
+				}
+				else {
+					AddComsumeEdge(T1, T2, {});
+					AddComsumeEdge(T1, InSideSet.In, {});
+				}
+			}
+			else
+				AddComsumeEdge(T1, InSideSet.In, {});
+			if (IsGreedy)
+			{
+				AddComsumeEdge(InSideSet.Out, InSideSet.In, {});
+				AddComsumeEdge(InSideSet.Out, T2, {});
+			}
+			else {
+				AddComsumeEdge(InSideSet.Out, T2, {});
+				AddComsumeEdge(InSideSet.Out, InSideSet.In, {});
+			}
+			return NodeSet{ T1, T2 };
+		}
+		else if ((!Min.has_value() || (Min.has_value() && *Min == 0)) && Max.has_value() && *Max <= 1)
+		{
+			if (*Max == 0)
+			{
+				auto T1 = NewNode();
+				auto T2 = NewNode();
+				AddComsumeEdge(T1, T2, {});
+				return NodeSet{ T1, T2 };
+			}
+			else {
+				auto T1 = NewNode();
+				auto T2 = NewNode();
+				if (IsGreedy)
+				{
+					AddComsumeEdge(T1, InSideSet.In, {});
+					AddComsumeEdge(T1, T2, {});
+				}
+				else {
+					AddComsumeEdge(T1, T2, {});
+					AddComsumeEdge(T1, InSideSet.In, {});
+				}
+				AddComsumeEdge(InSideSet.Out, T2, {});
+				return NodeSet{T1, T2};
+			}
+		}	
+
+		auto T1 = NewNode();
+		auto T2 = NewNode();
+		auto T3 = NewNode();
+		auto T4 = NewNode();
+
+		{
+			EpsilonNFATable::Edge Edge{ {EpsilonNFATable::EdgeType::CounterPush}, T2, 0 };
+			AddEdge(T1, std::move(Edge));
+		}
+
+		AddComsumeEdge(T2, InSideSet.In, {});
+		AddComsumeEdge(InSideSet.Out, T3, {});
+
+		auto Start = T3;
+
+		if (Equal.has_value() || Max.has_value())
+		{
+			Start = NewNode();
+			std::size_t Tar = Equal.has_value() ? *Equal : Max.has_value();
+			assert(Tar > 1);
+
+			Counter Tem;
+			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Target, Tar - 1, RegexOutOfRange::TypeT::Counter, Tar - 1);
+
+			EpsilonNFATable::Edge Edge{ {EpsilonNFATable::EdgeType::CounterSmallEqual, Tem}, Start, 0 };
+			AddEdge(T3, std::move(Edge));
+		}
+
+		{
+			EpsilonNFATable::Edge Edge{ {EpsilonNFATable::EdgeType::CounterAdd}, T2, 0 };
+			AddEdge(Start, std::move(Edge));
+		}
+
+		Start = T3;
+
+		if (Min.has_value())
+		{
+			Counter Tem;
+			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Target, *Min, RegexOutOfRange::TypeT::Counter, *Min);
+
+			auto New = NewNode();
+
+			EpsilonNFATable::Edge Edge{ {EpsilonNFATable::EdgeType::CounterBigEqual, Tem}, New, 0 };
+			AddEdge(Start, std::move(Edge));
+
+			Start = New;
+		}
+
+		if (Max.has_value())
+		{
+			Counter Tem;
+			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Target, *Max, RegexOutOfRange::TypeT::Counter, *Max);
+
+			auto New = NewNode();
+			EpsilonNFATable::Edge Edge{ {EpsilonNFATable::EdgeType::CounterSmallEqual, Tem}, New, 0 };
+			AddEdge(Start, std::move(Edge));
+
+			Start = New;
+		}
+
+		{
+			EpsilonNFATable::Edge Edge{ {EpsilonNFATable::EdgeType::CounterPop}, T4, 0 };
+			AddEdge(Start, std::move(Edge));
+		}
+
+		if (!IsGreedy)
+		{
+			auto& Ref = Nodes[T3].Edges;
+			assert(Ref.size() == 2);
+			std::swap(Ref[0], Ref[1]);
+		}
+
+		return NodeSet{ T1, T4 };
+	}
+
+	/*
+	void EpsilonNFATable::AddCounter(EdgeType Type, std::size_t From, std::size_t To, Counter Counter)
+	{
+		switch (Type)
+		{
+		case EdgeType::CounterPush:
+		case EdgeType::CounterAdd:
+		case EdgeType::CounterPop:
+		{
+			Edge NewEdge;
+			NewEdge.Property.Type = Type;
+			NewEdge.ShiftNode = To;
+			AddEdge(From, std::move(NewEdge));
+			break;
+		}
+		case EdgeType::CounterBigEqual:
+		case EdgeType::CounterSmallEqual:
+		case EdgeType::CounterEqual:
+		{
+			Edge NewEdge;
+			NewEdge.Property.Type = Type;
+			NewEdge.Property.Datas = Counter;
+			NewEdge.ShiftNode = To;
+			AddEdge(From, std::move(NewEdge));
+			break;
+		}
+		default:
+			assert(false);
+		}
+	}
+	*/
+
+	void EpsilonNFATable::AddComsumeEdge(std::size_t From, std::size_t To, std::vector<IntervalT> Acceptable) {
 		Edge NewEdge;
-		NewEdge.Type = EdgeType::Acceptable;
+		NewEdge.Property.Type = EdgeType::Consume;
+		NewEdge.Property.Datas = std::move(Acceptable);
 		NewEdge.ShiftNode = To;
-		NewEdge.AcceptData = std::move(Data);
 		AddEdge(From, std::move(NewEdge));
 	}
 
-	void UnfaTable::AddCapture(NodeSet OutsideSet, NodeSet InsideSet)
+	void EpsilonNFATable::AddAcceptableEdge(std::size_t From, std::size_t To, Accept Data)
+	{
+		Edge NewEdge;
+		NewEdge.Property.Type = EdgeType::Acceptable;
+		NewEdge.ShiftNode = To;
+		NewEdge.Property.Datas = std::move(Data);
+		AddEdge(From, std::move(NewEdge));
+	}
+
+	void EpsilonNFATable::AddCapture(NodeSet OutsideSet, NodeSet InsideSet)
 	{
 		Edge NewEdge;
 		NewEdge.ShiftNode = InsideSet.In;
-		NewEdge.Type = EdgeType::CaptureBegin;
-		AddEdge(OutsideSet.In, std::move(NewEdge));
+		NewEdge.Property.Type = EdgeType::CaptureBegin;
+		AddEdge(OutsideSet.In, NewEdge);
 
 		NewEdge.ShiftNode = OutsideSet.Out;
-		NewEdge.Type = EdgeType::CaptureEnd;
-		AddEdge(InsideSet.Out, std::move(NewEdge));
+		NewEdge.Property.Type = EdgeType::CaptureEnd;
+		AddEdge(InsideSet.Out, NewEdge);
 	}
 
-	void UnfaTable::AddCounter(NodeSet OutsideSet, NodeSet InsideSet, Counter EndCounter, bool Greedy)
+	/*
+	void EpsilonNFATable::AddCounter(NodeSet OutsideSet, NodeSet InsideSet, Counter EndCounter, bool Greedy)
 	{
 		Edge Begin;
 		Begin.ShiftNode = InsideSet.Out;
@@ -776,19 +914,27 @@ namespace Potato::Reg
 			AddEdge(InsideSet.Out, std::move(Continue));
 		}
 	}
+	*/
 
-	void UnfaTable::AddEdge(std::size_t FormNodeIndex, Edge Edge)
+	void EpsilonNFATable::AddEdge(std::size_t FormNodeIndex, Edge Edge)
 	{
 		assert(FormNodeIndex < Nodes.size());
 		auto& Cur = Nodes[FormNodeIndex];
-		Edge.UniqueID = TemporaryUniqueID;
+		Edge.UniqueID = 0;
 		Cur.Edges.push_back(std::move(Edge));
 	}
 
-	void UnfaTable::Link(UnfaTable const& OtherTable, bool ThisHasHigherPriority)
+	void EpsilonNFATable::Link(EpsilonNFATable const& OtherTable, bool ThisHasHigherPriority)
 	{
 		if (!OtherTable.Nodes.empty())
 		{
+			for (auto& Ite : Nodes)
+			{
+				for (auto& Ite2 : Ite.Edges)
+				{
+					Ite2.UniqueID += 1;
+				}
+			}
 			Nodes.reserve(Nodes.size() + OtherTable.Nodes.size());
 			std::size_t NodeOffset = Nodes.size();
 			for (auto& Ite : OtherTable.Nodes)
@@ -804,7 +950,8 @@ namespace Potato::Reg
 				Nodes.push_back(std::move(NewNode));
 			}
 			Edge NewEdges;
-			NewEdges.Type = EdgeType::Consume;
+			NewEdges.Property.Type = EdgeType::Consume;
+			NewEdges.Property.Datas = std::vector<IntervalT>{};
 			NewEdges.ShiftNode = NodeOffset;
 			if(ThisHasHigherPriority)
 				Nodes[0].Edges.emplace_back(NewEdges);
@@ -815,7 +962,7 @@ namespace Potato::Reg
 		}
 	}
 
-	void CreateUnfaTable(LexerTranslater& Translater, UnfaTable& Output, Accept AcceptData)
+	void CreateUnfaTable(LexerTranslater& Translater, EpsilonNFATable& Output, Accept AcceptData)
 	{
 		auto N1 = Output.NewNode();
 		auto N2 = Output.NewNode();
@@ -832,7 +979,7 @@ namespace Potato::Reg
 			auto Steps = Pro.EndOfFile();
 
 			//auto Steps = SLRX::ProcessParsingStep(Wrapper, 0, [&](std::size_t Input){ return Translater.GetSymbol(Input); });
-			UnfaTable::NodeSet Set = SLRX::ProcessParsingStepWithOutputType<UnfaTable::NodeSet>(std::span(Steps),
+			EpsilonNFATable::NodeSet Set = SLRX::ProcessParsingStepWithOutputType<EpsilonNFATable::NodeSet>(std::span(Steps),
 				[&](SLRX::VariantElement Elements)-> std::any {
 					if (Elements.IsTerminal())
 						return RegTerminalFunction(Elements.AsTerminal(), Translater);
@@ -857,9 +1004,9 @@ namespace Potato::Reg
 		}
 	}
 
-	UnfaTable UnfaTable::Create(std::u32string_view Str, bool IsRaw, Accept AcceptData, StandardT UniqueID)
+	EpsilonNFATable EpsilonNFATable::Create(std::u32string_view Str, bool IsRaw, Accept AcceptData)
 	{
-		UnfaTable Result(UniqueID);
+		EpsilonNFATable Result;
 		LexerTranslater Tran;
 
 		for (auto Ite : Str)
@@ -875,13 +1022,22 @@ namespace Potato::Reg
 	struct ExpandResult
 	{
 		std::vector<std::size_t> ContainNodes;
-		std::vector<UnserilizedTable::Edge> Edges;
+		std::vector<NFATable::Edge> Edges;
 	};
 
 	struct SearchCore
 	{
 		std::size_t ToNode;
-		std::vector<UnserilizedTable::EdgeProperty> Propertys;
+		
+		struct Element
+		{
+			std::size_t From;
+			std::size_t To;
+			EpsilonNFATable::PropertyT Propertys;
+		};
+
+		std::vector<Element> Propertys;
+
 		struct UniqueID
 		{
 			bool HasUniqueID;
@@ -901,27 +1057,42 @@ namespace Potato::Reg
 		}
 	};
 
-	bool CheckProperty(std::vector<std::size_t>& Temp, UnserilizedTable::EdgeProperty Ite)
+	/*
+
+	bool CheckProperty(std::vector<std::size_t>& Temp, NFATable::EdgeProperty Ite)
 	{
 		switch (Ite.Type)
 		{
-		case UnfaTable::EdgeType::CounterBegin:
+		case EpsilonNFATable::EdgeType::CounterPush:
 			Temp.push_back(0);
 			break;
-		case UnfaTable::EdgeType::CounterContinue:
+		case EpsilonNFATable::EdgeType::CounterAdd:
 			if (!Temp.empty())
 				*Temp.rbegin() += 1;
 			break;
-		case UnfaTable::EdgeType::CounterEnd:
+		case EpsilonNFATable::EdgeType::CounterPop:
+			if(!Temp.empty())
+				Temp.pop_back();
+			break;
+		case EpsilonNFATable::EdgeType::CounterEqual:
 			if (!Temp.empty())
 			{
 				auto Last = *Temp.rbegin();
-				if (Last >= Ite.CounterData.Min && Last < Ite.CounterData.Max)
-				{
-					Temp.pop_back();
-				}
-				else
-					return false;
+				return Last == std::get<Counter>(Ite.Data).Target;
+			}
+			break;
+		case EpsilonNFATable::EdgeType::CounterSmallEqual:
+			if (!Temp.empty())
+			{
+				auto Last = *Temp.rbegin();
+				return Last <= std::get<Counter>(Ite.Data).Target;
+			}
+			break;
+		case EpsilonNFATable::EdgeType::CounterBigEqual:
+			if (!Temp.empty())
+			{
+				auto Last = *Temp.rbegin();
+				return Last >= std::get<Counter>(Ite.Data).Target;
 			}
 			break;
 		default:
@@ -930,7 +1101,7 @@ namespace Potato::Reg
 		return true;
 	}
 
-	bool CheckPropertys(std::span<UnserilizedTable::EdgeProperty const> Source, UnserilizedTable::EdgeProperty Last)
+	bool CheckPropertys(std::span<NFATable::EdgeProperty const> Source, NFATable::EdgeProperty Last)
 	{
 		std::vector<std::size_t> Temp;
 		for (auto& Ite : Source)
@@ -940,8 +1111,56 @@ namespace Potato::Reg
 		}
 		return CheckProperty(Temp, Last);
 	}
+	*/
 
-	ExpandResult SearchEpsilonNode(UnfaTable const& Input, std::size_t SearchNode)
+	bool CheckProperty(std::span<SearchCore::Element const> Ref)
+	{
+		std::vector<std::size_t> Temp;
+		for (auto& Ite : Ref)
+		{
+			switch (Ite.Propertys.Type)
+			{
+			case EpsilonNFATable::EdgeType::CounterPush:
+				Temp.push_back(0);
+				break;
+			case EpsilonNFATable::EdgeType::CounterAdd:
+				if (!Temp.empty())
+					*Temp.rbegin() += 1;
+				break;
+			case EpsilonNFATable::EdgeType::CounterPop:
+				if (!Temp.empty())
+					Temp.pop_back();
+				break;
+			case EpsilonNFATable::EdgeType::CounterEqual:
+				if (!Temp.empty())
+				{
+					auto Last = *Temp.rbegin();
+					return Last == std::get<Counter>(Ite.Propertys.Datas).Target;
+				}
+				break;
+			case EpsilonNFATable::EdgeType::CounterSmallEqual:
+				if (!Temp.empty())
+				{
+					auto Last = *Temp.rbegin();
+					return Last <= std::get<Counter>(Ite.Propertys.Datas).Target;
+				}
+				break;
+			case EpsilonNFATable::EdgeType::CounterBigEqual:
+				if (!Temp.empty())
+				{
+					auto Last = *Temp.rbegin();
+					return Last >= std::get<Counter>(Ite.Propertys.Datas).Target;
+				}
+				break;
+			default:
+				break;
+			}
+			return true;
+		}
+		return true;
+	}
+
+	ExpandResult SearchEpsilonNode(EpsilonNFATable const& Input, std::size_t SearchNode)
 	{
 		ExpandResult Result;
 
@@ -961,35 +1180,98 @@ namespace Potato::Reg
 
 				bool IsLast = ( EdgeIte  + 1 == Node.Edges.rend());
 
-				bool CirculDependenc = std::find(Result.ContainNodes.begin(), Result.ContainNodes.end(), Ite.ShiftNode) != Result.ContainNodes.end();
-				
-				Cur.ToNode = Ite.ShiftNode;
-
-				if (CirculDependenc && Ite.Type != UnfaTable::EdgeType::Consume && !Ite.ConsumeChars.empty()) [[unlikely]]
+				if (Ite.Property.Type == EpsilonNFATable::EdgeType::Consume && !std::get<std::vector<IntervalT>>(Ite.Property.Datas).empty())
 				{
-					throw Exception::CircleShifting{};
+					if (!CheckProperty(std::span(Cur.Propertys)))
+						continue;
+
+					NFATable::Edge NewEdge;
+					NewEdge.ToNode = Ite.ShiftNode;
+
+					Cur.AddUniqueID(Ite.UniqueID);
+
+					assert(Cur.UniqueID.has_value());
+
+					if (Cur.UniqueID->HasUniqueID)
+						NewEdge.UniqueID = Cur.UniqueID->UniqueID;
+					NewEdge.ConsumeChars = std::get<std::vector<IntervalT>>(Ite.Property.Datas);
+
+					for (auto& Ite : Cur.Propertys)
+					{
+						switch (Ite.Propertys.Type)
+						{
+						case EpsilonNFATable::EdgeType::CaptureBegin:
+						case EpsilonNFATable::EdgeType::CaptureEnd:
+						case EpsilonNFATable::EdgeType::CounterAdd:
+						case EpsilonNFATable::EdgeType::CounterPop:
+						case EpsilonNFATable::EdgeType::CounterPush:
+							NewEdge.Propertys.push_back({ Ite.Propertys.Type});
+							break;
+						case EpsilonNFATable::EdgeType::CounterBigEqual:
+						case EpsilonNFATable::EdgeType::CounterEqual:
+						case EpsilonNFATable::EdgeType::CounterSmallEqual:
+							NewEdge.Propertys.push_back({Ite.Propertys.Type, std::get<Counter>(Ite.Propertys.Datas)});
+							break;
+						default:
+							break;
+						}
+					}
+
+					Result.Edges.push_back(std::move(NewEdge));
+
+				}
+				else {
+
+					auto CircleDetected = std::find_if(Cur.Propertys.begin(), Cur.Propertys.end(), [&](SearchCore::Element& Ele){
+						return Ele.From == Ite.ShiftNode;
+					});
+
+					if (CircleDetected != Cur.Propertys.end())
+					{
+						volatile int i = 0;
+						throw Exception::CircleShifting{};
+					}
+
+					Result.ContainNodes.push_back(Ite.ShiftNode);
+
+					SearchCore NewOne;
+					if (IsLast)
+						NewOne = std::move(Cur);
+					else
+						NewOne = Cur;
+
+					NewOne.AddUniqueID(Ite.UniqueID);
+
+					NewOne.Propertys.push_back({ NewOne.ToNode, Ite.ShiftNode, Ite.Property });
+					NewOne.ToNode = Ite.ShiftNode;
+					SearchStack.push_back(std::move(NewOne));
 				}
 
-				switch (Ite.Type)
+				/*
+				Cur.ToNode = Ite.ShiftNode;
+
+				switch (Ite.Property.Type)
 				{
-				case UnfaTable::EdgeType::Consume:
-					if (Ite.ConsumeChars.empty())
+				case EpsilonNFATable::EdgeType::Consume:
+				{
+					auto& Ref = std::get<std::vector<IntervalT>>(Ite.Property.Datas);
+					if (Ref.empty())
 					{
 						Result.ContainNodes.push_back(Ite.ShiftNode);
-						if(IsLast)
+						if (IsLast)
 							SearchStack.push_back(std::move(Cur));
 						else
 							SearchStack.push_back(Cur);
 					}
 					else {
 						Cur.AddUniqueID(Ite.UniqueID);
-						UnserilizedTable::Edge Edge;
+						NFATable::Edge Edge;
 						Edge.ToNode = Ite.ShiftNode;
 						if (IsLast)
-							Edge.ConsumeChars = std::move(Ite.ConsumeChars);
+							Edge.ConsumeChars = std::move(Ref);
 						else
-							Edge.ConsumeChars = Ite.ConsumeChars;
-						assert(Cur.UniqueID.has_value()); 
+							Edge.ConsumeChars = Ref;
+						assert(Cur.UniqueID.has_value());
 						if (Cur.UniqueID->HasUniqueID)
 							Edge.UniqueID = Cur.UniqueID->UniqueID;
 						if (IsLast)
@@ -999,35 +1281,52 @@ namespace Potato::Reg
 						Result.Edges.push_back(std::move(Edge));
 					}
 					break;
-				case UnfaTable::EdgeType::CounterBegin:
-				case UnfaTable::EdgeType::CounterContinue:
-				case UnfaTable::EdgeType::CounterEnd:
-					if(!CheckPropertys(Cur.Propertys, {Ite.Type, {}, Ite.CounterDatas}))
+				}
+				case EpsilonNFATable::EdgeType::CounterAdd:
+				case EpsilonNFATable::EdgeType::CounterBigEqual:
+				case EpsilonNFATable::EdgeType::CounterEqual:
+				case EpsilonNFATable::EdgeType::CounterPop:
+				case EpsilonNFATable::EdgeType::CounterPush:
+				case EpsilonNFATable::EdgeType::CounterSmallEqual:
+					if(!CheckPropertys(Cur.Propertys, {Ite.Property.Type, std::get<Counter>(Ite.Property.Datas)}))
 						break;
 				default:
 					Result.ContainNodes.push_back(Ite.ShiftNode);
 
+					NFATable::EdgeProperty NewProperty;
+					NewProperty.Type = Ite.Property.Type;
+					assert(!std::holds_alternative<std::vector<IntervalT>>(Ite.Property.Datas));
+					if (std::holds_alternative<Accept>(Ite.Property.Datas))
+					{
+						NewProperty.Data = std::get<Accept>(Ite.Property.Datas);
+					}
+					else if (std::holds_alternative<Counter>(Ite.Property.Datas))
+					{
+						NewProperty.Data = std::get<Counter>(Ite.Property.Datas);
+					}
+
 					if (IsLast)
 					{
 						Cur.AddUniqueID(Ite.UniqueID);
-						Cur.Propertys.push_back({ Ite.Type, Ite.AcceptData, Ite.CounterDatas });
+						Cur.Propertys.push_back(NewProperty);
 						SearchStack.push_back(std::move(Cur));
 					}
 					else {
 						auto NewCur = Cur;
 						NewCur.AddUniqueID(Ite.UniqueID);
-						NewCur.Propertys.push_back({ Ite.Type, Ite.AcceptData, Ite.CounterDatas });
+						NewCur.Propertys.push_back(NewProperty);
 						SearchStack.push_back(std::move(NewCur));
 					}
 					break;
 				}
+				*/
 			}
 		}
-		std::sort(Result.ContainNodes.begin(), Result.ContainNodes.end());
+		//std::sort(Result.ContainNodes.begin(), Result.ContainNodes.end());
 		return Result;
 	}
 
-	UnserilizedTable::UnserilizedTable(UnfaTable const& Table)
+	NFATable::NFATable(EpsilonNFATable const& Table)
 	{
 
 		struct NodeStorage
@@ -1071,6 +1370,40 @@ namespace Potato::Reg
 			Nodes.push_back({std::move(Ite.Edges)});
 		}
 
+		// Copy Acceptable Node
+
+		/*
+		{
+
+			struct AcceptableNodeProperty
+			{
+				std::size_t From;
+				std::size_t To;
+				Reg::StandardT UniqueID = 0;
+			};
+
+			std::vector<AcceptableNodeProperty> AccNodePro;
+
+			for (std::size_t I1 = 0; I1 < Nodes.size(); ++I1)
+			{
+				for (auto& Ite : Nodes[I1].Edges)
+				{
+					if (Ite.ConsumeChars.size() == 2 && Ite.ConsumeChars[0] == Reg::MaxChar() && Ite.ConsumeChars[1] == Reg::MaxChar() + 1)
+					{
+						assert(Ite.ToNode != I1);
+						auto& TargetNode = Nodes[Ite.ToNode];
+						assert(TargetNode.Edges.empty());
+						for (auto& Ite2 : Nodes[I1].Edges)
+						{
+							if(Ite2)
+						}
+					}
+				}
+			}
+		}
+		*/
+
+		/*
 		{
 			// For Acceptable Node
 			std::optional<std::size_t> RecordedIndex;
@@ -1106,6 +1439,7 @@ namespace Potato::Reg
 				++Index;
 			}
 		}
+		*/
 
 		/*
 		{
@@ -1176,6 +1510,158 @@ namespace Potato::Reg
 		*/
 	}
 
+	DFATable::DFATable(NFATable const& Input)
+	{
+
+		assert(!Input.Nodes.empty());
+
+		std::vector<std::vector<std::size_t>> Mapping;
+
+		struct TempProperty
+		{
+			std::vector<NFATable::EdgeProperty> Propertys;
+			std::size_t OriginalFrom;
+			std::size_t OriginalTo;
+		};
+
+		struct TemporaryEdge
+		{
+			std::vector<TempProperty> Propertys;
+			std::vector<IntervalT> ConsumeSymbols;
+			std::size_t ToNode;
+		};
+
+		std::vector<std::vector<TemporaryEdge>> TemporaryEdges;
+
+		Mapping.push_back({0});
+
+		TemporaryEdges.resize(Mapping.size());
+
+		std::vector<std::size_t> SearchingStack;
+		SearchingStack.push_back(0);
+
+		while (!SearchingStack.empty())
+		{
+			auto Top = *SearchingStack.rbegin();
+			SearchingStack.pop_back();
+
+			auto SearchNode = Mapping[Top];
+
+			std::vector<TemporaryEdge> Temps;
+
+			for (auto Ite : SearchNode)
+			{
+				auto& CurNode = Input.Nodes[Ite];
+				for (auto& Ite2 : CurNode.Edges)
+				{
+					Temps.push_back({{{Ite2.Propertys, Ite, Ite2.ToNode}}, Ite2.ConsumeChars, 0});
+				}
+			}
+
+			if (Temps.size() > 1)
+			{
+				bool Change = true;
+				while (Change)
+				{
+					Change = false;
+
+					std::vector<TemporaryEdge> TempTemps;
+
+					std::span<TemporaryEdge> Span = std::span(Temps);
+
+					while (!Span.empty())
+					{
+						auto Top = std::move(Span[0]);
+						Span = Span.subspan(1);
+
+						if (Top.ConsumeSymbols.empty())
+							continue;
+
+						for (auto& Ite : Span)
+						{
+							auto Result = Misc::SequenceIntervalWrapper{ Top.ConsumeSymbols }.Collision(Ite.ConsumeSymbols);
+							if (!Result.middle.empty())
+							{
+								TemporaryEdge New;
+								New.ConsumeSymbols = Result.middle;
+								New.Propertys = Top.Propertys;
+								New.Propertys.insert(New.Propertys.end(), Ite.Propertys.begin(), Ite.Propertys.end());
+								TempTemps.push_back(std::move(New));
+
+								Top.ConsumeSymbols = std::move(Result.left);
+								Ite.ConsumeSymbols = std::move(Result.right);
+
+								Change = true;
+
+								if(Top.ConsumeSymbols.empty())
+									break;
+							}
+						}
+
+						if(!Top.ConsumeSymbols.empty())
+							TempTemps.push_back(std::move(Top));
+					}
+					std::swap(TempTemps, Temps);
+				}
+			}
+
+			for (auto& Ite : Temps)
+			{
+				std::optional<std::size_t> Target;
+
+				for (std::size_t I1 = 0; I1 < Mapping.size(); ++I1)
+				{
+					auto& Ref = Mapping[I1];
+
+					if (Ref.size() == Ite.Propertys.size())
+					{
+						bool SubFind = true;
+						for (std::size_t I2 = 0; I2 < Ref.size(); ++I2)
+						{
+							if (Ref[I2] != Ite.Propertys[I2].OriginalTo)
+							{
+								SubFind = false;
+								break;
+							}
+						}
+						if (SubFind)
+						{
+							Target = I1;
+							break;
+						}
+					}
+				}
+
+				if (Target.has_value())
+				{
+					Ite.ToNode = *Target;
+				}
+				else {
+					auto Index = Mapping.size();
+
+					Ite.ToNode = Index;
+
+					std::vector<std::size_t> TempsNodes;
+
+					for (auto& Ite2 : Ite.Propertys)
+					{
+						TempsNodes.push_back(Ite2.OriginalTo);
+					}
+
+					Mapping.push_back(TempsNodes);
+					TemporaryEdges.resize(Mapping.size());
+
+					SearchingStack.push_back(Index);
+				}
+			}
+
+			TemporaryEdges[Top] = std::move(Temps);
+		}
+
+		volatile int i = 0;
+	}
+
+	/*
 	std::size_t TranslateIntervalT(std::span<IntervalT const> Source, std::vector<TableWrapper::ZipChar>& Output)
 	{
 		auto OldSize = Output.size();
@@ -1973,6 +2459,7 @@ namespace Potato::Reg
 		assert(Temporary.has_value());
 		return TableWrapper::Create(*Temporary);
 	}
+	*/
 
 	namespace Exception
 	{
