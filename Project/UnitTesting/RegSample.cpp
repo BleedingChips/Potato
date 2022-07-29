@@ -11,9 +11,9 @@ void TestingReg()
 	//Crerator.AddRegex(UR"(+)", { 1 }, Crerator.GetCountedUniqueID(), true);
 
 
-	EpsilonNFATable Table = EpsilonNFATable::Create(UR"((1.*))", false, {0});
-	//Table.Link(EpsilonNFATable::Create(UR"((a){1,4})", false, { 1 }));
-	//Table.Link(EpsilonNFATable::Create(UR"(a{1,2})", false, { 0 }));
+	EpsilonNFATable Table = EpsilonNFATable::Create(UR"(a*ab)", false, {0});
+	Table.Link(EpsilonNFATable::Create(UR"((a*)ab)", false, { 1 }));
+	Table.Link(EpsilonNFATable::Create(UR"(a{0,3}(abc))", false, { 0 }));
 	NFATable Ta(Table);
 
 	DFATable DT(Ta);

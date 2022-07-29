@@ -485,8 +485,8 @@ namespace Potato::Reg
 		}
 		case 4:
 		{
-			auto T1 = Output.NewNode();
-			auto T2 = Output.NewNode();
+			auto T1 = Output.NewNode(NT.FirstTokenIndex);
+			auto T2 = Output.NewNode(NT.FirstTokenIndex);
 			NodeSet Set{ T1, T2 };
 			Output.AddComsumeEdge(T1, T2, NT[1].Consume<SeqIntervalT>());
 			return Set;
@@ -495,8 +495,8 @@ namespace Potato::Reg
 		{
 			auto Tar = NT[2].Consume<SeqIntervalT>();
 			auto P = MaxIntervalRange().AsWrapper().Remove(Tar);
-			auto T1 = Output.NewNode();
-			auto T2 = Output.NewNode();
+			auto T1 = Output.NewNode(NT.FirstTokenIndex);
+			auto T2 = Output.NewNode(NT.FirstTokenIndex);
 			NodeSet Set{ T1, T2 };
 			Output.AddComsumeEdge(T1, T2, P);
 			return Set;
@@ -507,8 +507,8 @@ namespace Potato::Reg
 		}
 		case 7:
 		{
-			auto T1 = Output.NewNode();
-			auto T2 = Output.NewNode();
+			auto T1 = Output.NewNode(NT.FirstTokenIndex);
+			auto T2 = Output.NewNode(NT.FirstTokenIndex);
 			NodeSet Last = NT.Datas[1].Consume<NodeSet>();
 			NodeSet Set{ T1, T2 };
 			Output.AddCapture(Set, Last);
@@ -518,8 +518,8 @@ namespace Potato::Reg
 		{
 			NodeSet Last1 = NT[0].Consume<NodeSet>();
 			NodeSet Last2 = NT[2].Consume<NodeSet>();
-			auto T1 = Output.NewNode();
-			auto T2 = Output.NewNode();
+			auto T1 = Output.NewNode(NT.FirstTokenIndex);
+			auto T2 = Output.NewNode(NT.FirstTokenIndex);
 			Output.AddComsumeEdge(T1, Last1.In, {});
 			Output.AddComsumeEdge(T1, Last2.In, {});
 			Output.AddComsumeEdge(Last1.Out, T2, {});
@@ -528,8 +528,8 @@ namespace Potato::Reg
 		}
 		case 9:
 		{
-			auto T1 = Output.NewNode();
-			auto T2 = Output.NewNode();
+			auto T1 = Output.NewNode(NT.FirstTokenIndex);
+			auto T2 = Output.NewNode(NT.FirstTokenIndex);
 			auto Tar = NT[0].Consume<char32_t>();
 			NodeSet Set{ T1, T2 };
 			Output.AddComsumeEdge(T1, T2, { {Tar, Tar + 1} });
@@ -537,8 +537,8 @@ namespace Potato::Reg
 		}
 		case 50:
 		{
-			auto T1 = Output.NewNode();
-			auto T2 = Output.NewNode();
+			auto T1 = Output.NewNode(NT.FirstTokenIndex);
+			auto T2 = Output.NewNode(NT.FirstTokenIndex);
 			NodeSet Set{ T1, T2 };
 			Output.AddComsumeEdge(T1, T2, NT[0].Consume<SeqIntervalT>());
 			return Set;
@@ -556,8 +556,8 @@ namespace Potato::Reg
 		}
 		case 12:
 		{
-			auto T1 = Output.NewNode();
-			auto T2 = Output.NewNode();
+			auto T1 = Output.NewNode(NT.FirstTokenIndex);
+			auto T2 = Output.NewNode(NT.FirstTokenIndex);
 			auto Last1 = NT[0].Consume<NodeSet>();
 			Output.AddComsumeEdge(T1, Last1.In, {});
 			Output.AddComsumeEdge(T1, T2, {});
@@ -567,8 +567,8 @@ namespace Potato::Reg
 		}
 		case 13:
 		{
-			auto T1 = Output.NewNode();
-			auto T2 = Output.NewNode();
+			auto T1 = Output.NewNode(NT.FirstTokenIndex);
+			auto T2 = Output.NewNode(NT.FirstTokenIndex);
 			auto Last1 = NT[0].Consume<NodeSet>();
 			Output.AddComsumeEdge(T1, Last1.In, {});
 			Output.AddComsumeEdge(Last1.Out, Last1.In, {});
@@ -577,8 +577,8 @@ namespace Potato::Reg
 		}
 		case 14:
 		{
-			auto T1 = Output.NewNode();
-			auto T2 = Output.NewNode();
+			auto T1 = Output.NewNode(NT.FirstTokenIndex);
+			auto T2 = Output.NewNode(NT.FirstTokenIndex);
 			auto Last1 = NT[0].Consume<NodeSet>();
 			Output.AddComsumeEdge(T1, T2, {});
 			Output.AddComsumeEdge(T1, Last1.In, {});
@@ -588,8 +588,8 @@ namespace Potato::Reg
 		}
 		case 15:
 		{
-			auto T1 = Output.NewNode();
-			auto T2 = Output.NewNode();
+			auto T1 = Output.NewNode(NT.FirstTokenIndex);
+			auto T2 = Output.NewNode(NT.FirstTokenIndex);
 			auto Last1 = NT[0].Consume<NodeSet>();
 			Output.AddComsumeEdge(T1, Last1.In, {});
 			Output.AddComsumeEdge(Last1.Out, T2, {});
@@ -598,8 +598,8 @@ namespace Potato::Reg
 		}
 		case 16:
 		{
-			auto T1 = Output.NewNode();
-			auto T2 = Output.NewNode();
+			auto T1 = Output.NewNode(NT.FirstTokenIndex);
+			auto T2 = Output.NewNode(NT.FirstTokenIndex);
 			auto Last1 = NT[0].Consume<NodeSet>();
 			Output.AddComsumeEdge(T1, Last1.In, {});
 			Output.AddComsumeEdge(Last1.Out, T2, {});
@@ -608,8 +608,8 @@ namespace Potato::Reg
 		}
 		case 17:
 		{
-			auto T1 = Output.NewNode();
-			auto T2 = Output.NewNode();
+			auto T1 = Output.NewNode(NT.FirstTokenIndex);
+			auto T2 = Output.NewNode(NT.FirstTokenIndex);
 			auto Last1 = NT[0].Consume<NodeSet>();
 			Output.AddComsumeEdge(T1, T2, {});
 			Output.AddComsumeEdge(T1, Last1.In, {});
@@ -631,19 +631,19 @@ namespace Potato::Reg
 			return Te;
 		}
 		case 20: // {num}
-			return Output.AddCounter(NT[0].Consume<NodeSet>(), NT[2].Consume<std::size_t>(), {}, {}, false);
+			return Output.AddCounter(NT.FirstTokenIndex, NT[0].Consume<NodeSet>(), NT[2].Consume<std::size_t>(), {}, {}, false);
 		case 25: // {,N}?
-			return Output.AddCounter(NT[0].Consume<NodeSet>(), {}, {}, NT[3].Consume<std::size_t>(), false);
+			return Output.AddCounter(NT.FirstTokenIndex, NT[0].Consume<NodeSet>(), {}, {}, NT[3].Consume<std::size_t>(), false);
 		case 21: // {,N}
-			return Output.AddCounter(NT[0].Consume<NodeSet>(), {}, {}, NT[3].Consume<std::size_t>(), true);
+			return Output.AddCounter(NT.FirstTokenIndex, NT[0].Consume<NodeSet>(), {}, {}, NT[3].Consume<std::size_t>(), true);
 		case 26: // {N,} ?
-			return Output.AddCounter(NT[0].Consume<NodeSet>(), NT[2].Consume<std::size_t>(), {}, {}, false);
+			return Output.AddCounter(NT.FirstTokenIndex, NT[0].Consume<NodeSet>(), NT[2].Consume<std::size_t>(), {}, {}, false);
 		case 22: // {N,}
-			return Output.AddCounter(NT[0].Consume<NodeSet>(), NT[2].Consume<std::size_t>(), {}, {}, true);
+			return Output.AddCounter(NT.FirstTokenIndex, NT[0].Consume<NodeSet>(), NT[2].Consume<std::size_t>(), {}, {}, true);
 		case 27: // {N, N} ?
-			return Output.AddCounter(NT[0].Consume<NodeSet>(), {}, NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), false);
+			return Output.AddCounter(NT.FirstTokenIndex, NT[0].Consume<NodeSet>(), {}, NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), false);
 		case 23: // {N, N}
-			return Output.AddCounter(NT[0].Consume<NodeSet>(), {}, NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), true);
+			return Output.AddCounter(NT.FirstTokenIndex, NT[0].Consume<NodeSet>(), {}, NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), true);
 		default:
 			assert(false);
 			return {};
@@ -669,22 +669,22 @@ namespace Potato::Reg
 		}
 	}
 
-	std::size_t EpsilonNFATable::NewNode()
+	std::size_t EpsilonNFATable::NewNode(std::size_t TokenIndex)
 	{
 		std::size_t Index = Nodes.size();
-		Nodes.push_back({ Index, {} });
+		Nodes.push_back({ Index, {}, TokenIndex });
 		return Index;
 	}
 
-	EpsilonNFATable::NodeSet EpsilonNFATable::AddCounter(NodeSet InSideSet, std::optional<std::size_t> Equal, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool IsGreedy)
+	EpsilonNFATable::NodeSet EpsilonNFATable::AddCounter(std::size_t TokenIndex, NodeSet InSideSet, std::optional<std::size_t> Equal, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool IsGreedy)
 	{
 		if (Equal.has_value() || (Min.has_value() && Max.has_value() && *Min == *Max))
 		{
 			std::size_t Tar = Equal.has_value() ? *Equal : *Min;
 			if (Tar == 0)
 			{
-				auto T1 = NewNode();
-				auto T2 = NewNode();
+				auto T1 = NewNode(Nodes[InSideSet.In].TokenIndex);
+				auto T2 = NewNode(TokenIndex);
 				AddComsumeEdge(T1, T2, {});
 				return NodeSet{T1, T2};
 			}
@@ -696,8 +696,8 @@ namespace Potato::Reg
 		else if (Min.has_value() && !Max.has_value() && *Min <= 1)
 		{
 			std::size_t Index = *Min;
-			auto T1 = NewNode();
-			auto T2 = NewNode();
+			auto T1 = NewNode(TokenIndex);
+			auto T2 = NewNode(TokenIndex);
 
 			if (Index == 0)
 			{
@@ -728,14 +728,14 @@ namespace Potato::Reg
 		{
 			if (*Max == 0)
 			{
-				auto T1 = NewNode();
-				auto T2 = NewNode();
+				auto T1 = NewNode(TokenIndex);
+				auto T2 = NewNode(TokenIndex);
 				AddComsumeEdge(T1, T2, {});
 				return NodeSet{ T1, T2 };
 			}
 			else {
-				auto T1 = NewNode();
-				auto T2 = NewNode();
+				auto T1 = NewNode(TokenIndex);
+				auto T2 = NewNode(TokenIndex);
 				if (IsGreedy)
 				{
 					AddComsumeEdge(T1, InSideSet.In, {});
@@ -750,10 +750,10 @@ namespace Potato::Reg
 			}
 		}	
 
-		auto T1 = NewNode();
-		auto T2 = NewNode();
-		auto T3 = NewNode();
-		auto T4 = NewNode();
+		auto T1 = NewNode(TokenIndex);
+		auto T2 = NewNode(TokenIndex);
+		auto T3 = NewNode(TokenIndex);
+		auto T4 = NewNode(TokenIndex);
 
 		{
 			EpsilonNFATable::Edge Edge{ {EpsilonNFATable::EdgeType::CounterPush}, T2, 0 };
@@ -767,8 +767,8 @@ namespace Potato::Reg
 
 		if (Equal.has_value() || Max.has_value())
 		{
-			Start = NewNode();
-			std::size_t Tar = Equal.has_value() ? *Equal : Max.has_value();
+			Start = NewNode(TokenIndex);
+			std::size_t Tar = Equal.has_value() ? *Equal : *Max;
 			assert(Tar > 1);
 
 			Counter Tem;
@@ -790,7 +790,7 @@ namespace Potato::Reg
 			Counter Tem;
 			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Target, *Min, RegexOutOfRange::TypeT::Counter, *Min);
 
-			auto New = NewNode();
+			auto New = NewNode(TokenIndex);
 
 			EpsilonNFATable::Edge Edge{ {EpsilonNFATable::EdgeType::CounterBigEqual, Tem}, New, 0 };
 			AddEdge(Start, std::move(Edge));
@@ -803,7 +803,7 @@ namespace Potato::Reg
 			Counter Tem;
 			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Target, *Max, RegexOutOfRange::TypeT::Counter, *Max);
 
-			auto New = NewNode();
+			auto New = NewNode(TokenIndex);
 			EpsilonNFATable::Edge Edge{ {EpsilonNFATable::EdgeType::CounterSmallEqual, Tem}, New, 0 };
 			AddEdge(Start, std::move(Edge));
 
@@ -964,9 +964,9 @@ namespace Potato::Reg
 
 	void CreateUnfaTable(LexerTranslater& Translater, EpsilonNFATable& Output, Accept AcceptData)
 	{
-		auto N1 = Output.NewNode();
-		auto N2 = Output.NewNode();
-		auto N3 = Output.NewNode();
+		auto N1 = Output.NewNode(0);
+		auto N2 = Output.NewNode(0);
+		auto N3 = Output.NewNode(0);
 		Output.AddComsumeEdge(N2, N3, { {MaxChar(), MaxChar() + 1} });
 		auto Wrapper = RexSLRXWrapper();
 
@@ -1202,15 +1202,21 @@ namespace Potato::Reg
 						{
 						case EpsilonNFATable::EdgeType::CaptureBegin:
 						case EpsilonNFATable::EdgeType::CaptureEnd:
+							NewEdge.Propertys.CaptureProperty.push_back(Ite.Propertys.Type);
+							break;
 						case EpsilonNFATable::EdgeType::CounterAdd:
 						case EpsilonNFATable::EdgeType::CounterPop:
 						case EpsilonNFATable::EdgeType::CounterPush:
-							NewEdge.Propertys.push_back({ Ite.Propertys.Type});
+							NewEdge.Propertys.CounterProperty.push_back({Ite.Propertys.Type, {}});
 							break;
 						case EpsilonNFATable::EdgeType::CounterBigEqual:
 						case EpsilonNFATable::EdgeType::CounterEqual:
 						case EpsilonNFATable::EdgeType::CounterSmallEqual:
-							NewEdge.Propertys.push_back({Ite.Propertys.Type, std::get<Counter>(Ite.Propertys.Datas)});
+							NewEdge.Propertys.CounterProperty.push_back({Ite.Propertys.Type, std::get<Counter>(Ite.Propertys.Datas)});
+							break;
+						case EpsilonNFATable::EdgeType::Acceptable:
+							assert(!NewEdge.Propertys.AcceptableProperty.has_value());
+							NewEdge.Propertys.AcceptableProperty = std::get<Accept>(Ite.Propertys.Datas);
 							break;
 						default:
 							break;
@@ -1519,7 +1525,7 @@ namespace Potato::Reg
 
 		struct TempProperty
 		{
-			std::vector<NFATable::EdgeProperty> Propertys;
+			NFATable::EdgeProperty Propertys;
 			std::size_t OriginalFrom;
 			std::size_t OriginalTo;
 		};

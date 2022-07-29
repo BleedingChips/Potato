@@ -74,6 +74,7 @@ namespace Potato::Reg
 		{
 			std::size_t Index;
 			std::vector<Edge> Edges;
+			std::size_t TokenIndex;
 		};
 
 		struct NodeSet
@@ -93,11 +94,11 @@ namespace Potato::Reg
 
 		EpsilonNFATable() {}
 
-		std::size_t NewNode();
+		std::size_t NewNode(std::size_t TokenIndex);
 		void AddComsumeEdge(std::size_t From, std::size_t To, std::vector<IntervalT> Acceptable);
 		void AddAcceptableEdge(std::size_t From, std::size_t To, Accept Data);
 		void AddCapture(NodeSet OutsideSet, NodeSet InsideSet);
-		NodeSet AddCounter(NodeSet InSideSet, std::optional<std::size_t> Equal, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool IsGreedy);
+		NodeSet AddCounter(std::size_t TokenIndex, NodeSet InSideSet, std::optional<std::size_t> Equal, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool IsGreedy);
 		//void AddCounter(EdgeType Type, std::size_t From, std::size_t To, Counter Counter);
 		void AddEdge(std::size_t From, Edge Edge);
 
@@ -107,10 +108,17 @@ namespace Potato::Reg
 	struct NFATable
 	{
 
-		struct EdgeProperty
+		struct CounterProperty
 		{
 			EpsilonNFATable::EdgeType Type;
-			std::variant<Accept, Counter> Data;
+			Counter Target;
+		};
+
+		struct EdgeProperty
+		{
+			std::vector<EpsilonNFATable::EdgeType> CaptureProperty;
+			std::vector<CounterProperty> CounterProperty;
+			std::optional<Accept> AcceptableProperty;
 			std::strong_ordering operator<=>(EdgeProperty const& I2) const = default;
 			bool operator==(EdgeProperty const&) const = default;
 		};
@@ -118,7 +126,7 @@ namespace Potato::Reg
 		struct Edge
 		{
 			std::size_t ToNode;
-			std::vector<EdgeProperty> Propertys;
+			EdgeProperty Propertys;
 			std::vector<IntervalT> ConsumeChars;
 			std::optional<StandardT> UniqueID;
 		};
