@@ -1534,46 +1534,62 @@ namespace Potato::Reg
 		{
 			std::vector<TempProperty> Propertys;
 			std::vector<IntervalT> ConsumeSymbols;
-			std::size_t ToNode;
 		};
 
-		std::vector<std::vector<TemporaryEdge>> TemporaryEdges;
+		//std::vector<std::vector<TemporaryEdge>> TemporaryEdges;
 
 		Mapping.push_back({0});
 
-		TemporaryEdges.resize(Mapping.size());
+		//TemporaryEdges.resize(Mapping.size());
 
-		std::vector<std::size_t> SearchingStack;
-		SearchingStack.push_back(0);
+		struct SearchingCore
+		{
+			std::size_t Index;
+			std::vector<TemporaryEdge> Propertys;
+		};
+
+
+		std::vector<SearchingCore> SearchingStack;
+
+		{
+			SearchingCore Startup;
+			Startup.Index = 0;
+			auto& CurNode = Input.Nodes[Startup.Index];
+			for (auto& Ite2 : CurNode.Edges)
+			{
+				Startup.Propertys.push_back({ {{Ite2.Propertys, 0, Ite2.ToNode}}, Ite2.ConsumeChars});
+			}
+			SearchingStack.push_back(std::move(Startup));
+		}
+
+		struct FinalEdge
+		{
+			struct Propertys : TempProperty
+			{
+				TempProperty Porpertys;
+				bool HasCounter;
+				bool HasAcceptable;
+			};
+
+			std::vector<IntervalT> RequireSymbols;
+			std::vector<TempProperty> Propertys;
+			std::vector<std::size_t> ReferenceTo;
+		};
 
 		while (!SearchingStack.empty())
 		{
 			auto Top = *SearchingStack.rbegin();
 			SearchingStack.pop_back();
 
-			auto SearchNode = Mapping[Top];
-
-			std::vector<TemporaryEdge> Temps;
-
-			for (auto Ite : SearchNode)
+			if (Top.Propertys.size() > 1)
 			{
-				auto& CurNode = Input.Nodes[Ite];
-				for (auto& Ite2 : CurNode.Edges)
-				{
-					Temps.push_back({{{Ite2.Propertys, Ite, Ite2.ToNode}}, Ite2.ConsumeChars, 0});
-				}
-			}
-
-			if (Temps.size() > 1)
-			{
+				std::vector<TemporaryEdge> TempTemps;
 				bool Change = true;
 				while (Change)
 				{
 					Change = false;
 
-					std::vector<TemporaryEdge> TempTemps;
-
-					std::span<TemporaryEdge> Span = std::span(Temps);
+					std::span<TemporaryEdge> Span = std::span(Top.Propertys);
 
 					while (!Span.empty())
 					{
@@ -1607,11 +1623,27 @@ namespace Potato::Reg
 						if(!Top.ConsumeSymbols.empty())
 							TempTemps.push_back(std::move(Top));
 					}
-					std::swap(TempTemps, Temps);
+					std::swap(TempTemps, Top.Propertys);
+					TempTemps.clear();
 				}
 			}
 
-			for (auto& Ite : Temps)
+			std::vector<FinalEdge> Edges;
+			Edges.reserve(Top.Propertys.size());
+
+			for (auto& Ite : Top.Propertys)
+			{
+				FinalEdge ResultEdge;
+				std::vector<std::vector<std::size_t>> List;
+				ResultEdge.RequireSymbols = Ite.ConsumeSymbols;
+				for (auto& Ite2 : Ite.Propertys)
+				{
+
+				}
+			}
+
+
+			for (auto& Ite : Top.Propertys)
 			{
 				std::optional<std::size_t> Target;
 
