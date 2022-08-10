@@ -144,6 +144,24 @@ namespace Potato::Reg
 	struct DFATable
 	{
 
+		enum class ActionProperty : uint8_t
+		{
+			AddProperty,
+			PushProperty,
+			PopProperty,
+			CaptureBegin,
+			CaptureEnd,
+			CopyContentInstance,
+			RemoveContentInstance,
+		};
+
+		enum class CounterProperty : uint8_t
+		{
+			CounterSmaller,
+			CounterBigger,
+			CounterEqual,
+		};
+
 		struct EdgeProperty
 		{
 			std::vector<NFATable::EdgeProperty> Propertys;

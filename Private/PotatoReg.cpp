@@ -2,6 +2,7 @@
 #include "../Public/PotatoSLRX.h"
 #include "../Public/PotatoStrEncode.h"
 #include <deque>
+#include <limits>
 
 namespace Potato::Reg
 {
@@ -1057,62 +1058,6 @@ namespace Potato::Reg
 		}
 	};
 
-	/*
-
-	bool CheckProperty(std::vector<std::size_t>& Temp, NFATable::EdgeProperty Ite)
-	{
-		switch (Ite.Type)
-		{
-		case EpsilonNFATable::EdgeType::CounterPush:
-			Temp.push_back(0);
-			break;
-		case EpsilonNFATable::EdgeType::CounterAdd:
-			if (!Temp.empty())
-				*Temp.rbegin() += 1;
-			break;
-		case EpsilonNFATable::EdgeType::CounterPop:
-			if(!Temp.empty())
-				Temp.pop_back();
-			break;
-		case EpsilonNFATable::EdgeType::CounterEqual:
-			if (!Temp.empty())
-			{
-				auto Last = *Temp.rbegin();
-				return Last == std::get<Counter>(Ite.Data).Target;
-			}
-			break;
-		case EpsilonNFATable::EdgeType::CounterSmallEqual:
-			if (!Temp.empty())
-			{
-				auto Last = *Temp.rbegin();
-				return Last <= std::get<Counter>(Ite.Data).Target;
-			}
-			break;
-		case EpsilonNFATable::EdgeType::CounterBigEqual:
-			if (!Temp.empty())
-			{
-				auto Last = *Temp.rbegin();
-				return Last >= std::get<Counter>(Ite.Data).Target;
-			}
-			break;
-		default:
-			break;
-		}
-		return true;
-	}
-
-	bool CheckPropertys(std::span<NFATable::EdgeProperty const> Source, NFATable::EdgeProperty Last)
-	{
-		std::vector<std::size_t> Temp;
-		for (auto& Ite : Source)
-		{
-			if(!CheckProperty(Temp, Ite))
-				return false;
-		}
-		return CheckProperty(Temp, Last);
-	}
-	*/
-
 	bool CheckProperty(std::span<SearchCore::Element const> Ref)
 	{
 		std::vector<std::size_t> Temp;
@@ -1332,6 +1277,38 @@ namespace Potato::Reg
 		return Result;
 	}
 
+	struct NodeAllocator
+	{
+		std::vector<std::vector<std::size_t>> Mapping;
+		std::tuple<std::size_t, bool> FindOrAdd(std::span<std::size_t const> Ref) {
+			auto Res = Find(Ref);
+			if(Res.has_value())
+				return {*Res, false};
+			else {
+				std::size_t ID = Mapping.size();
+				std::vector<std::size_t> NewSet{ Ref .begin(), Ref.end() };
+				Mapping.push_back(std::move(NewSet));
+				return {ID, true};
+			}
+		}
+		std::optional<std::size_t> Find(std::span<std::size_t const> Ref) const
+		{
+			for (std::size_t I = 0; I < Mapping.size(); ++I)
+			{
+				auto TRef = std::span(Mapping[0]);
+				if(TRef.size() == Ref.size() && std::equal(TRef.begin(), TRef.end(), Ref.begin(), Ref.end()))
+					return I;
+			}
+			return {};
+		}
+		std::size_t Size() const { return Mapping.size(); }
+		std::span<std::size_t const> Read(std::size_t Require)  const
+		{
+			assert(Mapping.size() > Require);
+			return std::span(Mapping[Require]);
+		}
+	};
+
 	NFATable::NFATable(EpsilonNFATable const& Table)
 	{
 
@@ -1375,145 +1352,190 @@ namespace Potato::Reg
 		{
 			Nodes.push_back({std::move(Ite.Edges)});
 		}
+	}
 
-		// Copy Acceptable Node
+	struct TemporaryProperty
+	{
+		NFATable::EdgeProperty Propertys;
+		std::size_t OriginalFrom;
+		std::size_t OriginalTo;
+		std::size_t UniqueID;
+	};
 
-		/*
+	struct TemporaryEdge
+	{
+		std::vector<TemporaryProperty> Propertys;
+		std::vector<IntervalT> ConsumeSymbols;
+		std::vector<std::size_t> ToIndexs;
+	};
+
+	struct TemporaryNode
+	{
+		std::vector<TemporaryEdge> KeepAcceptEdges;
+		std::vector<TemporaryEdge> PostKeepAcceptEdges;
+		std::vector<TemporaryEdge> Edges;
+		bool HasAccept = false;
+	};
+
+	void CollectTemporaryProperty(NFATable const& Input, std::span<std::size_t const> Indexs, TemporaryNode& Output)
+	{
+		std::vector<std::size_t> RemovedUniqueID;
+		bool ReadAccept = false;
+		bool LastAccept = false;
+		for (auto IndexIte : Indexs)
 		{
-
-			struct AcceptableNodeProperty
+			auto& NodeRef = Input.Nodes[IndexIte];
+			for (auto& Ite : NodeRef.Edges)
 			{
-				std::size_t From;
-				std::size_t To;
-				Reg::StandardT UniqueID = 0;
-			};
-
-			std::vector<AcceptableNodeProperty> AccNodePro;
-
-			for (std::size_t I1 = 0; I1 < Nodes.size(); ++I1)
-			{
-				for (auto& Ite : Nodes[I1].Edges)
+				if (Ite.Propertys.AcceptableProperty.has_value() && ReadAccept)
 				{
-					if (Ite.ConsumeChars.size() == 2 && Ite.ConsumeChars[0] == Reg::MaxChar() && Ite.ConsumeChars[1] == Reg::MaxChar() + 1)
+					RemovedUniqueID.push_back(*Ite.UniqueID);
+					continue;
+				}
+
+				TemporaryEdge Edges;
+				Edges.ConsumeSymbols = Ite.ConsumeChars;
+				if (Ite.Propertys.AcceptableProperty.has_value())
+				{
+					ReadAccept = true;
+					LastAccept = true;
+					Output.HasAccept = true;
+					RemovedUniqueID.push_back(*Ite.UniqueID);
+				}
+				else {
+					if (LastAccept)
+						Output.KeepAcceptEdges = Output.Edges;
+					LastAccept = false;
+					if (ReadAccept)
 					{
-						assert(Ite.ToNode != I1);
-						auto& TargetNode = Nodes[Ite.ToNode];
-						assert(TargetNode.Edges.empty());
-						for (auto& Ite2 : Nodes[I1].Edges)
+						if (std::find(RemovedUniqueID.begin(), RemovedUniqueID.end(), *Ite.UniqueID) == RemovedUniqueID.end())
 						{
-							if(Ite2)
+							TemporaryEdge Edges;
+							Edges.ConsumeSymbols = Ite.ConsumeChars;
+							Edges.Propertys.push_back({ Ite.Propertys, IndexIte, Ite.ToNode, *Ite.UniqueID });
+							Output.PostKeepAcceptEdges.push_back(std::move(Edges));
 						}
 					}
 				}
+				Edges.Propertys.push_back({Ite.Propertys, IndexIte, Ite.ToNode, *Ite.UniqueID});
+				Output.Edges.push_back(std::move(Edges));
 			}
 		}
-		*/
+	}
 
-		/*
+	void UnionEdges(std::vector<TemporaryEdge>& TempBuffer, std::vector<TemporaryEdge>& Output)
+	{
+		if (Output.size() >= 2)
 		{
-			// For Acceptable Node
-			std::optional<std::size_t> RecordedIndex;
-			for (std::size_t Index = 0; Index < Nodes.size(); )
+			TempBuffer.clear();
+			bool Change = true;
+			while(Change)
 			{
-				auto& Ref = Nodes[Index];
-				if (Ref.Edges.empty())
+				Change = false;
+				std::span<TemporaryEdge> Span = std::span(Output);
+
+				while (!Span.empty())
 				{
-					if (RecordedIndex.has_value())
-					{
-						for (std::size_t Index2 = 0; Index2 < Nodes.size(); ++Index2)
-						{
-							auto& Temp = Nodes[Index2];
-							for (auto& Ite : Temp.Edges)
-							{
-								if (Ite.ToNode == Index)
-								{
-									Ite.ToNode = *RecordedIndex;
-								}
-								else if (Ite.ToNode > Index)
-								{
-									Ite.ToNode -= 1;
-								}
-							}
-						}
-						Nodes.erase(Nodes.begin() + Index);
+					auto Top = std::move(Span[0]);
+					Span = Span.subspan(1);
+
+					if (Top.ConsumeSymbols.empty())
 						continue;
+
+					for (auto& Ite : Span)
+					{
+						auto Result = Misc::SequenceIntervalWrapper{ Top.ConsumeSymbols }.Collision(Ite.ConsumeSymbols);
+						if (!Result.middle.empty())
+						{
+							TemporaryEdge New;
+							New.ConsumeSymbols = Result.middle;
+							New.Propertys = Top.Propertys;
+							New.Propertys.insert(New.Propertys.end(), Ite.Propertys.begin(), Ite.Propertys.end());
+							TempBuffer.push_back(std::move(New));
+
+							Top.ConsumeSymbols = std::move(Result.left);
+							Ite.ConsumeSymbols = std::move(Result.right);
+
+							Change = true;
+
+							if (Top.ConsumeSymbols.empty())
+								break;
+						}
+					}
+
+					if (!Top.ConsumeSymbols.empty())
+						TempBuffer.push_back(std::move(Top));
+				}
+				std::swap(TempBuffer, Output);
+				TempBuffer.clear();
+			}
+		}
+	}
+
+	struct DFASearchCore
+	{
+		std::size_t Index;
+		TemporaryNode TempRawNodes;
+	};
+
+	void ClassifyNodeIndes(NFATable const& Table, std::vector<TemporaryEdge>& TempraryEdges, NodeAllocator& Mapping, std::vector<DFASearchCore>& SeachStack)
+	{
+		if (!TempraryEdges.empty())
+		{
+			
+			for (auto& Ite : TempraryEdges)
+			{
+				std::size_t ToNodeBuffer = 1;
+				for (auto& Ite2 : Ite.Propertys)
+				{
+					if(!Ite2.Propertys.CounterProperty.empty())
+						ToNodeBuffer *= 2;
+				}
+				std::vector<std::vector<std::size_t>> TemporaryMapping;
+				TemporaryMapping.reserve(ToNodeBuffer);
+				TemporaryMapping.push_back({});
+				for (auto& Ite2 : Ite.Propertys)
+				{
+					if (Ite2.Propertys.CounterProperty.empty())
+					{
+						for (auto& Ite3 : TemporaryMapping)
+						{
+							assert(std::find(Ite3.begin(), Ite3.end(), Ite2.OriginalTo) == Ite3.end());
+							Ite3.push_back(Ite2.OriginalTo);
+						}
 					}
 					else {
-						RecordedIndex = Index;
-					}
-				}
-				++Index;
-			}
-		}
-		*/
-
-		/*
-		{
-			bool ContinueCheck = true;
-			while (ContinueCheck)
-			{
-				ContinueCheck = false;
-				for (std::size_t Index = 0; Index < Nodes.size(); ++Index)
-				{
-					for (std::size_t Index2 = Index + 1; Index2 < Nodes.size();)
-					{
-						auto& Ref1 = Nodes[Index];
-						auto& Ref2 = Nodes[Index2];
-						if (Ref1.Edges == Ref2.Edges)
+						std::size_t Cur = TemporaryMapping.size();
+						for (std::size_t I = 0; I < Cur; ++I)
 						{
-							ContinueCheck = true;
-							Nodes.erase(Nodes.begin() + Index2);
-							for (auto& Ite : Nodes)
-							{
-								for (auto& Ite2 : Ite.Edges)
-								{
-									if (Ite2.ToNode == Index2)
-										Ite2.ToNode = Index;
-									else if (Ite2.ToNode > Index2)
-										--Ite2.ToNode;
-								}
-							}
-						}
-						else {
-							++Index2;
+							auto New = TemporaryMapping[I];
+							assert(std::find(New.begin(), New.end(), Ite2.OriginalTo) == New.end());
+							New.push_back(Ite2.OriginalTo);
+							TemporaryMapping.push_back({std::move(New)});
 						}
 					}
 				}
-			}
-		}
-		
-
-		{
-			for (auto& Ite : Nodes)
-			{
-				for (std::size_t Index = 0; Index < Ite.Edges.size(); ++Index)
+				Ite.ToIndexs.resize(ToNodeBuffer);
+				for (std::size_t I = 0; I < TemporaryMapping.size(); ++I)
 				{
-					for (std::size_t Index2 = Index + 1; Index2 < Ite.Edges.size();)
-					{
-						auto& Ref = Ite.Edges[Index];
-						auto& Ref2 = Ite.Edges[Index2];
-						if (Ref.ToNode == Ref2.ToNode && !Nodes[Ref.ToNode].Edges.empty())
+					assert(I < Ite.ToIndexs.size());
+					auto& Ref = TemporaryMapping[I];
+					if(Ref.empty())
+						Ite.ToIndexs[I] = std::numeric_limits<std::size_t>::max();
+					else {
+						auto [ID, IsNew] = Mapping.FindOrAdd(std::span(Ref));
+						if (IsNew)
 						{
-							if (Ref.Propertys.ConsumeChars == Ref2.Propertys.ConsumeChars)
-							{
-								if(Ref.Block != Ref2.Block)
-									Ref.Block = 0;
-								Ite.Edges.erase(Ite.Edges.begin() + Index2);
-							}
-							else if (Index + 1 == Index2) {
-								if (Ref.Block != Ref2.Block)
-									Ref.Block = 0;
-								Ref.Propertys.ConsumeChars = SeqIntervalWrapperT(Ref.Propertys.ConsumeChars).Union(Ref2.Propertys.ConsumeChars);
-								Ite.Edges.erase(Ite.Edges.begin() + Index2);
-							}
+							DFASearchCore New;
+							New.Index = ID;
+							CollectTemporaryProperty(Table, std::span(Ref), New.TempRawNodes);
+							SeachStack.push_back(std::move(New));
 						}
-						else
-							++Index2;
+						Ite.ToIndexs[I] = ID;
 					}
 				}
 			}
 		}
-		*/
 	}
 
 	DFATable::DFATable(NFATable const& Input)
@@ -1521,179 +1543,43 @@ namespace Potato::Reg
 
 		assert(!Input.Nodes.empty());
 
-		std::vector<std::vector<std::size_t>> Mapping;
-
-		struct TempProperty
-		{
-			NFATable::EdgeProperty Propertys;
-			std::size_t OriginalFrom;
-			std::size_t OriginalTo;
-		};
-
-		struct TemporaryEdge
-		{
-			std::vector<TempProperty> Propertys;
-			std::vector<IntervalT> ConsumeSymbols;
-		};
-
-		//std::vector<std::vector<TemporaryEdge>> TemporaryEdges;
-
-		Mapping.push_back({0});
-
-		//TemporaryEdges.resize(Mapping.size());
-
-		struct SearchingCore
-		{
-			std::size_t Index;
-			std::vector<TemporaryEdge> Propertys;
-		};
+		NodeAllocator NodeAll;
 
 
-		std::vector<SearchingCore> SearchingStack;
+		std::vector<DFASearchCore> SearchingStack;
 
 		{
-			SearchingCore Startup;
+			DFASearchCore Startup;
 			Startup.Index = 0;
-			auto& CurNode = Input.Nodes[Startup.Index];
-			for (auto& Ite2 : CurNode.Edges)
-			{
-				Startup.Propertys.push_back({ {{Ite2.Propertys, 0, Ite2.ToNode}}, Ite2.ConsumeChars});
-			}
+			auto [ID, New] = NodeAll.FindOrAdd({&Startup.Index, 1});
+			assert(New);
+			CollectTemporaryProperty(Input, NodeAll.Read(ID), Startup.TempRawNodes);
 			SearchingStack.push_back(std::move(Startup));
 		}
 
-		struct FinalEdge
-		{
-			struct Propertys : TempProperty
-			{
-				TempProperty Porpertys;
-				bool HasCounter;
-				bool HasAcceptable;
-			};
-
-			std::vector<IntervalT> RequireSymbols;
-			std::vector<TempProperty> Propertys;
-			std::vector<std::size_t> ReferenceTo;
-		};
+		std::vector<TemporaryNode> TempNodes;
+		std::vector<TemporaryEdge> TempBuffer;
 
 		while (!SearchingStack.empty())
 		{
 			auto Top = *SearchingStack.rbegin();
 			SearchingStack.pop_back();
 
-			if (Top.Propertys.size() > 1)
-			{
-				std::vector<TemporaryEdge> TempTemps;
-				bool Change = true;
-				while (Change)
-				{
-					Change = false;
+			if(TempNodes.size() <= Top.Index)
+				TempNodes.resize(Top.Index + 1);
 
-					std::span<TemporaryEdge> Span = std::span(Top.Propertys);
+			UnionEdges(TempBuffer, Top.TempRawNodes.KeepAcceptEdges);
+			UnionEdges(TempBuffer, Top.TempRawNodes.Edges);
+			UnionEdges(TempBuffer, Top.TempRawNodes.PostKeepAcceptEdges);
 
-					while (!Span.empty())
-					{
-						auto Top = std::move(Span[0]);
-						Span = Span.subspan(1);
+			ClassifyNodeIndes(Input, Top.TempRawNodes.KeepAcceptEdges, NodeAll, SearchingStack);
+			ClassifyNodeIndes(Input, Top.TempRawNodes.Edges, NodeAll, SearchingStack);
+			ClassifyNodeIndes(Input, Top.TempRawNodes.PostKeepAcceptEdges, NodeAll, SearchingStack);
 
-						if (Top.ConsumeSymbols.empty())
-							continue;
+			TempNodes[Top.Index] = std::move(Top.TempRawNodes);
 
-						for (auto& Ite : Span)
-						{
-							auto Result = Misc::SequenceIntervalWrapper{ Top.ConsumeSymbols }.Collision(Ite.ConsumeSymbols);
-							if (!Result.middle.empty())
-							{
-								TemporaryEdge New;
-								New.ConsumeSymbols = Result.middle;
-								New.Propertys = Top.Propertys;
-								New.Propertys.insert(New.Propertys.end(), Ite.Propertys.begin(), Ite.Propertys.end());
-								TempTemps.push_back(std::move(New));
-
-								Top.ConsumeSymbols = std::move(Result.left);
-								Ite.ConsumeSymbols = std::move(Result.right);
-
-								Change = true;
-
-								if(Top.ConsumeSymbols.empty())
-									break;
-							}
-						}
-
-						if(!Top.ConsumeSymbols.empty())
-							TempTemps.push_back(std::move(Top));
-					}
-					std::swap(TempTemps, Top.Propertys);
-					TempTemps.clear();
-				}
-			}
-
-			std::vector<FinalEdge> Edges;
-			Edges.reserve(Top.Propertys.size());
-
-			for (auto& Ite : Top.Propertys)
-			{
-				FinalEdge ResultEdge;
-				std::vector<std::vector<std::size_t>> List;
-				ResultEdge.RequireSymbols = Ite.ConsumeSymbols;
-				for (auto& Ite2 : Ite.Propertys)
-				{
-
-				}
-			}
-
-
-			for (auto& Ite : Top.Propertys)
-			{
-				std::optional<std::size_t> Target;
-
-				for (std::size_t I1 = 0; I1 < Mapping.size(); ++I1)
-				{
-					auto& Ref = Mapping[I1];
-
-					if (Ref.size() == Ite.Propertys.size())
-					{
-						bool SubFind = true;
-						for (std::size_t I2 = 0; I2 < Ref.size(); ++I2)
-						{
-							if (Ref[I2] != Ite.Propertys[I2].OriginalTo)
-							{
-								SubFind = false;
-								break;
-							}
-						}
-						if (SubFind)
-						{
-							Target = I1;
-							break;
-						}
-					}
-				}
-
-				if (Target.has_value())
-				{
-					Ite.ToNode = *Target;
-				}
-				else {
-					auto Index = Mapping.size();
-
-					Ite.ToNode = Index;
-
-					std::vector<std::size_t> TempsNodes;
-
-					for (auto& Ite2 : Ite.Propertys)
-					{
-						TempsNodes.push_back(Ite2.OriginalTo);
-					}
-
-					Mapping.push_back(TempsNodes);
-					TemporaryEdges.resize(Mapping.size());
-
-					SearchingStack.push_back(Index);
-				}
-			}
-
-			TemporaryEdges[Top] = std::move(Temps);
+			volatile int i = 0;
+		
 		}
 
 		volatile int i = 0;
