@@ -1574,7 +1574,7 @@ namespace Potato::Reg
 
 			ClassifyNodeIndes(Input, Top.TempRawNodes.KeepAcceptEdges, NodeAll, SearchingStack);
 			ClassifyNodeIndes(Input, Top.TempRawNodes.Edges, NodeAll, SearchingStack);
-			ClassifyNodeIndes(Input, Top.TempRawNodes.PostKeepAcceptEdges, NodeAll, SearchingStack);
+			ClassifyNodeIndes(Input, Top.TempRawNodes.PostKeepAcceptEdges, NodeAll, SearchingStack); 
 
 			TempNodes[Top.Index] = std::move(Top.TempRawNodes);
 
