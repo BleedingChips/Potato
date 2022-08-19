@@ -11,14 +11,26 @@ void TestingReg()
 	//Crerator.AddRegex(UR"(+)", { 1 }, Crerator.GetCountedUniqueID(), true);
 
 
-	EpsilonNFATable Table = EpsilonNFATable::Create(UR"(a*ab)", false, {0});
+	EpsilonNFATable Table = EpsilonNFATable::Create(UR"(a{0,3}(abc))", false, {0});
 	Table.Link(EpsilonNFATable::Create(UR"((a*)ab)", false, { 1 }));
-	Table.Link(EpsilonNFATable::Create(UR"(a{0,3}(abc))", false, { 0 }));
+	Table.Link(EpsilonNFATable::Create(UR"(a*abcd)", false, { 2 }));
 	NFATable Ta(Table);
 
 	DFATable DT(Ta);
 
+	CoreProcesser Pro(DT, false);
 
+	std::u32string_view Str = U"aabcd";
+
+	for (std::size_t I = 0; I < Str.size(); ++I)
+	{
+		if (!Pro.ConsumeSymbol(Str[I], I))
+		{
+			volatile int i = 0;
+		}
+	}
+
+	volatile int i = 0;
 	/*
 	{
 		std::u32string_view Str = UR"(123456abcdef)";

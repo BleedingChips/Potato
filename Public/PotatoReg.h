@@ -61,13 +61,14 @@ namespace Potato::Reg
 		{
 			EdgeType Type;
 			std::variant<std::monostate, std::vector<IntervalT>, Accept, Counter> Datas;
+			bool operator==(PropertyT const&) const = default;
 		};
 
 		struct Edge
 		{
 			PropertyT Property;
 			std::size_t ShiftNode;
-			StandardT UniqueID = 0;
+			std::size_t UniqueID = 0;
 		};
 
 		struct Node
@@ -108,27 +109,12 @@ namespace Potato::Reg
 	struct NFATable
 	{
 
-		struct CounterProperty
-		{
-			EpsilonNFATable::EdgeType Type;
-			Counter Target;
-		};
-
-		struct EdgeProperty
-		{
-			std::vector<EpsilonNFATable::EdgeType> CaptureProperty;
-			std::vector<CounterProperty> CounterProperty;
-			std::optional<Accept> AcceptableProperty;
-			std::strong_ordering operator<=>(EdgeProperty const& I2) const = default;
-			bool operator==(EdgeProperty const&) const = default;
-		};
-
 		struct Edge
 		{
-			std::size_t ToNode;
-			EdgeProperty Propertys;
+			std::vector<EpsilonNFATable::PropertyT> Propertys;
 			std::vector<IntervalT> ConsumeChars;
-			std::optional<StandardT> UniqueID;
+			std::size_t ToNode;
+			std::size_t UniqueID;
 		};
 
 		struct Node
@@ -144,87 +130,88 @@ namespace Potato::Reg
 	struct DFATable
 	{
 
-		enum class ActionProperty
+		enum class ActionT : StandardT
 		{
 			CaptureBegin,
 			CaptureEnd,
-			CopyContentInstance,
-			RemoveContentInstance,
+			ContentBegin,
+			ContentEnd,
 			CounterSmaller,
-			CounterBigger,
+			CounterBigEqual,
 			CounterEqual,
 			CounterAdd,
 			CounterPush,
 			CounterPop,
-		};
-
-		enum class CounterProperty
-		{
-			Smaller,
-			Bigger,
-			Equal,
-			Add,
-			Push,
-			Pop
-		};
-
-		struct IndexedActionProperty
-		{
-			ActionProperty Proeprty;
-			std::size_t ContentInstance;
-		};
-
-		struct OptionalCounterProperty
-		{
-			std::size_t ContentIndex;
-			std::vector<ActionProperty> 
-			std::vector<CounterProperty> CounterPorperty;
-			std::vector<StandardT> CounterRef;
+			Accept
 		};
 
 		struct Edge
 		{
+			std::vector<ActionT> List;
+			std::vector<StandardT> Parameter;
+			std::vector<std::size_t> ToIndex;
 			std::vector<IntervalT> ConsumeSymbols;
-			std::vector<IndexedActionProperty> GobalAction;
-			std::vector<OptionalCounterProperty> Propertys;
-		};
-
-		struct Edge
-		{
-			std::size_t ContentIndex;
-			std::vector<ActionProperty> ActionPropertys;
-			std::vector<CounterProperty> CounterPropertys;
-			std::vector<StandardT> CounterRef;
-		};
-
-		struct Node
-		{
-			std::vector<Edge> KeepAcceptEdges;
-			std::vector<Edge>
-			std::vector<Edge> Edges;
-		};
-
-		
-
-		struct EdgeProperty
-		{
-			std::vector<NFATable::EdgeProperty> Propertys;
-		};
-		
-
-		struct Edge
-		{
-			std::size_t ToNode;
-			std::vector<IntervalT> ConsumeChars;
-			std::vector<EdgeProperty> Propertys;
 		};
 
 		struct Node
 		{
 			std::vector<Edge> Edges;
+			std::vector<Edge> KeepAcceptableEdges;
+			bool HasAcceptable;
 		};
+
+		std::vector<Node> Nodes;
 
 		DFATable(NFATable const& Input);
+	};
+
+	struct CoreProcesser
+	{
+		
+		struct CaptureBlock
+		{
+			bool IsBegin;
+			std::size_t TokenIndex;
+			std::size_t BlockIndex;
+		};
+
+		struct CounterBlock
+		{
+			StandardT CountNumber;
+			std::size_t BlockIndex;
+		};
+
+		struct Content
+		{
+			std::vector<CaptureBlock> CaptureBlocks;
+			std::vector<CounterBlock> CounterBlocks;
+		};
+
+		struct AcceptContent
+		{
+			std::vector<CaptureBlock> CaptureBlock;
+			Accept AcceptData;
+		};
+
+		struct LastAcceptable
+		{
+			Accept Data;
+			Misc::IndexSpan<> MainCapture;
+			std::vector<CounterBlock> Blocks;
+		};
+
+		bool ConsumeSymbol(DFATable const& Table, char32_t Symbol, std::size_t TokenIndex);
+		std::optional<AcceptContent> EndOfFile();
+
+
+		bool ConsumeSymbol(char32_t Input, std::size_t CurrentTokenIndex);
+
+		std::size_t CurrentNode = 0;
+		Content CurrentContent;
+		Content LastContent;
+
+		std::optional<LastAcceptable> LastAcceptable;
+		bool KeepAcceptable = false;
 	};
 
 	/*

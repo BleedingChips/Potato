@@ -1042,10 +1042,10 @@ namespace Potato::Reg
 		struct UniqueID
 		{
 			bool HasUniqueID;
-			StandardT UniqueID;
+			std::size_t UniqueID;
 		};
 		std::optional<UniqueID> UniqueID;
-		void AddUniqueID(StandardT ID)
+		void AddUniqueID(std::size_t ID)
 		{
 			if (!UniqueID.has_value())
 			{
@@ -1140,32 +1140,10 @@ namespace Potato::Reg
 					if (Cur.UniqueID->HasUniqueID)
 						NewEdge.UniqueID = Cur.UniqueID->UniqueID;
 					NewEdge.ConsumeChars = std::get<std::vector<IntervalT>>(Ite.Property.Datas);
-
 					for (auto& Ite : Cur.Propertys)
 					{
-						switch (Ite.Propertys.Type)
-						{
-						case EpsilonNFATable::EdgeType::CaptureBegin:
-						case EpsilonNFATable::EdgeType::CaptureEnd:
-							NewEdge.Propertys.CaptureProperty.push_back(Ite.Propertys.Type);
-							break;
-						case EpsilonNFATable::EdgeType::CounterAdd:
-						case EpsilonNFATable::EdgeType::CounterPop:
-						case EpsilonNFATable::EdgeType::CounterPush:
-							NewEdge.Propertys.CounterProperty.push_back({Ite.Propertys.Type, {}});
-							break;
-						case EpsilonNFATable::EdgeType::CounterBigEqual:
-						case EpsilonNFATable::EdgeType::CounterEqual:
-						case EpsilonNFATable::EdgeType::CounterSmallEqual:
-							NewEdge.Propertys.CounterProperty.push_back({Ite.Propertys.Type, std::get<Counter>(Ite.Propertys.Datas)});
-							break;
-						case EpsilonNFATable::EdgeType::Acceptable:
-							assert(!NewEdge.Propertys.AcceptableProperty.has_value());
-							NewEdge.Propertys.AcceptableProperty = std::get<Accept>(Ite.Propertys.Datas);
-							break;
-						default:
-							break;
-						}
+						if(Ite.Propertys.Type != EpsilonNFATable::EdgeType::Consume)
+							NewEdge.Propertys.push_back(Ite.Propertys);
 					}
 
 					Result.Edges.push_back(std::move(NewEdge));
@@ -1295,7 +1273,7 @@ namespace Potato::Reg
 		{
 			for (std::size_t I = 0; I < Mapping.size(); ++I)
 			{
-				auto TRef = std::span(Mapping[0]);
+				auto TRef = std::span(Mapping[I]);
 				if(TRef.size() == Ref.size() && std::equal(TRef.begin(), TRef.end(), Ref.begin(), Ref.end()))
 					return I;
 			}
@@ -1356,10 +1334,13 @@ namespace Potato::Reg
 
 	struct TemporaryProperty
 	{
-		NFATable::EdgeProperty Propertys;
+		std::vector<EpsilonNFATable::PropertyT> Propertys;
 		std::size_t OriginalFrom;
 		std::size_t OriginalTo;
 		std::size_t UniqueID;
+		bool HasCounter = false;
+		bool HasAcceptable = false;
+		bool operator ==(TemporaryProperty const&) const = default;
 	};
 
 	struct TemporaryEdge
@@ -1367,15 +1348,42 @@ namespace Potato::Reg
 		std::vector<TemporaryProperty> Propertys;
 		std::vector<IntervalT> ConsumeSymbols;
 		std::vector<std::size_t> ToIndexs;
+		bool operator ==(TemporaryEdge const&) const = default;
 	};
 
 	struct TemporaryNode
 	{
 		std::vector<TemporaryEdge> KeepAcceptEdges;
-		std::vector<TemporaryEdge> PostKeepAcceptEdges;
 		std::vector<TemporaryEdge> Edges;
 		bool HasAccept = false;
 	};
+
+	void CollectEdgeProperty(std::size_t SourceIndex, NFATable::Edge const& Source, TemporaryProperty& Target)
+	{
+		Target.OriginalFrom = SourceIndex;
+		Target.OriginalTo = Source.ToNode;
+		Target.UniqueID = Source.UniqueID;
+		Target.HasAcceptable = false;
+		Target.HasCounter = false;
+		Target.Propertys.reserve(Source.Propertys.size());
+		for (auto& Ite : Source.Propertys)
+		{
+			switch (Ite.Type)
+			{
+			case EpsilonNFATable::EdgeType::Acceptable:
+				Target.HasAcceptable = true;
+				break;
+			case EpsilonNFATable::EdgeType::CounterBigEqual:
+			case EpsilonNFATable::EdgeType::CounterEqual:
+			case EpsilonNFATable::EdgeType::CounterSmallEqual:
+				Target.HasCounter = true;
+				break;
+			default:
+				break;
+			}
+			Target.Propertys.push_back(Ite);
+		}
+	}
 
 	void CollectTemporaryProperty(NFATable const& Input, std::span<std::size_t const> Indexs, TemporaryNode& Output)
 	{
@@ -1387,20 +1395,19 @@ namespace Potato::Reg
 			auto& NodeRef = Input.Nodes[IndexIte];
 			for (auto& Ite : NodeRef.Edges)
 			{
-				if (Ite.Propertys.AcceptableProperty.has_value() && ReadAccept)
-				{
-					RemovedUniqueID.push_back(*Ite.UniqueID);
-					continue;
-				}
+
+				TemporaryProperty Temporary;
+				CollectEdgeProperty(IndexIte, Ite, Temporary);
 
 				TemporaryEdge Edges;
 				Edges.ConsumeSymbols = Ite.ConsumeChars;
-				if (Ite.Propertys.AcceptableProperty.has_value())
+
+				if (Temporary.HasAcceptable)
 				{
 					ReadAccept = true;
 					LastAccept = true;
 					Output.HasAccept = true;
-					RemovedUniqueID.push_back(*Ite.UniqueID);
+					RemovedUniqueID.push_back(Ite.UniqueID);
 				}
 				else {
 					if (LastAccept)
@@ -1408,16 +1415,16 @@ namespace Potato::Reg
 					LastAccept = false;
 					if (ReadAccept)
 					{
-						if (std::find(RemovedUniqueID.begin(), RemovedUniqueID.end(), *Ite.UniqueID) == RemovedUniqueID.end())
+						if (std::find(RemovedUniqueID.begin(), RemovedUniqueID.end(), Ite.UniqueID) == RemovedUniqueID.end())
 						{
 							TemporaryEdge Edges;
 							Edges.ConsumeSymbols = Ite.ConsumeChars;
-							Edges.Propertys.push_back({ Ite.Propertys, IndexIte, Ite.ToNode, *Ite.UniqueID });
-							Output.PostKeepAcceptEdges.push_back(std::move(Edges));
+							Edges.Propertys.push_back(Temporary); 
+							Output.KeepAcceptEdges.push_back(std::move(Edges));
 						}
 					}
 				}
-				Edges.Propertys.push_back({Ite.Propertys, IndexIte, Ite.ToNode, *Ite.UniqueID});
+				Edges.Propertys.push_back(std::move(Temporary));
 				Output.Edges.push_back(std::move(Edges));
 			}
 		}
@@ -1488,7 +1495,7 @@ namespace Potato::Reg
 				std::size_t ToNodeBuffer = 1;
 				for (auto& Ite2 : Ite.Propertys)
 				{
-					if(!Ite2.Propertys.CounterProperty.empty())
+					if(Ite2.HasCounter)
 						ToNodeBuffer *= 2;
 				}
 				std::vector<std::vector<std::size_t>> TemporaryMapping;
@@ -1496,7 +1503,7 @@ namespace Potato::Reg
 				TemporaryMapping.push_back({});
 				for (auto& Ite2 : Ite.Propertys)
 				{
-					if (Ite2.Propertys.CounterProperty.empty())
+					if (!Ite2.HasCounter)
 					{
 						for (auto& Ite3 : TemporaryMapping)
 						{
@@ -1538,6 +1545,78 @@ namespace Potato::Reg
 		}
 	}
 
+	std::vector<DFATable::Edge> CollectDFAEdge(std::vector<TemporaryEdge>& Source)
+	{
+
+		using EdgeType = EpsilonNFATable::EdgeType;
+		using ActionT = DFATable::ActionT;
+
+		std::vector<DFATable::Edge> Target;
+		Target.reserve(Source.size());
+		for (auto& Ite : Source)
+		{
+			DFATable::Edge NewOne;
+			NewOne.ConsumeSymbols = std::move(Ite.ConsumeSymbols);
+			NewOne.ToIndex = std::move(Ite.ToIndexs);
+			for (auto& Ite2 : Ite.Propertys)
+			{
+				NewOne.List.push_back(ActionT::ContentBegin);
+				NewOne.Parameter.push_back(Ite2.OriginalFrom);
+				NewOne.Parameter.push_back(Ite2.OriginalTo);
+				for (auto& Ite3 : Ite2.Propertys)
+				{
+					switch (Ite3.Type)
+					{
+					case EdgeType::Consume:
+						assert(false);
+						break;
+					case EdgeType::Acceptable:
+					{
+						auto Accr = std::get<Accept>(Ite3.Datas);
+						NewOne.Parameter.push_back(Accr.Mask);
+						NewOne.Parameter.push_back(Accr.SubMask);
+						NewOne.List.push_back(ActionT::Accept);
+						break;
+					}
+					case EdgeType::CaptureBegin:
+						NewOne.List.push_back(ActionT::CaptureBegin);
+						break;
+					case EdgeType::CaptureEnd:
+						NewOne.List.push_back(ActionT::CaptureEnd);
+						break;
+					case EdgeType::CounterAdd:
+						NewOne.List.push_back(ActionT::CounterAdd);
+						break;
+					case EdgeType::CounterBigEqual:
+						NewOne.List.push_back(ActionT::CounterBigEqual);
+						NewOne.Parameter.push_back(std::get<Counter>(Ite3.Datas).Target);
+						break;
+					case EdgeType::CounterEqual:
+						NewOne.List.push_back(ActionT::CounterEqual);
+						NewOne.Parameter.push_back(std::get<Counter>(Ite3.Datas).Target);
+						break;
+					case EdgeType::CounterPop:
+						NewOne.List.push_back(ActionT::CounterPop);
+						break;
+					case EdgeType::CounterPush:
+						NewOne.List.push_back(ActionT::CounterPush);
+						break;
+					case EdgeType::CounterSmallEqual:
+						NewOne.List.push_back(ActionT::CounterSmaller);
+						NewOne.Parameter.push_back(std::get<Counter>(Ite3.Datas).Target);
+						break;
+					default:
+						assert(false);
+						break;
+					}
+				}
+				NewOne.List.push_back(ActionT::ContentEnd);
+			}
+			Target.push_back(std::move(NewOne));
+		}
+		return Target;
+	}
+
 	DFATable::DFATable(NFATable const& Input)
 	{
 
@@ -1570,19 +1649,292 @@ namespace Potato::Reg
 
 			UnionEdges(TempBuffer, Top.TempRawNodes.KeepAcceptEdges);
 			UnionEdges(TempBuffer, Top.TempRawNodes.Edges);
-			UnionEdges(TempBuffer, Top.TempRawNodes.PostKeepAcceptEdges);
 
 			ClassifyNodeIndes(Input, Top.TempRawNodes.KeepAcceptEdges, NodeAll, SearchingStack);
 			ClassifyNodeIndes(Input, Top.TempRawNodes.Edges, NodeAll, SearchingStack);
-			ClassifyNodeIndes(Input, Top.TempRawNodes.PostKeepAcceptEdges, NodeAll, SearchingStack); 
+
+			if (Top.TempRawNodes.KeepAcceptEdges == Top.TempRawNodes.Edges)
+				Top.TempRawNodes.KeepAcceptEdges.clear();
 
 			TempNodes[Top.Index] = std::move(Top.TempRawNodes);
-
-			volatile int i = 0;
 		
 		}
 
-		volatile int i = 0;
+		std::optional<std::size_t> FirstEmpty;
+
+		for (std::size_t I1 = 0; I1 < TempNodes.size(); ++I1)
+		{
+			auto& Ref = TempNodes[I1];
+			if (Ref.Edges.empty())
+			{
+				FirstEmpty = I1;
+				break;
+			}
+		}
+
+		if (FirstEmpty.has_value())
+		{
+			for (std::size_t I1 = *FirstEmpty + 1; I1 < TempNodes.size();)
+			{
+				auto& Ref = TempNodes[I1];
+				if (Ref.Edges.empty())
+				{
+					for (std::size_t I2 = 0; I2 < TempNodes.size(); ++I2)
+					{
+						auto& Tar = TempNodes[I2];
+						for (auto& Ite1 : Tar.Edges)
+						{
+							for (auto& Ite2 : Ite1.ToIndexs)
+							{
+								if (Ite2 == I1)
+									Ite2 = *FirstEmpty;
+								else if (Ite2 > I1)
+								{
+									Ite2 -= 1;
+								}
+							}
+						}
+						for (auto& Ite1 : Tar.KeepAcceptEdges)
+						{
+							for (auto& Ite2 : Ite1.ToIndexs)
+							{
+								if (Ite2 == I2)
+									Ite2 = *FirstEmpty;
+								else if (Ite2 > I2)
+								{
+									Ite2 -= 1;
+								}
+							}
+						}
+					}
+					TempNodes.erase(TempNodes.begin() + I1);
+				}
+				else {
+					++I1;
+				}
+			}
+		}
+
+		Nodes.reserve(TempNodes.size());
+
+		for (auto& Ite : TempNodes)
+		{
+			Node NewNode;
+			NewNode.HasAcceptable = Ite.HasAccept;
+			NewNode.Edges = CollectDFAEdge(Ite.Edges);
+			NewNode.KeepAcceptableEdges = CollectDFAEdge(Ite.KeepAcceptEdges);
+			Nodes.push_back(std::move(NewNode));
+		}
+	}
+
+	std::size_t ApplyAction(std::span<DFATable::ActionT const> Actions, std::span<StandardT const> Parameter, CoreProcesser::Content const& Source, CoreProcesser::Content& Target, std::optional<CoreProcesser::AcceptContent>& Acc, std::size_t TokenIndex)
+	{
+		using ActionT = DFATable::ActionT;
+		std::size_t NodeOffset = 0;
+		std::size_t CounterDeep = 1;
+		std::optional<std::size_t> CorrentBlockIndex;
+		std::size_t CounterOffset = 0;
+		std::size_t CaptureOffset = 0;
+		bool CounterTestPass = true;
+		bool MeetCounter = false;
+		while (!Actions.empty())
+		{
+			auto TopAction = *Actions.begin();
+			Actions = Actions.subspan(1);
+
+			switch (TopAction)
+			{
+			case ActionT::CaptureBegin:
+				if (CounterTestPass)
+				{
+					assert(CorrentBlockIndex.has_value());
+					Target.CaptureBlocks.push_back({ true, TokenIndex, *CorrentBlockIndex });
+				}
+				break;
+			case ActionT::CaptureEnd:
+				if (CounterTestPass)
+				{
+					assert(CorrentBlockIndex.has_value());
+					Target.CaptureBlocks.push_back({ false, TokenIndex, *CorrentBlockIndex });
+				}
+				break;
+			case ActionT::ContentBegin:
+				assert(Parameter.size() >= 2);
+				CorrentBlockIndex = Parameter[1];
+				CounterOffset = Target.CounterBlocks.size();
+				CaptureOffset = Target.CaptureBlocks.size();
+				{
+					bool Find = false;
+					for (std::size_t I = 0; I < Source.CounterBlocks.size(); ++I)
+					{
+						auto& Cur = Source.CounterBlocks[I];
+						if (Cur.BlockIndex == Parameter[0])
+							Find = true;
+						else if (Find)
+						{
+							break;
+						}
+						if (Find)
+						{
+							Target.CounterBlocks.push_back({ Cur.CountNumber, *CorrentBlockIndex });
+						}
+					}
+					Find = false;
+					for (std::size_t I = 0; I < Source.CaptureBlocks.size(); ++I)
+					{
+						auto& Cur = Source.CaptureBlocks[I];
+						if (Cur.BlockIndex == Parameter[0])
+							Find = true;
+						else if (Find)
+						{
+							break;
+						}
+						if (Find)
+						{
+							Target.CaptureBlocks.push_back({ Cur.IsBegin, Cur.TokenIndex, *CorrentBlockIndex });
+						}
+					}
+				}
+				Parameter = Parameter.subspan(2);
+				break;
+			case ActionT::ContentEnd:
+				if (MeetCounter)
+				{
+					if (CounterTestPass)
+					{
+						NodeOffset += CounterDeep;
+					}
+					else {
+						Target.CaptureBlocks.resize(CaptureOffset);
+						Target.CounterBlocks.resize(CounterOffset);
+					}
+					CounterDeep *= 2;
+				}
+				CounterTestPass = true;
+				MeetCounter = false;
+				CorrentBlockIndex.reset();
+				break;
+			case ActionT::CounterAdd:	
+				if (CounterTestPass)
+				{
+					assert(CorrentBlockIndex.has_value());
+					assert(Target.CounterBlocks.size() > CounterOffset);
+					assert(Target.CounterBlocks.rbegin()->BlockIndex == *CorrentBlockIndex);
+					++Target.CounterBlocks.rbegin()->CountNumber;
+				}
+				break;
+			case ActionT::CounterBigEqual:
+				if (CounterTestPass)
+				{
+					assert(CorrentBlockIndex.has_value());
+					assert(Target.CounterBlocks.size() > CounterOffset);
+					assert(Target.CounterBlocks.rbegin()->BlockIndex == *CorrentBlockIndex);
+					assert(Parameter.size() >= 1);
+					if (Target.CounterBlocks.rbegin()->CountNumber < Parameter[0])
+					{
+						CounterTestPass = false;
+					}
+				}
+				MeetCounter = true;
+				Parameter = Parameter.subspan(1);
+				break;
+			case ActionT::CounterSmaller:
+				if (CounterTestPass)
+				{
+					assert(CorrentBlockIndex.has_value());
+					assert(Target.CounterBlocks.size() > CounterOffset);
+					assert(Target.CounterBlocks.rbegin()->BlockIndex == *CorrentBlockIndex);
+					assert(Parameter.size() >= 1);
+					if (Target.CounterBlocks.rbegin()->CountNumber >= Parameter[0])
+					{
+						CounterTestPass = false;
+					}
+				}
+				MeetCounter = true;
+				Parameter = Parameter.subspan(1);
+				break;
+			case ActionT::CounterEqual:
+				if (CounterTestPass)
+				{
+					assert(CorrentBlockIndex.has_value());
+					assert(Target.CounterBlocks.size() > CounterOffset);
+					assert(Target.CounterBlocks.rbegin()->BlockIndex == *CorrentBlockIndex);
+					assert(Parameter.size() >= 1);
+					if (Target.CounterBlocks.rbegin()->CountNumber != Parameter[0])
+					{
+						CounterTestPass = false;
+					}
+				}
+				MeetCounter = true;
+				Parameter = Parameter.subspan(1);
+				break;
+			case ActionT::CounterPush:	
+				if (CounterTestPass)
+				{
+					assert(CorrentBlockIndex.has_value());
+					Target.CounterBlocks.push_back({0, *CorrentBlockIndex });
+				}
+				break;
+			case ActionT::CounterPop:
+				if (CounterTestPass)
+				{
+					assert(CorrentBlockIndex.has_value());
+					assert(Target.CounterBlocks.size() > CounterOffset);
+					assert(Target.CounterBlocks.rbegin()->BlockIndex == *CorrentBlockIndex);
+					Target.CounterBlocks.pop_back();
+				}
+				break;
+			case ActionT::Accept:
+				if (CounterTestPass && !Acc.has_value())
+				{
+					assert(CorrentBlockIndex.has_value());
+					assert(Parameter.size() >= 2);
+					CoreProcesser::AcceptContent NewOne;
+					std::size_t Index = CaptureOffset;
+					for (; Index < Target.CaptureBlocks.size(); ++Index)
+					{
+						if (Target.CaptureBlocks[Index].BlockIndex != *CorrentBlockIndex)
+							break;
+						NewOne.CaptureBlock.push_back(Target.CaptureBlocks[Index]);
+					}
+					NewOne.CaptureBlock.insert(NewOne.CaptureBlock.end(), Target.CaptureBlocks.begin() + CaptureOffset, Target.CaptureBlocks.begin() + Index);
+					NewOne.AcceptData = { Parameter[0], Parameter[1] };
+				}
+				Parameter = Parameter.subspan(2);
+				
+				break;
+			default:
+				assert(false);
+				break;
+			}
+		}
+		return NodeOffset;
+	}
+
+	bool CoreProcesser::ConsumeSymbol(char32_t Input, std::size_t CurrentTokenIndex)
+	{
+		auto& CurNode = Table.Nodes[CurrentNode];
+		for (auto& Ite : CurNode.Edges)
+		{
+			if (Misc::SequenceIntervalWrapper{ Ite.ConsumeSymbols }.IsInclude(Input))
+			{
+				std::size_t Index = 0;
+				auto Pars = std::span{Ite.Parameter};
+				auto Actions = std::span{Ite.List}; 
+				std::swap(CurrentContent, LastContent);
+				CurrentContent.CaptureBlocks.clear();
+				CurrentContent.CounterBlocks.clear();
+				std::optional<AcceptContent> Acce;
+				auto NodeIndex = ApplyAction(Actions, Pars, LastContent, CurrentContent, Acce, CurrentTokenIndex);
+				assert(NodeIndex < Ite.ToIndex.size());
+				auto TarIndex = Ite.ToIndex[NodeIndex];
+				if(TarIndex == std::numeric_limits<std::size_t>::max())
+					return false;
+				CurrentNode = TarIndex;
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/*
