@@ -269,6 +269,117 @@ namespace Potato::Misc
 			return Result;
 		}
 
+		template<typename StorageT>
+		struct Predicter
+		{
+			static std::size_t Element() { return 1; }
+			template<typename Type> static std::size_t Object() { return AlignedSize<StorageT>(sizeof(std::remove_cvref_t<Type>)); }
+			template<typename Type> static std::size_t ObjectArray(std::span<Type const> Source) { return ObjectArray<Type>(Source.size()); };
+			template<typename Type> static std::size_t ObjectArray(std::size_t Count) { return AlignedSize<StorageT>(sizeof(std::remove_cvref_t<Type>) * Count); };
+			std::size_t SpaceRecord = 0;
+			std::size_t WriteElement() { SpaceRecord += Element(); return SpaceRecord; }
+			template<typename Type>
+			std::size_t WriteObject() { SpaceRecord += Object<Type>(); return SpaceRecord; };
+			template<typename Type>
+			std::size_t WriteObjectArray(std::span<Type const> Source) { SpaceRecord += ObjectArray(Source); return SpaceRecord; };
+			template<typename Type>
+			std::size_t WriteObjectArray(std::size_t Num) { SpaceRecord += ObjectArray<Type>(Num); return SpaceRecord; };
+			std::size_t RequireSpace() const { return SpaceRecord; }
+		};
+
+		template<typename StorageT>
+		struct SpanWriter
+		{
+
+			SpanWriter(std::span<StorageT> Buffer) : TotalBuffer(Buffer), IteBuffer(Buffer) {}
+
+			std::span<StorageT> TotalBuffer;
+			std::span<StorageT> IteBuffer;
+
+			std::size_t GetIteSpacePositon() const { return TotalBuffer.size() - IteBuffer.size(); }
+
+			template<typename Type>
+			Type* WriteObject(Type const& Ite) requires(std::is_standard_layout_v<Type>)
+			{
+				std::size_t AlignedLength = Predicter<StorageT>::template Object<Type>();
+				if (AlignedLength <= IteBuffer.size())
+				{
+					Type* Data = new (IteBuffer.data()) std::remove_cvref_t<Type>{std::forward<Type>(Ite)};
+					IteBuffer = IteBuffer.subspan(AlignedLength);
+					return Data;
+				}
+				return nullptr;
+			}
+
+			template<typename Type>
+			std::span<Type> WriteObjectArray(std::span<Type const> Ite) requires(std::is_standard_layout_v<Type>)
+			{
+				std::size_t AlignedLength = Predicter<StorageT>::template ObjectArray<Type>(Ite.size());
+				std::memcpy(IteBuffer.data(), Ite.data(), Ite.size() * sizeof(std::remove_cvref_t<Type>));
+				std::span<Type> Result{ reinterpret_cast<Type*>(IteBuffer.data()), Ite .size()};
+				IteBuffer = IteBuffer.subspan(AlignedLength);
+				return Result;
+			}
+
+			template<typename Type>
+			std::span<Type> WriteObjectArray(std::span<Type> Ite) requires(std::is_standard_layout_v<Type>)
+			{
+				return WriteObjectArray(std::span<Type const>{Ite});
+			}
+
+			template<typename Type>
+			std::span<Type> NewObjectArray(std::size_t Count) requires(std::is_standard_layout_v<Type>)
+			{
+				std::size_t AlignedLength = Predicter<StorageT>::template ObjectArray<Type>(Count);
+				std::span<Type> Result{ reinterpret_cast<Type*>(IteBuffer.data()), Count };
+				IteBuffer = IteBuffer.subspan(AlignedLength);
+				return Result;
+			}
+
+			/*
+			template<typeaname Type>
+			std::span<Type> NewObjectArray(std::size_t Size)
+			{
+
+			}
+			*/
+
+			template<typename Type>
+			Type* NewObject() requires(std::is_standard_layout_v<Type>)
+			{
+				std::size_t AlignedLength = AlignedSize<StorageT>(sizeof(std::remove_cvref_t<Type>));
+				if (AlignedLength <= IteBuffer.size())
+				{
+					Type* Data = new (IteBuffer.data()) std::remove_cvref_t<Type>{};
+					IteBuffer = IteBuffer.subspan(AlignedLength);
+					return Data;
+				}
+				return nullptr;
+			}
+
+			StorageT* NewElement() {
+				auto Re = IteBuffer.data();
+				IteBuffer = IteBuffer.subspan(1);
+				return Re;
+			}
+
+			template<typename SourceT, typename TargetT>
+			bool CrossTypeSet(SourceT& Source, TargetT const& Target) const requires(std::is_convertible_v<TargetT, SourceT>)
+			{
+				Source = static_cast<SourceT>(Target);
+				return Source == Target;
+			}
+
+			template<typename ExceptableT, typename SourceT, typename TargetT, typename ...Par>
+			void CrossTypeSetThrow(SourceT& Source, TargetT const& Target, Par&& ...Pars) const requires(std::is_convertible_v<TargetT, SourceT>&& std::is_constructible_v<ExceptableT, Par...>)
+			{
+				if(!CrossTypeSet(Source, Target))
+					throw ExceptableT{std::forward<Par>(Pars)...};
+			}
+
+
+		};
+
 	};
 
 

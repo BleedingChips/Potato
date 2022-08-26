@@ -7,26 +7,29 @@ using namespace Potato::StrEncode;
 namespace Potato::StrFormat
 {
 	
-	Reg::TableWrapper FormatPatternWrapper() {
-		static Reg::Table Datas{ UR"(\{([^\{\}]*?)\})" };
-		return Datas.AsWrapper();
+	Reg::DFATable const& FormatPatternWrapper() {
+		static Reg::DFATable Datas{ UR"(.*?(\{([^\{\}]*?)\}))" };
+		return Datas;
 	}
 
 	template<typename UnicodeT>
 	std::vector<PatternElement<UnicodeT>> CreateImp(std::basic_string_view<UnicodeT> Str)
 	{
 		std::vector<PatternElement<UnicodeT>> Elements;
-		auto Wrapper = FormatPatternWrapper();
+		auto& Wrapper = FormatPatternWrapper();
 		while (!Str.empty())
 		{
-			auto Re = Reg::ProcessSearch(Wrapper, Str);
+			auto Re = Reg::HeadMatch(Wrapper, Str);
 			if (Re.has_value())
 			{
-				if (Re->MainCapture.Begin() != 0)
-					Elements.push_back({ PatternElementType::NormalString, Str.substr(0, Re->MainCapture.Begin())});
-				auto Wrapper = Re->GetCaptureWrapper().GetTopSubCapture().GetCapture();
-				Elements.push_back({ PatternElementType::Parameter, Str.substr(Wrapper.Begin(), Wrapper.Count())});
-				Str = Str.substr(Re->MainCapture.End());
+				auto Wrapper = Re->GetCaptureWrapper().GetTopSubCapture();
+				assert(Wrapper.HasCapture());
+				auto Cap = Wrapper.GetCapture();
+				if (Cap.Begin() != 0)
+					Elements.push_back({ PatternElementType::NormalString, Str.substr(0, Cap.Begin())});
+				auto Wrapper2 = Wrapper.GetTopSubCapture().GetCapture();
+				Elements.push_back({ PatternElementType::Parameter, Str.substr(Wrapper2.Begin(), Wrapper2.Count())});
+				Str = Str.substr(Cap.End());
 			}
 			else {
 				Elements.push_back({ PatternElementType::NormalString, Str });

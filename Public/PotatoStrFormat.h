@@ -56,18 +56,18 @@ namespace Potato::StrFormat
 		std::optional<size_t> Match(std::basic_string_view<UnicodeT> code, TargetType&... all_target) const;
 
 		template<typename UnicodeT, typename ...TargetType>
-		std::optional<ScanResult> Search(std::basic_string_view<UnicodeT> code, TargetType&... all_target) const;
+		std::optional<ScanResult> HeadMatch(std::basic_string_view<UnicodeT> code, TargetType&... all_target) const;
 		
 		ScanPattern(ScanPattern&&) = default;
 		ScanPattern(ScanPattern const&) = default;
-		ScanPattern(Reg::Table Tables) : Tables(std::move(Tables)) {};
+		ScanPattern(Reg::DFATable Tables) : Tables(std::move(Tables)) {};
 
 		template<typename UnicodeT>
 		ScanPattern(std::basic_string_view<UnicodeT> Pattern) : ScanPattern(Create(Pattern)) {}
 
 		template<typename UnicodeT>
 		static ScanPattern Create(std::basic_string_view<UnicodeT> pattern) { 
-			return Reg::Table{ pattern };
+			return Reg::DFATable{ pattern };
 		}
 
 		template<typename UnicodeT, typename CurTarget, typename ...TargetType>
@@ -80,7 +80,7 @@ namespace Potato::StrFormat
 		
 	private:
 
-		Reg::Table Tables;
+		Reg::DFATable Tables;
 
 		template<typename UnicodeT, typename CurTarget, typename ...TargetType>
 		static std::optional<std::size_t> Dispatch(std::size_t Record, Reg::CaptureWrapper Wrapper, std::basic_string_view<UnicodeT> Chars, CurTarget& Target, TargetType&... OTarget)
@@ -107,7 +107,7 @@ namespace Potato::StrFormat
 	template<typename UnicodeT, typename ...TargetType>
 	std::optional<size_t> ScanPattern::Match(std::basic_string_view<UnicodeT> code, TargetType&... all_target) const
 	{
-		auto result = Reg::ProcessMatch(Reg::TableWrapper(Tables), std::span(code));
+		auto result = Reg::Match(Tables, std::span(code));
 		if (result)
 		{
 			return ScanPattern::Dispatch(0, result->GetCaptureWrapper().GetTopSubCapture(), code, all_target...);
@@ -116,9 +116,9 @@ namespace Potato::StrFormat
 	}
 
 	template<typename UnicodeT, typename ...TargetType>
-	std::optional<ScanPattern::ScanResult> ScanPattern::Search(std::basic_string_view<UnicodeT> code, TargetType&... all_target) const
+	std::optional<ScanPattern::ScanResult> ScanPattern::HeadMatch(std::basic_string_view<UnicodeT> code, TargetType&... all_target) const
 	{
-		auto result = Reg::ProcessSearch(Reg::TableWrapper(Tables), std::span(code));
+		auto result = Reg::HeadMatch(Tables, std::span(code));
 		if (result)
 		{
 			auto re2 = ScanPattern::Dispatch(0, result->GetCaptureWrapper().GetTopSubCapture(), code, all_target...);
@@ -152,20 +152,20 @@ namespace Potato::StrFormat
 
 
 	template<typename ...TargetType>
-	auto SearchScan(std::u32string_view PatternStr, std::u32string_view Code, TargetType& ... tar_type) {
-		return ScanPattern{ PatternStr }.Search(Code, tar_type...);
+	auto HeadMatchScan(std::u32string_view PatternStr, std::u32string_view Code, TargetType& ... tar_type) {
+		return ScanPattern{ PatternStr }.HeadMatch(Code, tar_type...);
 	}
 	template<typename ...TargetType>
-	auto SearchScan(std::u16string_view PatternStr, std::u16string_view Code, TargetType& ... tar_type) {
-		return ScanPattern{ PatternStr }.Search(Code, tar_type...);
+	auto HeadMatchScan(std::u16string_view PatternStr, std::u16string_view Code, TargetType& ... tar_type) {
+		return ScanPattern{ PatternStr }.HeadMatch(Code, tar_type...);
 	}
 	template<typename ...TargetType>
-	auto SearchScan(std::u8string_view PatternStr, std::u8string_view Code, TargetType& ... tar_type) {
-		return ScanPattern{ PatternStr }.Search(Code, tar_type...);
+	auto HeadMatchScan(std::u8string_view PatternStr, std::u8string_view Code, TargetType& ... tar_type) {
+		return ScanPattern{ PatternStr }.HeadMatch(Code, tar_type...);
 	}
 	template<typename ...TargetType>
-	auto SearchScan(std::wstring_view PatternStr, std::wstring_view Code, TargetType& ... tar_type) {
-		return ScanPattern{ PatternStr }.Search(Code, tar_type...);
+	auto HeadMatchScan(std::wstring_view PatternStr, std::wstring_view Code, TargetType& ... tar_type) {
+		return ScanPattern{ PatternStr }.HeadMatch(Code, tar_type...);
 	}
 
 	template<typename ...TargetType>

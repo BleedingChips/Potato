@@ -10,25 +10,36 @@ void TestingReg()
 	//Crerator.AddRegex(UR"((ab){2,3}b)", { 2 }, Crerator.GetCountedUniqueID());
 	//Crerator.AddRegex(UR"(+)", { 1 }, Crerator.GetCountedUniqueID(), true);
 
-
+	/*
 	EpsilonNFATable Table = EpsilonNFATable::Create(UR"(a{0,3}(abc))", false, {0});
 	Table.Link(EpsilonNFATable::Create(UR"((a*)ab)", false, { 1 }));
 	Table.Link(EpsilonNFATable::Create(UR"(a*abcd)", false, { 2 }));
 	NFATable Ta(Table);
 
 	DFATable DT(Ta);
+	*/
 
-	CoreProcesser Pro(DT, false);
+	EpsilonNFATable Table2 = EpsilonNFATable::Create(UR"(what)", false, { 0 });
+	Table2.Link(EpsilonNFATable::Create(UR"([a-z]*)", false, { 1 }));
 
-	std::u32string_view Str = U"aabcd";
+	NFATable Ta2(Table2);
 
-	for (std::size_t I = 0; I < Str.size(); ++I)
-	{
-		if (!Pro.ConsumeSymbol(Str[I], I))
-		{
-			volatile int i = 0;
-		}
-	}
+	DFATable DT2(Ta2);
+
+	
+
+	auto Re = HeadMatch(DT2, U"whati ", true);
+
+	auto K = SerilizeTableWrapper::Create(DT2);
+
+	
+
+
+	
+	/*
+	auto Re2 = DFATableHeadMatch(DT2, U"what");
+	*/
+
 
 	volatile int i = 0;
 	/*

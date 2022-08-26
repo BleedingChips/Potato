@@ -18,12 +18,11 @@ namespace Potato::Reg
 
 	inline constexpr char32_t MaxChar() { return 0x110000; };
 
-	inline constexpr char32_t EndOfFile() { return MaxChar(); }
+	inline constexpr char32_t EndOfFile() { return 0; }
 
 	struct Accept
 	{
 		StandardT Mask = 0;
-		StandardT SubMask = 0;
 		std::strong_ordering operator<=>(Accept const&) const = default;
 	};
 
@@ -125,6 +124,7 @@ namespace Potato::Reg
 		std::vector<Node> Nodes;
 
 		NFATable(EpsilonNFATable const& Table);
+		NFATable(std::u32string_view Str, bool IsRow = false, Accept Mask = {0}) : NFATable(EpsilonNFATable::Create(Str, IsRow, Mask)) {}
 	};
 
 	struct DFATable
@@ -151,27 +151,90 @@ namespace Potato::Reg
 			std::vector<StandardT> Parameter;
 			std::vector<std::size_t> ToIndex;
 			std::vector<IntervalT> ConsumeSymbols;
+			bool ContentNeedChange = true;
 		};
 
 		struct Node
 		{
 			std::vector<Edge> Edges;
 			std::vector<Edge> KeepAcceptableEdges;
-			bool HasAcceptable;
 		};
 
 		std::vector<Node> Nodes;
+		static constexpr std::size_t StartupNode() { return 0; }
 
+		DFATable(EpsilonNFATable const& ETable) : DFATable(NFATable{ETable}) {}
 		DFATable(NFATable const& Input);
+		DFATable(std::u32string_view Str, bool IsRaw = false, Accept Mask = {0}) : DFATable(EpsilonNFATable::Create(Str, IsRaw, Mask)) {}
+		
 	};
 
-	struct CoreProcesser
+	struct SerilizeTableWrapper
 	{
-		
+		using StandardT = Reg::StandardT;
+
+		using HalfStandardT = std::uint16_t;
+
+		static_assert(sizeof(HalfStandardT) * 2 == sizeof(StandardT));
+
+		struct alignas(StandardT) ZipChar
+		{
+			char32_t IsSingleChar : 1;
+			char32_t Char : 31;
+			std::strong_ordering operator<=>(ZipChar const&) const = default;
+			static_assert(sizeof(StandardT) == sizeof(char32_t));
+		};
+
+		struct alignas(StandardT) ZipEdge
+		{
+			StandardT ConsumeSymbolCount;
+			StandardT ToIndexCount;
+			HalfStandardT NeedContentChange;
+			HalfStandardT ParmaterCount;
+			HalfStandardT ActionCount;
+			HalfStandardT NextEdgeOffset;
+		};
+
+		struct alignas(StandardT) ZipNode
+		{
+			HalfStandardT AcceptEdgeOffset;
+			HalfStandardT EdgeCount;
+		};
+
+		static std::size_t CalculateRequireSpaceWithStanderT(DFATable const& Tab);
+		static std::size_t SerilizeTo(DFATable const& Tab, std::span<StandardT> Source);
+		static std::vector<StandardT> Create(DFATable const& Tab);
+	};
+
+	struct CaptureWrapper
+	{
+		CaptureWrapper() = default;
+		CaptureWrapper(std::span<Capture const> SubCaptures)
+			: SubCaptures(SubCaptures) {}
+		CaptureWrapper(CaptureWrapper const&) = default;
+		CaptureWrapper& operator=(CaptureWrapper const&) = default;
+		bool HasSubCapture() const { return !SubCaptures.empty(); }
+		bool HasNextCapture() const { return !NextCaptures.empty(); }
+		bool HasCapture() const { return CurrentCapture.has_value(); }
+		Misc::IndexSpan<> GetCapture() const { return *CurrentCapture; }
+
+		CaptureWrapper GetTopSubCapture() const;
+		CaptureWrapper GetNextCapture() const;
+
+		static std::optional<Misc::IndexSpan<>> FindFirstCapture(std::span<Capture const> Captures);
+
+	private:
+
+		std::span<Capture const> SubCaptures;
+		std::span<Capture const> NextCaptures;
+		std::optional<Misc::IndexSpan<>> CurrentCapture;
+	};
+
+	struct ProcessorContent
+	{
 		struct CaptureBlock
 		{
-			bool IsBegin;
-			std::size_t TokenIndex;
+			Capture CaptureData;
 			std::size_t BlockIndex;
 		};
 
@@ -181,38 +244,105 @@ namespace Potato::Reg
 			std::size_t BlockIndex;
 		};
 
-		struct Content
-		{
-			std::vector<CaptureBlock> CaptureBlocks;
-			std::vector<CounterBlock> CounterBlocks;
-		};
-
-		struct AcceptContent
-		{
-			std::vector<CaptureBlock> CaptureBlock;
-			Accept AcceptData;
-		};
-
-		struct LastAcceptable
-		{
-			Accept Data;
-			Misc::IndexSpan<> MainCapture;
-			std::vector<CounterBlock> Blocks;
-		};
-
-		bool ConsumeSymbol(DFATable const& Table, char32_t Symbol, std::size_t TokenIndex);
-		std::optional<AcceptContent> EndOfFile();
-
-
-		bool ConsumeSymbol(char32_t Input, std::size_t CurrentTokenIndex);
-
-		std::size_t CurrentNode = 0;
-		Content CurrentContent;
-		Content LastContent;
-
-		std::optional<LastAcceptable> LastAcceptable;
-		bool KeepAcceptable = false;
+		std::vector<CaptureBlock> CaptureBlocks;
+		std::vector<CounterBlock> CounterBlocks;
+		void Clear() { CounterBlocks.clear(); CaptureBlocks.clear(); }
+		Misc::IndexSpan<> FindCaptureIndex(std::size_t BlockIndex) const;
+		std::span<CaptureBlock const> FindCaptureSpan(std::size_t BlockIndex) const { return FindCaptureIndex(BlockIndex).Slice(CaptureBlocks); }
+		Misc::IndexSpan<> FindCounterIndex(std::size_t BlockIndex) const;
+		std::span<CounterBlock const> FindCounterSpan(std::size_t BlockIndex) const { return FindCounterIndex(BlockIndex).Slice(CounterBlocks); }
 	};
+
+	struct CoreProcessor
+	{
+
+		struct AcceptResult
+		{
+			std::optional<Accept> AcceptData;
+			Misc::IndexSpan<> CaptureSpan;
+			operator bool () const { return AcceptData.has_value(); }
+		};
+
+		struct Result
+		{
+			std::size_t NextNodeIndex;
+			AcceptResult AcceptData;
+			bool ContentNeedChange = true;
+		};
+
+		static std::optional<Result> ConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeIndex, DFATable const& Table, char32_t Symbol, std::size_t TokenIndex, bool KeepAccept);
+	
+		struct KeepAcceptResult
+		{
+			AcceptResult AcceptData;
+			bool ContentNeedChange = true;
+			bool MeetAcceptRequireConsume = false;
+		};
+
+		static KeepAcceptResult KeepAcceptConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeIndex, DFATable const& Table, char32_t Symbol, std::size_t TokenIndex);
+	
+	};
+
+	struct DFATableMatchProcessor
+	{
+		struct Result
+		{
+			std::vector<Capture> SubCaptures;
+			Accept AcceptData;
+			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ SubCaptures }; }
+		};
+
+		DFATableMatchProcessor(DFATable const& Tables) : Tables(Tables), NodeIndex(DFATable::StartupNode()) {}
+		DFATableMatchProcessor(DFATableMatchProcessor const&) = default;
+		bool ConsymeSymbol(char32_t Symbol, std::size_t TokenIndex);
+		std::optional<Result> EndOfFile(std::size_t TokenIndex);
+		void Clear();
+	protected:
+		ProcessorContent Contents;
+		ProcessorContent TempBuffer;
+		std::size_t NodeIndex = 0;
+		DFATable const& Tables;
+	};
+
+	struct DFATableHeadMatchProcessor
+	{
+
+		struct Result
+		{
+			Misc::IndexSpan<> MainCapture;
+			std::vector<Capture> SubCaptures;
+			Accept AcceptData;
+			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ SubCaptures }; }
+		};
+
+		DFATableHeadMatchProcessor(DFATable const& Tables) : Tables(Tables), NodeIndex(DFATable::StartupNode()) {}
+		DFATableHeadMatchProcessor(DFATableHeadMatchProcessor const&) = default;
+		std::optional<std::optional<Result>> ConsymeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy = false);
+		std::optional<Result> EndOfFile(std::size_t TokenIndex);
+		void Clear();
+	protected:
+		ProcessorContent Contents;
+		ProcessorContent TempBuffer;
+		std::optional<Result> CacheResult;
+		std::size_t NodeIndex = 0;
+		DFATable const& Tables;
+	};
+
+
+
+	auto Match(DFATableMatchProcessor& Processor, std::u32string_view Str) ->std::optional<DFATableMatchProcessor::Result>;
+	inline auto Match(DFATable const& Table, std::u32string_view Str)->std::optional<DFATableMatchProcessor::Result>{
+		DFATableMatchProcessor Pro{Table};
+		return Match(Pro, Str);
+	}
+	auto HeadMatch(DFATableHeadMatchProcessor& Table, std::u32string_view Str, bool Greddy = false)->std::optional<DFATableHeadMatchProcessor::Result>;
+	inline auto HeadMatch(DFATable const& Table, std::u32string_view Str, bool Greddy = false)->std::optional<DFATableHeadMatchProcessor::Result>
+	{
+		DFATableHeadMatchProcessor Pro{ Table };
+		return HeadMatch(Pro, Str);
+	}
+
+	
 
 	/*
 	struct TableWrapper
@@ -537,12 +667,15 @@ namespace Potato::Reg
 			enum class TypeT
 			{
 				Counter,
-				Node,
+				NodeCount,
+				NodeOffset,
 				EdgeCount,
+				EdgeOffset,
 				AcceptableCharCount,
 				PropertyCount,
 				CounterCount,
 				EdgeLength,
+				ContentIndex,
 			};
 
 			TypeT Type;
