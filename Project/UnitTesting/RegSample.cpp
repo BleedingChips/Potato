@@ -1,10 +1,108 @@
 ﻿#include "Potato/Public/PotatoReg.h"
 #include "TestingTypes.h"
+#include <string_view>
 using namespace Potato::Reg;
 
 
 void TestingReg()
 {
+
+	// Case 1
+
+	{
+		DFA Tab1(UR"(abcd)", false, {2});
+
+		std::u32string_view Source = UR"(abcd)";
+
+		auto Re = Match(Tab1, Source);
+
+		if (!Re.has_value())
+		{
+			throw UnpassedUnit{"Testing Reg Fauilt Case 1"};
+		}
+
+		auto Wra = TableWrapper::Create(Tab1);
+
+		auto Re2 = Match(Tab1, Source);
+
+		if (!Re2.has_value())
+		{
+			throw UnpassedUnit{ "Testing Reg Fauilt Case 1" };
+		}
+
+	}
+
+	// Case 2
+
+	{
+		DFA Tab1(UR"(.*cd)", false, { 2 });
+
+		std::u32string_view Source = UR"(abcd)";
+
+		auto Re = Match(Tab1, Source);
+
+		if (!Re.has_value())
+		{
+			throw UnpassedUnit{ "Testing Reg Fauilt Case 2" };
+		}
+
+		auto Wra = TableWrapper::Create(Tab1);
+
+		auto Re2 = Match(Tab1, Source);
+
+		if (!Re2.has_value())
+		{
+			throw UnpassedUnit{ "Testing Reg Fauilt Case 2" };
+		}
+	}
+
+	// Case 3
+
+	{
+		DFA Tab1(UR"(a{1,5})", false, { 2 });
+
+		std::u32string_view Source = UR"(aaaa)";
+
+		auto Re = Match(Tab1, Source);
+
+		if (!Re.has_value())
+		{
+			throw UnpassedUnit{ "Testing Reg Fauilt Case 3" };
+		}
+
+		auto Wra = TableWrapper::Create(Tab1);
+
+		auto Re2 = Match(Tab1, Source);
+
+		if (!Re2.has_value())
+		{
+			throw UnpassedUnit{ "Testing Reg Fauilt Case 3" };
+		}
+	}
+
+	// Case 4
+	{
+		DFA Tab1(UR"(a*(bc)d*)", false, { 2 });
+
+		std::u32string_view Source = UR"(aaaabcddd)";
+
+		auto Re = Match(Tab1, Source);
+
+		if (!Re.has_value())
+		{
+			throw UnpassedUnit{ "Testing Reg Fauilt Case 4" };
+		}
+
+		auto Wra = TableWrapper::Create(Tab1);
+
+		auto Re2 = Match(Tab1, Source);
+
+		if (!Re2.has_value())
+		{
+			throw UnpassedUnit{ "Testing Reg Fauilt Case 4" };
+		}
+	}
+
 
 	//Crerator.AddRegex(UR"((a){1,4})", { 2 }, Crerator.GetCountedUniqueID());
 	//Crerator.AddRegex(UR"((ab){2,3}b)", { 2 }, Crerator.GetCountedUniqueID());
@@ -31,8 +129,6 @@ void TestingReg()
 	auto Re = HeadMatch(DT2, U"whati ", true);
 
 	auto K = TableWrapper::Create(DT2);
-
-	
 
 
 	

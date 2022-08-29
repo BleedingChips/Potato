@@ -1757,7 +1757,7 @@ namespace Potato::Reg
 		return Pred.RequireSpace();
 	}
 
-	std::size_t TableWrapper::SerilizeTo(DFA const& Tab, std::span<StandardT> Source)
+	std::size_t TableWrapper::SerializeTo(DFA const& Tab, std::span<StandardT> Source)
 	{
 
 		std::vector<std::size_t> RecordsTime;
@@ -2292,15 +2292,16 @@ namespace Potato::Reg
 
 		Misc::SerilizerHelper::SpanReader<StandardT const> Reader(IteSpan);
 
-		auto CurNode = Reader.ReadObject<TableWrapper::ZipNode>();
+		auto CurNode = Reader.ReadObject<TableWrapper::ZipNode const>();
 		if (CurNode->EdgeCount != 0)
 		{
-			TableWrapper::ZipEdge* Edge = nullptr;
+			TableWrapper::ZipEdge const* Edge = nullptr;
 			if (KeepAccept)
 				Reader = Reader.SubSpan(CurNode->AcceptEdgeOffset);
-			Edge = Reader.ReadObject<TableWrapper::ZipEdge>();
+			Edge = Reader.ReadObject<TableWrapper::ZipEdge const>();
 			auto EdgeReader = Reader;
 			assert(Edge != nullptr);
+
 			while (Edge != nullptr)
 			{
 				auto Symbols = EdgeReader.ReadObjectArray<TableWrapper::ZipChar const>(Edge->ConsumeSymbolCount);
@@ -2309,10 +2310,30 @@ namespace Potato::Reg
 				{
 					auto List = EdgeReader.ReadObjectArray<DFA::ActionT const>(Edge->ActionCount);
 					auto Par = EdgeReader.ReadObjectArray<StandardT const>(Edge->ParmaterCount);
-					auto ToIndex = EdgeReader.ReadObjectArray<StanderT const>(Edge->ToIndex);
+					auto ToIndex = EdgeReader.ReadObjectArray<StandardT const>(Edge->ToIndexCount);
+					assert(List.has_value() && Par.has_value() && ToIndex.has_value());
+					auto AR = ApplyAction(*List, *Par, Target, Source, TokenIndex, Edge->NeedContentChange);
+					auto NodexIndex = (*ToIndex)[AR.NodeArrayIndex];
+					if (NodexIndex != std::numeric_limits<StandardT>::max())
+					{
+						Result Re;
+						Re.NextNodeIndex = NodexIndex;
+						Re.ContentNeedChange = Edge->NeedContentChange;
+						Re.AcceptData = AR.AcceptData;
+						return Re;
+					}
+					else {
+						return {};
+					}
+				}
+				if (Edge->NextEdgeOffset == 0)
+					Edge = nullptr;
+				else
+				{
+					Reader = Reader.SubSpan(Edge->NextEdgeOffset);
+					Edge = Reader.ReadObject<TableWrapper::ZipEdge const>();
 				}
 			}
-			volatile int o  =0;
 		}
 		return {};
 	}
@@ -2364,7 +2385,65 @@ namespace Potato::Reg
 		return KAResult;
 	}
 
-	bool DFAMatchProcessor::ConsymeSymbol(char32_t Symbol, std::size_t TokenIndex)
+	auto CoreProcessor::KeepAcceptConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeOffset, TableWrapper Wrapper, char32_t Symbol, std::size_t TokenIndex) ->KeepAcceptResult
+	{
+		assert(CurNodeOffset < Wrapper.NodeSize());
+
+		auto IteSpan = Wrapper.Wrapper.subspan(CurNodeOffset);
+
+		Misc::SerilizerHelper::SpanReader<StandardT const> Reader(IteSpan);
+
+		auto CurNode = Reader.ReadObject<TableWrapper::ZipNode const>();
+
+		KeepAcceptResult KAResult;
+
+
+		if (CurNode->EdgeCount != 0)
+		{
+			Reader = Reader.SubSpan(CurNode->AcceptEdgeOffset);
+			auto Edge = Reader.ReadObject<TableWrapper::ZipEdge const>();
+			auto EdgeReader = Reader;
+			assert(Edge != nullptr);
+
+			while (Edge != nullptr)
+			{
+				auto Symbols = EdgeReader.ReadObjectArray<TableWrapper::ZipChar const>(Edge->ConsumeSymbolCount);
+				assert(Symbols.has_value());
+				if (!KAResult.MeetAcceptRequireConsume && AcceptConsumeSymbol(*Symbols, Reg::EndOfFile()))
+				{
+					KAResult.MeetAcceptRequireConsume = true;
+				}
+				else if (AcceptConsumeSymbol(*Symbols, Symbol))
+				{
+					auto List = EdgeReader.ReadObjectArray<DFA::ActionT const>(Edge->ActionCount);
+					auto Par = EdgeReader.ReadObjectArray<StandardT const>(Edge->ParmaterCount);
+					auto ToIndex = EdgeReader.ReadObjectArray<StandardT const>(Edge->ToIndexCount);
+					assert(List.has_value() && Par.has_value() && ToIndex.has_value());
+					auto AR = ApplyAction(*List, *Par, Target, Source, TokenIndex, Edge->NeedContentChange);
+					auto NodexIndex = (*ToIndex)[AR.NodeArrayIndex];
+					if (NodexIndex != std::numeric_limits<StandardT>::max())
+					{
+						KAResult.ContentNeedChange = Edge->NeedContentChange;
+						KAResult.AcceptData = AR.AcceptData;
+						return KAResult;
+					}
+					else {
+						return {};
+					}
+				}
+				if (Edge->NextEdgeOffset == 0)
+					Edge = nullptr;
+				else
+				{
+					Reader = Reader.SubSpan(Edge->NextEdgeOffset);
+					Edge = Reader.ReadObject<TableWrapper::ZipEdge const>();
+				}
+			}
+		}
+		return KAResult;
+	}
+
+	bool DFAMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex)
 	{
 		assert(Symbol != 0);
 		TempBuffer.Clear();
@@ -2407,7 +2486,50 @@ namespace Potato::Reg
 		TempBuffer.Clear();
 	}
 
-	auto DFAHeadMatchProcessor::ConsymeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy) -> std::optional<std::optional<Result>>
+	bool TableMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex)
+	{
+		assert(Symbol != 0);
+		TempBuffer.Clear();
+		auto Re = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeOffset, Wrapper, Symbol, TokenIndex, false);
+		if (Re.has_value())
+		{
+			assert(!Re->AcceptData);
+			NodeOffset = Re->NextNodeIndex;
+			if (Re->ContentNeedChange)
+				std::swap(TempBuffer, Contents);
+			return true;
+		}
+		return false;
+	}
+
+	auto TableMatchProcessor::EndOfFile(std::size_t TokenIndex) ->std::optional<Result>
+	{
+		TempBuffer.Clear();
+		auto Re = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeOffset, Wrapper, Reg::EndOfFile(), TokenIndex, false);
+		if (Re.has_value())
+		{
+			assert(Re->AcceptData);
+			Result NRe;
+			NRe.AcceptData = *Re->AcceptData.AcceptData;
+			auto Span = Re->AcceptData.CaptureSpan.Slice(Contents.CaptureBlocks);
+			for (auto Ite : Span)
+			{
+				NRe.SubCaptures.push_back(Ite.CaptureData);
+			}
+			Clear();
+			return NRe;
+		}
+		return {};
+	}
+
+	void TableMatchProcessor::Clear()
+	{
+		NodeOffset = TableWrapper::StartupNode();
+		Contents.Clear();
+		TempBuffer.Clear();
+	}
+
+	auto DFAHeadMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy) -> std::optional<std::optional<Result>>
 	{
 		TempBuffer.Clear();
 		auto Re1 = CoreProcessor::KeepAcceptConsumeSymbol(TempBuffer, Contents, NodeIndex, Tables, Symbol, TokenIndex);
@@ -2424,7 +2546,7 @@ namespace Potato::Reg
 			Re.SubCaptures.clear();
 			for (auto Ite : Span)
 				Re.SubCaptures.push_back(Ite.CaptureData);
-			Re.MainCapture = {0, TokenIndex };
+			Re.MainCapture = { 0, TokenIndex };
 			CacheResult = std::move(Re);
 
 			if (!Greedy && !Re1.MeetAcceptRequireConsume)
@@ -2502,7 +2624,7 @@ namespace Potato::Reg
 	{
 		for (std::size_t I = 0; I < Str.size(); ++I)
 		{
-			if (!Pro.ConsymeSymbol(Str[I], I))
+			if (!Pro.ConsumeSymbol(Str[I], I))
 				return {};
 		}
 		return Pro.EndOfFile(Str.size());
@@ -2512,7 +2634,7 @@ namespace Potato::Reg
 	{
 		for (std::size_t I = 0; I < Str.size(); ++I)
 		{
-			auto Re = Pro.ConsymeSymbol(Str[I], I, Greedy);
+			auto Re = Pro.ConsumeSymbol(Str[I], I, Greedy);
 			if (Re.has_value())
 			{
 				if (Re->has_value())
@@ -2521,6 +2643,16 @@ namespace Potato::Reg
 				}
 			}else
 				break;
+		}
+		return Pro.EndOfFile(Str.size());
+	}
+
+	auto Match(TableMatchProcessor& Pro, std::u32string_view Str)->std::optional<TableMatchProcessor::Result>
+	{
+		for (std::size_t I = 0; I < Str.size(); ++I)
+		{
+			if (!Pro.ConsumeSymbol(Str[I], I))
+				return {};
 		}
 		return Pro.EndOfFile(Str.size());
 	}

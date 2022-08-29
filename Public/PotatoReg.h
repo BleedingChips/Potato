@@ -202,8 +202,9 @@ namespace Potato::Reg
 		};
 
 		static std::size_t CalculateRequireSpaceWithStanderT(DFA const& Tab);
-		static std::size_t SerilizeTo(DFA const& Tab, std::span<StandardT> Source);
+		static std::size_t SerializeTo(DFA const& Tab, std::span<StandardT> Source);
 		static std::vector<StandardT> Create(DFA const& Tab);
+		static std::vector<StandardT> Create(std::u32string_view Reg, bool IsRow = false, Accept Acce = {0}) { return Create(DFA{Reg, IsRow, Acce}); }
 
 		TableWrapper(std::span<StandardT const> Wrapper) : Wrapper(Wrapper) {}
 		TableWrapper() = default;
@@ -292,7 +293,7 @@ namespace Potato::Reg
 		};
 
 		static KeepAcceptResult KeepAcceptConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeIndex, DFA const& Table, char32_t Symbol, std::size_t TokenIndex);
-		static KeepAcceptResult KeepAcceptConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeOffset, DFA const& Table, char32_t Symbol, std::size_t TokenIndex);
+		static KeepAcceptResult KeepAcceptConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeOffset, TableWrapper Wrapper, char32_t Symbol, std::size_t TokenIndex);
 	};
 
 	struct DFAMatchProcessor
@@ -306,7 +307,7 @@ namespace Potato::Reg
 
 		DFAMatchProcessor(DFA const& Tables) : Tables(Tables), NodeIndex(DFA::StartupNode()) {}
 		DFAMatchProcessor(DFAMatchProcessor const&) = default;
-		bool ConsymeSymbol(char32_t Symbol, std::size_t TokenIndex);
+		bool ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex);
 		std::optional<Result> EndOfFile(std::size_t TokenIndex);
 		void Clear();
 	protected:
@@ -314,6 +315,26 @@ namespace Potato::Reg
 		ProcessorContent TempBuffer;
 		std::size_t NodeIndex = 0;
 		DFA const& Tables;
+	};
+
+	struct TableMatchProcessor
+	{
+		struct Result
+		{
+			std::vector<Capture> SubCaptures;
+			Accept AcceptData;
+			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ SubCaptures }; }
+		};
+
+		TableMatchProcessor(TableWrapper Wrapper) : Wrapper(Wrapper), NodeOffset(TableWrapper::StartupNode()) {}
+		TableMatchProcessor(TableMatchProcessor const&) = default;
+		bool ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex);
+		std::optional<Result> EndOfFile(std::size_t TokenIndex);
+		void Clear();
+		ProcessorContent Contents;
+		ProcessorContent TempBuffer;
+		std::size_t NodeOffset;
+		TableWrapper Wrapper;
 	};
 
 	struct DFAHeadMatchProcessor
@@ -329,7 +350,7 @@ namespace Potato::Reg
 
 		DFAHeadMatchProcessor(DFA const& Tables) : Tables(Tables), NodeIndex(DFA::StartupNode()) {}
 		DFAHeadMatchProcessor(DFAHeadMatchProcessor const&) = default;
-		std::optional<std::optional<Result>> ConsymeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy = false);
+		std::optional<std::optional<Result>> ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy = false);
 		std::optional<Result> EndOfFile(std::size_t TokenIndex);
 		void Clear();
 	protected:
@@ -340,15 +361,50 @@ namespace Potato::Reg
 		DFA const& Tables;
 	};
 
+	struct TableHeadMatchProcessor
+	{
+
+		struct Result
+		{
+			Misc::IndexSpan<> MainCapture;
+			std::vector<Capture> SubCaptures;
+			Accept AcceptData;
+			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ SubCaptures }; }
+		};
+
+		TableHeadMatchProcessor(TableWrapper Wrapper) : Wrapper(Wrapper), NodeOffset(TableWrapper::StartupNode()) {}
+		TableHeadMatchProcessor(TableHeadMatchProcessor const&) = default;
+		std::optional<std::optional<Result>> ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy = false);
+		std::optional<Result> EndOfFile(std::size_t TokenIndex);
+		void Clear();
+	protected:
+		ProcessorContent Contents;
+		ProcessorContent TempBuffer;
+		std::optional<Result> CacheResult;
+		std::size_t NodeOffset = 0;
+		TableWrapper Wrapper;
+	};
+
 	auto Match(DFAMatchProcessor& Processor, std::u32string_view Str) ->std::optional<DFAMatchProcessor::Result>;
+	auto Match(TableMatchProcessor& Processor, std::u32string_view Str)->std::optional<TableMatchProcessor::Result>;
 	inline auto Match(DFA const& Table, std::u32string_view Str)->std::optional<DFAMatchProcessor::Result>{
 		DFAMatchProcessor Pro{Table};
+		return Match(Pro, Str);
+	}
+	inline auto Match(TableWrapper Wrapper, std::u32string_view Str)->std::optional<TableMatchProcessor::Result> {
+		TableMatchProcessor Pro{ Wrapper };
 		return Match(Pro, Str);
 	}
 	auto HeadMatch(DFAHeadMatchProcessor& Table, std::u32string_view Str, bool Greddy = false)->std::optional<DFAHeadMatchProcessor::Result>;
 	inline auto HeadMatch(DFA const& Table, std::u32string_view Str, bool Greddy = false)->std::optional<DFAHeadMatchProcessor::Result>
 	{
 		DFAHeadMatchProcessor Pro{ Table };
+		return HeadMatch(Pro, Str);
+	}
+	auto HeadMatch(TableHeadMatchProcessor& Table, std::u32string_view Str, bool Greddy = false)->std::optional<TableHeadMatchProcessor::Result>;
+	inline auto HeadMatch(TableWrapper Table, std::u32string_view Str, bool Greddy = false)->std::optional<TableHeadMatchProcessor::Result>
+	{
+		TableHeadMatchProcessor Pro{ Table };
 		return HeadMatch(Pro, Str);
 	}
 

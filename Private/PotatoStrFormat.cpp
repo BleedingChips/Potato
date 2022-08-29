@@ -7,16 +7,16 @@ using namespace Potato::StrEncode;
 namespace Potato::StrFormat
 {
 	
-	Reg::DFATable const& FormatPatternWrapper() {
-		static Reg::DFATable Datas{ UR"(.*?(\{([^\{\}]*?)\}))" };
-		return Datas;
+	Reg::TableWrapper FormatPatternWrapper() {
+		static auto Table =  Reg::TableWrapper::Create(UR"(.*?(\{([^\{\}]*?)\}))");
+		return Reg::TableWrapper{ Table };
 	}
 
 	template<typename UnicodeT>
 	std::vector<PatternElement<UnicodeT>> CreateImp(std::basic_string_view<UnicodeT> Str)
 	{
 		std::vector<PatternElement<UnicodeT>> Elements;
-		auto& Wrapper = FormatPatternWrapper();
+		auto Wrapper = FormatPatternWrapper();
 		while (!Str.empty())
 		{
 			auto Re = Reg::HeadMatch(Wrapper, Str);

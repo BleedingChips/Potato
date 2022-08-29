@@ -376,7 +376,7 @@ namespace Potato::Misc
 		struct SpanReader
 		{
 			SpanReader(std::span<StorageT> Buffer) : Buffer(Buffer), IteBuffer(Buffer) {}
-			SpanReader(SpanReader const Reader) = default;
+			SpanReader(SpanReader const& Reader) = default;
 			SpanReader SubSpan(std::size_t Index) const { auto New = *this; New.IteBuffer = IteBuffer.subspan(Index); return New; }
 			SpanReader& operator=(SpanReader const&) = default;
 			
