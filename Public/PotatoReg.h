@@ -39,7 +39,7 @@ namespace Potato::Reg
 	};
 
 
-	struct EpsilonNFATable
+	struct EpsilonNFA
 	{
 
 		enum class EdgeType
@@ -83,16 +83,16 @@ namespace Potato::Reg
 			std::size_t Out;
 		};
 
-		static EpsilonNFATable Create(std::u32string_view Str, bool IsRaw, Accept AcceptData);
+		static EpsilonNFA Create(std::u32string_view Str, bool IsRaw, Accept AcceptData);
 
-		void Link(EpsilonNFATable const& OtherTable, bool ThisHasHigherPriority = true);
+		void Link(EpsilonNFA const& OtherTable, bool ThisHasHigherPriority = true);
 
-		EpsilonNFATable(EpsilonNFATable&&) = default;
-		EpsilonNFATable(EpsilonNFATable const&) = default;
-		EpsilonNFATable& operator=(EpsilonNFATable const&) = default;
-		EpsilonNFATable& operator=(EpsilonNFATable&&) = default;
+		EpsilonNFA(EpsilonNFA&&) = default;
+		EpsilonNFA(EpsilonNFA const&) = default;
+		EpsilonNFA& operator=(EpsilonNFA const&) = default;
+		EpsilonNFA& operator=(EpsilonNFA&&) = default;
 
-		EpsilonNFATable() {}
+		EpsilonNFA() {}
 
 		std::size_t NewNode(std::size_t TokenIndex);
 		void AddComsumeEdge(std::size_t From, std::size_t To, std::vector<IntervalT> Acceptable);
@@ -105,12 +105,12 @@ namespace Potato::Reg
 		std::vector<Node> Nodes;
 	};
 
-	struct NFATable
+	struct NFA
 	{
 
 		struct Edge
 		{
-			std::vector<EpsilonNFATable::PropertyT> Propertys;
+			std::vector<EpsilonNFA::PropertyT> Propertys;
 			std::vector<IntervalT> ConsumeChars;
 			std::size_t ToNode;
 			std::size_t UniqueID;
@@ -123,11 +123,11 @@ namespace Potato::Reg
 
 		std::vector<Node> Nodes;
 
-		NFATable(EpsilonNFATable const& Table);
-		NFATable(std::u32string_view Str, bool IsRow = false, Accept Mask = {0}) : NFATable(EpsilonNFATable::Create(Str, IsRow, Mask)) {}
+		NFA(EpsilonNFA const& Table);
+		NFA(std::u32string_view Str, bool IsRow = false, Accept Mask = {0}) : NFA(EpsilonNFA::Create(Str, IsRow, Mask)) {}
 	};
 
-	struct DFATable
+	struct DFA
 	{
 
 		enum class ActionT : StandardT
@@ -163,13 +163,13 @@ namespace Potato::Reg
 		std::vector<Node> Nodes;
 		static constexpr std::size_t StartupNode() { return 0; }
 
-		DFATable(EpsilonNFATable const& ETable) : DFATable(NFATable{ETable}) {}
-		DFATable(NFATable const& Input);
-		DFATable(std::u32string_view Str, bool IsRaw = false, Accept Mask = {0}) : DFATable(EpsilonNFATable::Create(Str, IsRaw, Mask)) {}
+		DFA(EpsilonNFA const& ETable) : DFA(NFA{ETable}) {}
+		DFA(NFA const& Input);
+		DFA(std::u32string_view Str, bool IsRaw = false, Accept Mask = {0}) : DFA(EpsilonNFA::Create(Str, IsRaw, Mask)) {}
 		
 	};
 
-	struct SerilizeTableWrapper
+	struct TableWrapper
 	{
 		using StandardT = Reg::StandardT;
 
@@ -201,9 +201,20 @@ namespace Potato::Reg
 			HalfStandardT EdgeCount;
 		};
 
-		static std::size_t CalculateRequireSpaceWithStanderT(DFATable const& Tab);
-		static std::size_t SerilizeTo(DFATable const& Tab, std::span<StandardT> Source);
-		static std::vector<StandardT> Create(DFATable const& Tab);
+		static std::size_t CalculateRequireSpaceWithStanderT(DFA const& Tab);
+		static std::size_t SerilizeTo(DFA const& Tab, std::span<StandardT> Source);
+		static std::vector<StandardT> Create(DFA const& Tab);
+
+		TableWrapper(std::span<StandardT const> Wrapper) : Wrapper(Wrapper) {}
+		TableWrapper() = default;
+		TableWrapper(TableWrapper const&) = default;
+		TableWrapper& operator=(TableWrapper const& )= default;
+		std::size_t BufferSize() const { return Wrapper.size(); }
+		operator bool() const { return !Wrapper.empty(); }
+		std::size_t NodeSize() const { return *this ? Wrapper[0] : 0; };
+		static constexpr std::size_t StartupNode() { return 1; };
+		
+		std::span<StandardT const> Wrapper;
 	};
 
 	struct CaptureWrapper
@@ -270,8 +281,9 @@ namespace Potato::Reg
 			bool ContentNeedChange = true;
 		};
 
-		static std::optional<Result> ConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeIndex, DFATable const& Table, char32_t Symbol, std::size_t TokenIndex, bool KeepAccept);
-	
+		static std::optional<Result> ConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeIndex, DFA const& Table, char32_t Symbol, std::size_t TokenIndex, bool KeepAccept);
+		static std::optional<Result> ConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeOffset, TableWrapper Wrapper, char32_t Symbol, std::size_t TokenIndex, bool KeepAccept);
+
 		struct KeepAcceptResult
 		{
 			AcceptResult AcceptData;
@@ -279,11 +291,11 @@ namespace Potato::Reg
 			bool MeetAcceptRequireConsume = false;
 		};
 
-		static KeepAcceptResult KeepAcceptConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeIndex, DFATable const& Table, char32_t Symbol, std::size_t TokenIndex);
-	
+		static KeepAcceptResult KeepAcceptConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeIndex, DFA const& Table, char32_t Symbol, std::size_t TokenIndex);
+		static KeepAcceptResult KeepAcceptConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeOffset, DFA const& Table, char32_t Symbol, std::size_t TokenIndex);
 	};
 
-	struct DFATableMatchProcessor
+	struct DFAMatchProcessor
 	{
 		struct Result
 		{
@@ -292,8 +304,8 @@ namespace Potato::Reg
 			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ SubCaptures }; }
 		};
 
-		DFATableMatchProcessor(DFATable const& Tables) : Tables(Tables), NodeIndex(DFATable::StartupNode()) {}
-		DFATableMatchProcessor(DFATableMatchProcessor const&) = default;
+		DFAMatchProcessor(DFA const& Tables) : Tables(Tables), NodeIndex(DFA::StartupNode()) {}
+		DFAMatchProcessor(DFAMatchProcessor const&) = default;
 		bool ConsymeSymbol(char32_t Symbol, std::size_t TokenIndex);
 		std::optional<Result> EndOfFile(std::size_t TokenIndex);
 		void Clear();
@@ -301,10 +313,10 @@ namespace Potato::Reg
 		ProcessorContent Contents;
 		ProcessorContent TempBuffer;
 		std::size_t NodeIndex = 0;
-		DFATable const& Tables;
+		DFA const& Tables;
 	};
 
-	struct DFATableHeadMatchProcessor
+	struct DFAHeadMatchProcessor
 	{
 
 		struct Result
@@ -315,8 +327,8 @@ namespace Potato::Reg
 			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ SubCaptures }; }
 		};
 
-		DFATableHeadMatchProcessor(DFATable const& Tables) : Tables(Tables), NodeIndex(DFATable::StartupNode()) {}
-		DFATableHeadMatchProcessor(DFATableHeadMatchProcessor const&) = default;
+		DFAHeadMatchProcessor(DFA const& Tables) : Tables(Tables), NodeIndex(DFA::StartupNode()) {}
+		DFAHeadMatchProcessor(DFAHeadMatchProcessor const&) = default;
 		std::optional<std::optional<Result>> ConsymeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy = false);
 		std::optional<Result> EndOfFile(std::size_t TokenIndex);
 		void Clear();
@@ -325,20 +337,18 @@ namespace Potato::Reg
 		ProcessorContent TempBuffer;
 		std::optional<Result> CacheResult;
 		std::size_t NodeIndex = 0;
-		DFATable const& Tables;
+		DFA const& Tables;
 	};
 
-
-
-	auto Match(DFATableMatchProcessor& Processor, std::u32string_view Str) ->std::optional<DFATableMatchProcessor::Result>;
-	inline auto Match(DFATable const& Table, std::u32string_view Str)->std::optional<DFATableMatchProcessor::Result>{
-		DFATableMatchProcessor Pro{Table};
+	auto Match(DFAMatchProcessor& Processor, std::u32string_view Str) ->std::optional<DFAMatchProcessor::Result>;
+	inline auto Match(DFA const& Table, std::u32string_view Str)->std::optional<DFAMatchProcessor::Result>{
+		DFAMatchProcessor Pro{Table};
 		return Match(Pro, Str);
 	}
-	auto HeadMatch(DFATableHeadMatchProcessor& Table, std::u32string_view Str, bool Greddy = false)->std::optional<DFATableHeadMatchProcessor::Result>;
-	inline auto HeadMatch(DFATable const& Table, std::u32string_view Str, bool Greddy = false)->std::optional<DFATableHeadMatchProcessor::Result>
+	auto HeadMatch(DFAHeadMatchProcessor& Table, std::u32string_view Str, bool Greddy = false)->std::optional<DFAHeadMatchProcessor::Result>;
+	inline auto HeadMatch(DFA const& Table, std::u32string_view Str, bool Greddy = false)->std::optional<DFAHeadMatchProcessor::Result>
 	{
-		DFATableHeadMatchProcessor Pro{ Table };
+		DFAHeadMatchProcessor Pro{ Table };
 		return HeadMatch(Pro, Str);
 	}
 

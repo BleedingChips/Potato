@@ -19,18 +19,18 @@ void TestingReg()
 	DFATable DT(Ta);
 	*/
 
-	EpsilonNFATable Table2 = EpsilonNFATable::Create(UR"(what)", false, { 0 });
-	Table2.Link(EpsilonNFATable::Create(UR"([a-z]*)", false, { 1 }));
+	EpsilonNFA Table2 = EpsilonNFA::Create(UR"(what)", false, { 0 });
+	Table2.Link(EpsilonNFA::Create(UR"([a-z]*)", false, { 1 }));
 
-	NFATable Ta2(Table2);
+	NFA Ta2(Table2);
 
-	DFATable DT2(Ta2);
+	DFA DT2(Ta2);
 
 	
 
 	auto Re = HeadMatch(DT2, U"whati ", true);
 
-	auto K = SerilizeTableWrapper::Create(DT2);
+	auto K = TableWrapper::Create(DT2);
 
 	
 

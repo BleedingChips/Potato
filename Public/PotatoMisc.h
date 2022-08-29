@@ -336,18 +336,10 @@ namespace Potato::Misc
 				return Result;
 			}
 
-			/*
-			template<typeaname Type>
-			std::span<Type> NewObjectArray(std::size_t Size)
-			{
-
-			}
-			*/
-
 			template<typename Type>
 			Type* NewObject() requires(std::is_standard_layout_v<Type>)
 			{
-				std::size_t AlignedLength = AlignedSize<StorageT>(sizeof(std::remove_cvref_t<Type>));
+				std::size_t AlignedLength = Predicter<StorageT>::template Object<Type>();
 				if (AlignedLength <= IteBuffer.size())
 				{
 					Type* Data = new (IteBuffer.data()) std::remove_cvref_t<Type>{};
@@ -377,6 +369,58 @@ namespace Potato::Misc
 					throw ExceptableT{std::forward<Par>(Pars)...};
 			}
 
+
+		};
+
+		template<typename StorageT>
+		struct SpanReader
+		{
+			SpanReader(std::span<StorageT> Buffer) : Buffer(Buffer), IteBuffer(Buffer) {}
+			SpanReader(SpanReader const Reader) = default;
+			SpanReader SubSpan(std::size_t Index) const { auto New = *this; New.IteBuffer = IteBuffer.subspan(Index); return New; }
+			SpanReader& operator=(SpanReader const&) = default;
+			
+			StorageT* ReadElement(){ 
+				if(IteBuffer.size() >= 1)
+				{
+					auto Buffer = reinterpret_cast<StorageT*>(IteBuffer.data());
+					IteBuffer = IteBuffer.subspan(1);
+					return Buffer;
+				}
+				return nullptr;
+			}
+
+			template<typename Type>
+			Type* ReadObject()
+			{
+				auto RS = Predicter<StorageT>::template Object<Type>();
+
+				if (RS <= IteBuffer.size())
+				{
+					auto Buffer = reinterpret_cast<Type*>(IteBuffer.data());
+					IteBuffer = IteBuffer.subspan(RS);
+					return Buffer;
+				}
+				return nullptr;
+			}
+
+			template<typename Type>
+			std::optional<std::span<Type>> ReadObjectArray(std::size_t Count)
+			{
+				auto RS = Predicter<StorageT>::template ObjectArray<Type>(Count);
+
+				if (RS <= IteBuffer.size())
+				{
+					auto Buffer = std::span<Type>{reinterpret_cast<Type*>(IteBuffer.data()), Count};
+					IteBuffer = IteBuffer.subspan(RS);
+					return Buffer;
+				}
+				return {};
+			}
+			
+			std::span<StorageT> Buffer;
+			std::span<StorageT> IteBuffer;
+			
 
 		};
 

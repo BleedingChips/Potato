@@ -424,10 +424,10 @@ namespace Potato::Reg
 
 	}
 
-	std::any RegNoTerminalFunction(Potato::SLRX::NTElement& NT, EpsilonNFATable& Output)
+	std::any RegNoTerminalFunction(Potato::SLRX::NTElement& NT, EpsilonNFA& Output)
 	{
 
-		using NodeSet = EpsilonNFATable::NodeSet;
+		using NodeSet = EpsilonNFA::NodeSet;
 
 		switch (NT.Mask)
 		{
@@ -670,14 +670,14 @@ namespace Potato::Reg
 		}
 	}
 
-	std::size_t EpsilonNFATable::NewNode(std::size_t TokenIndex)
+	std::size_t EpsilonNFA::NewNode(std::size_t TokenIndex)
 	{
 		std::size_t Index = Nodes.size();
 		Nodes.push_back({ Index, {}, TokenIndex });
 		return Index;
 	}
 
-	EpsilonNFATable::NodeSet EpsilonNFATable::AddCounter(std::size_t TokenIndex, NodeSet InSideSet, std::optional<std::size_t> Equal, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool IsGreedy)
+	EpsilonNFA::NodeSet EpsilonNFA::AddCounter(std::size_t TokenIndex, NodeSet InSideSet, std::optional<std::size_t> Equal, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool IsGreedy)
 	{
 		if (Equal.has_value() || (Min.has_value() && Max.has_value() && *Min == *Max))
 		{
@@ -757,7 +757,7 @@ namespace Potato::Reg
 		auto T4 = NewNode(TokenIndex);
 
 		{
-			EpsilonNFATable::Edge Edge{ {EpsilonNFATable::EdgeType::CounterPush}, T2, 0 };
+			EpsilonNFA::Edge Edge{ {EpsilonNFA::EdgeType::CounterPush}, T2, 0 };
 			AddEdge(T1, std::move(Edge));
 		}
 
@@ -775,12 +775,12 @@ namespace Potato::Reg
 			Counter Tem;
 			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Target, Tar - 1, RegexOutOfRange::TypeT::Counter, Tar - 1);
 
-			EpsilonNFATable::Edge Edge{ {EpsilonNFATable::EdgeType::CounterSmallEqual, Tem}, Start, 0 };
+			EpsilonNFA::Edge Edge{ {EpsilonNFA::EdgeType::CounterSmallEqual, Tem}, Start, 0 };
 			AddEdge(T3, std::move(Edge));
 		}
 
 		{
-			EpsilonNFATable::Edge Edge{ {EpsilonNFATable::EdgeType::CounterAdd}, T2, 0 };
+			EpsilonNFA::Edge Edge{ {EpsilonNFA::EdgeType::CounterAdd}, T2, 0 };
 			AddEdge(Start, std::move(Edge));
 		}
 
@@ -793,7 +793,7 @@ namespace Potato::Reg
 
 			auto New = NewNode(TokenIndex);
 
-			EpsilonNFATable::Edge Edge{ {EpsilonNFATable::EdgeType::CounterBigEqual, Tem}, New, 0 };
+			EpsilonNFA::Edge Edge{ {EpsilonNFA::EdgeType::CounterBigEqual, Tem}, New, 0 };
 			AddEdge(Start, std::move(Edge));
 
 			Start = New;
@@ -805,14 +805,14 @@ namespace Potato::Reg
 			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Target, *Max, RegexOutOfRange::TypeT::Counter, *Max);
 
 			auto New = NewNode(TokenIndex);
-			EpsilonNFATable::Edge Edge{ {EpsilonNFATable::EdgeType::CounterSmallEqual, Tem}, New, 0 };
+			EpsilonNFA::Edge Edge{ {EpsilonNFA::EdgeType::CounterSmallEqual, Tem}, New, 0 };
 			AddEdge(Start, std::move(Edge));
 
 			Start = New;
 		}
 
 		{
-			EpsilonNFATable::Edge Edge{ {EpsilonNFATable::EdgeType::CounterPop}, T4, 0 };
+			EpsilonNFA::Edge Edge{ {EpsilonNFA::EdgeType::CounterPop}, T4, 0 };
 			AddEdge(Start, std::move(Edge));
 		}
 
@@ -826,39 +826,7 @@ namespace Potato::Reg
 		return NodeSet{ T1, T4 };
 	}
 
-	/*
-	void EpsilonNFATable::AddCounter(EdgeType Type, std::size_t From, std::size_t To, Counter Counter)
-	{
-		switch (Type)
-		{
-		case EdgeType::CounterPush:
-		case EdgeType::CounterAdd:
-		case EdgeType::CounterPop:
-		{
-			Edge NewEdge;
-			NewEdge.Property.Type = Type;
-			NewEdge.ShiftNode = To;
-			AddEdge(From, std::move(NewEdge));
-			break;
-		}
-		case EdgeType::CounterBigEqual:
-		case EdgeType::CounterSmallEqual:
-		case EdgeType::CounterEqual:
-		{
-			Edge NewEdge;
-			NewEdge.Property.Type = Type;
-			NewEdge.Property.Datas = Counter;
-			NewEdge.ShiftNode = To;
-			AddEdge(From, std::move(NewEdge));
-			break;
-		}
-		default:
-			assert(false);
-		}
-	}
-	*/
-
-	void EpsilonNFATable::AddComsumeEdge(std::size_t From, std::size_t To, std::vector<IntervalT> Acceptable) {
+	void EpsilonNFA::AddComsumeEdge(std::size_t From, std::size_t To, std::vector<IntervalT> Acceptable) {
 		Edge NewEdge;
 		NewEdge.Property.Type = EdgeType::Consume;
 		NewEdge.Property.Datas = std::move(Acceptable);
@@ -866,7 +834,7 @@ namespace Potato::Reg
 		AddEdge(From, std::move(NewEdge));
 	}
 
-	void EpsilonNFATable::AddAcceptableEdge(std::size_t From, std::size_t To, Accept Data)
+	void EpsilonNFA::AddAcceptableEdge(std::size_t From, std::size_t To, Accept Data)
 	{
 		Edge NewEdge;
 		NewEdge.Property.Type = EdgeType::Acceptable;
@@ -875,7 +843,7 @@ namespace Potato::Reg
 		AddEdge(From, std::move(NewEdge));
 	}
 
-	void EpsilonNFATable::AddCapture(NodeSet OutsideSet, NodeSet InsideSet)
+	void EpsilonNFA::AddCapture(NodeSet OutsideSet, NodeSet InsideSet)
 	{
 		Edge NewEdge;
 		NewEdge.ShiftNode = InsideSet.In;
@@ -887,37 +855,7 @@ namespace Potato::Reg
 		AddEdge(InsideSet.Out, NewEdge);
 	}
 
-	/*
-	void EpsilonNFATable::AddCounter(NodeSet OutsideSet, NodeSet InsideSet, Counter EndCounter, bool Greedy)
-	{
-		Edge Begin;
-		Begin.ShiftNode = InsideSet.Out;
-		Begin.Type = EdgeType::CounterBegin;
-
-		Edge Continue;
-		Continue.ShiftNode = InsideSet.In;
-		Continue.Type = EdgeType::CounterContinue;
-		Continue.CounterDatas = Counter{ 0, EndCounter.Max - 1 };
-
-		Edge End;
-		End.ShiftNode = OutsideSet.Out;
-		End.Type = EdgeType::CounterEnd;
-		End.CounterDatas = EndCounter;
-
-		AddEdge(OutsideSet.In, std::move(Begin));
-		if (Greedy)
-		{
-			AddEdge(InsideSet.Out, std::move(Continue));
-			AddEdge(InsideSet.Out, std::move(End));
-		}
-		else {
-			AddEdge(InsideSet.Out, std::move(End));
-			AddEdge(InsideSet.Out, std::move(Continue));
-		}
-	}
-	*/
-
-	void EpsilonNFATable::AddEdge(std::size_t FormNodeIndex, Edge Edge)
+	void EpsilonNFA::AddEdge(std::size_t FormNodeIndex, Edge Edge)
 	{
 		assert(FormNodeIndex < Nodes.size());
 		auto& Cur = Nodes[FormNodeIndex];
@@ -925,7 +863,7 @@ namespace Potato::Reg
 		Cur.Edges.push_back(std::move(Edge));
 	}
 
-	void EpsilonNFATable::Link(EpsilonNFATable const& OtherTable, bool ThisHasHigherPriority)
+	void EpsilonNFA::Link(EpsilonNFA const& OtherTable, bool ThisHasHigherPriority)
 	{
 		if (!OtherTable.Nodes.empty())
 		{
@@ -963,7 +901,7 @@ namespace Potato::Reg
 		}
 	}
 
-	void CreateUnfaTable(LexerTranslater& Translater, EpsilonNFATable& Output, Accept AcceptData)
+	void CreateUnfaTable(LexerTranslater& Translater, EpsilonNFA& Output, Accept AcceptData)
 	{
 		auto N1 = Output.NewNode(0);
 		auto N2 = Output.NewNode(0);
@@ -979,8 +917,7 @@ namespace Potato::Reg
 			}
 			auto Steps = Pro.EndOfFile();
 
-			//auto Steps = SLRX::ProcessParsingStep(Wrapper, 0, [&](std::size_t Input){ return Translater.GetSymbol(Input); });
-			EpsilonNFATable::NodeSet Set = SLRX::ProcessParsingStepWithOutputType<EpsilonNFATable::NodeSet>(std::span(Steps),
+			EpsilonNFA::NodeSet Set = SLRX::ProcessParsingStepWithOutputType<EpsilonNFA::NodeSet>(std::span(Steps),
 				[&](SLRX::VariantElement Elements)-> std::any {
 					if (Elements.IsTerminal())
 						return RegTerminalFunction(Elements.AsTerminal(), Translater);
@@ -1005,9 +942,9 @@ namespace Potato::Reg
 		}
 	}
 
-	EpsilonNFATable EpsilonNFATable::Create(std::u32string_view Str, bool IsRaw, Accept AcceptData)
+	EpsilonNFA EpsilonNFA::Create(std::u32string_view Str, bool IsRaw, Accept AcceptData)
 	{
-		EpsilonNFATable Result;
+		EpsilonNFA Result;
 		LexerTranslater Tran;
 
 		for (auto Ite : Str)
@@ -1023,7 +960,7 @@ namespace Potato::Reg
 	struct ExpandResult
 	{
 		std::vector<std::size_t> ContainNodes;
-		std::vector<NFATable::Edge> Edges;
+		std::vector<NFA::Edge> Edges;
 	};
 
 	struct SearchCore
@@ -1034,7 +971,7 @@ namespace Potato::Reg
 		{
 			std::size_t From;
 			std::size_t To;
-			EpsilonNFATable::PropertyT Propertys;
+			EpsilonNFA::PropertyT Propertys;
 		};
 
 		std::vector<Element> Propertys;
@@ -1065,32 +1002,32 @@ namespace Potato::Reg
 		{
 			switch (Ite.Propertys.Type)
 			{
-			case EpsilonNFATable::EdgeType::CounterPush:
+			case EpsilonNFA::EdgeType::CounterPush:
 				Temp.push_back(0);
 				break;
-			case EpsilonNFATable::EdgeType::CounterAdd:
+			case EpsilonNFA::EdgeType::CounterAdd:
 				if (!Temp.empty())
 					*Temp.rbegin() += 1;
 				break;
-			case EpsilonNFATable::EdgeType::CounterPop:
+			case EpsilonNFA::EdgeType::CounterPop:
 				if (!Temp.empty())
 					Temp.pop_back();
 				break;
-			case EpsilonNFATable::EdgeType::CounterEqual:
+			case EpsilonNFA::EdgeType::CounterEqual:
 				if (!Temp.empty())
 				{
 					auto Last = *Temp.rbegin();
 					return Last == std::get<Counter>(Ite.Propertys.Datas).Target;
 				}
 				break;
-			case EpsilonNFATable::EdgeType::CounterSmallEqual:
+			case EpsilonNFA::EdgeType::CounterSmallEqual:
 				if (!Temp.empty())
 				{
 					auto Last = *Temp.rbegin();
 					return Last <= std::get<Counter>(Ite.Propertys.Datas).Target;
 				}
 				break;
-			case EpsilonNFATable::EdgeType::CounterBigEqual:
+			case EpsilonNFA::EdgeType::CounterBigEqual:
 				if (!Temp.empty())
 				{
 					auto Last = *Temp.rbegin();
@@ -1105,7 +1042,7 @@ namespace Potato::Reg
 		return true;
 	}
 
-	ExpandResult SearchEpsilonNode(EpsilonNFATable const& Input, std::size_t SearchNode)
+	ExpandResult SearchEpsilonNode(EpsilonNFA const& Input, std::size_t SearchNode)
 	{
 		ExpandResult Result;
 
@@ -1125,12 +1062,12 @@ namespace Potato::Reg
 
 				bool IsLast = ( EdgeIte  + 1 == Node.Edges.rend());
 
-				if (Ite.Property.Type == EpsilonNFATable::EdgeType::Consume && !std::get<std::vector<IntervalT>>(Ite.Property.Datas).empty())
+				if (Ite.Property.Type == EpsilonNFA::EdgeType::Consume && !std::get<std::vector<IntervalT>>(Ite.Property.Datas).empty())
 				{
 					if (!CheckProperty(std::span(Cur.Propertys)))
 						continue;
 
-					NFATable::Edge NewEdge;
+					NFA::Edge NewEdge;
 					NewEdge.ToNode = Ite.ShiftNode;
 
 					Cur.AddUniqueID(Ite.UniqueID);
@@ -1142,7 +1079,7 @@ namespace Potato::Reg
 					NewEdge.ConsumeChars = std::get<std::vector<IntervalT>>(Ite.Property.Datas);
 					for (auto& Ite : Cur.Propertys)
 					{
-						if(Ite.Propertys.Type != EpsilonNFATable::EdgeType::Consume)
+						if(Ite.Propertys.Type != EpsilonNFA::EdgeType::Consume)
 							NewEdge.Propertys.push_back(Ite.Propertys);
 					}
 
@@ -1175,83 +1112,8 @@ namespace Potato::Reg
 					NewOne.ToNode = Ite.ShiftNode;
 					SearchStack.push_back(std::move(NewOne));
 				}
-
-				/*
-				Cur.ToNode = Ite.ShiftNode;
-
-				switch (Ite.Property.Type)
-				{
-				case EpsilonNFATable::EdgeType::Consume:
-				{
-					auto& Ref = std::get<std::vector<IntervalT>>(Ite.Property.Datas);
-					if (Ref.empty())
-					{
-						Result.ContainNodes.push_back(Ite.ShiftNode);
-						if (IsLast)
-							SearchStack.push_back(std::move(Cur));
-						else
-							SearchStack.push_back(Cur);
-					}
-					else {
-						Cur.AddUniqueID(Ite.UniqueID);
-						NFATable::Edge Edge;
-						Edge.ToNode = Ite.ShiftNode;
-						if (IsLast)
-							Edge.ConsumeChars = std::move(Ref);
-						else
-							Edge.ConsumeChars = Ref;
-						assert(Cur.UniqueID.has_value());
-						if (Cur.UniqueID->HasUniqueID)
-							Edge.UniqueID = Cur.UniqueID->UniqueID;
-						if (IsLast)
-							Edge.Propertys = std::move(Cur.Propertys);
-						else
-							Edge.Propertys = Cur.Propertys;
-						Result.Edges.push_back(std::move(Edge));
-					}
-					break;
-				}
-				case EpsilonNFATable::EdgeType::CounterAdd:
-				case EpsilonNFATable::EdgeType::CounterBigEqual:
-				case EpsilonNFATable::EdgeType::CounterEqual:
-				case EpsilonNFATable::EdgeType::CounterPop:
-				case EpsilonNFATable::EdgeType::CounterPush:
-				case EpsilonNFATable::EdgeType::CounterSmallEqual:
-					if(!CheckPropertys(Cur.Propertys, {Ite.Property.Type, std::get<Counter>(Ite.Property.Datas)}))
-						break;
-				default:
-					Result.ContainNodes.push_back(Ite.ShiftNode);
-
-					NFATable::EdgeProperty NewProperty;
-					NewProperty.Type = Ite.Property.Type;
-					assert(!std::holds_alternative<std::vector<IntervalT>>(Ite.Property.Datas));
-					if (std::holds_alternative<Accept>(Ite.Property.Datas))
-					{
-						NewProperty.Data = std::get<Accept>(Ite.Property.Datas);
-					}
-					else if (std::holds_alternative<Counter>(Ite.Property.Datas))
-					{
-						NewProperty.Data = std::get<Counter>(Ite.Property.Datas);
-					}
-
-					if (IsLast)
-					{
-						Cur.AddUniqueID(Ite.UniqueID);
-						Cur.Propertys.push_back(NewProperty);
-						SearchStack.push_back(std::move(Cur));
-					}
-					else {
-						auto NewCur = Cur;
-						NewCur.AddUniqueID(Ite.UniqueID);
-						NewCur.Propertys.push_back(NewProperty);
-						SearchStack.push_back(std::move(NewCur));
-					}
-					break;
-				}
-				*/
 			}
 		}
-		//std::sort(Result.ContainNodes.begin(), Result.ContainNodes.end());
 		return Result;
 	}
 
@@ -1287,7 +1149,7 @@ namespace Potato::Reg
 		}
 	};
 
-	NFATable::NFATable(EpsilonNFATable const& Table)
+	NFA::NFA(EpsilonNFA const& Table)
 	{
 
 		struct NodeStorage
@@ -1334,7 +1196,7 @@ namespace Potato::Reg
 
 	struct TemporaryProperty
 	{
-		std::vector<EpsilonNFATable::PropertyT> Propertys;
+		std::vector<EpsilonNFA::PropertyT> Propertys;
 		std::size_t OriginalFrom;
 		std::size_t OriginalTo;
 		std::size_t UniqueID;
@@ -1358,7 +1220,7 @@ namespace Potato::Reg
 		bool HasAccept = false;
 	};
 
-	void CollectEdgeProperty(std::size_t SourceIndex, NFATable::Edge const& Source, TemporaryProperty& Target)
+	void CollectEdgeProperty(std::size_t SourceIndex, NFA::Edge const& Source, TemporaryProperty& Target)
 	{
 		Target.OriginalFrom = SourceIndex;
 		Target.OriginalTo = Source.ToNode;
@@ -1370,12 +1232,12 @@ namespace Potato::Reg
 		{
 			switch (Ite.Type)
 			{
-			case EpsilonNFATable::EdgeType::Acceptable:
+			case EpsilonNFA::EdgeType::Acceptable:
 				Target.HasAcceptable = true;
 				break;
-			case EpsilonNFATable::EdgeType::CounterBigEqual:
-			case EpsilonNFATable::EdgeType::CounterEqual:
-			case EpsilonNFATable::EdgeType::CounterSmallEqual:
+			case EpsilonNFA::EdgeType::CounterBigEqual:
+			case EpsilonNFA::EdgeType::CounterEqual:
+			case EpsilonNFA::EdgeType::CounterSmallEqual:
 				Target.HasCounter = true;
 				break;
 			default:
@@ -1385,7 +1247,7 @@ namespace Potato::Reg
 		}
 	}
 
-	void CollectTemporaryProperty(NFATable const& Input, std::span<std::size_t const> Indexs, TemporaryNode& Output)
+	void CollectTemporaryProperty(NFA const& Input, std::span<std::size_t const> Indexs, TemporaryNode& Output)
 	{
 		std::vector<std::size_t> RemovedUniqueID;
 		bool ReadAccept = false;
@@ -1485,7 +1347,7 @@ namespace Potato::Reg
 		TemporaryNode TempRawNodes;
 	};
 
-	void ClassifyNodeIndes(NFATable const& Table, std::vector<TemporaryEdge>& TempraryEdges, NodeAllocator& Mapping, std::vector<DFASearchCore>& SeachStack)
+	void ClassifyNodeIndes(NFA const& Table, std::vector<TemporaryEdge>& TempraryEdges, NodeAllocator& Mapping, std::vector<DFASearchCore>& SeachStack)
 	{
 		if (!TempraryEdges.empty())
 		{
@@ -1545,17 +1407,17 @@ namespace Potato::Reg
 		}
 	}
 
-	std::vector<DFATable::Edge> CollectDFAEdge(std::vector<TemporaryEdge>& Source)
+	std::vector<DFA::Edge> CollectDFAEdge(std::vector<TemporaryEdge>& Source)
 	{
 
-		using EdgeType = EpsilonNFATable::EdgeType;
-		using ActionT = DFATable::ActionT;
+		using EdgeType = EpsilonNFA::EdgeType;
+		using ActionT = DFA::ActionT;
 
-		std::vector<DFATable::Edge> Target;
+		std::vector<DFA::Edge> Target;
 		Target.reserve(Source.size());
 		for (auto& Ite : Source)
 		{
-			DFATable::Edge NewOne;
+			DFA::Edge NewOne;
 			NewOne.ConsumeSymbols = std::move(Ite.ConsumeSymbols);
 			NewOne.ToIndex = std::move(Ite.ToIndexs);
 			NewOne.ContentNeedChange = false;
@@ -1628,12 +1490,12 @@ namespace Potato::Reg
 		return Target;
 	}
 
-	DFATable::DFATable(NFATable const& Input)
+	DFA::DFA(NFA const& Input)
 	{
 
 		assert(!Input.Nodes.empty());
 
-		using EdgeT = EpsilonNFATable::EdgeType;
+		using EdgeT = EpsilonNFA::EdgeType;
 
 		NodeAllocator NodeAll;
 
@@ -1852,19 +1714,19 @@ namespace Potato::Reg
 		return Count;
 	}
 
-	void CalEdgeSize(Misc::SerilizerHelper::Predicter<StandardT>& Pre, std::span<DFATable::Edge const> Symbols)
+	void CalEdgeSize(Misc::SerilizerHelper::Predicter<StandardT>& Pre, std::span<DFA::Edge const> Symbols)
 	{
 		for (auto& Ite2 : Symbols)
 		{
-			Pre.WriteObject<SerilizeTableWrapper::ZipEdge>();
+			Pre.WriteObject<TableWrapper::ZipEdge>();
 			Pre.WriteObjectArray(std::span(Ite2.List));
 			Pre.WriteObjectArray(std::span(Ite2.Parameter));
 			Pre.WriteObjectArray<StandardT>(Ite2.ToIndex.size());
-			Pre.WriteObjectArray<SerilizeTableWrapper::ZipChar>(Ite2.ConsumeSymbols.size());
+			Pre.WriteObjectArray<TableWrapper::ZipChar>(CalConsumeSymbolSize(Ite2.ConsumeSymbols));
 		}
 	}
 
-	std::size_t TranslateIntervalT(std::span<IntervalT const> Source, std::vector<SerilizeTableWrapper::ZipChar>& Output)
+	std::size_t TranslateIntervalT(std::span<IntervalT const> Source, std::vector<TableWrapper::ZipChar>& Output)
 	{
 		auto OldSize = Output.size();
 		for (auto& Ite : Source)
@@ -1879,21 +1741,28 @@ namespace Potato::Reg
 		return Output.size() - OldSize;
 	}
 
-	std::size_t SerilizeTableWrapper::CalculateRequireSpaceWithStanderT(DFATable const& Tab)
+	std::vector<std::size_t> Records; 
+
+	std::size_t TableWrapper::CalculateRequireSpaceWithStanderT(DFA const& Tab)
 	{
 		Misc::SerilizerHelper::Predicter<StandardT> Pred;
 		Pred.WriteElement();
 		for (auto& Ite : Tab.Nodes)
 		{
+			Records.push_back(Pred.RequireSpace());
 			Pred.WriteObject<ZipNode>();
-			CalEdgeSize(Pred, std::span(Ite.KeepAcceptableEdges));
 			CalEdgeSize(Pred, std::span(Ite.Edges));
+			CalEdgeSize(Pred, std::span(Ite.KeepAcceptableEdges));
 		}
 		return Pred.RequireSpace();
 	}
 
-	std::size_t SerilizeTableWrapper::SerilizeTo(DFATable const& Tab, std::span<StandardT> Source)
+	std::size_t TableWrapper::SerilizeTo(DFA const& Tab, std::span<StandardT> Source)
 	{
+
+		std::vector<std::size_t> RecordsTime;
+
+
 		assert(CalculateRequireSpaceWithStanderT(Tab) <= Source.size());
 		std::vector<std::size_t> NodeOffetMapping;
 		NodeOffetMapping.reserve(Tab.Nodes.size());
@@ -1929,15 +1798,18 @@ namespace Potato::Reg
 		Misc::SerilizerHelper::SpanWriter<StandardT> Serilizer(Source);
 		auto NodeNumber = Serilizer.NewElement();
 		Serilizer.CrossTypeSetThrow<Exception::RegexOutOfRange>(*NodeNumber, Tab.Nodes.size(), RegexOutOfRange::TypeT::NodeCount, Tab.Nodes.size());
-		
+		int NodeIndex =  0;
 		for (auto& Ite : Tab.Nodes)
 		{
+			RecordsTime.push_back(Serilizer.GetIteSpacePositon());
 			NodeOffetMapping.push_back(Serilizer.GetIteSpacePositon());
 			auto Node = Serilizer.NewObject<ZipNode>();
 			Serilizer.CrossTypeSetThrow<RegexOutOfRange>(Node->EdgeCount, Ite.Edges.size(), RegexOutOfRange::TypeT::EdgeCount, Ite.Edges.size());
 			std::size_t EdgeStartOffset = Serilizer.GetIteSpacePositon();
-			auto SerilizeEdge = [&](std::span<DFATable::Edge const> Edges)
+			int EdgeIndex = 0;
+			auto SerilizeEdge = [&](std::span<DFA::Edge const> Edges)
 			{
+				EdgeIndex += 1;
 				ZipEdge* LastEdge = nullptr;
 				std::size_t LastEdgeBegin = 0;
 				for (auto& Ite : Edges)
@@ -1964,6 +1836,7 @@ namespace Potato::Reg
 					Records.push_back({Span, std::span(Ite.ToIndex)});
 				}
 			};
+			NodeIndex += 1;
 
 			SerilizeEdge(Ite.Edges);
 			
@@ -1975,6 +1848,7 @@ namespace Potato::Reg
 			else {
 				std::size_t Offset = Serilizer.GetIteSpacePositon();
 				Serilizer.CrossTypeSetThrow<RegexOutOfRange>(Node->AcceptEdgeOffset, Offset - EdgeStartOffset, RegexOutOfRange::TypeT::EdgeOffset, Offset - EdgeStartOffset);
+				EdgeIndex = 0;
 				SerilizeEdge(Ite.KeepAcceptableEdges);
 			}
 		}
@@ -1998,7 +1872,7 @@ namespace Potato::Reg
 		return Serilizer.GetIteSpacePositon();
 	}
 
-	std::vector<StandardT> SerilizeTableWrapper::Create(DFATable const& Tab)
+	std::vector<StandardT> TableWrapper::Create(DFA const& Tab)
 	{
 		std::vector<StandardT> Buffer;
 		Buffer.resize(CalculateRequireSpaceWithStanderT(Tab));
@@ -2099,9 +1973,9 @@ namespace Potato::Reg
 		CoreProcessor::AcceptResult AcceptData;
 	};
 
-	ApplyActionResult ApplyAction(std::span<DFATable::ActionT const> Actions, std::span<StandardT const> Parameter, ProcessorContent& Target, ProcessorContent const& Source,  std::size_t TokenIndex, bool ContentNeedChange)
+	ApplyActionResult ApplyAction(std::span<DFA::ActionT const> Actions, std::span<StandardT const> Parameter, ProcessorContent& Target, ProcessorContent const& Source,  std::size_t TokenIndex, bool ContentNeedChange)
 	{
-		using ActionT = DFATable::ActionT;
+		using ActionT = DFA::ActionT;
 		std::size_t CounterDeep = 1;
 		std::optional<std::size_t> CorrentBlockIndex;
 		bool CounterTestPass = true;
@@ -2344,7 +2218,7 @@ namespace Potato::Reg
 		
 	}
 
-	auto CoreProcessor::ConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeIndex, DFATable const& Table, char32_t Symbol, std::size_t TokenIndex, bool KeepAccept) -> std::optional<Result>
+	auto CoreProcessor::ConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeIndex, DFA const& Table, char32_t Symbol, std::size_t TokenIndex, bool KeepAccept) -> std::optional<Result>
 	{
 		assert(CurNodeIndex < Table.Nodes.size());
 
@@ -2388,7 +2262,63 @@ namespace Potato::Reg
 		return {};
 	}
 
-	auto CoreProcessor::KeepAcceptConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeIndex, DFATable const& Table, char32_t Symbol, std::size_t TokenIndex) ->KeepAcceptResult
+	bool AcceptConsumeSymbol(std::span<TableWrapper::ZipChar const> Source, char32_t Symbol)
+	{
+		while (!Source.empty())
+		{
+			auto Cur = Source[0];
+			if (Cur.IsSingleChar)
+			{
+				if(Symbol == Cur.Char)
+					return true;
+				Source = Source.subspan(1);
+			}
+			else {
+				assert(Source.size() >= 2);
+				assert(!Source[1].IsSingleChar);
+				if (Symbol >= Cur.Char && Symbol < Source[1].Char)
+					return true;
+				Source = Source.subspan(2);
+			}
+		}
+		return false;
+	}
+
+	auto CoreProcessor::ConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeOffset, TableWrapper Wrapper, char32_t Symbol, std::size_t TokenIndex, bool KeepAccept) ->std::optional<Result>
+	{
+		assert(CurNodeOffset < Wrapper.BufferSize());
+
+		auto IteSpan = Wrapper.Wrapper.subspan(CurNodeOffset);
+
+		Misc::SerilizerHelper::SpanReader<StandardT const> Reader(IteSpan);
+
+		auto CurNode = Reader.ReadObject<TableWrapper::ZipNode>();
+		if (CurNode->EdgeCount != 0)
+		{
+			TableWrapper::ZipEdge* Edge = nullptr;
+			if (KeepAccept)
+				Reader = Reader.SubSpan(CurNode->AcceptEdgeOffset);
+			Edge = Reader.ReadObject<TableWrapper::ZipEdge>();
+			auto EdgeReader = Reader;
+			assert(Edge != nullptr);
+			while (Edge != nullptr)
+			{
+				auto Symbols = EdgeReader.ReadObjectArray<TableWrapper::ZipChar const>(Edge->ConsumeSymbolCount);
+				assert(Symbols.has_value());
+				if (AcceptConsumeSymbol(*Symbols, Symbol))
+				{
+					auto List = EdgeReader.ReadObjectArray<DFA::ActionT const>(Edge->ActionCount);
+					auto Par = EdgeReader.ReadObjectArray<StandardT const>(Edge->ParmaterCount);
+					auto ToIndex = EdgeReader.ReadObjectArray<StanderT const>(Edge->ToIndex);
+				}
+			}
+			volatile int o  =0;
+		}
+		return {};
+	}
+
+
+	auto CoreProcessor::KeepAcceptConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeIndex, DFA const& Table, char32_t Symbol, std::size_t TokenIndex) ->KeepAcceptResult
 	{
 		assert(CurNodeIndex < Table.Nodes.size());
 
@@ -2434,7 +2364,7 @@ namespace Potato::Reg
 		return KAResult;
 	}
 
-	bool DFATableMatchProcessor::ConsymeSymbol(char32_t Symbol, std::size_t TokenIndex)
+	bool DFAMatchProcessor::ConsymeSymbol(char32_t Symbol, std::size_t TokenIndex)
 	{
 		assert(Symbol != 0);
 		TempBuffer.Clear();
@@ -2450,7 +2380,7 @@ namespace Potato::Reg
 		return false;
 	}
 
-	auto DFATableMatchProcessor::EndOfFile(std::size_t TokenIndex) ->std::optional<Result>
+	auto DFAMatchProcessor::EndOfFile(std::size_t TokenIndex) ->std::optional<Result>
 	{
 		TempBuffer.Clear();
 		auto Re = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, Tables, Reg::EndOfFile(), TokenIndex, false);
@@ -2470,14 +2400,14 @@ namespace Potato::Reg
 		return {};
 	}
 
-	void DFATableMatchProcessor::Clear()
+	void DFAMatchProcessor::Clear()
 	{
-		NodeIndex = DFATable::StartupNode();
+		NodeIndex = DFA::StartupNode();
 		Contents.Clear();
 		TempBuffer.Clear();
 	}
 
-	auto DFATableHeadMatchProcessor::ConsymeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy) -> std::optional<std::optional<Result>>
+	auto DFAHeadMatchProcessor::ConsymeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy) -> std::optional<std::optional<Result>>
 	{
 		TempBuffer.Clear();
 		auto Re1 = CoreProcessor::KeepAcceptConsumeSymbol(TempBuffer, Contents, NodeIndex, Tables, Symbol, TokenIndex);
@@ -2527,7 +2457,7 @@ namespace Potato::Reg
 		}
 	}
 
-	auto DFATableHeadMatchProcessor::EndOfFile(std::size_t TokenIndex) ->std::optional<Result>
+	auto DFAHeadMatchProcessor::EndOfFile(std::size_t TokenIndex) ->std::optional<Result>
 	{
 		TempBuffer.Clear();
 		auto Re1 = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, Tables, Reg::EndOfFile(), TokenIndex, true);
@@ -2560,15 +2490,15 @@ namespace Potato::Reg
 		}
 	}
 
-	void DFATableHeadMatchProcessor::Clear()
+	void DFAHeadMatchProcessor::Clear()
 	{
 		Contents.Clear();
 		TempBuffer.Clear();
 		CacheResult.reset();
-		NodeIndex = DFATable::StartupNode();
+		NodeIndex = DFA::StartupNode();
 	}
 
-	auto Match(DFATableMatchProcessor& Pro, std::u32string_view Str)->std::optional<DFATableMatchProcessor::Result>
+	auto Match(DFAMatchProcessor& Pro, std::u32string_view Str)->std::optional<DFAMatchProcessor::Result>
 	{
 		for (std::size_t I = 0; I < Str.size(); ++I)
 		{
@@ -2578,7 +2508,7 @@ namespace Potato::Reg
 		return Pro.EndOfFile(Str.size());
 	}
 	
-	auto HeadMatch(DFATableHeadMatchProcessor& Pro, std::u32string_view Str, bool Greedy)->std::optional<DFATableHeadMatchProcessor::Result>
+	auto HeadMatch(DFAHeadMatchProcessor& Pro, std::u32string_view Str, bool Greedy)->std::optional<DFAHeadMatchProcessor::Result>
 	{
 		for (std::size_t I = 0; I < Str.size(); ++I)
 		{
@@ -2597,7 +2527,7 @@ namespace Potato::Reg
 
 	
 
-	//std::optional<KeepAcceptResult> KeepAcceptConsumeSymbol(Content& Content, std::size_t CurNodeIndex, DFATable const& Table, char32_t Symbol, std::size_t TokenIndex);
+	//std::optional<KeepAcceptResult> KeepAcceptConsumeSymbol(Content& Content, std::size_t CurNodeIndex, DFA const& Table, char32_t Symbol, std::size_t TokenIndex);
 
 	/*
 	std::size_t TranslateIntervalT(std::span<IntervalT const> Source, std::vector<TableWrapper::ZipChar>& Output)
