@@ -288,10 +288,15 @@ namespace Potato::Misc
 		};
 
 		template<typename StorageT>
-		struct SpanWriter
+		struct SpanReader
 		{
 
-			SpanWriter(std::span<StorageT> Buffer) : TotalBuffer(Buffer), IteBuffer(Buffer) {}
+			template<typename Type>
+			using AddConst = std::conditional_t<std::is_const_v<StorageT>, std::add_const_t<Type>, Type>;
+
+			SpanReader(std::span<StorageT> Buffer) : TotalBuffer(Buffer), IteBuffer(Buffer) {}
+			SpanReader SubSpan(std::size_t Index) const { auto New = *this; New.IteBuffer = IteBuffer.subspan(Index); return New; }
+			SpanReader& operator=(SpanReader const&) = default;
 
 			std::span<StorageT> TotalBuffer;
 			std::span<StorageT> IteBuffer;
@@ -299,7 +304,7 @@ namespace Potato::Misc
 			std::size_t GetIteSpacePositon() const { return TotalBuffer.size() - IteBuffer.size(); }
 
 			template<typename Type>
-			Type* WriteObject(Type const& Ite) requires(std::is_standard_layout_v<Type>)
+			Type* NewObject(Type const& Ite) requires(std::is_standard_layout_v<Type> && !std::is_const_v<StorageT>)
 			{
 				std::size_t AlignedLength = Predicter<StorageT>::template Object<Type>();
 				if (AlignedLength <= IteBuffer.size())
@@ -312,32 +317,7 @@ namespace Potato::Misc
 			}
 
 			template<typename Type>
-			std::span<Type> WriteObjectArray(std::span<Type const> Ite) requires(std::is_standard_layout_v<Type>)
-			{
-				std::size_t AlignedLength = Predicter<StorageT>::template ObjectArray<Type>(Ite.size());
-				std::memcpy(IteBuffer.data(), Ite.data(), Ite.size() * sizeof(std::remove_cvref_t<Type>));
-				std::span<Type> Result{ reinterpret_cast<Type*>(IteBuffer.data()), Ite .size()};
-				IteBuffer = IteBuffer.subspan(AlignedLength);
-				return Result;
-			}
-
-			template<typename Type>
-			std::span<Type> WriteObjectArray(std::span<Type> Ite) requires(std::is_standard_layout_v<Type>)
-			{
-				return WriteObjectArray(std::span<Type const>{Ite});
-			}
-
-			template<typename Type>
-			std::span<Type> NewObjectArray(std::size_t Count) requires(std::is_standard_layout_v<Type>)
-			{
-				std::size_t AlignedLength = Predicter<StorageT>::template ObjectArray<Type>(Count);
-				std::span<Type> Result{ reinterpret_cast<Type*>(IteBuffer.data()), Count };
-				IteBuffer = IteBuffer.subspan(AlignedLength);
-				return Result;
-			}
-
-			template<typename Type>
-			Type* NewObject() requires(std::is_standard_layout_v<Type>)
+			Type* NewObject() requires(std::is_standard_layout_v<Type> && !std::is_const_v<StorageT>)
 			{
 				std::size_t AlignedLength = Predicter<StorageT>::template Object<Type>();
 				if (AlignedLength <= IteBuffer.size())
@@ -349,7 +329,46 @@ namespace Potato::Misc
 				return nullptr;
 			}
 
-			StorageT* NewElement() {
+			template<typename Type>
+			std::optional<std::span<Type>> NewObjectArray(std::span<Type const> Ite) requires(std::is_standard_layout_v<Type> && !std::is_const_v<StorageT>)
+			{
+				std::size_t AlignedLength = Predicter<StorageT>::template ObjectArray<Type>(Ite.size());
+				if (AlignedLength <= IteBuffer.size())
+				{
+					std::memcpy(IteBuffer.data(), Ite.data(), Ite.size() * sizeof(std::remove_cvref_t<Type>));
+					std::span<Type> Result{ reinterpret_cast<Type*>(IteBuffer.data()), Ite.size() };
+					IteBuffer = IteBuffer.subspan(AlignedLength);
+					return Result;
+				}
+				else {
+					return {};
+				}
+			}
+
+			template<typename Type>
+			std::optional<std::span<Type>> NewObjectArray(std::span<Type> Ite) requires(std::is_standard_layout_v<Type> && !std::is_const_v<StorageT>)
+			{
+				return NewObjectArray(std::span<Type const>{Ite});
+			}
+
+			template<typename Type>
+			std::optional<std::span<Type>> NewObjectArray(std::size_t Count) requires(std::is_standard_layout_v<Type> && !std::is_const_v<StorageT>)
+			{
+				std::size_t AlignedLength = Predicter<StorageT>::template ObjectArray<Type>(Count);
+				if (AlignedLength <= IteBuffer.size())
+				{
+					new (IteBuffer.data()) Type[Count];
+					std::span<Type> Result{ reinterpret_cast<Type*>(IteBuffer.data()), Count };
+					IteBuffer = IteBuffer.subspan(AlignedLength);
+					return Result;
+				}
+				else {
+					return {};
+				}
+			}
+			
+
+			StorageT* NewElement() requires(!std::is_const_v<StorageT>) {
 				auto Re = IteBuffer.data();
 				IteBuffer = IteBuffer.subspan(1);
 				return Re;
@@ -369,19 +388,8 @@ namespace Potato::Misc
 					throw ExceptableT{std::forward<Par>(Pars)...};
 			}
 
-
-		};
-
-		template<typename StorageT>
-		struct SpanReader
-		{
-			SpanReader(std::span<StorageT> Buffer) : Buffer(Buffer), IteBuffer(Buffer) {}
-			SpanReader(SpanReader const& Reader) = default;
-			SpanReader SubSpan(std::size_t Index) const { auto New = *this; New.IteBuffer = IteBuffer.subspan(Index); return New; }
-			SpanReader& operator=(SpanReader const&) = default;
-			
-			StorageT* ReadElement(){ 
-				if(IteBuffer.size() >= 1)
+			StorageT* ReadElement() {
+				if (IteBuffer.size() >= 1)
 				{
 					auto Buffer = reinterpret_cast<StorageT*>(IteBuffer.data());
 					IteBuffer = IteBuffer.subspan(1);
@@ -389,15 +397,15 @@ namespace Potato::Misc
 				}
 				return nullptr;
 			}
-
+			
 			template<typename Type>
-			Type* ReadObject()
+			AddConst<Type>* ReadObject()
 			{
 				auto RS = Predicter<StorageT>::template Object<Type>();
 
 				if (RS <= IteBuffer.size())
 				{
-					auto Buffer = reinterpret_cast<Type*>(IteBuffer.data());
+					auto Buffer = reinterpret_cast<AddConst<Type>*>(IteBuffer.data());
 					IteBuffer = IteBuffer.subspan(RS);
 					return Buffer;
 				}
@@ -405,23 +413,18 @@ namespace Potato::Misc
 			}
 
 			template<typename Type>
-			std::optional<std::span<Type>> ReadObjectArray(std::size_t Count)
+			std::optional<std::span<AddConst<Type>>> ReadObjectArray(std::size_t Count)
 			{
 				auto RS = Predicter<StorageT>::template ObjectArray<Type>(Count);
 
 				if (RS <= IteBuffer.size())
 				{
-					auto Buffer = std::span<Type>{reinterpret_cast<Type*>(IteBuffer.data()), Count};
+					auto Buffer = std::span<AddConst<Type>>{ reinterpret_cast<AddConst<Type>*>(IteBuffer.data()), Count };
 					IteBuffer = IteBuffer.subspan(RS);
 					return Buffer;
 				}
 				return {};
 			}
-			
-			std::span<StorageT> Buffer;
-			std::span<StorageT> IteBuffer;
-			
-
 		};
 
 	};

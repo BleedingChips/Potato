@@ -1,13 +1,20 @@
 ﻿#include "Potato/Public/PotatoReg.h"
 #include "TestingTypes.h"
 #include <string_view>
+#include <set>
 using namespace Potato::Reg;
 
 
 void TestingReg()
 {
-
+	/*
 	// Case 1
+	std::set<std::size_t> Nums;
+	for(std::size_t I = 0; I < 100; ++I)
+		Nums.insert(I);
+	Nums.erase(90);
+
+	volatile int i233 = Nums.size();
 
 	{
 		DFA Tab1(UR"(abcd)", false, {2});
@@ -102,6 +109,57 @@ void TestingReg()
 			throw UnpassedUnit{ "Testing Reg Fauilt Case 4" };
 		}
 	}
+	*/
+
+	// Case 5
+	{
+		MulityRegCreater Crea;
+		Crea.LowPriorityLink(UR"(a)", true, { 0 });
+		Crea.LowPriorityLink(UR"([a-z]+)", false, { 2 });
+		auto DFA = *Crea.GenerateNFA();
+		std::u32string_view Str = UR"(aa)";
+		auto Re = HeadMatch(DFA, Str, true);
+		volatile int i = 0;
+	}
+
+	/*
+	// Case 5
+
+	{
+		MulityRegCreater Crea;
+		Crea.LowPriorityLink(UR"(what)", true, {0});
+		Crea.LowPriorityLink(UR"(if)", true, { 1 });
+		Crea.LowPriorityLink(UR"([a-z]+)", false, { 2 });
+		Crea.LowPriorityLink(UR"(\s+)", false, { 3 });
+
+		auto DFA = *Crea.GenerateNFA();
+
+		std::u32string_view Str = UR"(what whatif  if abd def)";
+
+		std::u32string_view S = Str;
+
+		std::vector<std::u32string_view> List;
+
+		while (!S.empty())
+		{
+			auto Re = HeadMatch(DFA, S, true);
+			if (!Re.has_value())
+			{
+				throw UnpassedUnit{ "Testing Reg Fauilt Case 5" };
+			}
+			else {
+				List.push_back(S.substr(0, Re->MainCapture.Count()));
+				S = S.substr(Re->MainCapture.Count());
+			}
+		}
+
+		if (List.size() != 9)
+		{
+			throw UnpassedUnit{ "Testing Reg Fauilt Case 5" };
+		}
+
+	}
+	*/
 
 
 	//Crerator.AddRegex(UR"((a){1,4})", { 2 }, Crerator.GetCountedUniqueID());

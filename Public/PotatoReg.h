@@ -218,6 +218,14 @@ namespace Potato::Reg
 		std::span<StandardT const> Wrapper;
 	};
 
+	struct Table
+	{
+		Table(std::u32string_view Str, bool IsRow, Accept AcceptData) : SerializeBuffer(TableWrapper::Create(Str, IsRow, AcceptData)) {}
+		TableWrapper AsWrapper() const { return TableWrapper{ SerializeBuffer }; };
+	protected:
+		std::vector<StandardT> SerializeBuffer;
+	};
+
 	struct CaptureWrapper
 	{
 		CaptureWrapper() = default;
@@ -296,6 +304,58 @@ namespace Potato::Reg
 		static KeepAcceptResult KeepAcceptConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeOffset, TableWrapper Wrapper, char32_t Symbol, std::size_t TokenIndex);
 	};
 
+	struct MatchProcessor
+	{
+		struct Result
+		{
+			std::vector<Capture> SubCaptures;
+			Accept AcceptData;
+			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ SubCaptures }; }
+		};
+
+		MatchProcessor(std::size_t StartupNode) : NodeIndex(StartupNode) {}
+		MatchProcessor(MatchProcessor const&) = default;
+
+		bool ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, 
+			std::optional<CoreProcessor::Result>(*Fun)(void* Data, ProcessorContent& Target, ProcessorContent const& Source, std::size_t NodeIndex, char32_t Symbol, std::size_t TokenIndex),
+			void* Data
+			);
+
+		std::optional<Result> EndOfFile(std::size_t TokenIndex, 
+			std::optional<CoreProcessor::Result>(*Fun)(void* Data, ProcessorContent& Target, ProcessorContent const& Source, std::size_t NodeIndex, char32_t Symbol, std::size_t TokenIndex),
+			void* Data, std::size_t StartupNodeIndex
+		);
+
+		void Clear(std::size_t StartupNodeIndex);
+
+		ProcessorContent Contents;
+		ProcessorContent TempBuffer;
+		std::size_t NodeIndex = 0;
+	};
+
+	struct DFAMatchProcessor : protected MatchProcessor
+	{
+		struct Result
+		{
+			std::vector<Capture> SubCaptures;
+			Accept AcceptData;
+			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ SubCaptures }; }
+		};
+
+		DFAMatchProcessor(DFA const& Tables) : Tables(Tables), MatchProcessor(DFA::StartupNode()) {}
+		DFAMatchProcessor(DFAMatchProcessor const&) = default;
+		bool ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex) {
+			return MatchProcessor::ConsumeSymbol(Symbol, TokenIndex, [](void* This, ProcessorContent& Target, ProcessorContent const& Source, std::size_t NodeIndex, char32_t Symbol, std::size_t TokenIndex) -> std::optional<CoreProcessor::Result> {
+				return CoreProcessor::
+			}, this);
+		}
+		std::optional<Result> EndOfFile(std::size_t TokenIndex);
+		void Clear();
+	protected:
+		DFA const& Tables;
+	};
+
+	/*
 	struct DFAMatchProcessor
 	{
 		struct Result
@@ -316,6 +376,7 @@ namespace Potato::Reg
 		std::size_t NodeIndex = 0;
 		DFA const& Tables;
 	};
+	*/
 
 	struct TableMatchProcessor
 	{
@@ -399,14 +460,32 @@ namespace Potato::Reg
 	inline auto HeadMatch(DFA const& Table, std::u32string_view Str, bool Greddy = false)->std::optional<DFAHeadMatchProcessor::Result>
 	{
 		DFAHeadMatchProcessor Pro{ Table };
-		return HeadMatch(Pro, Str);
+		return HeadMatch(Pro, Str, Greddy);
 	}
 	auto HeadMatch(TableHeadMatchProcessor& Table, std::u32string_view Str, bool Greddy = false)->std::optional<TableHeadMatchProcessor::Result>;
 	inline auto HeadMatch(TableWrapper Table, std::u32string_view Str, bool Greddy = false)->std::optional<TableHeadMatchProcessor::Result>
 	{
 		TableHeadMatchProcessor Pro{ Table };
-		return HeadMatch(Pro, Str);
+		return HeadMatch(Pro, Str, Greddy);
 	}
+
+	struct MulityRegCreater
+	{
+		MulityRegCreater() = default;
+		MulityRegCreater(MulityRegCreater const&) = default;
+		MulityRegCreater(MulityRegCreater &&) = default;
+		MulityRegCreater& operator= (MulityRegCreater const&)  = default;
+		MulityRegCreater& operator= (MulityRegCreater &&) = default;
+
+		MulityRegCreater(std::u32string_view Str, bool IsRow, Accept Acce) : ETable(EpsilonNFA::Create(Str, IsRow, Acce)) {}
+		void LowPriorityLink(std::u32string_view Str, bool IsRow, Accept Acce);
+		std::optional<DFA> GenerateNFA() const;
+		std::optional<std::vector<StandardT>> GenerateTableBuffer() const;
+
+	protected:
+
+		std::optional<EpsilonNFA> ETable;
+	};
 
 	
 

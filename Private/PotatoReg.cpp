@@ -1795,7 +1795,7 @@ namespace Potato::Reg
 			Records.reserve(Count);
 		}
 
-		Misc::SerilizerHelper::SpanWriter<StandardT> Serilizer(Source);
+		Misc::SerilizerHelper::SpanReader<StandardT> Serilizer(Source);
 		auto NodeNumber = Serilizer.NewElement();
 		Serilizer.CrossTypeSetThrow<Exception::RegexOutOfRange>(*NodeNumber, Tab.Nodes.size(), RegexOutOfRange::TypeT::NodeCount, Tab.Nodes.size());
 		int NodeIndex =  0;
@@ -1829,11 +1829,11 @@ namespace Potato::Reg
 					TempZipBuffer.clear();
 					TranslateIntervalT(std::span(Ite.ConsumeSymbols), TempZipBuffer);
 					Serilizer.CrossTypeSetThrow<RegexOutOfRange>(Edge->ConsumeSymbolCount, TempZipBuffer.size(), RegexOutOfRange::TypeT::AcceptableCharCount, TempZipBuffer.size());
-					Serilizer.WriteObjectArray(std::span(TempZipBuffer));
-					Serilizer.WriteObjectArray(std::span(Ite.List));
-					Serilizer.WriteObjectArray(std::span(Ite.Parameter));
+					Serilizer.NewObjectArray(std::span(TempZipBuffer));
+					Serilizer.NewObjectArray(std::span(Ite.List));
+					Serilizer.NewObjectArray(std::span(Ite.Parameter));
 					auto Span = Serilizer.NewObjectArray<StandardT>(Ite.ToIndex.size());
-					Records.push_back({Span, std::span(Ite.ToIndex)});
+					Records.push_back({*Span, std::span(Ite.ToIndex)});
 				}
 			};
 			NodeIndex += 1;
@@ -1876,7 +1876,7 @@ namespace Potato::Reg
 	{
 		std::vector<StandardT> Buffer;
 		Buffer.resize(CalculateRequireSpaceWithStanderT(Tab));
-		SerilizeTo(Tab, std::span(Buffer));
+		SerializeTo(Tab, std::span(Buffer));
 		return Buffer;
 	}
 
@@ -2202,7 +2202,7 @@ namespace Potato::Reg
 					if (CounterTestPass && !Result.AcceptData)
 					{
 						assert(CorrentBlockIndex.has_value());
-						assert(Parameter.size() >= 2);
+						assert(Parameter.size() >= 1);
 						Result.AcceptData.CaptureSpan = CacheCaptureIndex;
 						Result.AcceptData.AcceptData = { Parameter[0] };
 					}
@@ -2443,6 +2443,58 @@ namespace Potato::Reg
 		return KAResult;
 	}
 
+	bool MatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex,
+		std::optional<CoreProcessor::Result>(*Fun)(void* Data, ProcessorContent& Target, ProcessorContent const& Source, std::size_t NodeIndex, char32_t Symbol, std::size_t TokenIndex), 
+		void* Data
+	)
+	{
+		assert(Fun != nullptr);
+		assert(Symbol != 0);
+		TempBuffer.Clear();
+		auto Re = Fun(Data, TempBuffer, Contents, NodeIndex, Symbol, TokenIndex);
+		if (Re.has_value())
+		{
+			assert(!Re->AcceptData);
+			NodeIndex = Re->NextNodeIndex;
+			if (Re->ContentNeedChange)
+				std::swap(TempBuffer, Contents);
+			return true;
+		}
+		return false;
+	}
+
+	auto MatchProcessor::EndOfFile(std::size_t TokenIndex,
+		std::optional<CoreProcessor::Result>(*Fun)(void* Data, ProcessorContent& Target, ProcessorContent const& Source, std::size_t NodeIndex, char32_t Symbol, std::size_t TokenIndex), 
+		void* Data, 
+		std::size_t StartupNodeIndex
+	) ->std::optional<Result>
+	{
+		TempBuffer.Clear();
+		auto Re = Fun(Data, TempBuffer, Contents, NodeIndex, Reg::EndOfFile(), TokenIndex);
+		if (Re.has_value())
+		{
+			assert(Re->AcceptData);
+			Result NRe;
+			NRe.AcceptData = *Re->AcceptData.AcceptData;
+			auto Span = Re->AcceptData.CaptureSpan.Slice(Contents.CaptureBlocks);
+			for (auto Ite : Span)
+			{
+				NRe.SubCaptures.push_back(Ite.CaptureData);
+			}
+			Clear(StartupNodeIndex);
+			return NRe;
+		}
+		return {};
+	}
+
+	void MatchProcessor::Clear(std::size_t StartupNodeIndex)
+	{
+		NodeIndex = StartupNodeIndex;
+		Contents.Clear();
+		TempBuffer.Clear();
+	}
+
+	/*
 	bool DFAMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex)
 	{
 		assert(Symbol != 0);
@@ -2485,6 +2537,7 @@ namespace Potato::Reg
 		Contents.Clear();
 		TempBuffer.Clear();
 	}
+	*/
 
 	bool TableMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex)
 	{
@@ -2620,6 +2673,97 @@ namespace Potato::Reg
 		NodeIndex = DFA::StartupNode();
 	}
 
+	auto TableHeadMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy) -> std::optional<std::optional<Result>>
+	{
+		TempBuffer.Clear();
+		auto Re1 = CoreProcessor::KeepAcceptConsumeSymbol(TempBuffer, Contents, NodeOffset, Wrapper, Symbol, TokenIndex);
+		if (Re1.AcceptData)
+		{
+			Result Re;
+			if (CacheResult.has_value())
+			{
+				Re = std::move(*CacheResult);
+				CacheResult.reset();
+			}
+			Re.AcceptData = *Re1.AcceptData.AcceptData;
+			std::span<ProcessorContent::CaptureBlock const> Span = Re1.ContentNeedChange ? std::span(TempBuffer.CaptureBlocks) : std::span(Contents.CaptureBlocks);
+			Re.SubCaptures.clear();
+			for (auto Ite : Span)
+				Re.SubCaptures.push_back(Ite.CaptureData);
+			Re.MainCapture = { 0, TokenIndex };
+			CacheResult = std::move(Re);
+
+			if (!Greedy && !Re1.MeetAcceptRequireConsume)
+			{
+				auto Re = std::move(CacheResult);
+				Clear();
+				return Re;
+			}
+		}
+
+		auto Re2 = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeOffset, Wrapper, Symbol, TokenIndex, true);
+		if (Re2.has_value())
+		{
+			assert(!Re2->AcceptData);
+			NodeOffset = Re2->NextNodeIndex;
+			if (Re2->ContentNeedChange)
+				std::swap(TempBuffer, Contents);
+			return std::optional<Result>{};
+		}
+		else {
+			if (CacheResult.has_value())
+			{
+				auto Re = std::move(CacheResult);
+				Clear();
+				return Re;
+			}
+			else {
+				return {};
+			}
+		}
+	}
+
+	auto TableHeadMatchProcessor::EndOfFile(std::size_t TokenIndex) ->std::optional<Result>
+	{
+		TempBuffer.Clear();
+		auto Re1 = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeOffset, Wrapper, Reg::EndOfFile(), TokenIndex, true);
+		if (Re1.has_value())
+		{
+			assert(Re1->AcceptData);
+			Result Re;
+			if (CacheResult.has_value())
+			{
+				Re = std::move(*CacheResult);
+				CacheResult.reset();
+			}
+			Re.AcceptData = *Re1->AcceptData.AcceptData;
+			std::span<ProcessorContent::CaptureBlock const> Span = Re1->ContentNeedChange ? std::span(TempBuffer.CaptureBlocks) : std::span(Contents.CaptureBlocks);
+			Re.SubCaptures.clear();
+			for (auto Ite : Span)
+				Re.SubCaptures.push_back(Ite.CaptureData);
+			Re.MainCapture = { 0, TokenIndex };
+			Clear();
+			return Re;
+		}
+		if (CacheResult.has_value())
+		{
+			Result Re = std::move(*CacheResult);
+			Clear();
+			return Re;
+		}
+		else {
+			return {};
+		}
+	}
+
+	void TableHeadMatchProcessor::Clear()
+	{
+		Contents.Clear();
+		TempBuffer.Clear();
+		CacheResult.reset();
+		NodeOffset = TableWrapper::StartupNode();
+	}
+
 	auto Match(DFAMatchProcessor& Pro, std::u32string_view Str)->std::optional<DFAMatchProcessor::Result>
 	{
 		for (std::size_t I = 0; I < Str.size(); ++I)
@@ -2655,6 +2799,56 @@ namespace Potato::Reg
 				return {};
 		}
 		return Pro.EndOfFile(Str.size());
+	}
+
+	auto HeadMatch(TableHeadMatchProcessor& Pro, std::u32string_view Str, bool Greedy)->std::optional<TableHeadMatchProcessor::Result>
+	{
+		for (std::size_t I = 0; I < Str.size(); ++I)
+		{
+			auto Re = Pro.ConsumeSymbol(Str[I], I, Greedy);
+			if (Re.has_value())
+			{
+				if (Re->has_value())
+				{
+					return **Re;
+				}
+			}
+			else
+				break;
+		}
+		return Pro.EndOfFile(Str.size());
+	}
+
+	void MulityRegCreater::LowPriorityLink(std::u32string_view Str, bool IsRow, Accept Acce)
+	{
+		if (ETable.has_value())
+		{
+			ETable->Link(EpsilonNFA::Create(Str, IsRow, Acce));
+		}
+		else {
+			ETable = EpsilonNFA::Create(Str, IsRow, Acce);
+		}
+	}
+
+	std::optional<DFA> MulityRegCreater::GenerateNFA() const
+	{
+		if (ETable.has_value())
+		{
+			return DFA{*ETable};
+		}
+		else {
+			return {};
+		}
+	}
+
+	std::optional<std::vector<StandardT>> MulityRegCreater::GenerateTableBuffer() const
+	{
+		auto DFA = GenerateNFA();
+		if (DFA.has_value())
+		{
+			return TableWrapper::Create(*DFA);
+		}
+		return {};
 	}
 
 	
