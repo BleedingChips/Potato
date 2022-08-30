@@ -2443,50 +2443,6 @@ namespace Potato::Reg
 		return KAResult;
 	}
 
-	bool MatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex,
-		std::optional<CoreProcessor::Result>(*Fun)(void* Data, ProcessorContent& Target, ProcessorContent const& Source, std::size_t NodeIndex, char32_t Symbol, std::size_t TokenIndex), 
-		void* Data
-	)
-	{
-		assert(Fun != nullptr);
-		assert(Symbol != 0);
-		TempBuffer.Clear();
-		auto Re = Fun(Data, TempBuffer, Contents, NodeIndex, Symbol, TokenIndex);
-		if (Re.has_value())
-		{
-			assert(!Re->AcceptData);
-			NodeIndex = Re->NextNodeIndex;
-			if (Re->ContentNeedChange)
-				std::swap(TempBuffer, Contents);
-			return true;
-		}
-		return false;
-	}
-
-	auto MatchProcessor::EndOfFile(std::size_t TokenIndex,
-		std::optional<CoreProcessor::Result>(*Fun)(void* Data, ProcessorContent& Target, ProcessorContent const& Source, std::size_t NodeIndex, char32_t Symbol, std::size_t TokenIndex), 
-		void* Data, 
-		std::size_t StartupNodeIndex
-	) ->std::optional<Result>
-	{
-		TempBuffer.Clear();
-		auto Re = Fun(Data, TempBuffer, Contents, NodeIndex, Reg::EndOfFile(), TokenIndex);
-		if (Re.has_value())
-		{
-			assert(Re->AcceptData);
-			Result NRe;
-			NRe.AcceptData = *Re->AcceptData.AcceptData;
-			auto Span = Re->AcceptData.CaptureSpan.Slice(Contents.CaptureBlocks);
-			for (auto Ite : Span)
-			{
-				NRe.SubCaptures.push_back(Ite.CaptureData);
-			}
-			Clear(StartupNodeIndex);
-			return NRe;
-		}
-		return {};
-	}
-
 	void MatchProcessor::Clear(std::size_t StartupNodeIndex)
 	{
 		NodeIndex = StartupNodeIndex;
@@ -2539,6 +2495,7 @@ namespace Potato::Reg
 	}
 	*/
 
+	/*
 	bool TableMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex)
 	{
 		assert(Symbol != 0);
@@ -2581,7 +2538,17 @@ namespace Potato::Reg
 		Contents.Clear();
 		TempBuffer.Clear();
 	}
+	*/
 
+	void HeadMatchProcessor::Clear(std::size_t StartupNodeIndex)
+	{
+		Contents.Clear();
+		TempBuffer.Clear();
+		CacheResult.reset();
+		NodeIndex = StartupNodeIndex;
+	}
+
+	/*
 	auto DFAHeadMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy) -> std::optional<std::optional<Result>>
 	{
 		TempBuffer.Clear();
@@ -2763,6 +2730,7 @@ namespace Potato::Reg
 		CacheResult.reset();
 		NodeOffset = TableWrapper::StartupNode();
 	}
+	*/
 
 	auto Match(DFAMatchProcessor& Pro, std::u32string_view Str)->std::optional<DFAMatchProcessor::Result>
 	{

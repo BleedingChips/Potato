@@ -7,15 +7,7 @@ using namespace Potato::Reg;
 
 void TestingReg()
 {
-	/*
 	// Case 1
-	std::set<std::size_t> Nums;
-	for(std::size_t I = 0; I < 100; ++I)
-		Nums.insert(I);
-	Nums.erase(90);
-
-	volatile int i233 = Nums.size();
-
 	{
 		DFA Tab1(UR"(abcd)", false, {2});
 
@@ -109,7 +101,6 @@ void TestingReg()
 			throw UnpassedUnit{ "Testing Reg Fauilt Case 4" };
 		}
 	}
-	*/
 
 	// Case 5
 	{
