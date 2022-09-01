@@ -12,7 +12,7 @@ int main()
 
 		//TestingStrEncode();
 
-		//TestingSLRX();
+		TestingSLRX();
 
 		TestingReg();
 

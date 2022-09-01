@@ -314,48 +314,9 @@ namespace Potato::Reg
 			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ SubCaptures }; }
 		};
 
+		void Clear(std::size_t StartupNodeIndex);
 		MatchProcessor(std::size_t StartupNode) : NodeIndex(StartupNode) {}
 		MatchProcessor(MatchProcessor const&) = default;
-
-		template<typename TableT>
-		bool ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, TableT& Type)
-		{
-			assert(Symbol != Reg::EndOfFile());
-			TempBuffer.Clear();
-			auto Re = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, Type, Symbol, TokenIndex, false);
-			if (Re.has_value())
-			{
-				assert(!Re->AcceptData);
-				NodeIndex = Re->NextNodeIndex;
-				if (Re->ContentNeedChange)
-					std::swap(TempBuffer, Contents);
-				return true;
-			}
-			return false;
-		}
-
-		template<typename TableT>
-		std::optional<Result> EndOfFile(std::size_t TokenIndex, TableT& Type, std::size_t StartupIndex)
-		{
-			TempBuffer.Clear();
-			auto Re = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, Type, Reg::EndOfFile(), TokenIndex, false);
-			if (Re.has_value())
-			{
-				assert(Re->AcceptData);
-				Result NRe;
-				NRe.AcceptData = *Re->AcceptData.AcceptData;
-				auto Span = Re->AcceptData.CaptureSpan.Slice(Contents.CaptureBlocks);
-				for (auto Ite : Span)
-				{
-					NRe.SubCaptures.push_back(Ite.CaptureData);
-				}
-				Clear(StartupIndex);
-				return NRe;
-			}
-			return {};
-		}
-
-		void Clear(std::size_t StartupNodeIndex);
 
 		ProcessorContent Contents;
 		ProcessorContent TempBuffer;
@@ -368,12 +329,8 @@ namespace Potato::Reg
 
 		DFAMatchProcessor(DFA const& Tables) : Tables(Tables), MatchProcessor(DFA::StartupNode()) {}
 		DFAMatchProcessor(DFAMatchProcessor const&) = default;
-		bool ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex) {
-			return MatchProcessor::ConsumeSymbol(Symbol, TokenIndex, Tables);
-		}
-		std::optional<Result> EndOfFile(std::size_t TokenIndex) {
-			return MatchProcessor::EndOfFile(TokenIndex, Tables, DFA::StartupNode());
-		}
+		bool ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex);
+		std::optional<Result> EndOfFile(std::size_t TokenIndex);
 		void Clear(){ MatchProcessor::Clear(DFA::StartupNode()); }
 	protected:
 		DFA const& Tables;
@@ -385,12 +342,8 @@ namespace Potato::Reg
 
 		TableMatchProcessor(TableWrapper Wrapper) : Wrapper(Wrapper), MatchProcessor(TableWrapper::StartupNode()) {}
 		TableMatchProcessor(TableMatchProcessor const&) = default;
-		bool ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex) {
-			return MatchProcessor::ConsumeSymbol(Symbol, TokenIndex, Wrapper);
-		}
-		std::optional<Result> EndOfFile(std::size_t TokenIndex){
-			return MatchProcessor::EndOfFile(TokenIndex, Wrapper, DFA::StartupNode());
-		}
+		bool ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex);
+		std::optional<Result> EndOfFile(std::size_t TokenIndex);
 		void Clear() { MatchProcessor::Clear(TableWrapper::StartupNode()); }
 		TableWrapper Wrapper;
 	};
@@ -407,92 +360,8 @@ namespace Potato::Reg
 
 		HeadMatchProcessor(std::size_t StartupNodeIndex) : NodeIndex(StartupNodeIndex) {}
 		HeadMatchProcessor(HeadMatchProcessor const&) = default;
-		template<typename TableT>
-		std::optional<std::optional<Result>> ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, TableT& Table, std::size_t StartupNodeIndex, bool Greedy = false)
-		{
-			assert(Symbol != Reg::EndOfFile());
-			TempBuffer.Clear();
-			auto Re1 = CoreProcessor::KeepAcceptConsumeSymbol(TempBuffer, Contents, NodeIndex, Table, Symbol, TokenIndex);
-			if (Re1.AcceptData)
-			{
-				Result Re;
-				if (CacheResult.has_value())
-				{
-					Re = std::move(*CacheResult);
-					CacheResult.reset();
-				}
-				Re.AcceptData = *Re1.AcceptData.AcceptData;
-				std::span<ProcessorContent::CaptureBlock const> Span = Re1.ContentNeedChange ? std::span(TempBuffer.CaptureBlocks) : std::span(Contents.CaptureBlocks);
-				Re.SubCaptures.clear();
-				for (auto Ite : Span)
-					Re.SubCaptures.push_back(Ite.CaptureData);
-				Re.MainCapture = { 0, TokenIndex };
-				CacheResult = std::move(Re);
-
-				if (!Greedy && !Re1.MeetAcceptRequireConsume)
-				{
-					auto Re = std::move(CacheResult);
-					Clear(StartupNodeIndex);
-					return Re;
-				}
-			}
-
-			auto Re2 = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, Table, Symbol, TokenIndex, true);
-			if (Re2.has_value())
-			{
-				assert(!Re2->AcceptData);
-				NodeIndex = Re2->NextNodeIndex;
-				if (Re2->ContentNeedChange)
-					std::swap(TempBuffer, Contents);
-				return std::optional<Result>{};
-			}
-			else {
-				if (CacheResult.has_value())
-				{
-					auto Re = std::move(CacheResult);
-					Clear(StartupNodeIndex);
-					return Re;
-				}
-				else {
-					return {};
-				}
-			}
-		}
-		template<typename TableT>
-		std::optional<Result> EndOfFile(std::size_t TokenIndex, TableT& Table, std::size_t StartupNodeIndex)
-		{
-			TempBuffer.Clear();
-			auto Re1 = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, Table, Reg::EndOfFile(), TokenIndex, true);
-			if (Re1.has_value())
-			{
-				assert(Re1->AcceptData);
-				Result Re;
-				if (CacheResult.has_value())
-				{
-					Re = std::move(*CacheResult);
-					CacheResult.reset();
-				}
-				Re.AcceptData = *Re1->AcceptData.AcceptData;
-				std::span<ProcessorContent::CaptureBlock const> Span = Re1->ContentNeedChange ? std::span(TempBuffer.CaptureBlocks) : std::span(Contents.CaptureBlocks);
-				Re.SubCaptures.clear();
-				for (auto Ite : Span)
-					Re.SubCaptures.push_back(Ite.CaptureData);
-				Re.MainCapture = { 0, TokenIndex };
-				Clear(StartupNodeIndex);
-				return Re;
-			}
-			if (CacheResult.has_value())
-			{
-				Result Re = std::move(*CacheResult);
-				Clear(StartupNodeIndex);
-				return Re;
-			}
-			else {
-				return {};
-			}
-		}
 		void Clear(std::size_t StartupNodeIndex);
-	protected:
+
 		ProcessorContent Contents;
 		ProcessorContent TempBuffer;
 		std::optional<Result> CacheResult;
@@ -505,12 +374,8 @@ namespace Potato::Reg
 
 		DFAHeadMatchProcessor(DFA const& Tables) : Table(Tables), HeadMatchProcessor(DFA::StartupNode()) {}
 		DFAHeadMatchProcessor(DFAHeadMatchProcessor const&) = default;
-		std::optional<std::optional<Result>> ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy = false) {
-			return HeadMatchProcessor::ConsumeSymbol(Symbol, TokenIndex, Table, DFA::StartupNode(), Greedy);
-		}
-		std::optional<Result> EndOfFile(std::size_t TokenIndex) {
-			return HeadMatchProcessor::EndOfFile(TokenIndex, Table, DFA::StartupNode());
-		}
+		std::optional<std::optional<Result>> ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy = false);
+		std::optional<Result> EndOfFile(std::size_t TokenIndex);
 		void Clear(){ HeadMatchProcessor::Clear(DFA::StartupNode()); }
 	protected:
 		DFA const& Table;
@@ -522,12 +387,8 @@ namespace Potato::Reg
 
 		TableHeadMatchProcessor(TableWrapper Wrapper) : Wrapper(Wrapper), HeadMatchProcessor(DFA::StartupNode()) {}
 		TableHeadMatchProcessor(TableHeadMatchProcessor const&) = default;
-		std::optional<std::optional<Result>> ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy = false) {
-			return HeadMatchProcessor::ConsumeSymbol(Symbol, TokenIndex, Wrapper, TableWrapper::StartupNode(), Greedy);
-		}
-		std::optional<Result> EndOfFile(std::size_t TokenIndex) {
-			return HeadMatchProcessor::EndOfFile(TokenIndex, Wrapper, TableWrapper::StartupNode());
-		}
+		std::optional<std::optional<Result>> ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy = false);
+		std::optional<Result> EndOfFile(std::size_t TokenIndex);
 		void Clear() { HeadMatchProcessor::Clear(TableWrapper::StartupNode()); }
 	protected:
 		TableWrapper Wrapper;
@@ -566,7 +427,7 @@ namespace Potato::Reg
 
 		MulityRegCreater(std::u32string_view Str, bool IsRow, Accept Acce) : ETable(EpsilonNFA::Create(Str, IsRow, Acce)) {}
 		void LowPriorityLink(std::u32string_view Str, bool IsRow, Accept Acce);
-		std::optional<DFA> GenerateNFA() const;
+		std::optional<DFA> GenerateDFA() const;
 		std::optional<std::vector<StandardT>> GenerateTableBuffer() const;
 
 	protected:

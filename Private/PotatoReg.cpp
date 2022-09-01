@@ -1369,8 +1369,8 @@ namespace Potato::Reg
 					{
 						for (auto& Ite3 : TemporaryMapping)
 						{
-							assert(std::find(Ite3.begin(), Ite3.end(), Ite2.OriginalTo) == Ite3.end());
-							Ite3.push_back(Ite2.OriginalTo);
+							if(std::find(Ite3.begin(), Ite3.end(), Ite2.OriginalTo) == Ite3.end())
+								Ite3.push_back(Ite2.OriginalTo);
 						}
 					}
 					else {
@@ -1378,8 +1378,8 @@ namespace Potato::Reg
 						for (std::size_t I = 0; I < Cur; ++I)
 						{
 							auto New = TemporaryMapping[I];
-							assert(std::find(New.begin(), New.end(), Ite2.OriginalTo) == New.end());
-							New.push_back(Ite2.OriginalTo);
+							if(std::find(New.begin(), New.end(), Ite2.OriginalTo) == New.end())
+								New.push_back(Ite2.OriginalTo);
 							TemporaryMapping.push_back({std::move(New)});
 						}
 					}
@@ -1574,9 +1574,9 @@ namespace Potato::Reg
 							{
 								for (auto& Ite2 : Ite1.ToIndexs)
 								{
-									if (Ite2 == I2)
+									if (Ite2 == I1)
 										Ite2 = *FirstEmpty;
-									else if (Ite2 > I2)
+									else if (Ite2 > I1)
 									{
 										Ite2 -= 1;
 									}
@@ -2450,95 +2450,146 @@ namespace Potato::Reg
 		TempBuffer.Clear();
 	}
 
-	/*
-	bool DFAMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex)
+	template<typename TableT>
+	bool MatchProcessorConsumeSymbol(MatchProcessor& Pro, TableT Table, char32_t Symbol, std::size_t TokenIndex)
 	{
-		assert(Symbol != 0);
-		TempBuffer.Clear();
-		auto Re = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, Tables, Symbol, TokenIndex, false);
+		assert(Symbol != Reg::EndOfFile());
+		Pro.TempBuffer.Clear();
+		auto Re = CoreProcessor::ConsumeSymbol(Pro.TempBuffer, Pro.Contents, Pro.NodeIndex, Table, Symbol, TokenIndex, false);
 		if (Re.has_value())
 		{
 			assert(!Re->AcceptData);
-			NodeIndex = Re->NextNodeIndex;
-			if(Re->ContentNeedChange)
-				std::swap(TempBuffer, Contents);
+			Pro.NodeIndex = Re->NextNodeIndex;
+			if (Re->ContentNeedChange)
+				std::swap(Pro.TempBuffer, Pro.Contents);
 			return true;
 		}
 		return false;
+	}
+
+	template<typename TableT>
+	std::optional<MatchProcessor::Result> MatchProcessorEndOfFile(MatchProcessor& Pro, std::size_t TokenIndex, TableT& Table, std::size_t StartupIndex)
+	{
+		Pro.TempBuffer.Clear();
+		auto Re = CoreProcessor::ConsumeSymbol(Pro.TempBuffer, Pro.Contents, Pro.NodeIndex, Table, Reg::EndOfFile(), TokenIndex, false);
+		if (Re.has_value())
+		{
+			assert(Re->AcceptData);
+			MatchProcessor::Result NRe;
+			NRe.AcceptData = *Re->AcceptData.AcceptData;
+			auto Span = Re->AcceptData.CaptureSpan.Slice(Pro.Contents.CaptureBlocks);
+			for (auto Ite : Span)
+			{
+				NRe.SubCaptures.push_back(Ite.CaptureData);
+			}
+			Pro.Clear(StartupIndex);
+			return NRe;
+		}
+		return {};
+	}
+
+	bool DFAMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex) {
+		return MatchProcessorConsumeSymbol(*this, Tables, Symbol, TokenIndex);
 	}
 
 	auto DFAMatchProcessor::EndOfFile(std::size_t TokenIndex) ->std::optional<Result>
 	{
-		TempBuffer.Clear();
-		auto Re = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, Tables, Reg::EndOfFile(), TokenIndex, false);
-		if (Re.has_value())
+		return MatchProcessorEndOfFile(*this, TokenIndex, Tables, DFA::StartupNode());
+	}
+
+	bool TableMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex) {
+		return MatchProcessorConsumeSymbol(*this, Wrapper, Symbol, TokenIndex);
+	}
+	auto TableMatchProcessor::EndOfFile(std::size_t TokenIndex) ->std::optional<Result> {
+		return MatchProcessorEndOfFile(*this, TokenIndex, Wrapper, TableWrapper::StartupNode());
+	}
+
+	template<typename TableT>
+	std::optional<std::optional<HeadMatchProcessor::Result>> HeadMatchProcessorConsumeSymbol(HeadMatchProcessor& Pro, char32_t Symbol, std::size_t TokenIndex, TableT& Table, std::size_t StartupNodeIndex, bool Greedy = false)
+	{
+		assert(Symbol != Reg::EndOfFile());
+		Pro.TempBuffer.Clear();
+		auto Re1 = CoreProcessor::KeepAcceptConsumeSymbol(Pro.TempBuffer, Pro.Contents, Pro.NodeIndex, Table, Symbol, TokenIndex);
+		if (Re1.AcceptData)
 		{
-			assert(Re->AcceptData);
-			Result NRe;
-			NRe.AcceptData = *Re->AcceptData.AcceptData;
-			auto Span = Re->AcceptData.CaptureSpan.Slice(Contents.CaptureBlocks);
-			for (auto Ite : Span)
+			HeadMatchProcessor::Result Re;
+			if (Pro.CacheResult.has_value())
 			{
-				NRe.SubCaptures.push_back(Ite.CaptureData);
+				Re = std::move(*Pro.CacheResult);
+				Pro.CacheResult.reset();
 			}
-			Clear();
-			return NRe;
-		}
-		return {};
-	}
-
-	void DFAMatchProcessor::Clear()
-	{
-		NodeIndex = DFA::StartupNode();
-		Contents.Clear();
-		TempBuffer.Clear();
-	}
-	*/
-
-	/*
-	bool TableMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex)
-	{
-		assert(Symbol != 0);
-		TempBuffer.Clear();
-		auto Re = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeOffset, Wrapper, Symbol, TokenIndex, false);
-		if (Re.has_value())
-		{
-			assert(!Re->AcceptData);
-			NodeOffset = Re->NextNodeIndex;
-			if (Re->ContentNeedChange)
-				std::swap(TempBuffer, Contents);
-			return true;
-		}
-		return false;
-	}
-
-	auto TableMatchProcessor::EndOfFile(std::size_t TokenIndex) ->std::optional<Result>
-	{
-		TempBuffer.Clear();
-		auto Re = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeOffset, Wrapper, Reg::EndOfFile(), TokenIndex, false);
-		if (Re.has_value())
-		{
-			assert(Re->AcceptData);
-			Result NRe;
-			NRe.AcceptData = *Re->AcceptData.AcceptData;
-			auto Span = Re->AcceptData.CaptureSpan.Slice(Contents.CaptureBlocks);
+			Re.AcceptData = *Re1.AcceptData.AcceptData;
+			std::span<ProcessorContent::CaptureBlock const> Span = Re1.ContentNeedChange ? std::span(Pro.TempBuffer.CaptureBlocks) : std::span(Pro.Contents.CaptureBlocks);
+			Re.SubCaptures.clear();
 			for (auto Ite : Span)
+				Re.SubCaptures.push_back(Ite.CaptureData);
+			Re.MainCapture = { 0, TokenIndex };
+			Pro.CacheResult = std::move(Re);
+
+			if (!Greedy && !Re1.MeetAcceptRequireConsume)
 			{
-				NRe.SubCaptures.push_back(Ite.CaptureData);
+				auto Re = std::move(Pro.CacheResult);
+				Pro.Clear(StartupNodeIndex);
+				return Re;
 			}
-			Clear();
-			return NRe;
 		}
-		return {};
+
+		auto Re2 = CoreProcessor::ConsumeSymbol(Pro.TempBuffer, Pro.Contents, Pro.NodeIndex, Table, Symbol, TokenIndex, true);
+		if (Re2.has_value())
+		{
+			assert(!Re2->AcceptData);
+			Pro.NodeIndex = Re2->NextNodeIndex;
+			if (Re2->ContentNeedChange)
+				std::swap(Pro.TempBuffer, Pro.Contents);
+			return std::optional<HeadMatchProcessor::Result>{};
+		}
+		else {
+			if (Pro.CacheResult.has_value())
+			{
+				auto Re = std::move(Pro.CacheResult);
+				Pro.Clear(StartupNodeIndex);
+				return Re;
+			}
+			else {
+				return {};
+			}
+		}
 	}
 
-	void TableMatchProcessor::Clear()
+	template<typename TableT>
+	std::optional<HeadMatchProcessor::Result> HeadMatchProcessorEndOfFile(HeadMatchProcessor& Pro, std::size_t TokenIndex, TableT& Table, std::size_t StartupNodeIndex)
 	{
-		NodeOffset = TableWrapper::StartupNode();
-		Contents.Clear();
-		TempBuffer.Clear();
+		Pro.TempBuffer.Clear();
+		auto Re1 = CoreProcessor::ConsumeSymbol(Pro.TempBuffer, Pro.Contents, Pro.NodeIndex, Table, Reg::EndOfFile(), TokenIndex, true);
+		if (Re1.has_value())
+		{
+			assert(Re1->AcceptData);
+			HeadMatchProcessor::Result Re;
+			if (Pro.CacheResult.has_value())
+			{
+				Re = std::move(*Pro.CacheResult);
+				Pro.CacheResult.reset();
+			}
+			Re.AcceptData = *Re1->AcceptData.AcceptData;
+			std::span<ProcessorContent::CaptureBlock const> Span = Re1->ContentNeedChange ? std::span(Pro.TempBuffer.CaptureBlocks) : std::span(Pro.Contents.CaptureBlocks);
+			Re.SubCaptures.clear();
+			for (auto Ite : Span)
+				Re.SubCaptures.push_back(Ite.CaptureData);
+			Re.MainCapture = { 0, TokenIndex };
+			Pro.Clear(StartupNodeIndex);
+			return Re;
+		}
+		if (Pro.CacheResult.has_value())
+		{
+			HeadMatchProcessor::Result Re = std::move(*Pro.CacheResult);
+			Pro.Clear(StartupNodeIndex);
+			return Re;
+		}
+		else {
+			return {};
+		}
 	}
-	*/
+	
 
 	void HeadMatchProcessor::Clear(std::size_t StartupNodeIndex)
 	{
@@ -2548,189 +2599,25 @@ namespace Potato::Reg
 		NodeIndex = StartupNodeIndex;
 	}
 
-	/*
-	auto DFAHeadMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy) -> std::optional<std::optional<Result>>
+	auto DFAHeadMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy) ->std::optional<std::optional<Result>>
 	{
-		TempBuffer.Clear();
-		auto Re1 = CoreProcessor::KeepAcceptConsumeSymbol(TempBuffer, Contents, NodeIndex, Tables, Symbol, TokenIndex);
-		if (Re1.AcceptData)
-		{
-			Result Re;
-			if (CacheResult.has_value())
-			{
-				Re = std::move(*CacheResult);
-				CacheResult.reset();
-			}
-			Re.AcceptData = *Re1.AcceptData.AcceptData;
-			std::span<ProcessorContent::CaptureBlock const> Span = Re1.ContentNeedChange ? std::span(TempBuffer.CaptureBlocks) : std::span(Contents.CaptureBlocks);
-			Re.SubCaptures.clear();
-			for (auto Ite : Span)
-				Re.SubCaptures.push_back(Ite.CaptureData);
-			Re.MainCapture = { 0, TokenIndex };
-			CacheResult = std::move(Re);
-
-			if (!Greedy && !Re1.MeetAcceptRequireConsume)
-			{
-				auto Re = std::move(CacheResult);
-				Clear();
-				return Re;
-			}
-		}
-
-		auto Re2 = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, Tables, Symbol, TokenIndex, true);
-		if (Re2.has_value())
-		{
-			assert(!Re2->AcceptData);
-			NodeIndex = Re2->NextNodeIndex;
-			if (Re2->ContentNeedChange)
-				std::swap(TempBuffer, Contents);
-			return std::optional<Result>{};
-		}
-		else {
-			if (CacheResult.has_value())
-			{
-				auto Re = std::move(CacheResult);
-				Clear();
-				return Re;
-			}
-			else {
-				return {};
-			}
-		}
+		return HeadMatchProcessorConsumeSymbol(*this, Symbol, TokenIndex, Table, DFA::StartupNode(), Greedy);
 	}
 
-	auto DFAHeadMatchProcessor::EndOfFile(std::size_t TokenIndex) ->std::optional<Result>
+	auto DFAHeadMatchProcessor::EndOfFile(std::size_t TokenIndex)->std::optional<Result>
 	{
-		TempBuffer.Clear();
-		auto Re1 = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, Tables, Reg::EndOfFile(), TokenIndex, true);
-		if (Re1.has_value())
-		{
-			assert(Re1->AcceptData);
-			Result Re;
-			if (CacheResult.has_value())
-			{
-				Re = std::move(*CacheResult);
-				CacheResult.reset();
-			}
-			Re.AcceptData = *Re1->AcceptData.AcceptData;
-			std::span<ProcessorContent::CaptureBlock const> Span = Re1->ContentNeedChange ? std::span(TempBuffer.CaptureBlocks) : std::span(Contents.CaptureBlocks);
-			Re.SubCaptures.clear();
-			for (auto Ite : Span)
-				Re.SubCaptures.push_back(Ite.CaptureData);
-			Re.MainCapture = { 0, TokenIndex };
-			Clear();
-			return Re;
-		}
-		if (CacheResult.has_value())
-		{
-			Result Re = std::move(*CacheResult);
-			Clear();
-			return Re;
-		}
-		else {
-			return {};
-		}
+		return HeadMatchProcessorEndOfFile(*this, TokenIndex, Table, DFA::StartupNode());
 	}
 
-	void DFAHeadMatchProcessor::Clear()
+	auto TableHeadMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy) ->std::optional<std::optional<Result>>
 	{
-		Contents.Clear();
-		TempBuffer.Clear();
-		CacheResult.reset();
-		NodeIndex = DFA::StartupNode();
+		return HeadMatchProcessorConsumeSymbol(*this, Symbol, TokenIndex, Wrapper, DFA::StartupNode(), Greedy);
 	}
 
-	auto TableHeadMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy) -> std::optional<std::optional<Result>>
+	auto TableHeadMatchProcessor::EndOfFile(std::size_t TokenIndex)->std::optional<Result>
 	{
-		TempBuffer.Clear();
-		auto Re1 = CoreProcessor::KeepAcceptConsumeSymbol(TempBuffer, Contents, NodeOffset, Wrapper, Symbol, TokenIndex);
-		if (Re1.AcceptData)
-		{
-			Result Re;
-			if (CacheResult.has_value())
-			{
-				Re = std::move(*CacheResult);
-				CacheResult.reset();
-			}
-			Re.AcceptData = *Re1.AcceptData.AcceptData;
-			std::span<ProcessorContent::CaptureBlock const> Span = Re1.ContentNeedChange ? std::span(TempBuffer.CaptureBlocks) : std::span(Contents.CaptureBlocks);
-			Re.SubCaptures.clear();
-			for (auto Ite : Span)
-				Re.SubCaptures.push_back(Ite.CaptureData);
-			Re.MainCapture = { 0, TokenIndex };
-			CacheResult = std::move(Re);
-
-			if (!Greedy && !Re1.MeetAcceptRequireConsume)
-			{
-				auto Re = std::move(CacheResult);
-				Clear();
-				return Re;
-			}
-		}
-
-		auto Re2 = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeOffset, Wrapper, Symbol, TokenIndex, true);
-		if (Re2.has_value())
-		{
-			assert(!Re2->AcceptData);
-			NodeOffset = Re2->NextNodeIndex;
-			if (Re2->ContentNeedChange)
-				std::swap(TempBuffer, Contents);
-			return std::optional<Result>{};
-		}
-		else {
-			if (CacheResult.has_value())
-			{
-				auto Re = std::move(CacheResult);
-				Clear();
-				return Re;
-			}
-			else {
-				return {};
-			}
-		}
+		return HeadMatchProcessorEndOfFile(*this, TokenIndex, Wrapper, DFA::StartupNode());
 	}
-
-	auto TableHeadMatchProcessor::EndOfFile(std::size_t TokenIndex) ->std::optional<Result>
-	{
-		TempBuffer.Clear();
-		auto Re1 = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeOffset, Wrapper, Reg::EndOfFile(), TokenIndex, true);
-		if (Re1.has_value())
-		{
-			assert(Re1->AcceptData);
-			Result Re;
-			if (CacheResult.has_value())
-			{
-				Re = std::move(*CacheResult);
-				CacheResult.reset();
-			}
-			Re.AcceptData = *Re1->AcceptData.AcceptData;
-			std::span<ProcessorContent::CaptureBlock const> Span = Re1->ContentNeedChange ? std::span(TempBuffer.CaptureBlocks) : std::span(Contents.CaptureBlocks);
-			Re.SubCaptures.clear();
-			for (auto Ite : Span)
-				Re.SubCaptures.push_back(Ite.CaptureData);
-			Re.MainCapture = { 0, TokenIndex };
-			Clear();
-			return Re;
-		}
-		if (CacheResult.has_value())
-		{
-			Result Re = std::move(*CacheResult);
-			Clear();
-			return Re;
-		}
-		else {
-			return {};
-		}
-	}
-
-	void TableHeadMatchProcessor::Clear()
-	{
-		Contents.Clear();
-		TempBuffer.Clear();
-		CacheResult.reset();
-		NodeOffset = TableWrapper::StartupNode();
-	}
-	*/
 
 	auto Match(DFAMatchProcessor& Pro, std::u32string_view Str)->std::optional<DFAMatchProcessor::Result>
 	{
@@ -2798,7 +2685,7 @@ namespace Potato::Reg
 		}
 	}
 
-	std::optional<DFA> MulityRegCreater::GenerateNFA() const
+	std::optional<DFA> MulityRegCreater::GenerateDFA() const
 	{
 		if (ETable.has_value())
 		{
@@ -2811,817 +2698,13 @@ namespace Potato::Reg
 
 	std::optional<std::vector<StandardT>> MulityRegCreater::GenerateTableBuffer() const
 	{
-		auto DFA = GenerateNFA();
+		auto DFA = GenerateDFA();
 		if (DFA.has_value())
 		{
 			return TableWrapper::Create(*DFA);
 		}
 		return {};
 	}
-
-	
-
-	//std::optional<KeepAcceptResult> KeepAcceptConsumeSymbol(Content& Content, std::size_t CurNodeIndex, DFA const& Table, char32_t Symbol, std::size_t TokenIndex);
-
-	/*
-	std::size_t TranslateIntervalT(std::span<IntervalT const> Source, std::vector<TableWrapper::ZipChar>& Output)
-	{
-		auto OldSize = Output.size();
-		for (auto& Ite : Source)
-		{
-			if (Ite.start + 1 == Ite.end)
-				Output.push_back({ true, Ite.start });
-			else {
-				Output.push_back({ false, Ite.start });
-				Output.push_back({ false, Ite.end });
-			}
-		}
-		return Output.size() - OldSize;
-	}
-
-	bool Acceptable(char32_t InputSym, std::span<TableWrapper::ZipChar const> RequreSpan)
-	{
-		for (std::size_t Index = 0; Index < RequreSpan.size(); ++Index)
-		{
-			auto Cur = RequreSpan[Index];
-			if (Cur.IsSingleChar)
-			{
-				if(InputSym == Cur.Char)
-					return true;
-			}
-			else {
-				++Index;
-				assert(Index < RequreSpan.size());
-				auto Cur2 = RequreSpan[Index];
-				if(InputSym >= Cur.Char && InputSym < Cur2.Char)
-					return true;
-				else if(InputSym < Cur2.Char)
-					return false;
-			}
-		}
-		return false;
-	}
-
-	auto TableWrapper::Create(UnserilizedTable const& Table) ->std::vector<StandardT>
-	{
-		std::vector<StandardT> Result;
-		Result.resize(2);
-
-		Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Result[0], Table.Nodes.size(), RegexOutOfRange::TypeT::Node, Table.Nodes.size());
-
-		struct Record
-		{
-			std::size_t EdgeOffset;
-			std::size_t MappingNode;
-		};
-
-		std::vector<Record> Records;
-
-		std::vector<std::size_t> NodeOffset;
-
-		std::vector<ZipChar> Chars;
-		std::vector<ZipProperty> Propertys;
-		std::vector<StandardT> CounterDatas;
-
-		for (auto& Ite : Table.Nodes)
-		{
-			ZipNode NewNode;
-			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(NewNode.EdgeCount, Ite.Edges.size(), RegexOutOfRange::TypeT::EdgeCount, Ite.Edges.size());
-			auto NodeResult = Misc::SerilizerHelper::WriteObject(Result, NewNode);
-			NodeOffset.push_back(NodeResult.StartOffset);
-			for (auto EdgeIte = Ite.Edges.rbegin(); EdgeIte != Ite.Edges.rend(); ++EdgeIte)
-			{
-				auto& Ite2 = *EdgeIte;
-				Propertys.clear();
-				CounterDatas.clear();
-				std::optional<Accept> AcceptData;
-				std::size_t CounterPropertyCount = 0;
-				for (auto& Ite3 : Ite2.Propertys)
-				{
-					switch (Ite3.Type)
-					{
-					case UnfaTable::EdgeType::CounterBegin:
-						Propertys.push_back(ZipProperty::CounterBegin);
-						++CounterPropertyCount;
-						break;
-					case UnfaTable::EdgeType::CounterContinue:
-						Propertys.push_back(ZipProperty::CounterContinue);
-						CounterDatas.push_back(Ite3.CounterData.Max);
-						++CounterPropertyCount;
-						break;
-					case UnfaTable::EdgeType::CounterEnd:
-						Propertys.push_back(ZipProperty::CounterEnd);
-						CounterDatas.push_back(Ite3.CounterData.Min);
-						CounterDatas.push_back(Ite3.CounterData.Max);
-						++CounterPropertyCount;
-						break;
-					}
-				}
-
-				for (auto& Ite3 : Ite2.Propertys)
-				{
-					switch (Ite3.Type)
-					{
-					case UnfaTable::EdgeType::CaptureBegin:
-						Propertys.push_back(ZipProperty::CaptureBegin);
-						break;
-					case UnfaTable::EdgeType::CaptureEnd:
-						Propertys.push_back(ZipProperty::CaptureEnd);
-						break;
-					case UnfaTable::EdgeType::Acceptable:
-						AcceptData = Ite3.AcceptData;
-						break;
-					}
-				}
-
-				ZipEdge Edges;
-				if (AcceptData.has_value())
-					Edges.AcceptableCharCount = 0;
-				else {
-					Chars.clear();
-					TranslateIntervalT(std::span(Ite2.ConsumeChars), Chars);
-					Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Edges.AcceptableCharCount, Chars.size(), RegexOutOfRange::TypeT::AcceptableCharCount, Chars.size());
-				}
-				
-				Edges.HasCounter = (CounterPropertyCount != 0);
-
-				Edges.PropertyCount = static_cast<decltype(Edges.PropertyCount)>(Propertys.size());
-
-				if(Edges.PropertyCount != Propertys.size())
-					throw Exception::RegexOutOfRange{ RegexOutOfRange::TypeT::PropertyCount, Propertys.size() };
-
-				Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Edges.CounterDataCount, CounterDatas.size(), RegexOutOfRange::TypeT::CounterCount, CounterDatas.size());
-				if (Ite2.UniqueID.has_value())
-				{
-					Edges.HasUniqueID = true;
-					Edges.UniqueID = *Ite2.UniqueID;
-				}
-				else {
-					Edges.HasUniqueID = false;
-					Edges.UniqueID = 0;
-				}
-
-				auto EdgeResult = Misc::SerilizerHelper::WriteObject(Result, Edges);
-				Records.push_back({ EdgeResult.StartOffset, Ite2.ToNode });
-				if (AcceptData.has_value())
-				{
-					Misc::SerilizerHelper::WriteObject(Result, *AcceptData);
-				}
-				else {
-					Misc::SerilizerHelper::WriteObjectArray(Result, std::span(Chars));
-				}
-				Misc::SerilizerHelper::WriteObjectArray(Result, std::span(Propertys));
-				Misc::SerilizerHelper::WriteObjectArray(Result, std::span(CounterDatas));
-				auto EdgeReadResult = Misc::SerilizerHelper::ReadObject<ZipEdge>(std::span(Result).subspan(EdgeResult.StartOffset));
-
-				EdgeReadResult->EdgeTotalLength = Result.size() - EdgeResult.StartOffset;
-				if (EdgeReadResult->EdgeTotalLength != Result.size() - EdgeResult.StartOffset)
-				{
-					throw Exception::RegexOutOfRange{ RegexOutOfRange::TypeT::EdgeLength, Result.size() - EdgeResult.StartOffset };
-				}
-			}
-		}
-		Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Result[1], NodeOffset[0], RegexOutOfRange::TypeT::Node, NodeOffset[0]);
-
-		for (auto& Ite : Records)
-		{
-			auto Ptr = Misc::SerilizerHelper::ReadObject<ZipEdge>(std::span(Result).subspan(Ite.EdgeOffset));
-			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Ptr->ToNode, NodeOffset[Ite.MappingNode], RegexOutOfRange::TypeT::Node , NodeOffset[Ite.MappingNode]);
-		}
-
-#if _DEBUG
-		{
-
-			struct DebugEdge
-			{
-				std::size_t ToNode;
-				std::span<TableWrapper::ZipProperty const> Propertys;
-				std::span<StandardT const> CounterDatas;
-				std::span<ZipChar const> ConsumeChars;
-				std::optional<Accept> AcceptData;
-			};
-
-			struct DebugNode
-			{
-				StandardT NodeOffset;
-				std::vector<DebugEdge> Edges;
-			};
-
-			std::vector<DebugNode> DebugsNode;
-
-			TableWrapper Wrapper(Result);
-
-			for (auto& Ite : NodeOffset)
-			{
-				StandardT Offset = static_cast<StandardT>(Ite);
-				auto Node = Wrapper[Offset];
-				DebugNode DNode;
-				DNode.NodeOffset = Node.NodeOffset;
-				DNode.Edges.reserve(Node.EdgeCount);
-				auto EdgeSpan = Node.AppendData;
-				for (std::size_t Index = 0; Index < Node.EdgeCount; ++Index)
-				{
-					DebugEdge DebugEdges;
-					auto IteSpan = EdgeSpan;
-					auto EdgesResult = Misc::SerilizerHelper::ReadObject<ZipEdge const>(IteSpan);
-					EdgeSpan = EdgeSpan.subspan(EdgesResult->EdgeTotalLength);
-					DebugEdges.ToNode = EdgesResult->ToNode;
-					if (EdgesResult->AcceptableCharCount != 0)
-					{
-						auto ConsumeResult = Misc::SerilizerHelper::ReadObjectArray<ZipChar const>(EdgesResult.LastSpan, EdgesResult->AcceptableCharCount);
-						DebugEdges.ConsumeChars = *ConsumeResult;
-						IteSpan = ConsumeResult.LastSpan;
-					}
-					else {
-						auto AcceptResult = Misc::SerilizerHelper::ReadObject<Accept const>(EdgesResult.LastSpan);
-						DebugEdges.AcceptData = *AcceptResult;
-						IteSpan = AcceptResult.LastSpan;
-					}
-					auto PropertyResult = Misc::SerilizerHelper::ReadObjectArray<ZipProperty const>(IteSpan, EdgesResult->PropertyCount);
-					DebugEdges.Propertys = *PropertyResult;
-					auto CounterResult = Misc::SerilizerHelper::ReadObjectArray<StandardT const>(PropertyResult.LastSpan, EdgesResult->CounterDataCount);
-					DebugEdges.CounterDatas = *CounterResult;
-					DNode.Edges.push_back(DebugEdges);
-				}
-				std::reverse(DNode.Edges.begin(), DNode.Edges.end());
-				DebugsNode.push_back(std::move(DNode));
-			}
-
-			volatile int i = 0;
-		}
-#endif
-
-		return Result;
-	}
-
-	auto TableWrapper::operator[](StandardT Offset) const ->NodeViewer
-	{
-		auto Result = Misc::SerilizerHelper::ReadObject<ZipNode const>(Wrapper.subspan(Offset));
-		NodeViewer Viewer;
-		Viewer.NodeOffset = Offset;
-		Viewer.EdgeCount = Result->EdgeCount;
-		Viewer.AppendData = Result.LastSpan;
-		return Viewer;
-	}
-
-	std::vector<StandardT> TableWrapper::Create(std::u32string_view Str, Accept Mask, StandardT UniqueID, bool IsRaw)
-	{
-		auto Tab1 = Reg::UnfaTable::Create(Str, IsRaw, Mask, UniqueID);
-		return Create(Tab1);
-	}
-
-	CoreProcessor::CoreProcessor(TableWrapper Wrapper, bool KeepAcceptableViewer, std::size_t InputStartupTokenIndex)
-		: Wrapper(Wrapper), CurrentState(Wrapper.StartupNodeOffset()), KeepAcceptableViewer(KeepAcceptableViewer) , RequireTokenIndex(InputStartupTokenIndex),
-		StartupTokenIndex(InputStartupTokenIndex)
-	{
-
-	}
-
-	std::optional<CoreProcessor::ConsumeResult> CoreProcessor::ConsumeTokenInput(char32_t InputSymbols, std::size_t NextTokenIndex)
-	{
-
-		auto Node = Wrapper[CurrentState];
-		auto SpanData = Node.AppendData;
-
-		for (std::size_t Index = 0; Index < Node.EdgeCount; ++Index)
-		{
-			auto ZipEdge = Misc::SerilizerHelper::ReadObject<TableWrapper::ZipEdge const>(SpanData);
-			SpanData = SpanData.subspan(ZipEdge->EdgeTotalLength);
-
-			AmbiguousPoint Point;
-			std::optional<Accept> AcceptResult;
-			std::span<StandardT const> SpanIte;
-
-			if (ZipEdge->AcceptableCharCount == 0)
-			{
-				if (KeepAcceptableViewer || InputSymbols == MaxChar())
-				{
-					auto Acce = Misc::SerilizerHelper::ReadObject<Accept const>(ZipEdge.LastSpan);
-					Point.AcceptData = *Acce;
-					SpanIte = Acce.LastSpan;
-				}
-				else
-					continue;
-			}
-			else {
-				auto Acce = Misc::SerilizerHelper::ReadObjectArray<TableWrapper::ZipChar const>(ZipEdge.LastSpan, ZipEdge->AcceptableCharCount);
-				if (!Acceptable(InputSymbols, *Acce))
-					continue;
-				SpanIte = Acce.LastSpan;
-			}
-
-			if (ZipEdge->PropertyCount != 0)
-			{
-				auto RR = Misc::SerilizerHelper::ReadObjectArray<TableWrapper::ZipProperty const>(SpanIte, ZipEdge->PropertyCount);
-				Point.Propertys = *RR;
-				SpanIte = RR.LastSpan;
-			}
-
-			if (ZipEdge->HasCounter)
-			{
-				std::size_t Count = ZipEdge->CounterDataCount;
-				auto RR = Misc::SerilizerHelper::ReadObjectArray<StandardT const>(SpanIte, Count);
-				bool Pass = true;
-
-				std::size_t LastCounterCount = CounterRecord.size();
-				std::size_t CounterDataIte = 0;
-				bool MeetContinue = false;
-				bool MeetEnd = false;
-
-				for (std::size_t Index = 0; Pass && Index < Point.Propertys.size(); ++Index)
-				{
-					switch (Point.Propertys[Index])
-					{
-					case TableWrapper::ZipProperty::CounterBegin:
-						LastCounterCount += 1;
-						break;
-					case TableWrapper::ZipProperty::CounterContinue:
-					{
-						MeetContinue = true;
-						assert(!MeetEnd);
-						assert(CounterDataIte < RR->size());
-						auto Range = (*RR)[CounterDataIte];
-						++CounterDataIte;
-						std::size_t CurCount = 0;
-						assert(LastCounterCount >= 1);
-						if (LastCounterCount <= CounterRecord.size())
-							CurCount = CounterRecord[LastCounterCount - 1];
-						if (CurCount >= Range)
-							Pass = false;
-						break;
-					}
-					case TableWrapper::ZipProperty::CounterEnd:
-					{
-						MeetEnd = true;
-						assert(!MeetContinue);
-						assert(CounterDataIte + 1 < RR->size());
-						auto RangeMin = (*RR)[CounterDataIte];
-						++CounterDataIte;
-						auto RangeMax = (*RR)[CounterDataIte];
-						++CounterDataIte;
-						assert(LastCounterCount >= 1);
-						std::size_t CurCount = 0;
-						assert(LastCounterCount >= 1);
-						if (LastCounterCount <= CounterRecord.size())
-							CurCount = CounterRecord[LastCounterCount - 1];
-						if (CurCount < RangeMin || CurCount >= RangeMax)
-							Pass = false;
-						else
-							--LastCounterCount;
-						break;
-					}
-					default:
-						Index = Point.Propertys.size();
-						break;
-					}
-				}
-
-				if(!Pass)
-					continue;
-			}
-
-			Point.ToNode = ZipEdge->ToNode;
-			Point.CaptureCount = CaptureRecord.size();
-			Point.CounterHistory = CounterHistory;
-			Point.NextTokenIndex = NextTokenIndex;
-			Point.CurrentTokenIndex = RequireTokenIndex;
-
-			if(ZipEdge->HasUniqueID)
-				Point.UniqueID = ZipEdge->UniqueID;
-
-			if (AmbiguousPoints.empty() || AmbiguousPoints.rbegin()->CounterHistory != CounterHistory)
-			{
-				Point.CounterIndex = {AmbiguousCounter.size(), CounterRecord.size()};
-				AmbiguousCounter.insert(AmbiguousCounter.end(), CounterRecord.begin(), CounterRecord.end());
-			}
-			else {
-				Point.CounterIndex = AmbiguousPoints.rbegin()->CounterIndex;
-			}
-
-			AmbiguousPoints.push_back(Point);
-		}
-
-		if (AmbiguousPoints.empty())
-		{
-			return {};
-		}
-
-		auto Ite = *AmbiguousPoints.rbegin();
-		AmbiguousPoints.pop_back();
-
-		if (Ite.CounterHistory != CounterHistory)
-		{
-			CounterRecord.clear();
-			auto Require = Ite.CounterIndex.Slice(AmbiguousCounter);
-			CounterRecord.insert(CounterRecord.end(), Require.begin(), Require.end());
-		}
-
-		if (AmbiguousPoints.empty() || AmbiguousPoints.rbegin()->CounterHistory != Ite.CounterHistory)
-			AmbiguousCounter.resize(Ite.CounterIndex.Begin());
-
-		CurrentState = Ite.ToNode;
-
-		bool IsEndOfFile = (RequireTokenIndex == Ite.NextTokenIndex && InputSymbols == EndOfFile());
-
-		RequireTokenIndex = Ite.NextTokenIndex;
-
-		CaptureRecord.resize(Ite.CaptureCount);
-
-		bool CounterChange = false;
-		for (auto& Ite2 : Ite.Propertys)
-		{
-			switch (Ite2)
-			{
-			case TableWrapper::ZipProperty::CaptureBegin:
-				CaptureRecord.push_back({true, Ite.CurrentTokenIndex});
-				break;
-			case TableWrapper::ZipProperty::CaptureEnd:
-				CaptureRecord.push_back({ false, Ite.CurrentTokenIndex });
-				break;
-			case TableWrapper::ZipProperty::CounterBegin:
-				CounterRecord.push_back(0);
-				CounterChange = true;
-				break;
-			case TableWrapper::ZipProperty::CounterContinue:
-				assert(!CounterRecord.empty());
-				++(* CounterRecord.rbegin());
-				CounterChange = true;
-				break;
-			case TableWrapper::ZipProperty::CounterEnd:
-				assert(!CounterRecord.empty());
-				CounterRecord.pop_back();
-				CounterChange = true;
-				break;
-			default:
-				assert(false);
-				break;
-			}
-		}
-
-		if (CounterChange)
-		{
-			++CounterHistory;
-			if (CounterHistory == std::numeric_limits<decltype(CounterHistory)>::max())
-			{
-				if (AmbiguousPoints.empty())
-				{
-					CounterHistory = 0;
-				}
-				else {
-					std::size_t HistoryIte = 0;
-					std::size_t LastHistory = AmbiguousPoints.begin()->CounterHistory;
-					for (auto& Ite : AmbiguousPoints)
-					{
-						if (Ite.CounterHistory != LastHistory)
-						{
-							LastHistory = Ite.CounterHistory;
-							++HistoryIte;
-						}
-						Ite.CounterHistory = HistoryIte;
-					}
-					CounterHistory = HistoryIte;
-				}
-			}
-		}
-
-		ConsumeResult Result;
-		if(Ite.AcceptData.has_value())
-		{
-			Result.Accept = {*Ite.AcceptData, *Ite.UniqueID, std::span(CaptureRecord)};
-		}
-		Result.CurrentTokenIndex = Ite.CurrentTokenIndex;
-		Result.StartupTokenIndex = StartupTokenIndex;
-		Result.IsEndOfFile = IsEndOfFile;
-		return Result;
-	}
-
-	void CoreProcessor::Reset(std::size_t InputStartupTokenIndex)
-	{
-		AmbiguousCounter.clear();
-		CounterRecord.clear();
-		CounterHistory = 0;
-		AmbiguousPoints.clear();
-		CaptureRecord.clear();
-		CurrentState = Wrapper.StartupNodeOffset();
-		RequireTokenIndex = InputStartupTokenIndex;
-		StartupTokenIndex = InputStartupTokenIndex;
-	}
-
-	void CoreProcessor::RemoveAmbiuosPoint(StandardT UniqueID)
-	{
-		if (!AmbiguousPoints.empty())
-		{
-			for (std::size_t Index = 0; Index < AmbiguousPoints.size();)
-			{
-				auto& Cur = AmbiguousPoints[Index];
-				if (Cur.UniqueID.has_value() && *Cur.UniqueID == UniqueID)
-				{
-					bool SameHistory = false;
-					if (!SameHistory && Index > 0)
-						SameHistory = (AmbiguousPoints[Index - 1].CounterHistory == Cur.CounterHistory);
-					if(!SameHistory && Index + 1< AmbiguousPoints.size())
-						SameHistory = (AmbiguousPoints[Index + 1].CounterHistory == Cur.CounterHistory);
-					if (!SameHistory && Cur.CounterIndex.Count() != 0)
-					{
-						CounterRecord.erase(CounterRecord.begin() + Cur.CounterIndex.Begin(), CounterRecord.begin() + Cur.CounterIndex.End());
-						for (std::size_t Index2 = Index + 1; Index2 < AmbiguousPoints.size(); ++Index2)
-						{
-							AmbiguousPoints[Index2].CounterIndex.Offset -= Cur.CounterIndex.End();
-						}
-					}
-					AmbiguousPoints.erase(AmbiguousPoints.begin() + Index);
-				}
-				else {
-					++Index;
-				}
-			}
-		}
-	}
-
-	std::optional<Misc::IndexSpan<>> CaptureWrapper::FindFirstCapture(std::span<Capture const> Captures)
-	{
-		std::size_t Stack = 0;
-		Misc::IndexSpan<> First;
-		for (std::size_t Index = 0; Index < Captures.size(); ++Index)
-		{
-			auto Cur = Captures[Index];
-			if (Cur.IsBegin)
-			{
-				if (Stack == 0)
-					First.Offset = Index;
-				++Stack;
-			}
-			else {
-				--Stack;
-				if (Stack == 0)
-				{
-					First.Length = Index - First.Offset + 1;
-					return First;
-				}
-			}
-		}
-		return First;
-	}
-
-	CaptureWrapper CaptureWrapper::GetNextCapture() const
-	{
-		auto First = FindFirstCapture(NextCaptures);
-		if (First.has_value())
-		{
-			CaptureWrapper Result;
-			Result.SubCaptures = First->Sub(1, First->Length - 2).Slice(NextCaptures);
-			Result.NextCaptures = NextCaptures.subspan(First->End());
-			auto Start = NextCaptures[First->Begin()];
-			auto End = NextCaptures[First->End() - 1];
-			Result.CurrentCapture = { Start.Index, End.Index - Start.Index };
-			return Result;
-		}
-		return {};
-	}
-
-	CaptureWrapper CaptureWrapper::GetTopSubCapture() const
-	{
-		auto First = FindFirstCapture(SubCaptures);
-		if (First.has_value())
-		{
-			auto Start = SubCaptures[First->Begin()];
-			auto End = SubCaptures[First->End() - 1];
-			CaptureWrapper Result;
-			Result.SubCaptures = First->Sub(1, First->Length - 2).Slice(SubCaptures);
-			Result.NextCaptures = SubCaptures.subspan(First->End());
-			Result.CurrentCapture = { Start.Index, End.Index - Start.Index };
-			return Result;
-		}
-		return {};
-	}
-
-	ProcessResult::ProcessResult(CoreProcessor::ConsumeResult const& Result)
-	{
-		assert(Result.Accept.has_value());
-		std::vector<Capture> TempCaptures;
-		TempCaptures.insert(TempCaptures.end(), Result.Accept->CaptureData.begin(), Result.Accept->CaptureData.end());
-		Captures = std::move(TempCaptures);
-		MainCapture = { Result .StartupTokenIndex, Result .CurrentTokenIndex - Result .StartupTokenIndex};
-		AcceptData = Result.Accept->AcceptData;
-		UniqueID = Result.Accept->UniqueID;
-	}
-
-	auto MatchProcessor::ConsumeTokenInput(char32_t Token, std::size_t NextTokenIndex)->std::optional<Result>
-	{
-		auto Re1 = Processor.ConsumeTokenInput(Token, NextTokenIndex);
-		if (Re1.has_value())
-		{
-			Result ReturnResult;
-			ReturnResult.IsEndOfFile = Re1->IsEndOfFile;
-			if (Re1->Accept.has_value())
-			{
-				ReturnResult.Accept = ProcessResult{*Re1};
-			}
-			return ReturnResult;
-		}
-		else {
-			return {};
-		}
-	}
-
-	std::optional<ProcessResult> ProcessMatch(TableWrapper Wrapper, std::u32string_view Span)
-	{
-		MatchProcessor Pro(Wrapper);
-		while (true)
-		{
-			auto Re = Pro.GetRequireTokenIndex();
-			char32_t Input = (Re >= Span.size() ? EndOfFile() : Span[Re]);
-			auto Re2 = Pro.ConsumeTokenInput(Input, Re + 1);
-			if (Re2.has_value())
-			{
-				if(Re2->Accept.has_value())
-					return Re2->Accept;
-				if(Re2->IsEndOfFile)
-					return {};
-			}
-			else {
-				return {};
-			}
-		}
-		return {};
-	}
-
-	auto FrontMatchProcessor::ConsumeTokenInput(char32_t Token, std::size_t NextTokenIndex) -> std::optional<Result>
-	{
-		auto Re1 = Processor.ConsumeTokenInput(Token, NextTokenIndex);
-		if (Re1.has_value())
-		{
-			Result ReturnResult;
-			ReturnResult.IsEndOfFile = Re1->IsEndOfFile;
-			if (Re1->Accept.has_value())
-			{
-				ReturnResult.Accept = ProcessResult{ *Re1 };
-			}
-			return ReturnResult;
-		}
-		else {
-			return {};
-		}
-	}
-
-	std::optional<ProcessResult> ProcessFrontMatch(TableWrapper Wrapper, std::u32string_view Span)
-	{
-		FrontMatchProcessor Pro(Wrapper);
-		while (true)
-		{
-			auto Re = Pro.GetRequireTokenIndex();
-			char32_t Input = (Re >= Span.size() ? EndOfFile() : Span[Re]);
-			auto Re2 = Pro.ConsumeTokenInput(Input, Re + 1);
-			if (Re2.has_value())
-			{
-				if (Re2->Accept.has_value())
-					return Re2->Accept;
-				if(Re2->IsEndOfFile)
-					return {};
-			}
-			else {
-				return {};
-			}
-		}
-		return {};
-	}
-
-	auto SearchProcessor::ConsumeTokenInput(char32_t Token, std::size_t NextTokenIndex) -> std::optional<Result>
-	{
-		auto R1 = Processor.ConsumeTokenInput(Token, NextTokenIndex);
-		if (R1.has_value())
-		{
-			Result ReturnResult;
-			ReturnResult.IsEndOfFile = R1->IsEndOfFile;
-			if (R1->Accept.has_value())
-			{
-				ReturnResult.Accept = ProcessResult{ *R1 };
-				return ReturnResult;
-			}
-
-			if (Processor.GetRequireTokenIndex() == RetryStartupTokenIndex && Processor.GetCurrentState() == Processor.GetWrapper().StartupNodeOffset())
-			{
-				++RetryStartupTokenIndex;
-			}
-
-			return ReturnResult;
-		}
-		else {
-			if(Token == EndOfFile())
-				return {};
-			Processor.Reset(RetryStartupTokenIndex);
-			++RetryStartupTokenIndex;
-			Result ReturnResult;
-			ReturnResult.IsEndOfFile = false;
-			return ReturnResult;
-		}
-	}
-
-	std::optional<ProcessResult> ProcessSearch(TableWrapper Wrapper, std::u32string_view Span)
-	{
-		SearchProcessor Pro(Wrapper);
-		while (true)
-		{
-			auto Re = Pro.GetRequireTokenIndex();
-			char32_t Input = (Re >= Span.size() ? EndOfFile() : Span[Re]);
-			auto Re2 = Pro.ConsumeTokenInput(Input, Re + 1);
-			if (Re2.has_value())
-			{
-				if (Re2->Accept.has_value())
-					return Re2->Accept;
-				if(Re2->IsEndOfFile)
-					return {};
-			}
-			else {
-				return {};
-			}
-		}
-		return {};
-	}
-
-	auto GreedyFrontMatchProcessor::ConsumeTokenInput(char32_t Token, std::size_t NextTokenIndex) -> std::optional<Result>
-	{
-		auto R1 = Processor.ConsumeTokenInput(Token, NextTokenIndex);
-		if (R1.has_value())
-		{
-			Result ReturnResult;
-			ReturnResult.IsEndOfFile = R1->IsEndOfFile;
-			if (R1->Accept.has_value())
-			{
-				if (!TempResult.has_value() || (TempResult->UniqueID != R1->Accept->UniqueID && TempResult->MainCapture.Count() < R1->CurrentTokenIndex))
-				{
-					TempResult = ProcessResult{ *R1 };
-				}
-				if (R1->IsEndOfFile)
-				{
-					ReturnResult.Accept = std::move(TempResult);
-					return ReturnResult;
-				}
-				Processor.RemoveAmbiuosPoint(R1->Accept->UniqueID);
-			}
-			return ReturnResult;
-		}
-		else {
-			if (TempResult.has_value())
-			{
-				Result ReturnResult;
-				ReturnResult.Accept = std::move(TempResult);
-				TempResult.reset();
-				ReturnResult.IsEndOfFile = false;
-				return ReturnResult;
-			}
-			return {};
-		}
-	}
-
-	std::optional<ProcessResult> ProcessGreedyFrontMatch(TableWrapper Wrapper, std::u32string_view Span)
-	{
-		GreedyFrontMatchProcessor Pro(Wrapper);
-		while (true)
-		{
-			auto Re = Pro.GetRequireTokenIndex();
-			char32_t Input = (Re >= Span.size() ? EndOfFile() : Span[Re]);
-			auto Re2 = Pro.ConsumeTokenInput(Input, Re + 1);
-			if (Re2.has_value())
-			{
-				if (Re2->Accept.has_value())
-					return Re2->Accept;
-				if (Re2->IsEndOfFile)
-					return {};
-			}
-			else {
-				return {};
-			}
-		}
-		return {};
-	}
-
-
-	StandardT MulityRegexCreator::Push(UnfaTable const& UT)
-	{
-		if (Temporary.has_value())
-		{
-			Temporary->Link(UT, true);
-		}
-		else {
-			Temporary = UT;
-		}
-		++CountedUniqueID;
-		return CountedUniqueID;
-	}
-
-	StandardT MulityRegexCreator::AddRegex(std::u32string_view Regex, Accept Mask, StandardT UniqueID, bool IsRaw)
-	{
-		return Push(UnfaTable::Create(Regex, IsRaw, Mask, UniqueID));
-	}
-
-
-	std::vector<StandardT> MulityRegexCreator::Generate() const
-	{
-		assert(Temporary.has_value());
-		return TableWrapper::Create(*Temporary);
-	}
-	*/
 
 	namespace Exception
 	{

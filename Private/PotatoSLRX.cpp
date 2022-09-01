@@ -403,7 +403,7 @@ namespace Potato::SLRX
 
 
 
-	LR0Table::LR0Table(ProductionInfo Infos)
+	LR0::LR0(ProductionInfo Infos)
 	{
 		std::vector<ProductionInfo::SearchElement> Status;
 		std::vector<Misc::IndexSpan<>> PreNode;
@@ -609,7 +609,7 @@ namespace Potato::SLRX
 		std::size_t ToNode;
 		std::ptrdiff_t Reduce;
 		std::size_t LastState;
-		LR0Table::Reduce Property;
+		LR0::Reduce Property;
 	};
 
 	struct FastShift
@@ -673,10 +673,9 @@ namespace Potato::SLRX
 
 
 
-	SLRXTable::SLRXTable(LR0Table const& Table, std::size_t MaxForwardDetect)
+	LRX::LRX(LR0 const& Table, std::size_t MaxForwardDetect)
 	{
 		
-
 		std::vector<FastNode> TempNode;
 
 		{
@@ -1174,7 +1173,7 @@ namespace Potato::SLRX
 		}
 	}
 
-	std::vector<TableWrapper::StandardT> TableWrapper::Create(SLRXTable const& Table)
+	std::vector<TableWrapper::StandardT> TableWrapper::Create(LRX const& Table)
 	{
 		std::vector<StandardT> FinalBuffer;
 		FinalBuffer.resize(3);
@@ -1189,7 +1188,7 @@ namespace Potato::SLRX
 		struct ReducePropertyMapping
 		{
 			std::size_t Offset;
-			std::span<SLRXTable::ReduceTuple const> Mapping; 
+			std::span<LRX::ReduceTuple const> Mapping; 
 		};
 		
 		std::vector<ShiftPropertyMapping> ShiftMapping;
@@ -1538,7 +1537,7 @@ namespace Potato::SLRX
 		return FinalBuffer;
 	}
 
-	bool CoreProcessor::DetectSymbolEqual(std::deque<CacheSymbol> const& T1, std::span<StandardT const> T2)
+	bool IsSymbolEqual(std::deque<CacheSymbol> const& T1, std::span<StandardT const> T2)
 	{
 		if (T1.size() >= T2.size())
 		{
@@ -1555,9 +1554,140 @@ namespace Potato::SLRX
 			return Equal;
 		}
 		return false;
-		
 	}
 
+	auto CoreProcessor::ConsumeSymbol(LRX const& Table, Symbol InputSymbol, std::size_t TokenIndex)->Result
+	{
+		if(States.empty())
+			return {{}};
+		assert(InputSymbol.IsTerminal());
+		bool IsEndOfFile = InputSymbol.IsEndOfFile();
+
+		if (!IsEndOfFile)
+			CacheSymbols.push_back({ TokenIteratorIndex, TokenIndex, InputSymbol.Value });
+
+		bool Consumed = false;
+
+		while (!CacheSymbols.empty() && MaxForwardDetect <= CacheSymbols.size() || IsEndOfFile)
+		{
+			auto NodeWrapper = Wrapper.ReadNode(*States.rbegin());
+			bool Find = false;
+
+			for (auto Ite = NodeWrapper.Iterate(); Ite.has_value(); Ite = Ite->Next())
+			{
+				if (Ite->Storage.IsShift)
+				{
+					if (IsEndOfFile == Ite->Storage.IncludeEndOfFile && DetectSymbolEqual(CacheSymbols, Ite->Symbols))
+					{
+						auto ShiftPro = Ite->ReadShiftProperty();
+						States.push_back(ShiftPro.ToNode);
+						MaxForwardDetect = ShiftPro.ForwardDetectCount;
+
+						if (!CacheSymbols.empty())
+						{
+							auto Last = *CacheSymbols.begin();
+							ParsingStep NewStep;
+							NewStep.Value = Symbol::AsTerminal(Last.Value);
+							NewStep.Shift.TokenIndex = Last.TokenIndex;
+							Steps.push_back(NewStep);
+							CacheSymbols.pop_front();
+						}
+						Consumed = true;
+						Find = true;
+						break;
+					}
+				}
+				else {
+					if (
+						(!Ite->Storage.IncludeEndOfFile && Ite->Symbols.empty())
+						|| IsEndOfFile == Ite->Storage.IncludeEndOfFile && DetectSymbolEqual(CacheSymbols, Ite->Symbols)
+						)
+					{
+						auto Reduce = Ite->ReadReduceProperty();
+
+						assert(States.size() >= Reduce.Storage.ProductionCount);
+						States.resize(States.size() - Reduce.Storage.ProductionCount);
+						std::size_t LastState = *States.rbegin();
+						bool Find2 = false;
+						for (auto Ite3 : Reduce.Mapping)
+						{
+							if (LastState == Ite3.LastState)
+							{
+								States.push_back(Ite3.ToState);
+								MaxForwardDetect = Ite3.ForwardDetectCount;
+								ParsingStep NewStep;
+								NewStep.Value = Symbol::AsNoTerminal(Reduce.Storage.NoTerminalValue);
+								NewStep.Reduce.Mask = Reduce.Storage.Mask;
+								NewStep.Reduce.ProductionIndex = Reduce.Storage.ProductionIndex;
+								NewStep.Reduce.ProductionCount = Reduce.Storage.ProductionCount;
+								Steps.push_back(NewStep);
+								Find = true;
+								Find2 = true;
+								break;
+							}
+						}
+						assert(Find2);
+						break;
+					}
+				}
+			}
+			if (!Find)
+			{
+
+				if (IsEndOfFile && CacheSymbols.empty() && NodeWrapper.Storage.ForwardDetectedCount == 0)
+				{
+					States.clear();
+					break;
+				}
+
+				std::size_t LastState = *States.rbegin();
+
+				std::vector<UnaccableSymbol::Tuple> RequireSymbols;
+
+				for (auto Ite = NodeWrapper.Iterate(); Ite.has_value(); Ite = Ite->Next())
+				{
+
+					std::optional<UnaccableSymbol::Tuple> RS;
+
+					std::size_t I1 = 0;
+					for (; I1 < Ite->Symbols.size() && I1 < CacheSymbols.size(); ++I1)
+					{
+						if (Ite->Symbols[I1] != CacheSymbols[I1].Value)
+							break;
+					}
+
+					if (I1 < Ite->Symbols.size())
+					{
+						if (I1 < CacheSymbols.size())
+						{
+							RS = { Symbol::AsTerminal(Ite->Symbols[I1]), CacheSymbols[I1].TokenIndex };
+						}
+						else {
+							RS = { Symbol::AsTerminal(Ite->Symbols[I1]), TokenIteratorIndex };
+						}
+					}
+					else {
+						RS = { Symbol::EndOfFile(), TokenIteratorIndex };
+					}
+
+					if (RS.has_value())
+					{
+						if (std::find(RequireSymbols.begin(), RequireSymbols.end(), *RS) == RequireSymbols.end())
+							RequireSymbols.push_back(*RS);
+					}
+				}
+
+				throw UnaccableSymbol{
+					InputSymbol,
+					TokenIteratorIndex,
+					TokenIndex,
+					std::move(RequireSymbols)
+				};
+			}
+		}s
+	}
+
+	/*
 	void CoreProcessor::Consume(Symbol InputSymbol, std::size_t TokenIndex)
 	{
 		if (States.empty())
@@ -1697,6 +1827,7 @@ namespace Potato::SLRX
 		assert(States.empty());
 		return std::move(Steps);
 	}
+	*/
 
 
 	TableWrapper::NodeWrapperT TableWrapper::ReadNode(std::size_t Offset) const

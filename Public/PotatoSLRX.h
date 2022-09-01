@@ -238,7 +238,7 @@ namespace Potato::SLRX
 		std::map<Symbol, std::vector<std::size_t>> TrackedAcceptableNoTerminalSymbol;
 	};
 
-	struct LR0Table
+	struct LR0
 	{
 		struct ShiftEdge
 		{
@@ -281,14 +281,14 @@ namespace Potato::SLRX
 
 		std::vector<Node> Nodes;
 
-		LR0Table(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority)
-			: LR0Table(ProductionInfo{StartSymbol, std::move(Production), std::move(Priority)}) {}
-		LR0Table(ProductionInfo Info);
-		LR0Table(LR0Table&&) = default;
-		LR0Table(LR0Table const&) = default;
+		LR0(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority)
+			: LR0(ProductionInfo{StartSymbol, std::move(Production), std::move(Priority)}) {}
+		LR0(ProductionInfo Info);
+		LR0(LR0&&) = default;
+		LR0(LR0 const&) = default;
 	};
 
-	struct SLRXTable
+	struct LRX
 	{
 		struct Shift
 		{
@@ -306,26 +306,26 @@ namespace Potato::SLRX
 		{
 			std::vector<std::vector<Symbol>> RequireSymbolss;
 			std::vector<ReduceTuple> ReduceShifts;
-			LR0Table::Reduce Property;
+			LR0::Reduce Property;
 		};
 
 		struct Node
 		{
 			std::vector<Shift> Shifts;
 			std::vector<Reduce> Reduces;
-			std::vector<LR0Table::MappedProduction> MappedProduction;
+			std::vector<LR0::MappedProduction> MappedProduction;
 			std::size_t MaxForwardDetectCount = 0;
 		};
 
 		std::vector<Node> Nodes;
 
-		SLRXTable(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority, std::size_t MaxForwardDetect = 3)
-			: SLRXTable(LR0Table{StartSymbol, std::move(Production), std::move(Priority)}, MaxForwardDetect) {}
-		SLRXTable(LR0Table const& Table, std::size_t MaxForwardDetect = 3);
-		SLRXTable(SLRXTable const&) = default;
-		SLRXTable(SLRXTable&&) = default;
-		SLRXTable& operator=(SLRXTable const&) = default;
-		SLRXTable& operator=(SLRXTable&&) = default;
+		LRX(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority, std::size_t MaxForwardDetect = 3)
+			: LRX(LR0{StartSymbol, std::move(Production), std::move(Priority)}, MaxForwardDetect) {}
+		LRX(LR0 const& Table, std::size_t MaxForwardDetect = 3);
+		LRX(LRX const&) = default;
+		LRX(LRX&&) = default;
+		LRX& operator=(LRX const&) = default;
+		LRX& operator=(LRX&&) = default;
 	};
 
 	struct TableWrapper
@@ -381,12 +381,12 @@ namespace Potato::SLRX
 		};
 
 		static std::vector<StandardT> Create(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority){ 
-			return Create(SLRXTable{ StartSymbol, std::move(Production), std::move(Priority) });
+			return Create(LRX{ StartSymbol, std::move(Production), std::move(Priority) });
 		}
 		static std::vector<StandardT> Create(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority, std::size_t MaxForwardDetect) {
-			return Create(SLRXTable{ StartSymbol, std::move(Production), std::move(Priority), MaxForwardDetect });
+			return Create(LRX{ StartSymbol, std::move(Production), std::move(Priority), MaxForwardDetect });
 		}
-		static std::vector<StandardT> Create(SLRXTable const& Table);
+		static std::vector<StandardT> Create(LRX const& Table);
 
 		TableWrapper(std::span<StandardT const> Wrapper) : Wrapper(Wrapper) {}
 		TableWrapper(TableWrapper const&) = default;
@@ -431,6 +431,36 @@ namespace Potato::SLRX
 		friend struct CoreProcessor;
 	};
 
+	struct CoreProcessor
+	{
+		struct Result
+		{
+			std::optional<std::vector<Symbol>> RequireSymbols;
+		};
+
+		auto ConsumeSymbol(LRX const& Table, Symbol InputSymbol, std::size_t TokenIndex)->Result;
+		auto ConsumeSymbol(TableWrapper Table, Symbol InputSymbol, std::size_t TokenIndex)->Result;
+		auto EndOfFile(LRX const& Table, std::size_t StartupNodeIndex) -> Result;
+		auto EndOfFule(TableWrapper Table, std::size_t StartupNodeIndex) -> Result;
+		void Clear(std::size_t StartupNodeIndex);
+
+		struct CacheSymbol
+		{
+			std::size_t TokenIteratorIndex;
+			std::size_t TokenIndex;
+			StandardT Value;
+		};
+
+		std::vector<std::size_t> States;
+		std::size_t MaxForwardDetect;
+
+		static bool DetectSymbolEqual(std::deque<CacheSymbol> const& T1, std::span<StandardT const> T2);
+
+		std::deque<CacheSymbol> CacheSymbols;
+		std::vector<ParsingStep> Steps;
+	};
+
+	/*
 	struct Table
 	{
 		Table(Table const& Input) : Datas(Input.Datas) { Wrapper = TableWrapper{ Datas }; }
@@ -446,18 +476,18 @@ namespace Potato::SLRX
 			return *this;
 		}
 		Table() = default;
-		Table(SLRX::SLRXTable const& Table)
+		Table(SLRX::LRX const& Table)
 		{
 			Datas = TableWrapper::Create(Table);
 			Wrapper = TableWrapper(Datas);
 		}
 		Table(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority, std::size_t MaxForwardDetected)
-			: Table(SLRX::SLRXTable{ StartSymbol, std::move(Production), std::move(Priority), MaxForwardDetected })
+			: Table(SLRX::LRX{ StartSymbol, std::move(Production), std::move(Priority), MaxForwardDetected })
 		{
 			
 		}
 		Table(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority)
-			: Table(SLRX::SLRXTable{ StartSymbol, std::move(Production), std::move(Priority) })
+			: Table(SLRX::LRX{ StartSymbol, std::move(Production), std::move(Priority) })
 		{
 		}
 		std::size_t NodeCount() const { return Wrapper.NodeCount(); }
@@ -504,6 +534,7 @@ namespace Potato::SLRX
 
 		TableWrapper Wrapper;
 	};
+	*/
 
 
 	namespace Exception
@@ -546,9 +577,9 @@ namespace Potato::SLRX
 			std::size_t DetectNum;
 			std::vector<ParsingStep> Steps1;
 			std::vector<ParsingStep> Steps2;
-			std::vector<LR0Table::MappedProduction> EffectProductions;
+			std::vector<LR0::MappedProduction> EffectProductions;
 			
-			IllegalSLRXProduction(Category Type, std::size_t MaxForwardDetectNum, std::size_t DetectNum, std::vector<ParsingStep> Steps1, std::vector<ParsingStep> Steps2, std::vector<LR0Table::MappedProduction> EffectProductions)
+			IllegalSLRXProduction(Category Type, std::size_t MaxForwardDetectNum, std::size_t DetectNum, std::vector<ParsingStep> Steps1, std::vector<ParsingStep> Steps2, std::vector<LR0::MappedProduction> EffectProductions)
 				: Type(Type), MaxForwardDetectNum(MaxForwardDetectNum), DetectNum(DetectNum), Steps1(std::move(Steps1)), Steps2(std::move(Steps2)), EffectProductions(std::move(EffectProductions)) {}
 
 			IllegalSLRXProduction(IllegalSLRXProduction const&) = default;

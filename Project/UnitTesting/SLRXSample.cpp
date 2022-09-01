@@ -70,9 +70,9 @@ constexpr Symbol operator*(NT sym) { return Symbol::AsNoTerminal(static_cast<Sta
 
 void TestingSLRX()
 {
-	/*
+
 	try {
-		SLRXTable Tab(
+		LRX Tab(
 			*Noterminal::Exp,
 			{
 				{*Noterminal::Exp, {*Noterminal::Exp, *Noterminal::Exp}, 2},
@@ -97,7 +97,7 @@ void TestingSLRX()
 
 
 	try {
-		SLRXTable Tab(
+		LRX Tab(
 			*Noterminal::Exp,
 			{
 				{*Noterminal::Exp, {*Noterminal::Exp, *Noterminal::Exp}, 2},
@@ -121,7 +121,7 @@ void TestingSLRX()
 
 
 	try {
-		SLRXTable tab(
+		LRX tab(
 			*Noterminal::Exp,
 			{
 				{*Noterminal::Exp, {*Noterminal::Exp1, *Terminal::Num, *Terminal::Num, *Terminal::Num, *Terminal::Add}, 1},
@@ -134,7 +134,7 @@ void TestingSLRX()
 		4
 		);
 	}
-	catch (Exception::IllegalSLRXProduction const& Wtf)
+	catch (Exception::IllegalSLRXProduction const&)
 	{
 		throw UnpassedUnit{ "TestingSLRX : Bad Output Result 1.3" };
 	}
@@ -145,7 +145,7 @@ void TestingSLRX()
 
 
 	try {
-		SLRXTable tab(
+		LRX tab(
 			*Noterminal::Exp,
 			{
 				{*Noterminal::Exp, {*Noterminal::Exp, *Noterminal::Exp, 1}, 1},
@@ -166,7 +166,7 @@ void TestingSLRX()
 	}
 
 	try {
-		SLRXTable tab(
+		LRX tab(
 			*Noterminal::Exp,
 			{
 				{*Noterminal::Exp, {*Noterminal::Exp, *Noterminal::Exp, ItSelf{}}, 1},
@@ -226,7 +226,7 @@ void TestingSLRX()
 			Pro.Consume(*Ite.Ope);
 		}
 
-		auto Stes = Pro.EndOfFIle();
+		auto Stes = Pro.EndOfFile();
 
 		auto Func = [&](VariantElement Ele) -> std::any {
 			if (Ele.IsNoTerminal())
@@ -270,8 +270,6 @@ void TestingSLRX()
 	}
 
 	std::wcout << LR"(TestingSLRX Pass !)" << std::endl;
-
-	*/
 
 	try
 	{

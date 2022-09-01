@@ -7,6 +7,11 @@ using namespace Potato::Reg;
 
 void TestingReg()
 {
+
+	DFA T(UR"(.*?[a-zA-Z]+)");
+
+	/*
+
 	// Case 1
 	{
 		DFA Tab1(UR"(abcd)", false, {2});
@@ -17,7 +22,7 @@ void TestingReg()
 
 		if (!Re.has_value())
 		{
-			throw UnpassedUnit{"Testing Reg Fauilt Case 1"};
+			throw UnpassedUnit{"Testing Reg Failure Case 1"};
 		}
 
 		auto Wra = TableWrapper::Create(Tab1);
@@ -26,7 +31,7 @@ void TestingReg()
 
 		if (!Re2.has_value())
 		{
-			throw UnpassedUnit{ "Testing Reg Fauilt Case 1" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 1" };
 		}
 
 	}
@@ -42,7 +47,7 @@ void TestingReg()
 
 		if (!Re.has_value())
 		{
-			throw UnpassedUnit{ "Testing Reg Fauilt Case 2" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 2" };
 		}
 
 		auto Wra = TableWrapper::Create(Tab1);
@@ -51,7 +56,7 @@ void TestingReg()
 
 		if (!Re2.has_value())
 		{
-			throw UnpassedUnit{ "Testing Reg Fauilt Case 2" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 2" };
 		}
 	}
 
@@ -66,7 +71,7 @@ void TestingReg()
 
 		if (!Re.has_value())
 		{
-			throw UnpassedUnit{ "Testing Reg Fauilt Case 3" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 3" };
 		}
 
 		auto Wra = TableWrapper::Create(Tab1);
@@ -75,7 +80,7 @@ void TestingReg()
 
 		if (!Re2.has_value())
 		{
-			throw UnpassedUnit{ "Testing Reg Fauilt Case 3" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 3" };
 		}
 	}
 
@@ -89,7 +94,7 @@ void TestingReg()
 
 		if (!Re.has_value())
 		{
-			throw UnpassedUnit{ "Testing Reg Fauilt Case 4" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 4" };
 		}
 
 		auto Wra = TableWrapper::Create(Tab1);
@@ -98,22 +103,10 @@ void TestingReg()
 
 		if (!Re2.has_value())
 		{
-			throw UnpassedUnit{ "Testing Reg Fauilt Case 4" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 4" };
 		}
 	}
 
-	// Case 5
-	{
-		MulityRegCreater Crea;
-		Crea.LowPriorityLink(UR"(a)", true, { 0 });
-		Crea.LowPriorityLink(UR"([a-z]+)", false, { 2 });
-		auto DFA = *Crea.GenerateNFA();
-		std::u32string_view Str = UR"(aa)";
-		auto Re = HeadMatch(DFA, Str, true);
-		volatile int i = 0;
-	}
-
-	/*
 	// Case 5
 
 	{
@@ -123,7 +116,7 @@ void TestingReg()
 		Crea.LowPriorityLink(UR"([a-z]+)", false, { 2 });
 		Crea.LowPriorityLink(UR"(\s+)", false, { 3 });
 
-		auto DFA = *Crea.GenerateNFA();
+		auto DFA = *Crea.GenerateDFA();
 
 		std::u32string_view Str = UR"(what whatif  if abd def)";
 
@@ -136,7 +129,7 @@ void TestingReg()
 			auto Re = HeadMatch(DFA, S, true);
 			if (!Re.has_value())
 			{
-				throw UnpassedUnit{ "Testing Reg Fauilt Case 5" };
+				throw UnpassedUnit{ "Testing Reg Failure Case 5" };
 			}
 			else {
 				List.push_back(S.substr(0, Re->MainCapture.Count()));
@@ -146,157 +139,128 @@ void TestingReg()
 
 		if (List.size() != 9)
 		{
-			throw UnpassedUnit{ "Testing Reg Fauilt Case 5" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 5" };
 		}
 
 	}
-	*/
 
 
-	//Crerator.AddRegex(UR"((a){1,4})", { 2 }, Crerator.GetCountedUniqueID());
-	//Crerator.AddRegex(UR"((ab){2,3}b)", { 2 }, Crerator.GetCountedUniqueID());
-	//Crerator.AddRegex(UR"(+)", { 1 }, Crerator.GetCountedUniqueID(), true);
-
-	/*
-	EpsilonNFATable Table = EpsilonNFATable::Create(UR"(a{0,3}(abc))", false, {0});
-	Table.Link(EpsilonNFATable::Create(UR"((a*)ab)", false, { 1 }));
-	Table.Link(EpsilonNFATable::Create(UR"(a*abcd)", false, { 2 }));
-	NFATable Ta(Table);
-
-	DFATable DT(Ta);
-	*/
-
-	EpsilonNFA Table2 = EpsilonNFA::Create(UR"(what)", false, { 0 });
-	Table2.Link(EpsilonNFA::Create(UR"([a-z]*)", false, { 1 }));
-
-	NFA Ta2(Table2);
-
-	DFA DT2(Ta2);
-
-	
-
-	auto Re = HeadMatch(DT2, U"whati ", true);
-
-	auto K = TableWrapper::Create(DT2);
-
-
-	
-	/*
-	auto Re2 = DFATableHeadMatch(DT2, U"what");
-	*/
-
-
-	volatile int i = 0;
-	/*
+	// Case 6
 	{
 		std::u32string_view Str = UR"(123456abcdef)";
 		std::u32string_view TStr = UR"(123456)";
 
-		Table T(TStr);
+		DFA T(TStr);
 
-		auto R = ProcessFrontMatch(T.AsWrapper(), Str);
+		auto R = HeadMatch(T, Str);
 
 		if (!R.has_value() || Str.substr(R->MainCapture.Begin(), R->MainCapture.Count()) != TStr)
-			throw UnpassedUnit{ "TestingReg : Bad Sample 1" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 6" };
 	}
 
+	// Case 7
 	{
 		std::u32string_view Str = UR"(2)";
 
-		Table T(UR"([0-9])");
+		DFA T(UR"([0-9])");
 
-		auto R = ProcessMatch(T.AsWrapper(), Str);
+		auto R = Match(T, Str);
 
-		if (!R.has_value() || Str.substr(R->MainCapture.Begin(), R->MainCapture.Count()) != Str)
-			throw UnpassedUnit{ "TestingReg : Bad Sample 2" };
+		if (!R.has_value())
+			throw UnpassedUnit{ "Testing Reg Failure Case 7" };
 	}
 
+	// Case 8
 	{
 		std::u32string_view Str = UR"(11111)";
 
-		Table T(UR"(1*)");
+		DFA T(UR"(1*)");
 
-		auto R = ProcessMatch(T.AsWrapper(), Str);
+		auto R = Match(T, Str);
 
-		if (!R.has_value() || Str.substr(R->MainCapture.Begin(), R->MainCapture.Count()) != Str)
-			throw UnpassedUnit{ "TestingReg : Bad Sample 3" };
+		if (!R.has_value())
+			throw UnpassedUnit{ "Testing Reg Failure Case 8" };
 	}
 
+	// Case 9
 	{
 		std::u32string_view Str = UR"(11111)";
 
-		Table T(UR"(1+)");
+		DFA T(UR"(1+)");
 
-		auto R = ProcessMatch(T.AsWrapper(), Str);
+		auto R = Match(T, Str);
 
-		if (!R.has_value() || Str.substr(R->MainCapture.Begin(), R->MainCapture.Count()) != Str)
-			throw UnpassedUnit{ "TestingReg : Bad Sample 4" };
+		if (!R.has_value())
+			throw UnpassedUnit{ "Testing Reg Failure Case 9" };
 	}
 
 	
-
+	// Case 10
 	{
 		std::u32string_view Str = UR"(11112222)";
 
-		Table T(UR"((1*)2*)");
+		DFA T(UR"((1*)2*)");
 
-		auto R = ProcessMatch(T.AsWrapper(), Str);
+		auto R = Match(T, Str);
 
 		if (R.has_value() && R->GetCaptureWrapper().HasSubCapture())
 		{
 			auto Capture = R->GetCaptureWrapper().GetTopSubCapture().GetCapture();
 			if(Str.substr(Capture.Begin(), Capture.Count()) != UR"(1111)")
-				throw UnpassedUnit{ "TestingReg : Bad Sample 5" };
+				throw UnpassedUnit{ "Testing Reg Failure Case 10" };
 		}else
-			throw UnpassedUnit{ "TestingReg : Bad Sample 5" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 10" };
 	}
 
+	// Case 11
 	{
 		std::u32string_view Str = UR"(11111)";
 
-		Table T(UR"(1{1,7})");
+		DFA T(UR"(1{1,7})");
 
-		auto R = ProcessMatch(T.AsWrapper(), Str);
+		auto R = Match(T, Str);
 
 		if (!R.has_value())
-			throw UnpassedUnit{ "TestingReg : Bad Sample 6" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 11" };
 	}
 
 	std::u32string_view Str = UR"(123456789abcdefABCDEF你好啊)";
 
+	// Case 12
 	{
-		Table T(UR"([a-zA-Z]+)");
+		DFA T(UR"(.*?[a-zA-Z]+)");
 
-		auto R = ProcessSearch(T.AsWrapper(), Str);
+		auto R = HeadMatch(T, Str);
 
 		if (!R.has_value() || Str.substr(R->MainCapture.Begin(), R->MainCapture.Count()) != UR"(abcdefABCDEF)")
-			throw UnpassedUnit{ "TestingReg : Bad Sample 7" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 12" };
 	}
 	
+	// Case 13
 	{
 
 		std::u32string_view Str = UR"(abcdef{{}}ABCDEF你好啊)";
-		Table T(UR"(\{[^\{\}]*\})");
+		DFA T(UR"(.*?\{[^\{\}]*\})");
 
-		auto R = ProcessSearch(T.AsWrapper(), Str);
+		auto R = HeadMatch(T, Str);
 
 		auto Str2 = Str.substr(0, R->MainCapture.Begin());
 		auto St3 = Str.substr(R->MainCapture.Begin(), R->MainCapture.Count());
 
 		if (!R.has_value() || Str.substr(0, R->MainCapture.Begin()) != UR"(abcdef{)" || Str.substr(R->MainCapture.End()) != UR"(}ABCDEF你好啊)")
-			throw UnpassedUnit{ "TestingReg : Bad Sample 9" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 13" };
 	}
 
-
+	// Case 14
 	{
-		MulityRegexCreator Crerator;
-		Crerator.AddRegex(UR"([1-4]+)", {1}, Crerator.GetCountedUniqueID());
-		Crerator.AddRegex(UR"([1-9]+)", { 2 }, Crerator.GetCountedUniqueID());
-		Crerator.AddRegex(UR"([a-z]+)", { 3 }, Crerator.GetCountedUniqueID());
-		Crerator.AddRegex(UR"([A-Z]+)", { 4 }, Crerator.GetCountedUniqueID());
-		Crerator.AddRegex(UR"((?:你|好|啊)+)", { 5 }, Crerator.GetCountedUniqueID());
+		MulityRegCreater Crerator;
+		Crerator.LowPriorityLink(UR"([1-4]+)", false, {1});
+		Crerator.LowPriorityLink(UR"([1-9]+)", false, { 2 });
+		Crerator.LowPriorityLink(UR"([a-z]+)", false, { 3 });
+		Crerator.LowPriorityLink(UR"([A-Z]+)", false, { 4 });
+		Crerator.LowPriorityLink(UR"((?:你|好|啊)+)", false, { 5 });
 
-		auto TBuffer = Crerator.Generate();
+		auto TTable = *Crerator.GenerateDFA();
 
 		std::vector<std::tuple<std::u32string_view, std::size_t>> List;
 
@@ -304,7 +268,7 @@ void TestingReg()
 
 		while (!IteStr.empty())
 		{
-			auto R = ProcessGreedyFrontMatch(TableWrapper(TBuffer), IteStr);
+			auto R = HeadMatch(TTable, IteStr, true);
 			if (R.has_value())
 			{
 				List.push_back({ IteStr .substr(R->MainCapture.Begin(), R->MainCapture.Count()), R->AcceptData.Mask});
@@ -314,36 +278,15 @@ void TestingReg()
 		}
 
 		if (List.size() != 4)
-			throw UnpassedUnit{ "TestingReg : Bad Sample 8" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 14" };
 		if (std::get<0>(List[0]) != UR"(123456789)" || std::get<1>(List[0]) != 2)
-			throw UnpassedUnit{ "TestingReg : Bad Sample 8" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 14" };
 		if (std::get<0>(List[1]) != UR"(abcdef)" || std::get<1>(List[1]) != 3)
-			throw UnpassedUnit{ "TestingReg : Bad Sample 8" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 14" };
 		if (std::get<0>(List[2]) != UR"(ABCDEF)" || std::get<1>(List[2]) != 4)
-			throw UnpassedUnit{ "TestingReg : Bad Sample 8" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 14" };
 		if (std::get<0>(List[3]) != UR"(你好啊)" || std::get<1>(List[3]) != 5)
-			throw UnpassedUnit{ "TestingReg : Bad Sample 8" };
-	}
-	*/
-
-	/*
-	{
-		MulityRegexCreator Crerator;
-		Crerator.AddRegex(UR"((a){1,4})", { 2 }, Crerator.GetCountedUniqueID());
-		//Crerator.AddRegex(UR"((ab){2,3}b)", { 2 }, Crerator.GetCountedUniqueID());
-		//Crerator.AddRegex(UR"(+)", { 1 }, Crerator.GetCountedUniqueID(), true);
-		
-
-		auto TBuffer = Crerator.Generate();
-
-		std::vector<std::tuple<std::u32string_view, std::size_t>> List;
-
-		auto IteStr = UR"(1+21)";
-
-		auto R = ProcessGreedyFrontMatch(TableWrapper(TBuffer), IteStr);
-
-
-		volatile int i = 0;
+			throw UnpassedUnit{ "Testing Reg Failure Case 14" };
 	}
 	*/
 
