@@ -14,7 +14,7 @@ int main()
 
 		TestingSLRX();
 
-		TestingReg();
+		//TestingReg();
 
 		//TestingStrFormat();
 

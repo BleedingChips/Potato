@@ -671,11 +671,9 @@ namespace Potato::SLRX
 		return Result;
 	}
 
-
-
 	LRX::LRX(LR0 const& Table, std::size_t MaxForwardDetect)
 	{
-		
+
 		std::vector<FastNode> TempNode;
 
 		{
@@ -796,7 +794,8 @@ namespace Potato::SLRX
 		for (std::size_t I1 = 0; I1 < TempNode.size(); ++I1)
 		{
 			auto& Ref = TempNode[I1];
-			Nodes[I1].MappedProduction = Table.Nodes[I1].MappedProduction;
+			auto& Productions = Table.Nodes[I1].MappedProduction;
+			Nodes[I1].MappedProduction = Productions;
 			if (Ref.DiffReduceCount >= 2 || (!Ref.Shifts.empty() && Ref.DiffReduceCount >= 1))
 			{
 				if (MaxForwardDetect != 0)
@@ -810,49 +809,57 @@ namespace Potato::SLRX
 						0,
 						{},
 						{},
-						Nodes[I1].MappedProduction
+						Productions
 						};
 				}
 			}
 			else {
 				auto& CurRef = Nodes[I1];
+
+				if (!Ref.Shifts.empty() && CurRef.RequireNodes.empty())
+					CurRef.RequireNodes.push_back({});
+
 				for (auto& Ite : Ref.Shifts)
 				{
 					std::vector<Symbol> Symbols;
 					Symbols.push_back(Ite.RequireSymbol);
 
-					auto FindIte = std::find_if(CurRef.Shifts.begin(), CurRef.Shifts.end(), [&](Shift const& R){
-						return R.ToNode == Ite.ToNode;
-					});
+					auto FindIte = std::find(CurRef.Shifts.begin(), CurRef.Shifts.end(), Ite.ToNode);
 
-					if(FindIte != CurRef.Shifts.end())
-						FindIte->RequireSymbolss.push_back(std::move(Symbols));
-					else {
-						Shift NewShift;
-						NewShift.RequireSymbolss.push_back(std::move(Symbols));
-						NewShift.ToNode = Ite.ToNode;
-						CurRef.Shifts.push_back(std::move(NewShift));
+					std::size_t ShiftsOffset = 0;
+
+					if (FindIte != CurRef.Shifts.end())
+					{
+						ShiftsOffset = static_cast<std::size_t>(std::distance(CurRef.Shifts.begin(), FindIte));
 					}
+					else {
+						ShiftsOffset = CurRef.Shifts.size();
+						CurRef.Shifts.push_back(Ite.ToNode);
+					}
+
+					CurRef.RequireNodes[0].push_back({RequireNode::TypeT::ShiftProperty, Ite.RequireSymbol, Ite.ToNode});
 				}
 
 				for (auto& Ite : Ref.Reduces)
 				{
 
-					auto FindIte = std::find_if(CurRef.Reduces.begin(), CurRef.Reduces.end(), [&](Reduce const& R) {
+					assert(CurRef.Reduces.size() <= 1 && CurRef.RequireNodes.empty());
+
+					auto FindIte = std::find_if(CurRef.Reduces.begin(), CurRef.Reduces.end(), [&](ReduceProperty const& R) {
 						return R.Property.ProductionIndex == Ite.Property.ProductionIndex;
 						});
 
-					if (FindIte != CurRef.Reduces.end())
-						FindIte->RequireSymbolss.push_back({});
-					else {
-						Reduce NewReduce;
-						NewReduce.Property = Ref.Reduces[0].Property;
-						NewReduce.RequireSymbolss.push_back({});
+					assert(FindIte == CurRef.Reduces.end());
+
+					if (FindIte == CurRef.Reduces.end())
+					{
+						ReduceProperty NewProperty;
+						NewProperty.Property = Ref.Reduces[0].Property;
 						for (auto& Ite : Ref.Reduces)
 						{
-							NewReduce.ReduceShifts.push_back({ Ite.LastState, Ite.ToNode });
+							NewProperty.Tuples.push_back({ Ite.LastState, Ite.ToNode });
 						}
-						CurRef.Reduces.push_back(std::move(NewReduce));
+						CurRef.Reduces.push_back(std::move(NewProperty));
 					}
 				}	
 			}
@@ -1057,65 +1064,105 @@ namespace Potato::SLRX
 
 							std::size_t ToNode = Find1->ToNode;
 
-							auto& ShiftRef = Nodes[ConfligNodeIte].Shifts;
-							auto Find = std::find_if(ShiftRef.begin(), ShiftRef.end(), [=](Shift const& R){
-								return R.ToNode == ToNode;
-							});
+							auto& NodeRef = Nodes[ConfligNodeIte];
 
-							if (Find != ShiftRef.end())
+							auto& ShiftRef = NodeRef.Shifts;
+							std::size_t ToNodeOffset = ShiftRef.size();
+
+							auto Find = std::find(ShiftRef.begin(), ShiftRef.end(), ToNode);
+
+							if(Find != ShiftRef.end())
+								ToNodeOffset = std::distance(ShiftRef.begin(), Find);
+							else
+								ShiftRef.push_back(ToNode);
+
+							std::size_t NodeIte = 0;
+
+							auto SymbolSpan = std::span(Symbols);
+
+							while (!SymbolSpan.empty())
 							{
-								Find->RequireSymbolss.push_back(std::move(Symbols));
-							}
-							else {
-								Shift NewShift;
-								NewShift.RequireSymbolss.push_back(std::move(Symbols));
-								NewShift.ToNode = ToNode;
-								ShiftRef.push_back(std::move(NewShift));
+								auto Top = *SymbolSpan.begin();
+								SymbolSpan = SymbolSpan.subspan(1);
+								
+								if (NodeRef.RequireNodes.size() < NodeIte)
+									NodeRef.RequireNodes.emplace_back();
+
+								assert(NodeRef.RequireNodes.size() > NodeIte);
+
+								auto& RNode = NodeRef.RequireNodes[NodeIte];
+
+								bool Find = false;
+
+								for (auto& Ite2 : RNode)
+								{
+									if (Ite2.RequireSymbol == Top)
+									{
+										assert(!SymbolSpan.empty() && Ite2.Type == RequireNode::TypeT::SymbolValue);
+										Find = true;
+										NodeIte = Ite2.ReferenceIndex;
+										break;
+									}
+								}
+
+								if (!Find)
+								{
+									if (!SymbolSpan.empty())
+									{
+										RNode.push_back(RequireNode{
+											RequireNode::TypeT::SymbolValue,
+											Top,
+											NodeRef.RequireNodes.size()
+										});
+									}
+									else {
+										RNode.push_back(RequireNode{
+											RequireNode::TypeT::ShiftProperty,
+											Top,
+											ToNodeOffset
+										});
+									}
+									NodeIte = NodeRef.RequireNodes.size();
+								}
 							}
 						}
 						else {
-
 							
+
+
 							auto Find1 = std::find_if(TempNodeRef.Reduces.begin(), TempNodeRef.Reduces.end(), [&](FastReduce const& P) {
 								return P.Property.ProductionIndex == TopEle.UniqueID;
 							});
 
 							assert(Find1 != TempNodeRef.Reduces.end());
 
-							auto& ReduceRef = Nodes[ConfligNodeIte].Reduces;
+							auto& NodeRef = Nodes[ConfligNodeIte];
+							auto& ReduceRef = NodeRef.Reduces;
 
-							auto Find = std::find_if(ReduceRef.begin(), ReduceRef.end(), [=](Reduce const& R){
+							auto Find = std::find_if(ReduceRef.begin(), ReduceRef.end(), [=](ReduceProperty const& R){
 								return R.Property.ProductionIndex == TopEle.UniqueID;
 							});
 
+							std::size_t PropertyOffset = NodeRef.Reduces.size();
+
 							if (Find != ReduceRef.end())
 							{
-								Find->RequireSymbolss.push_back(std::move(Symbols));
+								PropertyOffset = std::distance(ReduceRef.begin(), Find);
 							}
 							else {
-								Reduce NewReduce;
-								NewReduce.RequireSymbolss.push_back(std::move(Symbols));
-								
-								auto& TempNodeRef = TempNode[ConfligNodeIte];
-								bool Set = false;
-
+								ReduceProperty NewElement;
+								NewElement.Property = Find1->Property;
 								for (auto& Ite22 : TempNodeRef.Reduces)
 								{
 									if (Ite22.Property.ProductionIndex == TopEle.UniqueID)
 									{
-										NewReduce.ReduceShifts.push_back({ Ite22.LastState, Ite22.ToNode });
-										if (!Set)
-										{
-											Set = true;
-											NewReduce.Property = Ite22.Property;
-										}
+										NewElement.Tuples.push_back({ Ite22.LastState, Ite22.ToNode });
 									}
 								}
-								ReduceRef.push_back(std::move(NewReduce));
+								NodeRef.Reduces.push_back(std::move(NewElement));
 							}
 						}
 						auto& CurNode = Nodes[ConfligNodeIte];
-						CurNode.MaxForwardDetectCount = std::max(CurNode.MaxForwardDetectCount, TopSet.DetectedTerminalSymbol.size() + 1);
 					}
 					else {
 
@@ -1172,6 +1219,13 @@ namespace Potato::SLRX
 			}
 		}
 	}
+
+	auto LRXProcessor::Consume(Symbol Value, std::size_t TokenIndex)->CoreProcessor::Result
+	{
+		return {};
+	}
+
+	/*
 
 	std::vector<TableWrapper::StandardT> TableWrapper::Create(LRX const& Table)
 	{
@@ -1389,64 +1443,6 @@ namespace Potato::SLRX
 			}
 		}
 
-		/*
-		for (std::size_t I1 = 0; I1 < Table.Nodes.size(); ++I1)
-		{
-			auto& NodeRef = Table.Nodes[I1];
-			auto CurSpan = std::span(FinalBuffer).subspan(NodeOffset[I1]);
-			auto CurNode = Misc::SerilizerHelper::ReadObject<NodeStorageT>(CurSpan);
-			auto SpanIte = CurNode.LastSpan;
-
-			std::optional<std::size_t> LastIndex;
-
-			for (auto& Ite : NodeRef.Shifts)
-			{
-				if (!LastIndex.has_value() || Ite.ToNode != *LastIndex)
-				{
-					LastIndex = Ite.ToNode;
-					auto PropertyEdge = Misc::SerilizerHelper::ReadObject<RequireSymbolStorageT>(SpanIte);
-					auto Symbol = Misc::SerilizerHelper::ReadObjectArray<StandardT>(PropertyEdge.LastSpan, PropertyEdge->TerminalSymbolRequireCount);
-					auto Property = Misc::SerilizerHelper::ReadObject<ShiftPropertyT>(Symbol.LastSpan.subspan(PropertyEdge->PropertyOffset));
-					std::size_t RN = NodeOffset[Ite.ToNode];
-					std::size_t RD = Table.Nodes[Ite.ToNode].MaxForwardDetectCount;
-					Misc::SerilizerHelper::TryCrossTypeSet(Property->ToNode, RN, OutOfRange{ OutOfRange::TypeT::NodeOffset, RN });
-					Misc::SerilizerHelper::TryCrossTypeSet(Property->ForwardDetectCount, RD, OutOfRange{ OutOfRange::TypeT::NodeForwardDetectCount, RN });
-					SpanIte = Symbol.LastSpan;
-				}	
-			}
-
-			LastIndex.reset();
-
-			for (auto& Ite : NodeRef.Reduces)
-			{
-
-				if (!LastIndex.has_value() || Ite.Property.ProductionIndex != *LastIndex)
-				{
-					LastIndex = Ite.Property.ProductionIndex;
-					auto PropertyEdge = Misc::SerilizerHelper::ReadObject<RequireSymbolStorageT>(SpanIte);
-					auto Symbol = Misc::SerilizerHelper::ReadObjectArray<StandardT>(PropertyEdge.LastSpan, PropertyEdge->TerminalSymbolRequireCount);
-					auto Property = Misc::SerilizerHelper::ReadObject<ReducePropertyT>(Symbol.LastSpan.subspan(PropertyEdge->PropertyOffset));
-					auto ToNodeMap = Misc::SerilizerHelper::ReadObjectArray<ToNodeMappingT>(Property.LastSpan, Property->ToNodeMappingCount);
-
-
-					for (std::size_t I2 = 0; I2 < ToNodeMap->size(); ++I2)
-					{
-						auto& Ref = Ite.ReduceShifts[I2];
-						std::size_t LS = NodeOffset[Ref.LastState];
-						std::size_t TS = NodeOffset[Ref.TargetState];
-						auto& Ref2 = (*ToNodeMap)[I2];
-						Misc::SerilizerHelper::TryCrossTypeSet(Ref2.LastState, LS, OutOfRange{ OutOfRange::TypeT::NodeOffset, LS });
-						Misc::SerilizerHelper::TryCrossTypeSet(Ref2.ToState, TS, OutOfRange{ OutOfRange::TypeT::NodeOffset, TS });
-						std::size_t MaxForward = Table.Nodes[Ref.TargetState].MaxForwardDetectCount;
-						Misc::SerilizerHelper::TryCrossTypeSet(Ref2.ForwardDetectCount, MaxForward, OutOfRange{ OutOfRange::TypeT::NodeForwardDetectCount, MaxForward });
-					}
-
-					SpanIte = Symbol.LastSpan;
-				}
-			}
-		}
-		*/
-
 		Misc::SerilizerHelper::TryCrossTypeSet<OutOfRange>(FinalBuffer[0], Table.Nodes.size(), OutOfRange::TypeT::NodeCount, Table.Nodes.size() );
 		Misc::SerilizerHelper::TryCrossTypeSet<OutOfRange>(FinalBuffer[1], NodeOffset[1], OutOfRange::TypeT::NodeCount, Table.Nodes.size());
 		Misc::SerilizerHelper::TryCrossTypeSet<OutOfRange>(FinalBuffer[2], Table.Nodes[1].MaxForwardDetectCount, OutOfRange::TypeT::NodeForwardDetectCount, Table.Nodes.size());
@@ -1537,7 +1533,7 @@ namespace Potato::SLRX
 		return FinalBuffer;
 	}
 
-	bool IsSymbolEqual(std::deque<CacheSymbol> const& T1, std::span<StandardT const> T2)
+	bool CoreProcessor::DetectSymbolEqual(std::deque<CacheSymbol> const& T1, std::span<StandardT const> T2)
 	{
 		if (T1.size() >= T2.size())
 		{
@@ -1554,140 +1550,9 @@ namespace Potato::SLRX
 			return Equal;
 		}
 		return false;
+		
 	}
 
-	auto CoreProcessor::ConsumeSymbol(LRX const& Table, Symbol InputSymbol, std::size_t TokenIndex)->Result
-	{
-		if(States.empty())
-			return {{}};
-		assert(InputSymbol.IsTerminal());
-		bool IsEndOfFile = InputSymbol.IsEndOfFile();
-
-		if (!IsEndOfFile)
-			CacheSymbols.push_back({ TokenIteratorIndex, TokenIndex, InputSymbol.Value });
-
-		bool Consumed = false;
-
-		while (!CacheSymbols.empty() && MaxForwardDetect <= CacheSymbols.size() || IsEndOfFile)
-		{
-			auto NodeWrapper = Wrapper.ReadNode(*States.rbegin());
-			bool Find = false;
-
-			for (auto Ite = NodeWrapper.Iterate(); Ite.has_value(); Ite = Ite->Next())
-			{
-				if (Ite->Storage.IsShift)
-				{
-					if (IsEndOfFile == Ite->Storage.IncludeEndOfFile && DetectSymbolEqual(CacheSymbols, Ite->Symbols))
-					{
-						auto ShiftPro = Ite->ReadShiftProperty();
-						States.push_back(ShiftPro.ToNode);
-						MaxForwardDetect = ShiftPro.ForwardDetectCount;
-
-						if (!CacheSymbols.empty())
-						{
-							auto Last = *CacheSymbols.begin();
-							ParsingStep NewStep;
-							NewStep.Value = Symbol::AsTerminal(Last.Value);
-							NewStep.Shift.TokenIndex = Last.TokenIndex;
-							Steps.push_back(NewStep);
-							CacheSymbols.pop_front();
-						}
-						Consumed = true;
-						Find = true;
-						break;
-					}
-				}
-				else {
-					if (
-						(!Ite->Storage.IncludeEndOfFile && Ite->Symbols.empty())
-						|| IsEndOfFile == Ite->Storage.IncludeEndOfFile && DetectSymbolEqual(CacheSymbols, Ite->Symbols)
-						)
-					{
-						auto Reduce = Ite->ReadReduceProperty();
-
-						assert(States.size() >= Reduce.Storage.ProductionCount);
-						States.resize(States.size() - Reduce.Storage.ProductionCount);
-						std::size_t LastState = *States.rbegin();
-						bool Find2 = false;
-						for (auto Ite3 : Reduce.Mapping)
-						{
-							if (LastState == Ite3.LastState)
-							{
-								States.push_back(Ite3.ToState);
-								MaxForwardDetect = Ite3.ForwardDetectCount;
-								ParsingStep NewStep;
-								NewStep.Value = Symbol::AsNoTerminal(Reduce.Storage.NoTerminalValue);
-								NewStep.Reduce.Mask = Reduce.Storage.Mask;
-								NewStep.Reduce.ProductionIndex = Reduce.Storage.ProductionIndex;
-								NewStep.Reduce.ProductionCount = Reduce.Storage.ProductionCount;
-								Steps.push_back(NewStep);
-								Find = true;
-								Find2 = true;
-								break;
-							}
-						}
-						assert(Find2);
-						break;
-					}
-				}
-			}
-			if (!Find)
-			{
-
-				if (IsEndOfFile && CacheSymbols.empty() && NodeWrapper.Storage.ForwardDetectedCount == 0)
-				{
-					States.clear();
-					break;
-				}
-
-				std::size_t LastState = *States.rbegin();
-
-				std::vector<UnaccableSymbol::Tuple> RequireSymbols;
-
-				for (auto Ite = NodeWrapper.Iterate(); Ite.has_value(); Ite = Ite->Next())
-				{
-
-					std::optional<UnaccableSymbol::Tuple> RS;
-
-					std::size_t I1 = 0;
-					for (; I1 < Ite->Symbols.size() && I1 < CacheSymbols.size(); ++I1)
-					{
-						if (Ite->Symbols[I1] != CacheSymbols[I1].Value)
-							break;
-					}
-
-					if (I1 < Ite->Symbols.size())
-					{
-						if (I1 < CacheSymbols.size())
-						{
-							RS = { Symbol::AsTerminal(Ite->Symbols[I1]), CacheSymbols[I1].TokenIndex };
-						}
-						else {
-							RS = { Symbol::AsTerminal(Ite->Symbols[I1]), TokenIteratorIndex };
-						}
-					}
-					else {
-						RS = { Symbol::EndOfFile(), TokenIteratorIndex };
-					}
-
-					if (RS.has_value())
-					{
-						if (std::find(RequireSymbols.begin(), RequireSymbols.end(), *RS) == RequireSymbols.end())
-							RequireSymbols.push_back(*RS);
-					}
-				}
-
-				throw UnaccableSymbol{
-					InputSymbol,
-					TokenIteratorIndex,
-					TokenIndex,
-					std::move(RequireSymbols)
-				};
-			}
-		}s
-	}
-
-	/*
 	void CoreProcessor::Consume(Symbol InputSymbol, std::size_t TokenIndex)
 	{
 		if (States.empty())
@@ -1827,7 +1692,6 @@ namespace Potato::SLRX
 		assert(States.empty());
 		return std::move(Steps);
 	}
-	*/
 
 
 	TableWrapper::NodeWrapperT TableWrapper::ReadNode(std::size_t Offset) const
@@ -1878,6 +1742,7 @@ namespace Potato::SLRX
 		auto Data = Misc::SerilizerHelper::ReadObjectArray<ToNodeMappingT const>(Read.LastSpan, Read->ToNodeMappingCount);
 		return {*Read, *Data};
 	}
+	*/
 
 	namespace Exception
 	{

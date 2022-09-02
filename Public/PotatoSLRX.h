@@ -290,17 +290,15 @@ namespace Potato::SLRX
 
 	struct LRX
 	{
+
+		/*
 		struct Shift
 		{
 			std::vector<std::vector<Symbol>> RequireSymbolss;
 			std::size_t ToNode;
 		};
 
-		struct ReduceTuple
-		{
-			std::size_t LastState;
-			std::size_t TargetState;
-		};
+		
 
 		struct Reduce
 		{
@@ -308,13 +306,40 @@ namespace Potato::SLRX
 			std::vector<ReduceTuple> ReduceShifts;
 			LR0::Reduce Property;
 		};
+		*/
+
+		struct ReduceTuple
+		{
+			std::size_t LastState;
+			std::size_t TargetState;
+		};
+
+		struct ReduceProperty
+		{
+			std::vector<ReduceTuple> Tuples;
+			LR0::Reduce Property;
+		};
+
+		struct RequireNode
+		{
+			enum class TypeT : StandardT
+			{
+				SymbolValue,
+				ShiftProperty,
+				ReduceProperty
+			};
+
+			TypeT Type;
+			Symbol RequireSymbol;
+			std::size_t ReferenceIndex;
+		};
 
 		struct Node
 		{
-			std::vector<Shift> Shifts;
-			std::vector<Reduce> Reduces;
+			std::vector<std::vector<RequireNode>> RequireNodes;
+			std::vector<ReduceProperty> Reduces;
+			std::vector<std::size_t> Shifts;
 			std::vector<LR0::MappedProduction> MappedProduction;
-			std::size_t MaxForwardDetectCount = 0;
 		};
 
 		std::vector<Node> Nodes;
@@ -326,8 +351,47 @@ namespace Potato::SLRX
 		LRX(LRX&&) = default;
 		LRX& operator=(LRX const&) = default;
 		LRX& operator=(LRX&&) = default;
+
+		static constexpr std::size_t StartupOffset() { return 0; }
 	};
 
+	struct CoreProcessor
+	{
+		struct Result
+		{
+			std::vector<Symbol> RequireSymbols;
+			operator bool() const { return RequireSymbols.empty(); }
+		};
+
+		struct CacheSymbol
+		{
+			Symbol Value;
+			std::size_t TokenIndex;
+		};
+	};
+
+	struct LRXProcessor
+	{
+		LRXProcessor(LRX const& Ref) : Reference(Ref) {
+			States.push_back(LRX::StartupOffset());
+			CurrentTopState = LRX::StartupOffset();
+		}
+
+		auto Consume(Symbol Value, std::size_t TokenIndex) ->CoreProcessor::Result;
+		auto EndOfFile()->CoreProcessor::Result { return Consume(Symbol::EndOfFile(), 0); }
+
+	protected:
+
+		LRX const& Reference;
+
+		std::vector<CoreProcessor::CacheSymbol> CacheSymbols;
+		std::vector<std::size_t> States;
+		std::vector<ParsingStep> Steps;
+		std::size_t CurrentTopState;
+		std::optional<std::size_t> RequireNodeIndex;
+	};
+
+	/*
 	struct TableWrapper
 	{
 
@@ -431,36 +495,6 @@ namespace Potato::SLRX
 		friend struct CoreProcessor;
 	};
 
-	struct CoreProcessor
-	{
-		struct Result
-		{
-			std::optional<std::vector<Symbol>> RequireSymbols;
-		};
-
-		auto ConsumeSymbol(LRX const& Table, Symbol InputSymbol, std::size_t TokenIndex)->Result;
-		auto ConsumeSymbol(TableWrapper Table, Symbol InputSymbol, std::size_t TokenIndex)->Result;
-		auto EndOfFile(LRX const& Table, std::size_t StartupNodeIndex) -> Result;
-		auto EndOfFule(TableWrapper Table, std::size_t StartupNodeIndex) -> Result;
-		void Clear(std::size_t StartupNodeIndex);
-
-		struct CacheSymbol
-		{
-			std::size_t TokenIteratorIndex;
-			std::size_t TokenIndex;
-			StandardT Value;
-		};
-
-		std::vector<std::size_t> States;
-		std::size_t MaxForwardDetect;
-
-		static bool DetectSymbolEqual(std::deque<CacheSymbol> const& T1, std::span<StandardT const> T2);
-
-		std::deque<CacheSymbol> CacheSymbols;
-		std::vector<ParsingStep> Steps;
-	};
-
-	/*
 	struct Table
 	{
 		Table(Table const& Input) : Datas(Input.Datas) { Wrapper = TableWrapper{ Datas }; }

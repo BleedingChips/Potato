@@ -141,22 +141,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\Public\PotatoInterval.h" />
-    <ClInclude Include="..\..\Public\PotatoIR.h" />
-    <ClInclude Include="..\..\Public\PotatoReg.h" />
     <ClInclude Include="..\..\Public\PotatoSLRX.h" />
-    <ClInclude Include="..\..\Public\PotatoIntrusivePointer.h" />
     <ClInclude Include="..\..\Public\PotatoMisc.h" />
-    <ClInclude Include="..\..\Public\PotatoStrFormat.h" />
-    <ClInclude Include="..\..\Public\PotatoTMP.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\Private\PotatoIR.cpp" />
-    <ClCompile Include="..\..\Private\PotatoReg.cpp" />
     <ClCompile Include="..\..\Private\PotatoSLRX.cpp" />
     <ClCompile Include="..\..\Private\PotatoMisc.cpp" />
-    <ClCompile Include="..\..\Private\PotatoStrEncode.cpp" />
-    <ClCompile Include="..\..\Private\PotatoStrFormat.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

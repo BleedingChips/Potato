@@ -186,6 +186,7 @@ void TestingSLRX()
 		throw;
 	}
 	
+	/*
 	try
 	{
 		Table tab(
@@ -301,5 +302,6 @@ void TestingSLRX()
 	{
 		throw;
 	}
+	*/
 
 }
