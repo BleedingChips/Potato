@@ -320,16 +320,16 @@ namespace Potato::SLRX
 			LR0::Reduce Property;
 		};
 
+		enum class RequireNodeType : StandardT
+		{
+			SymbolValue,
+			ShiftProperty,
+			ReduceProperty
+		};
+
 		struct RequireNode
 		{
-			enum class TypeT : StandardT
-			{
-				SymbolValue,
-				ShiftProperty,
-				ReduceProperty
-			};
-
-			TypeT Type;
+			RequireNodeType Type;
 			Symbol RequireSymbol;
 			std::size_t ReferenceIndex;
 		};
@@ -338,7 +338,6 @@ namespace Potato::SLRX
 		{
 			std::vector<std::vector<RequireNode>> RequireNodes;
 			std::vector<ReduceProperty> Reduces;
-			std::vector<std::size_t> Shifts;
 			std::vector<LR0::MappedProduction> MappedProduction;
 		};
 
@@ -368,8 +367,50 @@ namespace Potato::SLRX
 			Symbol Value;
 			std::size_t TokenIndex;
 		};
+
+		struct Result
+		{
+			std::optional<LRX::RequireNode> StateChange;
+			std::vector<Symbol> RequireSymbol;
+		};
+
+		struct ConsumeResult
+		{
+
+			enum class Type
+			{
+				None,
+				Shift,
+				Reduce,
+			};
+
+			std::optional<>   IsReduce;
+			std::size_t RequireNodeOffset;
+			std::size_t LastState;
+		};
+
+		static std::optional<ConsumeResult> Consume(LRX const& Table, std::size_t TopState, std::span<std::size_t const> States, std::size_t NodeRequireOffset, Symbol Value, std::vector<Symbol>* SuggestSymbol);
+		
+		struct ReduceResult
+		{
+			ParsingStep Steps;
+			std::size_t LastState;
+		};
+
+		static std::optional<ReduceResult> TryReduce(LRX const& Table, std::size_t TopState);
+		//void TryReduce(LRX const& Table);
+
+		//static Result 
+
+		std::size_t NodeOffset;
+		std::size_t LastTopState;
+		std::vector<std::size_t> States;
+		std::vector<CoreProcessor::CacheSymbol> CacheSymbols;
+		std::vector<std::size_t> States;
+		std::vector<ParsingStep> Steps;
 	};
 
+	/*
 	struct LRXProcessor
 	{
 		LRXProcessor(LRX const& Ref) : Reference(Ref) {
@@ -379,6 +420,8 @@ namespace Potato::SLRX
 
 		auto Consume(Symbol Value, std::size_t TokenIndex) ->CoreProcessor::Result;
 		auto EndOfFile()->CoreProcessor::Result { return Consume(Symbol::EndOfFile(), 0); }
+
+		void Clear();
 
 	protected:
 
@@ -390,6 +433,7 @@ namespace Potato::SLRX
 		std::size_t CurrentTopState;
 		std::optional<std::size_t> RequireNodeIndex;
 	};
+	*/
 
 	/*
 	struct TableWrapper

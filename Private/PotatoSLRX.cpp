@@ -821,6 +821,7 @@ namespace Potato::SLRX
 
 				for (auto& Ite : Ref.Shifts)
 				{
+					/*
 					std::vector<Symbol> Symbols;
 					Symbols.push_back(Ite.RequireSymbol);
 
@@ -836,8 +837,9 @@ namespace Potato::SLRX
 						ShiftsOffset = CurRef.Shifts.size();
 						CurRef.Shifts.push_back(Ite.ToNode);
 					}
+					*/
 
-					CurRef.RequireNodes[0].push_back({RequireNode::TypeT::ShiftProperty, Ite.RequireSymbol, Ite.ToNode});
+					CurRef.RequireNodes[0].push_back({RequireNodeType::ShiftProperty, Ite.RequireSymbol, Ite.ToNode});
 				}
 
 				for (auto& Ite : Ref.Reduces)
@@ -1066,6 +1068,7 @@ namespace Potato::SLRX
 
 							auto& NodeRef = Nodes[ConfligNodeIte];
 
+							/*
 							auto& ShiftRef = NodeRef.Shifts;
 							std::size_t ToNodeOffset = ShiftRef.size();
 
@@ -1075,6 +1078,7 @@ namespace Potato::SLRX
 								ToNodeOffset = std::distance(ShiftRef.begin(), Find);
 							else
 								ShiftRef.push_back(ToNode);
+							*/
 
 							std::size_t NodeIte = 0;
 
@@ -1098,7 +1102,7 @@ namespace Potato::SLRX
 								{
 									if (Ite2.RequireSymbol == Top)
 									{
-										assert(!SymbolSpan.empty() && Ite2.Type == RequireNode::TypeT::SymbolValue);
+										assert(!SymbolSpan.empty() && Ite2.Type == RequireNodeType::SymbolValue);
 										Find = true;
 										NodeIte = Ite2.ReferenceIndex;
 										break;
@@ -1110,16 +1114,16 @@ namespace Potato::SLRX
 									if (!SymbolSpan.empty())
 									{
 										RNode.push_back(RequireNode{
-											RequireNode::TypeT::SymbolValue,
+											RequireNodeType::SymbolValue,
 											Top,
 											NodeRef.RequireNodes.size()
 										});
 									}
 									else {
 										RNode.push_back(RequireNode{
-											RequireNode::TypeT::ShiftProperty,
+											RequireNodeType::ShiftProperty,
 											Top,
-											ToNodeOffset
+											ToNode
 										});
 									}
 									NodeIte = NodeRef.RequireNodes.size();
@@ -1220,10 +1224,101 @@ namespace Potato::SLRX
 		}
 	}
 
+	auto CoreProcessor::Consume(LRX const& Table, std::size_t TopState, std::span<std::size_t const> States, std::size_t NodeRequireOffset, Symbol Value, std::size_t TokenIndex, std::vector<Symbol>* SuggestSymbol) ->std::optional<ConsumeResult>
+	{
+		assert(Table.Nodes.size() > TopState);
+		assert(*States.rbegin() == TopState);
+
+		auto& NodeRef = Table.Nodes[TopState];
+		assert(!NodeRef.RequireNodes.empty());
+		auto& NodeRequireArray = NodeRef.RequireNodes[NodeRequireOffset];
+
+		assert(!NodeRequireArray.empty());
+
+		bool Find = false;
+
+		for (auto& Ite : NodeRequireArray)
+		{
+			if (Ite.RequireSymbol == Value)
+			{
+				switch (Ite.Type)
+				{
+				case LRX::RequireNodeType::SymbolValue:
+				{
+					ConsumeResult Re;
+					Re.LastState = TopState;
+					Re.RequireNodeOffset = Ite.ReferenceIndex;
+					return Re;
+				}
+				case LRX::RequireNodeType::ShiftProperty:
+				{
+					ConsumeResult Re;
+					Re.LastState = Ite.ReferenceIndex;
+					Re.RequireNodeOffset = 0;
+					ParsingStep Steps;
+					Steps.Value = Value;
+					Steps.Shift.TokenIndex = TokenIndex;
+					Re.Steps.push_back(Steps);
+					return Re;
+				}
+				case LRX::RequireNodeType::ReduceProperty:
+				{
+
+				}
+				}
+			}
+		}
+
+
+		if (NodeRef.RequireNodes.empty())
+		{
+			return {};
+		}
+
+
+	}
+
+
+	/*
 	auto LRXProcessor::Consume(Symbol Value, std::size_t TokenIndex)->CoreProcessor::Result
 	{
+		if (RequireNodeIndex.has_value())
+		{
+			auto& CurNode = Reference.Nodes[CurrentTopState];
+			assert(CurNode.RequireNodes.size() > *RequireNodeIndex);
+			auto& RNodes = CurNode.RequireNodes[*RequireNodeIndex];
+			auto Find = std::find_if(RNodes.begin(), RNodes.end(), [=](LRX::RequireNode Node){
+				return Node.RequireSymbol == Value;
+			});
+
+			if (Find == RNodes.end())
+			{
+				CoreProcessor::Result Result;
+				for (auto Ite : RNodes)
+				{
+					Result.RequireSymbols.push_back(Ite.RequireSymbol);
+				}
+				return Result;
+			}
+			else {
+				CacheSymbols.push_back({Value, TokenIndex});
+				switch (Find->Type)
+				{
+				case LRX::RequireNodeType::SymbolValue:
+					RequireNodeIndex = Find->ReferenceIndex;
+					break;
+				case LRX::RequireNodeType::ShiftProperty:
+					
+					break;
+				}
+			}
+		}
+		else {
+
+		}
 		return {};
 	}
+	*/
 
 	/*
 
