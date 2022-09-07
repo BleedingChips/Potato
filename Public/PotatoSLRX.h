@@ -291,23 +291,6 @@ namespace Potato::SLRX
 	struct LRX
 	{
 
-		/*
-		struct Shift
-		{
-			std::vector<std::vector<Symbol>> RequireSymbolss;
-			std::size_t ToNode;
-		};
-
-		
-
-		struct Reduce
-		{
-			std::vector<std::vector<Symbol>> RequireSymbolss;
-			std::vector<ReduceTuple> ReduceShifts;
-			LR0::Reduce Property;
-		};
-		*/
-
 		struct ReduceTuple
 		{
 			std::size_t LastState;
@@ -351,16 +334,65 @@ namespace Potato::SLRX
 		LRX& operator=(LRX const&) = default;
 		LRX& operator=(LRX&&) = default;
 
-		static constexpr std::size_t StartupOffset() { return 0; }
+		static constexpr std::size_t StartupOffset() { return 1; }
+	};
+
+	struct TableWrapper
+	{
+		using StandardT = SLRX::StandardT;
+
+		using HalfStandardT = std::uint16_t;
+		using HalfHalfStandardT = std::uint8_t;
+
+		static_assert(sizeof(HalfStandardT) * 2 == sizeof(StandardT));
+		static_assert(sizeof(HalfHalfStandardT) * 2 == sizeof(HalfStandardT));
+
+		struct alignas(alignof(StandardT)) ZipNodeT
+		{
+			HalfStandardT RequireNodeDescCount;
+			HalfStandardT ReduceCount;
+		};
+
+		struct alignas(alignof(StandardT)) ZipRequireNodeT
+		{
+			LRX::RequireNodeType Type : 2;
+			StandardT IsEndOfFile : 1;
+			StandardT ToIndexOffset;
+			StandardT Value;
+		};
+
+		struct alignas(alignof(StandardT)) ZipRequireNodeDescT
+		{
+			StandardT RequireNodeCount;
+		};
+
+		struct alignas(alignof(StandardT)) ZipReducePropertyT
+		{
+			HalfStandardT IsStartSymbol : 1;
+			HalfStandardT ToNodeMappingCount : 15;
+			HalfStandardT ProductionIndex;
+			HalfStandardT ProductionCount;
+			HalfStandardT ReduceTupleCount;
+			StandardT Mask;
+			StandardT NoTerminalValue;
+			StandardT ReduceTupleCount;
+
+			static_assert(sizeof(HalfStandardT) == sizeof(std::uint16_t));
+		};
+
+		struct alignas(alignof(StandardT)) ZipReduceTupleT
+		{
+			StandardT LastState;
+			StandardT NewState;
+		};
+
+		static std::size_t CalculateRequireSpace(LRX const& Ref);
+		static std::size_t SerilizeTo(std::span<StandardT> OutputBuffer, LRX const& Ref);
+
 	};
 
 	struct CoreProcessor
 	{
-		struct Result
-		{
-			std::vector<Symbol> RequireSymbols;
-			operator bool() const { return RequireSymbols.empty(); }
-		};
 
 		struct CacheSymbol
 		{
@@ -368,72 +400,57 @@ namespace Potato::SLRX
 			std::size_t TokenIndex;
 		};
 
-		struct Result
-		{
-			std::optional<LRX::RequireNode> StateChange;
-			std::vector<Symbol> RequireSymbol;
-		};
-
 		struct ConsumeResult
 		{
-
-			enum class Type
-			{
-				None,
-				Shift,
-				Reduce,
-			};
-
-			std::optional<>   IsReduce;
-			std::size_t RequireNodeOffset;
-			std::size_t LastState;
+			std::size_t State;
+			std::size_t RequireNode;
+			std::optional<LR0::Reduce> Reduce;
 		};
 
 		static std::optional<ConsumeResult> Consume(LRX const& Table, std::size_t TopState, std::span<std::size_t const> States, std::size_t NodeRequireOffset, Symbol Value, std::vector<Symbol>* SuggestSymbol);
 		
 		struct ReduceResult
 		{
-			ParsingStep Steps;
-			std::size_t LastState;
+			LR0::Reduce Reduce;
+			std::size_t State;
 		};
 
-		static std::optional<ReduceResult> TryReduce(LRX const& Table, std::size_t TopState);
-		//void TryReduce(LRX const& Table);
+		static std::optional<ReduceResult> TryReduce(LRX const& Table, std::size_t TopState, std::span<std::size_t const> States);
 
-		//static Result 
-
-		std::size_t NodeOffset;
-		std::size_t LastTopState;
-		std::vector<std::size_t> States;
-		std::vector<CoreProcessor::CacheSymbol> CacheSymbols;
-		std::vector<std::size_t> States;
-		std::vector<ParsingStep> Steps;
+		
 	};
 
-	/*
 	struct LRXProcessor
 	{
+
 		LRXProcessor(LRX const& Ref) : Reference(Ref) {
-			States.push_back(LRX::StartupOffset());
-			CurrentTopState = LRX::StartupOffset();
+			Clear();
 		}
 
-		auto Consume(Symbol Value, std::size_t TokenIndex) ->CoreProcessor::Result;
-		auto EndOfFile()->CoreProcessor::Result { return Consume(Symbol::EndOfFile(), 0); }
+		bool Consume(Symbol Value, std::size_t TokenIndex, std::vector<Symbol>* SuggestSymbols = nullptr);
+		bool EndOfFile(std::vector<Symbol>* SuggestSymbols = nullptr) { return Consume(Symbol::EndOfFile(), 0, SuggestSymbols); }
 
-		void Clear();
+		void Clear() {
+			States.clear();
+			States.push_back(LRX::StartupOffset());
+			CurrentTopState = LRX::StartupOffset();
+			RequireNode = 0;
+			TryReduce();
+		}
+
+		std::vector<ParsingStep> Steps;
 
 	protected:
 
+		void TryReduce();
+
 		LRX const& Reference;
 
-		std::vector<CoreProcessor::CacheSymbol> CacheSymbols;
+		std::deque<CoreProcessor::CacheSymbol> CacheSymbols;
 		std::vector<std::size_t> States;
-		std::vector<ParsingStep> Steps;
 		std::size_t CurrentTopState;
-		std::optional<std::size_t> RequireNodeIndex;
+		std::size_t RequireNode;
 	};
-	*/
 
 	/*
 	struct TableWrapper
@@ -703,6 +720,10 @@ namespace Potato::SLRX
 
 			enum class TypeT
 			{
+				NodeCount,
+				RequireNodeCount,
+
+
 				NodeForwardDetectCount,
 				NodeEdgeCount,
 				RequireSymbolCount,
@@ -711,7 +732,7 @@ namespace Potato::SLRX
 				ProductionIndex,
 
 
-				NodeCount,
+				
 				NodeOffset,
 				ReduceCount,
 				ShiftCount,

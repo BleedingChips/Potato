@@ -71,6 +71,7 @@ constexpr Symbol operator*(NT sym) { return Symbol::AsNoTerminal(static_cast<Sta
 void TestingSLRX()
 {
 
+	/*
 	try {
 		LRX Tab(
 			*Noterminal::Exp,
@@ -164,6 +165,7 @@ void TestingSLRX()
 	{
 		throw;
 	}
+	
 
 	try {
 		LRX tab(
@@ -176,6 +178,19 @@ void TestingSLRX()
 		}
 		, 1
 		);
+
+		LRXProcessor Pro(tab);
+
+		std::vector<Symbol> Symbols = {*Terminal::Num, *Terminal::Num , *Terminal::Num , *Terminal::Num };
+
+		std::size_t Count = 0;
+		for (auto Ite : Symbols)
+		{
+			auto Re = Pro.Consume(Ite, Count);
+			++Count;
+		}
+		auto K = Pro.EndOfFile();
+		volatile int i = 0;
 	}
 	catch (Exception::IllegalSLRXProduction const& Wtf)
 	{
@@ -185,11 +200,11 @@ void TestingSLRX()
 	{
 		throw;
 	}
-	
-	/*
+	*/
+
 	try
 	{
-		Table tab(
+		LRX tab(
 			*Noterminal::Exp,
 			{
 				{*Noterminal::Exp, {*Terminal::Num}, 1},
@@ -220,14 +235,16 @@ void TestingSLRX()
 			{Terminal::Num, 2}
 		};
 
-		CoreProcessor Pro(tab.Wrapper);
+		LRXProcessor Pro(tab);
 
+		std::size_t O = 0;
 		for (auto& Ite : Wtf)
 		{
-			Pro.Consume(*Ite.Ope);
+			auto P = Pro.Consume(*Ite.Ope, O++);
+			volatile int i = 0;
 		}
 
-		auto Stes = Pro.EndOfFile();
+		auto End = Pro.EndOfFile();
 
 		auto Func = [&](VariantElement Ele) -> std::any {
 			if (Ele.IsNoTerminal())
@@ -256,7 +273,7 @@ void TestingSLRX()
 			}
 		};
 
-		auto Result = ProcessParsingStepWithOutputType<int32_t>(Stes, Func);
+		auto Result = ProcessParsingStepWithOutputType<int32_t>(Pro.Steps, Func);
 
 		if (Result != 1508)
 			throw UnpassedUnit{ "TestingSLRX : Bad Output Result 1.5" };
@@ -272,6 +289,7 @@ void TestingSLRX()
 
 	std::wcout << LR"(TestingSLRX Pass !)" << std::endl;
 
+	/*
 	try
 	{
 		
