@@ -1246,7 +1246,7 @@ namespace Potato::SLRX
 		assert(OutputBuffer.size() >= CalculateRequireSpace(Ref));
 
 		std::vector<std::size_t> NodeOffset;
-		NodeOffset.resize(Ref.Nodes.size());
+		NodeOffset.reserve(Ref.Nodes.size());
 
 		Misc::SerilizerHelper::SpanReader<StandardT> Reader(OutputBuffer);
 
@@ -1257,15 +1257,111 @@ namespace Potato::SLRX
 
 		std::size_t NodeIndex = 0;
 
+		struct RequireNodeOffsetRecord
+		{
+			ZipRequireNodeT* Ptr;
+			std::size_t Index;
+		};
+
+		struct ReduceTupleOffsetRecord
+		{
+			std::span<ZipReduceTupleT> Span;
+			std::span<LRX::ReduceTuple const> Tuples;
+		};
+
+		std::vector<RequireNodeOffsetRecord> ReduceRecord;
+		std::vector<RequireNodeOffsetRecord> ShiftRecord;
+		std::vector<RequireNodeOffsetRecord> SymbolsRecord;
+		std::vector<ReduceTupleOffsetRecord> ReduceTupleRecord;
+
 		for (auto& Ite : Ref.Nodes)
 		{
-			NodeOffset[NodeIndex] = Reader.GetIteSpacePositon();
-			++NodeIndex;
+			NodeOffset.push_back(Reader.GetIteSpacePositon());
 			auto Node = Reader.NewObject<ZipNodeT>();
 			Reader.CrossTypeSetThrow<OutOfRange>(Node->RequireNodeDescCount, Ite.RequireNodes.size(), OutOfRange::TypeT::RequireNodeCount, Ite.RequireNodes.size());
 			Reader.CrossTypeSetThrow<OutOfRange>(Node->ReduceCount, Ite.Reduces.size(), OutOfRange::TypeT::RequireNodeCount, Ite.RequireNodes.size());
+			std::size_t CurNodeOffset = Reader.GetIteSpacePositon();
+			std::vector<std::size_t> DescOffset;
+			for (auto& Ite2 : Ite.RequireNodes)
+			{
+				DescOffset.push_back(Reader.GetIteSpacePositon());
+				auto Desc = Reader.ReadObject<ZipRequireNodeDescT>();
+				Reader.CrossTypeSetThrow<OutOfRange>(Desc->RequireNodeCount, Ite2.size(), OutOfRange::TypeT::RequireNodeCount, Ite2.size());
+				auto Node = *Reader.ReadObjectArray<ZipRequireNodeT>(Ite2.size());
+				for (std::size_t I = 0; I < Node.size(); ++I)
+				{
+					auto& Target= Node[I];
+					auto& Source = Ite2[I];
+					Target.IsEndOfFile = Source.RequireSymbol.IsEndOfFile();
+					Target.Type = Source.Type;
+					Target.Value = Source.RequireSymbol.Value;
+					RequireNodeOffsetRecord Record{ &Target, Source.ReferenceIndex };
+					switch (Target.Type)
+					{
+					case LRX::RequireNodeType::SymbolValue:
+						SymbolsRecord.push_back(Record);
+						break;
+					case LRX::RequireNodeType::ShiftProperty:
+						ShiftRecord.push_back(Record);
+						break;
+					case LRX::RequireNodeType::ReduceProperty:
+						ReduceRecord.push_back(Record);
+						break;
+					default:
+						assert(false);
+						break;
+					}
+				}
+			}
+
+			for (auto Ite2 : SymbolsRecord)
+			{
+				std::size_t Tar = DescOffset[Ite2.Index];
+				Reader.CrossTypeSetThrow<OutOfRange>(Ite2.Ptr->ToIndexOffset, Tar, OutOfRange::TypeT::RequireNodeOffset, Tar);
+			}
+
+			SymbolsRecord.clear();
+
+			std::vector<std::size_t> ReduceOffset;
+
+			for (auto& Ite2 : Ite.Reduces)
+			{
+				ReduceOffset.push_back(Reader.GetIteSpacePositon());
+				auto Property = Reader.ReadObject<ZipReducePropertyT>();
+				Property->Mask = Ite2.Property.ReduceMask;
+				Property->NoTerminalValue = Ite2.Property.ReduceSymbol.Value;
+				Reader.CrossTypeSetThrow<OutOfRange>(Property->ProductionIndex, Ite2.Property.ProductionIndex, OutOfRange::TypeT::ReduceProperty, Ite2.Property.ProductionIndex);
+				Reader.CrossTypeSetThrow<OutOfRange>(Property->ProductionCount, Ite2.Property.ProductionElementCount, OutOfRange::TypeT::ReduceProperty, Ite2.Property.ProductionElementCount);
+				Reader.CrossTypeSetThrow<OutOfRange>(Property->ReduceTupleCount, Ite2.Tuples.size(), OutOfRange::TypeT::ReduceProperty, Ite2.Tuples.size());
+				auto Span = *Reader.ReadObjectArray<ZipReduceTupleT>(Ite2.Tuples.size());
+				ReduceTupleRecord.push_back({Span, std::span(Ite2.Tuples)});
+			}
+
+			for (auto Ite2 : ReduceRecord)
+			{
+				std::size_t Tar = ReduceOffset[Ite2.Index];
+				Reader.CrossTypeSetThrow<OutOfRange>(Ite2.Ptr->ToIndexOffset, Tar, OutOfRange::TypeT::RequireNodeOffset, Tar);
+			}
+
+			ReduceRecord.clear();
 		}
 
+		for (auto& Ite : ShiftRecord)
+		{
+			std::size_t Tar = NodeOffset[Ite.Index];
+			Reader.CrossTypeSetThrow<OutOfRange>(Ite.Ptr->ToIndexOffset, Tar, OutOfRange::TypeT::NodeOffset, Tar);
+		}
+
+		for (auto Ite : ReduceTupleRecord)
+		{
+			for (std::size_t I = 0; I < Ite.Span.size(); ++I)
+			{
+				auto& Target = Ite.Span[I];
+				auto& Source = Ite.Tuples[I];
+				Reader.CrossTypeSetThrow<OutOfRange>(Target.LastState, NodeOffset[Source.LastState], OutOfRange::TypeT::RequireNodeOffset, NodeOffset[Source.LastState]);
+				Reader.CrossTypeSetThrow<OutOfRange>(Target.ToState, NodeOffset[Source.TargetState], OutOfRange::TypeT::RequireNodeOffset, NodeOffset[Source.TargetState]);
+			}
+		}
 
 	}
 

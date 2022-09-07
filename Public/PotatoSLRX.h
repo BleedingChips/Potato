@@ -368,14 +368,11 @@ namespace Potato::SLRX
 
 		struct alignas(alignof(StandardT)) ZipReducePropertyT
 		{
-			HalfStandardT IsStartSymbol : 1;
-			HalfStandardT ToNodeMappingCount : 15;
 			HalfStandardT ProductionIndex;
 			HalfStandardT ProductionCount;
 			HalfStandardT ReduceTupleCount;
 			StandardT Mask;
 			StandardT NoTerminalValue;
-			StandardT ReduceTupleCount;
 
 			static_assert(sizeof(HalfStandardT) == sizeof(std::uint16_t));
 		};
@@ -383,7 +380,7 @@ namespace Potato::SLRX
 		struct alignas(alignof(StandardT)) ZipReduceTupleT
 		{
 			StandardT LastState;
-			StandardT NewState;
+			StandardT ToState;
 		};
 
 		static std::size_t CalculateRequireSpace(LRX const& Ref);
@@ -722,7 +719,8 @@ namespace Potato::SLRX
 			{
 				NodeCount,
 				RequireNodeCount,
-
+				ReduceProperty,
+				RequireNodeOffset,
 
 				NodeForwardDetectCount,
 				NodeEdgeCount,
