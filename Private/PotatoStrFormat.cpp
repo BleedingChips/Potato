@@ -8,7 +8,7 @@ namespace Potato::StrFormat
 {
 	
 	Reg::TableWrapper FormatPatternWrapper() {
-		static auto Table =  Reg::TableWrapper::Create(UR"(.*?(\{([^\{\}]*?)\}))");
+		static auto Table =  Reg::TableWrapper::Create(UR"(.*?\{[^\{\}]*?\})");
 		return Reg::TableWrapper{ Table };
 	}
 

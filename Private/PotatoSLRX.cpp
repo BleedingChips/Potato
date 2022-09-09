@@ -1284,7 +1284,7 @@ namespace Potato::SLRX
 			std::vector<std::size_t> DescOffset;
 			for (auto& Ite2 : Ite.RequireNodes)
 			{
-				DescOffset.push_back(Reader.GetIteSpacePositon());
+				DescOffset.push_back(Reader.GetIteSpacePositon() - CurNodeOffset);
 				auto Desc = Reader.ReadObject<ZipRequireNodeDescT>();
 				Reader.CrossTypeSetThrow<OutOfRange>(Desc->RequireNodeCount, Ite2.size(), OutOfRange::TypeT::RequireNodeCount, Ite2.size());
 				auto Node = *Reader.ReadObjectArray<ZipRequireNodeT>(Ite2.size());
@@ -1326,7 +1326,7 @@ namespace Potato::SLRX
 
 			for (auto& Ite2 : Ite.Reduces)
 			{
-				ReduceOffset.push_back(Reader.GetIteSpacePositon());
+				ReduceOffset.push_back(Reader.GetIteSpacePositon() - CurNodeOffset);
 				auto Property = Reader.ReadObject<ZipReducePropertyT>();
 				Property->Mask = Ite2.Property.ReduceMask;
 				Property->NoTerminalValue = Ite2.Property.ReduceSymbol.Value;
@@ -1363,10 +1363,23 @@ namespace Potato::SLRX
 			}
 		}
 
+		Reader.CrossTypeSetThrow<OutOfRange>(*StartupNode, NodeOffset[1], OutOfRange::TypeT::NodeOffset, NodeOffset[1]);
+
+		return Reader.GetIteSpacePositon();
+
+	}
+
+	std::vector<StandardT> TableWrapper::Create(LRX const& Le)
+	{
+		std::vector<StandardT> Re;
+		Re.resize(CalculateRequireSpace(Le));
+		SerilizeTo(std::span(Re), Le);
+		return Re;
 	}
 
 	auto CoreProcessor::Consume(LRX const& Table, std::size_t TopState, std::span<std::size_t const> States, std::size_t NodeRequireOffset, Symbol Value, std::vector<Symbol>* SuggestSymbol) ->std::optional<ConsumeResult>
 	{
+		assert(Value.IsTerminal());
 		assert(Table.Nodes.size() > TopState);
 		assert(*States.rbegin() == TopState);
 
@@ -1428,6 +1441,101 @@ namespace Potato::SLRX
 		
 	}
 
+	auto CoreProcessor::Consume(TableWrapper Wrapper, std::size_t TopState, std::span<std::size_t const> States, std::size_t NodeRequireOffset, Symbol Value, std::vector<Symbol>* SuggestSymbol) ->std::optional<ConsumeResult>
+	{
+		assert(Wrapper.TotalBufferSize() > TopState);
+		assert(*States.rbegin() == TopState);
+
+		auto Reader = Wrapper.GetSpanReader(TopState);
+
+		auto Node = Reader.ReadObject<TableWrapper::ZipNodeT>();
+
+		assert(Node->RequireNodeDescCount != 0);
+
+		auto NodeDescReader = Reader.SubSpan(NodeRequireOffset);
+
+		auto Desc = NodeDescReader.ReadObject<TableWrapper::ZipRequireNodeDescT>();
+
+		assert(Desc->RequireNodeCount != 0);
+
+		auto RequireNodes = *NodeDescReader.ReadObjectArray<TableWrapper::ZipRequireNodeT>(Desc->RequireNodeCount);
+
+		if (Value.IsTerminal())
+		{
+			for (auto& Ite : RequireNodes)
+			{
+				if (Ite.IsEndOfFile && Value.IsEndOfFile() || (!Ite.IsEndOfFile && !Value.IsEndOfFile() && Ite.Value == Value.Value))
+				{
+					switch (Ite.Type)
+					{
+					case LRX::RequireNodeType::SymbolValue:
+					{
+						ConsumeResult Re;
+						Re.State = TopState;
+						Re.RequireNode = Ite.ToIndexOffset;
+						return Re;
+					}
+					case LRX::RequireNodeType::ShiftProperty:
+					{
+						ConsumeResult Re;
+						Re.State = Ite.ToIndexOffset;
+						Re.RequireNode = 0;
+						return Re;
+					}
+					case LRX::RequireNodeType::ReduceProperty:
+					{
+						ConsumeResult Re;
+						auto ReducePropertyReader = Reader.SubSpan(Ite.ToIndexOffset);
+						auto ReduceP = ReducePropertyReader.ReadObject<TableWrapper::ZipReducePropertyT>();
+						LR0::Reduce Reduce;
+						Reduce.ReduceSymbol = Symbol::AsNoTerminal(ReduceP->NoTerminalValue);
+						Reduce.ReduceMask = ReduceP->Mask;
+						Reduce.ProductionIndex = ReduceP->ProductionIndex;
+						Reduce.ProductionElementCount = ReduceP->ProductionCount;
+						Re.Reduce = Reduce;
+						assert(States.size() > Re.Reduce->ProductionElementCount);
+						auto RefState = States[States.size() - Re.Reduce->ProductionElementCount - 1];
+						auto ReduceTuples = *ReducePropertyReader.ReadObjectArray<TableWrapper::ZipReduceTupleT>(ReduceP->ReduceTupleCount);
+						auto FindIte = std::find_if(ReduceTuples.begin(), ReduceTuples.end(), [=](TableWrapper::ZipReduceTupleT Tupe) {
+							return Tupe.LastState == RefState;
+							});
+						assert(FindIte != ReduceTuples.end());
+						Re.State = FindIte->ToState;
+						Re.RequireNode = 0;
+						return Re;
+					}
+					}
+				}
+			}
+		}
+
+		if (SuggestSymbol != nullptr)
+		{
+			for (auto Ite : RequireNodes)
+			{
+				if (Ite.IsEndOfFile)
+				{
+					SuggestSymbol->push_back(Symbol::EndOfFile());
+				}
+				else {
+					SuggestSymbol->push_back(Symbol::AsTerminal(Ite.Value));
+				}
+			}
+				
+		}
+
+		return {};
+	}
+
+	void CoreProcessor::Clear(std::size_t StartupNodeIndex)
+	{
+		Steps.clear();
+		States.clear();
+		States.push_back(StartupNodeIndex);
+		CurrentTopState = StartupNodeIndex;
+		RequireNode = 0;
+	}
+
 	auto CoreProcessor::TryReduce(LRX const& Table, std::size_t TopState, std::span<std::size_t const> States) -> std::optional<ReduceResult>
 	{
 		assert(Table.Nodes.size() > TopState);
@@ -1453,59 +1561,121 @@ namespace Potato::SLRX
 		return {};
 	}
 
-	bool LRXProcessor::Consume(Symbol Value, std::size_t TokenIndex, std::vector<Symbol>* SuggestSymbols)
+	auto CoreProcessor::TryReduce(TableWrapper Wrapper, std::size_t TopState, std::span<std::size_t const> States) -> std::optional<ReduceResult>
 	{
-		auto Re = CoreProcessor::Consume(Reference, CurrentTopState, std::span(States), RequireNode, Value, SuggestSymbols);
+		assert(Wrapper.TotalBufferSize() > TopState);
+		assert(*States.rbegin() == TopState);
+		auto NodeReader = Wrapper.GetSpanReader(TopState);
+		auto Node = NodeReader.ReadObject<TableWrapper::ZipNodeT>();
+		if (Node->RequireNodeDescCount == 0)
+		{
+			assert(Node->ReduceCount <= 1);
+			if (Node->ReduceCount == 1)
+			{
+				auto ReduceP = NodeReader.ReadObject<TableWrapper::ZipReducePropertyT>();
+				LR0::Reduce Reduce;
+				Reduce.ReduceSymbol = Symbol::AsNoTerminal(ReduceP->NoTerminalValue);
+				Reduce.ReduceMask = ReduceP->Mask;
+				Reduce.ProductionIndex = ReduceP->ProductionIndex;
+				Reduce.ProductionElementCount = ReduceP->ProductionCount;
+				ReduceResult Result;
+				Result.Reduce = Reduce;
+				assert(States.size() > Reduce.ProductionElementCount);
+				auto RefState = States[States.size() - Reduce.ProductionElementCount - 1];
+				auto ReduceTuples = *NodeReader.ReadObjectArray<TableWrapper::ZipReduceTupleT>(ReduceP->ReduceTupleCount);
+				auto FindIte = std::find_if(ReduceTuples.begin(), ReduceTuples.end(), [=](TableWrapper::ZipReduceTupleT Tupe) {
+					return Tupe.LastState == RefState;
+					});
+				assert(FindIte != ReduceTuples.end());
+				Result.State = FindIte->ToState;
+				return Result;
+			}
+			
+		}
+		return {};
+	}
+
+	template<typename Table> void TemplateTryReduce(Table& Tab, CoreProcessor& Pro)
+	{
+		if (Pro.RequireNode == 0)
+		{
+			while (true)
+			{
+				auto Re = CoreProcessor::TryReduce(Tab, Pro.CurrentTopState, std::span(Pro.States));
+				if (Re.has_value())
+				{
+					Pro.States.resize(Pro.States.size() - Re->Reduce.ProductionElementCount);
+					Pro.States.push_back(Re->State);
+					Pro.CurrentTopState = Re->State;
+					ParsingStep Step;
+					Step.Value = Re->Reduce.ReduceSymbol;
+					Step.Reduce.Mask = Re->Reduce.ReduceMask;
+					Step.Reduce.ProductionIndex = Re->Reduce.ProductionIndex;
+					Step.Reduce.ProductionCount = Re->Reduce.ProductionElementCount;
+					Pro.Steps.push_back(Step);
+				}
+				else {
+					break;
+				}
+			}
+		}
+	}
+
+	template<typename Table> bool TemplateConsume(Table& Tab, CoreProcessor& Pro, Symbol Value, std::size_t TokenIndex, std::vector<Symbol>* SuggestSymbols)
+	{
+		auto Re = CoreProcessor::Consume(Tab, Pro.CurrentTopState, std::span(Pro.States), Pro.RequireNode, Value, SuggestSymbols);
 		if (Re.has_value())
 		{
-			CacheSymbols.push_back({Value, TokenIndex});
+			Pro.CacheSymbols.push_back({ Value, TokenIndex });
 			std::size_t SymbolsIndex = 0;
-			while (SymbolsIndex <= CacheSymbols.size())
+			while (SymbolsIndex <= Pro.CacheSymbols.size())
 			{
 				if (Re->Reduce.has_value())
 				{
-					States.resize(States.size() - Re->Reduce->ProductionElementCount);
-					States.push_back(Re->State);
-					RequireNode = Re->RequireNode;
-					CurrentTopState = Re->State;
+					Pro.States.resize(Pro.States.size() - Re->Reduce->ProductionElementCount);
+					Pro.States.push_back(Re->State);
+					Pro.RequireNode = Re->RequireNode;
+					Pro.CurrentTopState = Re->State;
 					ParsingStep Step;
 					Step.Value = Re->Reduce->ReduceSymbol;
 					Step.Reduce.Mask = Re->Reduce->ReduceMask;
 					Step.Reduce.ProductionIndex = Re->Reduce->ProductionIndex;
 					Step.Reduce.ProductionCount = Re->Reduce->ProductionElementCount;
-					Steps.push_back(Step);
+					Pro.Steps.push_back(Step);
 					SymbolsIndex = 0;
-					TryReduce();
+					TemplateTryReduce(Tab, Pro);
 				}
 				else {
 					if (Re->RequireNode == 0)
 					{
-						States.push_back(Re->State);
-						RequireNode = Re->RequireNode;
-						CurrentTopState = Re->State;
-						auto LastSymbol = *CacheSymbols.rbegin();
-						CacheSymbols.pop_front();
+						Pro.States.push_back(Re->State);
+						Pro.RequireNode = Re->RequireNode;
+						Pro.CurrentTopState = Re->State;
+						auto LastSymbol = *Pro.CacheSymbols.begin();
+						Pro.CacheSymbols.pop_front();
 						SymbolsIndex = 0;
 						if (LastSymbol.Value != Symbol::EndOfFile())
 						{
 							ParsingStep Step;
 							Step.Value = LastSymbol.Value;
 							Step.Shift.TokenIndex = LastSymbol.TokenIndex;
-							Steps.push_back(Step);
-							TryReduce();
+							Pro.Steps.push_back(Step);
+							TemplateTryReduce(Tab, Pro);
 						}
 						else {
-							assert(CacheSymbols.empty());
-							assert(States.size() == 3);
+							assert(Pro.CacheSymbols.empty());
+							assert(Pro.States.size() == 3);
 						}
 					}
 					else {
+						Pro.RequireNode = Re->RequireNode;
 						return true;
 					}
 				}
-				if (!CacheSymbols.empty())
+				if (!Pro.CacheSymbols.empty())
 				{
-					Re = CoreProcessor::Consume(Reference, CurrentTopState, std::span(States), RequireNode, CacheSymbols[SymbolsIndex].Value, SuggestSymbols);
+					std::vector<Symbol> Sug;
+					Re = CoreProcessor::Consume(Tab, Pro.CurrentTopState, std::span(Pro.States), Pro.RequireNode, Pro.CacheSymbols[SymbolsIndex].Value, &Sug);
 					++SymbolsIndex;
 					assert(Re.has_value());
 				}
@@ -1520,653 +1690,25 @@ namespace Potato::SLRX
 		}
 	}
 
-	/*
-	bool LRXProcessor::EndOfFile(std::vector<Symbol>* SuggestSymbols)
+	bool LRXProcessor::Consume(Symbol Value, std::size_t TokenIndex, std::vector<Symbol>* SuggestSymbols)
 	{
-		auto Re = CoreProcessor::Consume(Reference, CurrentTopState, std::span(States), RequireNode, Symbol::EndOfFile(), SuggestSymbols);
-		if (Re.has_value())
-		{
-			assert(Re->RequireNode == 0);
-			CacheSymbols.push_back({ Symbol::EndOfFile(), 0 });
-			std::size_t SymbolsIndex = 0;
-			while (SymbolsIndex <= CacheSymbols.size())
-			{
-				if (Re->Reduce.has_value())
-				{
-					States.resize(States.size() - Re->Reduce->ProductionElementCount);
-					States.push_back(Re->State);
-					RequireNode = Re->RequireNode;
-					CurrentTopState = Re->State;
-					ParsingStep Step;
-					Step.Value = Re->Reduce->ReduceSymbol;
-					Step.Reduce.Mask = Re->Reduce->ReduceMask;
-					Step.Reduce.ProductionIndex = Re->Reduce->ProductionIndex;
-					Step.Reduce.ProductionCount = Re->Reduce->ProductionElementCount;
-					Steps.push_back(Step);
-					SymbolsIndex = 0;
-					TryReduce();
-				}
-				else {
-					if (Re->RequireNode == 0)
-					{
-						States.push_back(Re->State);
-						RequireNode = Re->RequireNode;
-						CurrentTopState = Re->State;
-						ParsingStep Step;
-						Step.Value = CacheSymbols.rbegin()->Value;
-						Step.Shift.TokenIndex = CacheSymbols.rbegin()->TokenIndex;
-						Steps.push_back(Step);
-						CacheSymbols.pop_front();
-						SymbolsIndex = 0;
-						TryReduce();
-					}
-					else {
-						return true;
-					}
-				}
-				if (!CacheSymbols.empty())
-				{
-					Re = CoreProcessor::Consume(Reference, CurrentTopState, std::span(States), RequireNode, CacheSymbols[SymbolsIndex].Value, SuggestSymbols);
-					++SymbolsIndex;
-					assert(Re.has_value());
-				}
-				else {
-					return true;
-				}
-			}
-
-			return true;
-		}
-		return false;
+		return TemplateConsume(Reference, *this, Value, TokenIndex, SuggestSymbols);
 	}
-	*/
 
 	void LRXProcessor::TryReduce()
 	{
-		if (RequireNode == 0)
-		{
-			while (true)
-			{
-				auto Re = CoreProcessor::TryReduce(Reference, CurrentTopState, std::span(States));
-				if (Re.has_value())
-				{
-					States.resize(States.size() - Re->Reduce.ProductionElementCount);
-					States.push_back(Re->State);
-					CurrentTopState = Re->State;
-					ParsingStep Step;
-					Step.Value = Re->Reduce.ReduceSymbol;
-					Step.Reduce.Mask = Re->Reduce.ReduceMask;
-					Step.Reduce.ProductionIndex = Re->Reduce.ProductionIndex;
-					Step.Reduce.ProductionCount = Re->Reduce.ProductionElementCount;
-					Steps.push_back(Step);
-				}
-				else {
-					break;
-				}
-			}
-		}
-		
+		TemplateTryReduce(Reference, *this);
 	}
 
-	/*
-	auto LRXProcessor::Consume(Symbol Value, std::size_t TokenIndex)->CoreProcessor::Result
+	bool TableProcessor::Consume(Symbol Value, std::size_t TokenIndex, std::vector<Symbol>* SuggestSymbols)
 	{
-		if (RequireNodeIndex.has_value())
-		{
-			auto& CurNode = Reference.Nodes[CurrentTopState];
-			assert(CurNode.RequireNodes.size() > *RequireNodeIndex);
-			auto& RNodes = CurNode.RequireNodes[*RequireNodeIndex];
-			auto Find = std::find_if(RNodes.begin(), RNodes.end(), [=](LRX::RequireNode Node){
-				return Node.RequireSymbol == Value;
-			});
-
-			if (Find == RNodes.end())
-			{
-				CoreProcessor::Result Result;
-				for (auto Ite : RNodes)
-				{
-					Result.RequireSymbols.push_back(Ite.RequireSymbol);
-				}
-				return Result;
-			}
-			else {
-				CacheSymbols.push_back({Value, TokenIndex});
-				switch (Find->Type)
-				{
-				case LRX::RequireNodeType::SymbolValue:
-					RequireNodeIndex = Find->ReferenceIndex;
-					break;
-				case LRX::RequireNodeType::ShiftProperty:
-					
-					break;
-				}
-			}
-		}
-		else {
-
-		}
-		return {};
+		return TemplateConsume(Wrapper, *this, Value, TokenIndex, SuggestSymbols);
 	}
-	*/
 
-	/*
-
-	std::vector<TableWrapper::StandardT> TableWrapper::Create(LRX const& Table)
+	void TableProcessor::TryReduce()
 	{
-		std::vector<StandardT> FinalBuffer;
-		FinalBuffer.resize(3);
-		std::vector<std::size_t> NodeOffset;
-		
-		struct ShiftPropertyMapping
-		{
-			std::size_t Offset;
-			std::size_t Node;
-		};
-
-		struct ReducePropertyMapping
-		{
-			std::size_t Offset;
-			std::span<LRX::ReduceTuple const> Mapping; 
-		};
-		
-		std::vector<ShiftPropertyMapping> ShiftMapping;
-		std::vector<ReducePropertyMapping> ReduceMapping;
-
-		for (auto& Ite : Table.Nodes)
-		{
-			NodeStorageT NewNode;
-			Misc::SerilizerHelper::TryCrossTypeSet<OutOfRange>(NewNode.ForwardDetectedCount, Ite.MaxForwardDetectCount, OutOfRange::TypeT::NodeForwardDetectCount, Ite.MaxForwardDetectCount);
-			std::size_t EdgeSize = 0;
-
-			for(auto& Ite2 : Ite.Shifts)
-				EdgeSize += Ite2.RequireSymbolss.size();
-			for (auto& Ite2 : Ite.Reduces)
-				EdgeSize += Ite2.RequireSymbolss.size();
-
-			Misc::SerilizerHelper::TryCrossTypeSet<OutOfRange>(NewNode.EdgeCount, EdgeSize, OutOfRange::TypeT::NodeEdgeCount, EdgeSize);
-			auto NodeRe = Misc::SerilizerHelper::WriteObject(FinalBuffer, NewNode);
-			NodeOffset.push_back(NodeRe.StartOffset);
-
-			struct RecordElement
-			{
-				std::size_t RequireSymbolOffset;
-				std::size_t RequireSymbolLastSpanOffset;
-				std::size_t Index;
-			};
-
-			std::vector<RecordElement> PropertyReocords;
-			std::size_t Index = 0;
-			for (auto& Ite2 : Ite.Shifts)
-			{
-				for (auto& IteSyms : Ite2.RequireSymbolss)
-				{
-					bool HasEndOfDile = false;
-					std::vector<StandardT> Value;
-					for (auto Ite3 : IteSyms)
-					{
-						assert(!HasEndOfDile);
-						if (Ite3.IsEndOfFile())
-						{
-							HasEndOfDile = true;
-						}
-						else {
-							Value.push_back(Ite3.Value);
-						}
-					}
-
-					RequireSymbolStorageT NewRequireSymbol{ HasEndOfDile, 1, static_cast<HalfStandardT>(Value.size()), 0 };
-					if (NewRequireSymbol.TerminalSymbolRequireCount != Value.size())
-					{
-						throw OutOfRange{ OutOfRange::TypeT::RequireSymbolCount, Value.size() };
-					}
-
-					auto RSResult = Misc::SerilizerHelper::WriteObject(FinalBuffer, NewRequireSymbol);
-					auto ArrayResult = Misc::SerilizerHelper::WriteObjectArray(FinalBuffer, std::span(Value));
-					PropertyReocords.push_back({ RSResult.StartOffset, ArrayResult.StartOffset + ArrayResult.WriteLength, Index });
-				}
-
-				Index += 1;
-			}
-
-			for (auto& Ite2 : Ite.Reduces)
-			{
-				for (auto& IteSyms : Ite2.RequireSymbolss)
-				{
-					bool HasEndOfDile = false;
-					std::vector<StandardT> Value;
-					for (auto Ite3 : IteSyms)
-					{
-						assert(!HasEndOfDile);
-						if (Ite3.IsEndOfFile())
-						{
-							HasEndOfDile = true;
-						}
-						else {
-							Value.push_back(Ite3.Value);
-						}
-					}
-
-					RequireSymbolStorageT NewRequireSymbol{ HasEndOfDile, 0, static_cast<HalfStandardT>(Value.size()), 0 };
-					if (NewRequireSymbol.TerminalSymbolRequireCount != Value.size())
-					{
-						throw OutOfRange{ OutOfRange::TypeT::RequireSymbolCount, Value.size() };
-					}
-					auto RSResult = Misc::SerilizerHelper::WriteObject(FinalBuffer, NewRequireSymbol);
-					auto ArrayResult = Misc::SerilizerHelper::WriteObjectArray(FinalBuffer, std::span(Value));
-					PropertyReocords.push_back({ RSResult.StartOffset, ArrayResult.StartOffset + ArrayResult.WriteLength, Index });
-				}
-
-				Index += 1;
-			}
-
-			auto RecordSpan = std::span(PropertyReocords);
-
-			Index = 0;
-			for (auto& Ite2 : Ite.Shifts)
-			{
-				ShiftPropertyT Pro{ 0, 0 };
-				auto ShiftW = Misc::SerilizerHelper::WriteObject(FinalBuffer, Pro);
-
-				ShiftMapping.push_back({ ShiftW.StartOffset, Ite2.ToNode});
-
-				assert(!RecordSpan.empty());
-				while (!RecordSpan.empty())
-				{
-					if (RecordSpan[0].Index == Index)
-					{
-						auto Read = Misc::SerilizerHelper::ReadObject<RequireSymbolStorageT>(std::span(FinalBuffer).subspan(RecordSpan[0].RequireSymbolOffset));
-						auto Offset = ShiftW.StartOffset - RecordSpan[0].RequireSymbolLastSpanOffset;
-						Misc::SerilizerHelper::TryCrossTypeSet<OutOfRange>(Read->PropertyOffset, Offset, OutOfRange::TypeT::PropertyOffset, Offset );
-						RecordSpan = RecordSpan.subspan(1);
-					}
-					else {
-						break;
-					}
-				}
-
-				Index += 1;
-			}
-
-			for (auto& Ite2 : Ite.Reduces)
-			{
-				std::vector<ToNodeMappingT> Mapping;
-				Mapping.resize(Ite2.ReduceShifts.size());
-
-				ReducePropertyT Pro{
-						Ite2.Property.ReduceSymbol.IsStartSymbol(),
-						static_cast<HalfStandardT>(Mapping.size()),
-						static_cast<HalfStandardT>(Ite2.Property.ProductionIndex),
-						static_cast<HalfStandardT>(Ite2.Property.ProductionElementCount),
-						Ite2.Property.ReduceMask,
-						Ite2.Property.ReduceSymbol.Value
-				};
-
-				if (Pro.ToNodeMappingCount != Mapping.size())
-					throw OutOfRange{ OutOfRange::TypeT::ToNodeMappingCount, Mapping.size() };
-
-				if (Pro.ProductionIndex != Ite2.Property.ProductionIndex)
-					throw OutOfRange{ OutOfRange::TypeT::ProductionIndex, Ite2.Property.ProductionIndex };
-
-				if (Pro.ProductionCount != Ite2.Property.ProductionElementCount)
-					throw OutOfRange{ OutOfRange::TypeT::ProductionIndex,  Ite2.Property.ProductionElementCount };
-
-				auto RSResult = Misc::SerilizerHelper::WriteObject(FinalBuffer, Pro);
-				Misc::SerilizerHelper::WriteObjectArray(FinalBuffer, std::span(Mapping));
-
-				ReduceMapping.push_back({ RSResult.StartOffset, std::span(Ite2.ReduceShifts)});
-				
-				assert(!RecordSpan.empty());
-				while (!RecordSpan.empty())
-				{
-					if (RecordSpan[0].Index == Index)
-					{
-						auto Read = Misc::SerilizerHelper::ReadObject<RequireSymbolStorageT>(std::span(FinalBuffer).subspan(RecordSpan[0].RequireSymbolOffset));
-						auto Offset = RSResult.StartOffset - RecordSpan[0].RequireSymbolLastSpanOffset;
-						Misc::SerilizerHelper::TryCrossTypeSet<OutOfRange>(Read->PropertyOffset, Offset, OutOfRange::TypeT::PropertyOffset, Offset );
-						RecordSpan = RecordSpan.subspan(1);
-					}
-					else {
-						break;
-					}
-				}
-				Index += 1;
-			}
-
-			assert(RecordSpan.empty());
-		}
-		
-		for (auto Ite : ShiftMapping)
-		{
-			auto Property = Misc::SerilizerHelper::ReadObject<ShiftPropertyT>(std::span(FinalBuffer).subspan(Ite.Offset));
-			std::size_t RN = NodeOffset[Ite.Node];
-			std::size_t RD = Table.Nodes[Ite.Node].MaxForwardDetectCount;
-			Misc::SerilizerHelper::TryCrossTypeSet<OutOfRange>(Property->ToNode, RN, OutOfRange::TypeT::NodeOffset, RN );
-			Misc::SerilizerHelper::TryCrossTypeSet<OutOfRange>(Property->ForwardDetectCount, RD, OutOfRange::TypeT::NodeForwardDetectCount, RN );
-		}
-
-		for (auto Ite : ReduceMapping)
-		{
-			auto Property = Misc::SerilizerHelper::ReadObject<ReducePropertyT>(std::span(FinalBuffer).subspan(Ite.Offset));
-			auto Mapping = Misc::SerilizerHelper::ReadObjectArray<ToNodeMappingT>(Property.LastSpan, Property->ToNodeMappingCount);
-			
-			assert(Ite.Mapping.size() == Mapping->size());
-
-			for (std::size_t T1 = 0; T1 < Ite.Mapping.size(); ++T1)
-			{
-				auto& Mapping1 = Ite.Mapping[T1];
-				auto& Mapping2 = (*Mapping)[T1];
-
-				std::size_t LS = NodeOffset[Mapping1.LastState];
-				std::size_t TS = NodeOffset[Mapping1.TargetState];
-
-				Misc::SerilizerHelper::TryCrossTypeSet<OutOfRange>(Mapping2.LastState, LS, OutOfRange::TypeT::NodeOffset, LS );
-				Misc::SerilizerHelper::TryCrossTypeSet<OutOfRange>(Mapping2.ToState, TS, OutOfRange::TypeT::NodeOffset, TS );
-				std::size_t MaxForward = Table.Nodes[Mapping1.TargetState].MaxForwardDetectCount;
-				Misc::SerilizerHelper::TryCrossTypeSet<OutOfRange>(Mapping2.ForwardDetectCount, MaxForward, OutOfRange::TypeT::NodeForwardDetectCount, MaxForward);
-
-			}
-		}
-
-		Misc::SerilizerHelper::TryCrossTypeSet<OutOfRange>(FinalBuffer[0], Table.Nodes.size(), OutOfRange::TypeT::NodeCount, Table.Nodes.size() );
-		Misc::SerilizerHelper::TryCrossTypeSet<OutOfRange>(FinalBuffer[1], NodeOffset[1], OutOfRange::TypeT::NodeCount, Table.Nodes.size());
-		Misc::SerilizerHelper::TryCrossTypeSet<OutOfRange>(FinalBuffer[2], Table.Nodes[1].MaxForwardDetectCount, OutOfRange::TypeT::NodeForwardDetectCount, Table.Nodes.size());
-
-#ifdef _DEBUG
-		
-		struct DebugShift
-		{
-			std::vector<Symbol> RequireSymbols;
-			std::size_t ToNode;
-		};
-
-		struct DebugReduce
-		{
-			std::vector<Symbol> RequireSymbols;
-			std::span<ToNodeMappingT const> Mapping;
-			HalfStandardT ProductionIndex;
-			HalfStandardT ProductionCount;
-			StandardT Mask;
-			Symbol NoTerminalSymbol;
-		};
-
-		struct DebugNode
-		{
-			std::size_t Node;
-			std::size_t MaxForward;
-			std::vector<DebugShift> Shifts;
-			std::vector<DebugReduce> Reduces;
-		};
-
-		std::vector<DebugNode> DebugNodes;
-
-		TableWrapper Wrapper(FinalBuffer);
-
-		for (auto Index : NodeOffset)
-		{
-
-			auto NodeRef = Wrapper.ReadNode(Index);
-
-			DebugNode DNode;
-
-			DNode.Node = Index;
-			DNode.MaxForward = NodeRef.Storage.ForwardDetectedCount;
-
-			for (auto Ite = NodeRef.Iterate(); Ite; Ite = Ite->Next())
-			{
-
-				std::vector<Symbol> Symbols;
-
-				for (auto Ite2 : Ite->Symbols)
-				{
-					Symbols.push_back(Symbol::AsTerminal(Ite2));
-				}
-
-				if(Ite->Storage.IncludeEndOfFile)
-					Symbols.push_back(Symbol::EndOfFile());
-
-				if (Ite->Storage.IsShift)
-				{
-					DebugShift Shift;
-					Shift.RequireSymbols = std::move(Symbols);
-					Shift.ToNode = Ite->ReadShiftProperty().ToNode;
-					DNode.Shifts.push_back(std::move(Shift));
-				}
-				else {
-					DebugReduce NewReduce;
-					NewReduce.RequireSymbols = std::move(Symbols);
-					auto ReducePro = Ite->ReadReduceProperty();
-					NewReduce.Mask = ReducePro.Storage.Mask;
-					NewReduce.ProductionIndex = ReducePro.Storage.ProductionIndex;
-					NewReduce.ProductionCount = ReducePro.Storage.ProductionCount;
-					if (ReducePro.Storage.IsStartSymbol)
-						NewReduce.NoTerminalSymbol = Symbol::StartSymbol();
-					else
-						NewReduce.NoTerminalSymbol = Symbol::AsNoTerminal(ReducePro.Storage.NoTerminalValue);
-					NewReduce.Mapping = ReducePro.Mapping;
-					DNode.Reduces.push_back(std::move(NewReduce));
-
-				}
-			}
-			DebugNodes.push_back(std::move(DNode));
-		}
-
-		volatile int i = 0;
-
-#endif
-
-		return FinalBuffer;
+		TemplateTryReduce(Wrapper, *this);
 	}
-
-	bool CoreProcessor::DetectSymbolEqual(std::deque<CacheSymbol> const& T1, std::span<StandardT const> T2)
-	{
-		if (T1.size() >= T2.size())
-		{
-			bool Equal = true;
-			std::size_t Count = 0;
-			for (auto Ite = T1.begin(); Ite != T1.end() && Count < T2.size(); ++Ite, ++Count)
-			{
-				if (Ite->Value != T2[Count])
-				{
-					Equal = false;
-					break;
-				}
-			}
-			return Equal;
-		}
-		return false;
-		
-	}
-
-	void CoreProcessor::Consume(Symbol InputSymbol, std::size_t TokenIndex)
-	{
-		if (States.empty())
-			throw UnaccableSymbol{ InputSymbol, TokenIteratorIndex, TokenIndex, {}};
-
-		assert(InputSymbol.IsTerminal());
-		bool IsEndOfFile = InputSymbol.IsEndOfFile();
-
-		if(!IsEndOfFile)
-			CacheSymbols.push_back({ TokenIteratorIndex, TokenIndex, InputSymbol.Value});
-
-		bool Consumed = false;
-
-		while (!CacheSymbols.empty() && MaxForwardDetect <= CacheSymbols.size() || IsEndOfFile)
-		{
-			auto NodeWrapper = Wrapper.ReadNode(*States.rbegin());
-			bool Find = false;
-
-			for (auto Ite = NodeWrapper.Iterate(); Ite.has_value(); Ite = Ite->Next())
-			{
-				if (Ite->Storage.IsShift)
-				{
-					if (IsEndOfFile == Ite->Storage.IncludeEndOfFile && DetectSymbolEqual(CacheSymbols, Ite->Symbols))
-					{
-						auto ShiftPro = Ite->ReadShiftProperty();
-						States.push_back(ShiftPro.ToNode);
-						MaxForwardDetect = ShiftPro.ForwardDetectCount;
-						
-						if (!CacheSymbols.empty())
-						{
-							auto Last = *CacheSymbols.begin();
-							ParsingStep NewStep;
-							NewStep.Value = Symbol::AsTerminal(Last.Value);
-							NewStep.Shift.TokenIndex = Last.TokenIndex;
-							Steps.push_back(NewStep);
-							CacheSymbols.pop_front();
-						}	
-						Consumed = true;
-						Find = true;
-						break;
-					}
-				}
-				else {
-					if (
-						(!Ite->Storage.IncludeEndOfFile && Ite->Symbols.empty())
-						|| IsEndOfFile == Ite->Storage.IncludeEndOfFile && DetectSymbolEqual(CacheSymbols, Ite->Symbols)
-						)
-					{
-						auto Reduce = Ite->ReadReduceProperty();
-
-						assert(States.size() >= Reduce.Storage.ProductionCount);
-						States.resize(States.size() - Reduce.Storage.ProductionCount);
-						std::size_t LastState = *States.rbegin();
-						bool Find2 = false;
-						for (auto Ite3 : Reduce.Mapping)
-						{
-							if (LastState == Ite3.LastState)
-							{
-								States.push_back(Ite3.ToState);
-								MaxForwardDetect = Ite3.ForwardDetectCount;
-								ParsingStep NewStep;
-								NewStep.Value = Symbol::AsNoTerminal(Reduce.Storage.NoTerminalValue);
-								NewStep.Reduce.Mask = Reduce.Storage.Mask;
-								NewStep.Reduce.ProductionIndex = Reduce.Storage.ProductionIndex;
-								NewStep.Reduce.ProductionCount = Reduce.Storage.ProductionCount;
-								Steps.push_back(NewStep);
-								Find = true;
-								Find2 = true;
-								break;
-							}
-						}
-						assert(Find2);
-						break;
-					}
-				}
-			}
-			if (!Find)
-			{
-
-				if (IsEndOfFile && CacheSymbols.empty() && NodeWrapper.Storage.ForwardDetectedCount == 0)
-				{
-					States.clear();
-					break;
-				}
-
-				std::size_t LastState = *States.rbegin();
-
-				std::vector<UnaccableSymbol::Tuple> RequireSymbols;
-
-				for (auto Ite = NodeWrapper.Iterate(); Ite.has_value(); Ite = Ite->Next())
-				{
-
-					std::optional<UnaccableSymbol::Tuple> RS;
-
-					std::size_t I1 = 0;
-					for (; I1 < Ite->Symbols.size() && I1 < CacheSymbols.size(); ++I1)
-					{
-						if(Ite->Symbols[I1] != CacheSymbols[I1].Value)
-							break;
-					}
-
-					if (I1 < Ite->Symbols.size())
-					{
-						if (I1 < CacheSymbols.size())
-						{
-							RS = { Symbol::AsTerminal(Ite->Symbols[I1]), CacheSymbols [I1].TokenIndex};
-						}
-						else {
-							RS = { Symbol::AsTerminal(Ite->Symbols[I1]), TokenIteratorIndex };
-						}
-					}
-					else {
-						RS = {Symbol::EndOfFile(), TokenIteratorIndex };
-					}
-
-					if (RS.has_value())
-					{
-						if(std::find(RequireSymbols.begin(), RequireSymbols.end(), *RS) == RequireSymbols.end())
-							RequireSymbols.push_back(*RS);
-					}
-				}
-
-				throw UnaccableSymbol{
-					InputSymbol,
-					TokenIteratorIndex,
-					TokenIndex,
-					std::move(RequireSymbols)
-				};
-			}
-		}
-		TokenIteratorIndex += 1;
-	}
-
-	std::vector<ParsingStep> CoreProcessor::EndOfFile()
-	{
-		Consume(Symbol::EndOfFile(), TokenIteratorIndex);
-		assert(States.empty());
-		return std::move(Steps);
-	}
-
-
-	TableWrapper::NodeWrapperT TableWrapper::ReadNode(std::size_t Offset) const
-	{
-		TableWrapper::NodeWrapperT NewWrapper;
-		auto Read = Misc::SerilizerHelper::ReadObject<NodeStorageT const>(Wrapper.subspan(Offset));
-		NewWrapper.Storage = *Read;
-		NewWrapper.LastSpan = Read.LastSpan;
-		return NewWrapper;
-	}
-
-	auto TableWrapper::NodeWrapperT::Iterate() const -> std::optional<RequireSymbolWrapperT>
-	{
-		if (Storage.EdgeCount > 0)
-		{
-			auto Read = Misc::SerilizerHelper::ReadObject<RequireSymbolStorageT const>(LastSpan);
-			auto Datas = Misc::SerilizerHelper::ReadObjectArray<StandardT const>(Read.LastSpan, Read->TerminalSymbolRequireCount);
-			RequireSymbolWrapperT Wrapper{ *Read, Storage.EdgeCount, *Datas , Datas.LastSpan };
-			return Wrapper;
-		}
-		else {
-			return {};
-		}
-	}
-
-	auto TableWrapper::RequireSymbolWrapperT::Next() const ->std::optional<RequireSymbolWrapperT>
-	{
-		if (Last > 1)
-		{
-			auto Read = Misc::SerilizerHelper::ReadObject<RequireSymbolStorageT const>(LastSpan);
-			auto Datas = Misc::SerilizerHelper::ReadObjectArray<StandardT const>(Read.LastSpan, Read->TerminalSymbolRequireCount);
-			return RequireSymbolWrapperT{ *Read, Last - 1, *Datas , Datas.LastSpan };
-		}
-		else {
-			return {};
-		}
-	}
-
-	auto  TableWrapper::RequireSymbolWrapperT::ReadShiftProperty() const ->ShiftPropertyT
-	{
-		auto Read = Misc::SerilizerHelper::ReadObject<ShiftPropertyT const>(LastSpan.subspan(Storage.PropertyOffset));
-		return *Read;
-	}
-
-	auto  TableWrapper::RequireSymbolWrapperT::ReadReduceProperty() const ->ReducePropertyWrapperT
-	{
-		auto Read = Misc::SerilizerHelper::ReadObject<ReducePropertyT const>(LastSpan.subspan(Storage.PropertyOffset));
-		auto Data = Misc::SerilizerHelper::ReadObjectArray<ToNodeMappingT const>(Read.LastSpan, Read->ToNodeMappingCount);
-		return {*Read, *Data};
-	}
-	*/
 
 	namespace Exception
 	{

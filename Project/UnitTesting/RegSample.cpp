@@ -8,9 +8,9 @@ using namespace Potato::Reg;
 void TestingReg()
 {
 
+	/*
 	DFA T(UR"(.*?[a-zA-Z]+)");
 
-	/*
 
 	// Case 1
 	{
@@ -232,26 +232,11 @@ void TestingReg()
 
 		auto R = HeadMatch(T, Str);
 
-		if (!R.has_value() || Str.substr(R->MainCapture.Begin(), R->MainCapture.Count()) != UR"(abcdefABCDEF)")
+		if (!R.has_value() || Str.substr(R->MainCapture.Begin(), R->MainCapture.Count()) != UR"(123456789abcdefABCDEF)")
 			throw UnpassedUnit{ "Testing Reg Failure Case 12" };
 	}
-	
+
 	// Case 13
-	{
-
-		std::u32string_view Str = UR"(abcdef{{}}ABCDEF你好啊)";
-		DFA T(UR"(.*?\{[^\{\}]*\})");
-
-		auto R = HeadMatch(T, Str);
-
-		auto Str2 = Str.substr(0, R->MainCapture.Begin());
-		auto St3 = Str.substr(R->MainCapture.Begin(), R->MainCapture.Count());
-
-		if (!R.has_value() || Str.substr(0, R->MainCapture.Begin()) != UR"(abcdef{)" || Str.substr(R->MainCapture.End()) != UR"(}ABCDEF你好啊)")
-			throw UnpassedUnit{ "Testing Reg Failure Case 13" };
-	}
-
-	// Case 14
 	{
 		MulityRegCreater Crerator;
 		Crerator.LowPriorityLink(UR"([1-4]+)", false, {1});
@@ -278,17 +263,32 @@ void TestingReg()
 		}
 
 		if (List.size() != 4)
-			throw UnpassedUnit{ "Testing Reg Failure Case 14" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 13" };
 		if (std::get<0>(List[0]) != UR"(123456789)" || std::get<1>(List[0]) != 2)
-			throw UnpassedUnit{ "Testing Reg Failure Case 14" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 13" };
 		if (std::get<0>(List[1]) != UR"(abcdef)" || std::get<1>(List[1]) != 3)
-			throw UnpassedUnit{ "Testing Reg Failure Case 14" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 13" };
 		if (std::get<0>(List[2]) != UR"(ABCDEF)" || std::get<1>(List[2]) != 4)
-			throw UnpassedUnit{ "Testing Reg Failure Case 14" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 13" };
 		if (std::get<0>(List[3]) != UR"(你好啊)" || std::get<1>(List[3]) != 5)
-			throw UnpassedUnit{ "Testing Reg Failure Case 14" };
+			throw UnpassedUnit{ "Testing Reg Failure Case 13" };
 	}
 	*/
+
+	// Case 14
+	{
+		DFA T(UR"(.*?\{)");
+
+		auto K = TableWrapper::Create(T);
+
+		std::u32string_view S = UR"(1{})";
+
+		auto R = HeadMatch(TableWrapper{K}, S);
+
+		auto P = S.substr(0, R->MainCapture.Count());
+
+		volatile int o = 0;
+	}
 
 	std::wcout << LR"(TestingReg Pass !)" << std::endl;
 }

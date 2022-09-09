@@ -773,7 +773,7 @@ namespace Potato::Reg
 			assert(Tar > 1);
 
 			Counter Tem;
-			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Target, Tar - 1, RegexOutOfRange::TypeT::Counter, Tar - 1);
+			Misc::SerilizerHelper::CrossTypeSetThrow<RegexOutOfRange>(Tem.Target, Tar - 1, RegexOutOfRange::TypeT::Counter, Tar - 1);
 
 			EpsilonNFA::Edge Edge{ {EpsilonNFA::EdgeType::CounterSmallEqual, Tem}, Start, 0 };
 			AddEdge(T3, std::move(Edge));
@@ -789,7 +789,7 @@ namespace Potato::Reg
 		if (Min.has_value())
 		{
 			Counter Tem;
-			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Target, *Min, RegexOutOfRange::TypeT::Counter, *Min);
+			Misc::SerilizerHelper::CrossTypeSetThrow<RegexOutOfRange>(Tem.Target, *Min, RegexOutOfRange::TypeT::Counter, *Min);
 
 			auto New = NewNode(TokenIndex);
 
@@ -802,7 +802,7 @@ namespace Potato::Reg
 		if (Max.has_value())
 		{
 			Counter Tem;
-			Misc::SerilizerHelper::TryCrossTypeSet<RegexOutOfRange>(Tem.Target, *Max, RegexOutOfRange::TypeT::Counter, *Max);
+			Misc::SerilizerHelper::CrossTypeSetThrow<RegexOutOfRange>(Tem.Target, *Max, RegexOutOfRange::TypeT::Counter, *Max);
 
 			auto New = NewNode(TokenIndex);
 			EpsilonNFA::Edge Edge{ {EpsilonNFA::EdgeType::CounterSmallEqual, Tem}, New, 0 };
@@ -910,14 +910,18 @@ namespace Potato::Reg
 		auto Wrapper = RexSLRXWrapper();
 
 		try {
-			SLRX::CoreProcessor Pro(Wrapper);
+			SLRX::TableProcessor Pro(Wrapper);
+			std::size_t TokenIndex = 0;
 			for (auto& Ite : Translater.GetSpan())
 			{
-				Pro.Consume(*Ite.Value);
+				if(!Pro.Consume(*Ite.Value, TokenIndex))
+					throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Ite.MappingSymbol, TokenIndex };
+				TokenIndex++;
 			}
-			auto Steps = Pro.EndOfFile();
+			if(!Pro.EndOfFile())
+				throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Reg::EndOfFile(), TokenIndex};
 
-			EpsilonNFA::NodeSet Set = SLRX::ProcessParsingStepWithOutputType<EpsilonNFA::NodeSet>(std::span(Steps),
+			EpsilonNFA::NodeSet Set = SLRX::ProcessParsingStepWithOutputType<EpsilonNFA::NodeSet>(Pro.GetSteps(),
 				[&](SLRX::VariantElement Elements)-> std::any {
 					if (Elements.IsTerminal())
 						return RegTerminalFunction(Elements.AsTerminal(), Translater);
@@ -1426,8 +1430,8 @@ namespace Potato::Reg
 				NewOne.List.push_back(ActionT::ContentBegin);
 				StandardT From;
 				StandardT To;
-				Misc::SerilizerHelper::TryCrossTypeSet<Exception::RegexOutOfRange>(From, Ite2.OriginalFrom, RegexOutOfRange::TypeT::ContentIndex, Ite2.OriginalFrom);
-				Misc::SerilizerHelper::TryCrossTypeSet<Exception::RegexOutOfRange>(To, Ite2.OriginalTo, RegexOutOfRange::TypeT::ContentIndex, Ite2.OriginalTo);
+				Misc::SerilizerHelper::CrossTypeSetThrow<Exception::RegexOutOfRange>(From, Ite2.OriginalFrom, RegexOutOfRange::TypeT::ContentIndex, Ite2.OriginalFrom);
+				Misc::SerilizerHelper::CrossTypeSetThrow<Exception::RegexOutOfRange>(To, Ite2.OriginalTo, RegexOutOfRange::TypeT::ContentIndex, Ite2.OriginalTo);
 				NewOne.Parameter.push_back(From);
 				NewOne.Parameter.push_back(To);
 				if(From != To)
@@ -1760,7 +1764,7 @@ namespace Potato::Reg
 	std::size_t TableWrapper::SerializeTo(DFA const& Tab, std::span<StandardT> Source)
 	{
 
-		std::vector<std::size_t> RecordsTime;
+		std::vector<std::size_t> NodeOffset;
 
 
 		assert(CalculateRequireSpaceWithStanderT(Tab) <= Source.size());
@@ -1801,7 +1805,7 @@ namespace Potato::Reg
 		int NodeIndex =  0;
 		for (auto& Ite : Tab.Nodes)
 		{
-			RecordsTime.push_back(Serilizer.GetIteSpacePositon());
+			NodeOffset.push_back(Serilizer.GetIteSpacePositon());
 			NodeOffetMapping.push_back(Serilizer.GetIteSpacePositon());
 			auto Node = Serilizer.NewObject<ZipNode>();
 			Serilizer.CrossTypeSetThrow<RegexOutOfRange>(Node->EdgeCount, Ite.Edges.size(), RegexOutOfRange::TypeT::EdgeCount, Ite.Edges.size());
@@ -1829,6 +1833,9 @@ namespace Potato::Reg
 					TempZipBuffer.clear();
 					TranslateIntervalT(std::span(Ite.ConsumeSymbols), TempZipBuffer);
 					Serilizer.CrossTypeSetThrow<RegexOutOfRange>(Edge->ConsumeSymbolCount, TempZipBuffer.size(), RegexOutOfRange::TypeT::AcceptableCharCount, TempZipBuffer.size());
+					Serilizer.CrossTypeSetThrow<RegexOutOfRange>(Edge->ToIndexCount, Ite.ToIndex.size(), RegexOutOfRange::TypeT::ToIndeCount, Ite.ToIndex.size());
+					Serilizer.CrossTypeSetThrow<RegexOutOfRange>(Edge->ActionCount, Ite.List.size(), RegexOutOfRange::TypeT::ActionCount, Ite.List.size());
+					Serilizer.CrossTypeSetThrow<RegexOutOfRange>(Edge->ParmaterCount, Ite.Parameter.size(), RegexOutOfRange::TypeT::ActionParameterCount, Ite.Parameter.size());
 					Serilizer.NewObjectArray(std::span(TempZipBuffer));
 					Serilizer.NewObjectArray(std::span(Ite.List));
 					Serilizer.NewObjectArray(std::span(Ite.Parameter));
@@ -1864,7 +1871,7 @@ namespace Potato::Reg
 					Ite.Target[I1] = std::numeric_limits<StandardT>::max();
 				}
 				else {
-					Serilizer.CrossTypeSetThrow<RegexOutOfRange>(Ite.Target[I1], ID, RegexOutOfRange::TypeT::NodeOffset, ID);
+					Serilizer.CrossTypeSetThrow<RegexOutOfRange>(Ite.Target[I1], NodeOffset[ID], RegexOutOfRange::TypeT::NodeOffset, ID);
 				}
 			}
 		}
@@ -2332,6 +2339,7 @@ namespace Potato::Reg
 				{
 					Reader = Reader.SubSpan(Edge->NextEdgeOffset);
 					Edge = Reader.ReadObject<TableWrapper::ZipEdge const>();
+					EdgeReader = Reader;
 				}
 			}
 		}
@@ -2387,7 +2395,7 @@ namespace Potato::Reg
 
 	auto CoreProcessor::KeepAcceptConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeOffset, TableWrapper Wrapper, char32_t Symbol, std::size_t TokenIndex) ->KeepAcceptResult
 	{
-		assert(CurNodeOffset < Wrapper.NodeSize());
+		assert(CurNodeOffset < Wrapper.BufferSize());
 
 		auto IteSpan = Wrapper.Wrapper.subspan(CurNodeOffset);
 
@@ -2409,11 +2417,11 @@ namespace Potato::Reg
 			{
 				auto Symbols = EdgeReader.ReadObjectArray<TableWrapper::ZipChar const>(Edge->ConsumeSymbolCount);
 				assert(Symbols.has_value());
-				if (!KAResult.MeetAcceptRequireConsume && AcceptConsumeSymbol(*Symbols, Reg::EndOfFile()))
+				if (!KAResult.MeetAcceptRequireConsume && AcceptConsumeSymbol(*Symbols, Symbol))
 				{
 					KAResult.MeetAcceptRequireConsume = true;
 				}
-				else if (AcceptConsumeSymbol(*Symbols, Symbol))
+				else if (AcceptConsumeSymbol(*Symbols, Reg::EndOfFile()))
 				{
 					auto List = EdgeReader.ReadObjectArray<DFA::ActionT const>(Edge->ActionCount);
 					auto Par = EdgeReader.ReadObjectArray<StandardT const>(Edge->ParmaterCount);
@@ -2437,6 +2445,7 @@ namespace Potato::Reg
 				{
 					Reader = Reader.SubSpan(Edge->NextEdgeOffset);
 					Edge = Reader.ReadObject<TableWrapper::ZipEdge const>();
+					EdgeReader = Reader;
 				}
 			}
 		}
@@ -2611,12 +2620,12 @@ namespace Potato::Reg
 
 	auto TableHeadMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy) ->std::optional<std::optional<Result>>
 	{
-		return HeadMatchProcessorConsumeSymbol(*this, Symbol, TokenIndex, Wrapper, DFA::StartupNode(), Greedy);
+		return HeadMatchProcessorConsumeSymbol(*this, Symbol, TokenIndex, Wrapper, TableWrapper::StartupNode(), Greedy);
 	}
 
 	auto TableHeadMatchProcessor::EndOfFile(std::size_t TokenIndex)->std::optional<Result>
 	{
-		return HeadMatchProcessorEndOfFile(*this, TokenIndex, Wrapper, DFA::StartupNode());
+		return HeadMatchProcessorEndOfFile(*this, TokenIndex, Wrapper, TableWrapper::StartupNode());
 	}
 
 	auto Match(DFAMatchProcessor& Pro, std::u32string_view Str)->std::optional<DFAMatchProcessor::Result>

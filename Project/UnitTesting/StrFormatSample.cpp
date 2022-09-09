@@ -22,7 +22,7 @@ void TestingStrFormat()
 
 	int32_t R1 = 0;
 
-	SearchScan(UR"(([0-9]+))", Str, R1);
+	HeadMatchScan(UR"(.*?([0-9]+))", Str, R1);
 
 	if (R1 != 12445)
 		throw UnpassedUnit{ "TestingStrFormat : Bad SearchScan Output 1" };

@@ -179,95 +179,6 @@ namespace Potato::Misc
 
 	namespace SerilizerHelper
 	{
-		struct WriteResult
-		{
-			std::size_t StartOffset;
-			std::size_t WriteLength;
-		};
-
-		template<typename StorageT, typename RequireType>
-		static constexpr bool ObjectsToArray() { return sizeof(RequireType) % sizeof(StorageT) == 0; }
-
-		template<typename StorageT, typename Allocator, typename PODType>
-		static WriteResult WriteObject(std::vector<StorageT, Allocator>& Output, PODType&& InputStoraget)
-			requires(std::is_standard_layout_v<std::remove_cvref_t<PODType>>)
-		{
-			std::size_t OldSize = Output.size();
-			std::size_t AlignedLength = AlignedSize<StorageT>(sizeof(std::remove_cvref_t<PODType>));
-			Output.resize(OldSize + AlignedLength);
-			new (Output.data() + OldSize) std::remove_cvref_t<PODType>{std::forward<PODType>(InputStoraget)};
-			return {OldSize, AlignedLength};
-		}
-
-		template<typename StorageT, typename Allocator, typename PODType>
-		static WriteResult WriteObjectArray(std::vector<StorageT, Allocator>& Output, std::span<PODType> InputStoraget)
-			requires(std::is_standard_layout_v<std::remove_cvref_t<PODType>>)
-		{
-			std::size_t OldSize = Output.size();
-			std::size_t AlignedLength = AlignedSize<StorageT>(sizeof(std::remove_cvref_t<PODType>) * InputStoraget.size());
-			Output.resize(OldSize + AlignedLength);
-			std::memcpy(Output.data() + OldSize, InputStoraget.data(), InputStoraget.size() * sizeof(std::remove_cvref_t<PODType>));
-			return {OldSize, AlignedLength};
-		}
-
-		template<typename PODType, typename StorageT>
-		struct ReadResult
-		{
-			std::size_t ReadLength;
-			std::span<StorageT> LastSpan;
-			PODType* Result;
-			PODType* operator->() { return Result; }
-			PODType& operator*() {return *Result; }
-		};
-
-		template<typename PODType, typename StorageT>
-		static ReadResult<PODType, StorageT> ReadObject(std::span<StorageT> Input)
-			requires(std::is_standard_layout_v<std::remove_cvref_t<PODType>>)
-		{
-			auto Result = reinterpret_cast<PODType*>(Input.data());
-			std::size_t AlignedLength = AlignedSize<StorageT>(sizeof(std::remove_cvref_t<PODType>));
-			Input = Input.subspan(AlignedLength);
-			return { AlignedLength, Input, Result };
-		}
-
-		template<typename PODType, typename StorageT>
-		struct ReadArrayResult
-		{
-			std::span<PODType> Result;
-			std::size_t ReadLength;
-			std::span<StorageT> LastSpan;
-			std::span<PODType>& operator*() { return Result; }
-			std::span<PODType>* operator->() { return &Result; }
-		};
-
-		template<typename PODType, typename StorageT>
-		static ReadArrayResult<PODType, StorageT> ReadObjectArray(std::span<StorageT> Input, std::size_t ObjectCount)
-			requires(std::is_standard_layout_v<std::remove_cvref_t<PODType>>)
-		{
-			
-			auto Ptr = reinterpret_cast<PODType*>(Input.data());
-			std::span<PODType> Readed{ Ptr, Ptr + ObjectCount };
-			std::size_t AlignedLength = AlignedSize<StorageT>(sizeof(std::remove_cvref_t<PODType>) * ObjectCount);
-			Input = Input.subspan(AlignedLength);
-			return { Readed, AlignedLength, Input };
-		}
-
-		template<typename ExceptionT, typename TargetT, typename SourceT, typename ...AT>
-		void TryCrossTypeSet(TargetT& Output, SourceT const& Input, AT&&... at) requires (std::is_constructible_v<ExceptionT, AT...>)
-		{
-			Output = static_cast<TargetT>(Input);
-			if(Output != Input) //[[unlikely]]
-				throw ExceptionT{std::forward<AT>(at)...};
-		}
-
-		template<typename TargetT, typename Exceptable, typename SourceT, typename ...AT>
-		TargetT CrossType(SourceT const& Input, AT&&... at) requires (std::is_constructible_v<Exceptable, AT...>)
-		{
-			TargetT Result = static_cast<TargetT>(Input);
-			if(Result != Result)
-				throw Exceptable {std::forward<AT>(at)...};
-			return Result;
-		}
 
 		template<typename StorageT>
 		struct Predicter
@@ -287,6 +198,20 @@ namespace Potato::Misc
 			std::size_t RequireSpace() const { return SpaceRecord; }
 		};
 
+		template<typename SourceT, typename TargetT>
+		bool CrossTypeSet(SourceT& Source, TargetT const& Target) requires(std::is_convertible_v<TargetT, SourceT>)
+		{
+			Source = static_cast<SourceT>(Target);
+			return Source == Target;
+		}
+
+		template<typename ExceptableT, typename SourceT, typename TargetT, typename ...Par>
+		void CrossTypeSetThrow(SourceT& Source, TargetT const& Target, Par&& ...Pars) requires(std::is_convertible_v<TargetT, SourceT>&& std::is_constructible_v<ExceptableT, Par...>)
+		{
+			if (!CrossTypeSet(Source, Target))
+				throw ExceptableT{ std::forward<Par>(Pars)... };
+		}
+
 		template<typename StorageT>
 		struct SpanReader
 		{
@@ -297,6 +222,7 @@ namespace Potato::Misc
 			SpanReader(std::span<StorageT> Buffer) : TotalBuffer(Buffer), IteBuffer(Buffer) {}
 			SpanReader SubSpan(std::size_t Index) const { auto New = *this; New.IteBuffer = IteBuffer.subspan(Index); return New; }
 			SpanReader& operator=(SpanReader const&) = default;
+			std::size_t GetSize() const { return IteBuffer.size(); }
 
 			std::span<StorageT> TotalBuffer;
 			std::span<StorageT> IteBuffer;

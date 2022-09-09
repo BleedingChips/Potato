@@ -71,7 +71,6 @@ constexpr Symbol operator*(NT sym) { return Symbol::AsNoTerminal(static_cast<Sta
 void TestingSLRX()
 {
 
-	/*
 	try {
 		LRX Tab(
 			*Noterminal::Exp,
@@ -187,10 +186,13 @@ void TestingSLRX()
 		for (auto Ite : Symbols)
 		{
 			auto Re = Pro.Consume(Ite, Count);
+			if(!Re)
+				throw UnpassedUnit{ "TestingSLRX : Bad Output Result 1.4" };
 			++Count;
 		}
 		auto K = Pro.EndOfFile();
-		volatile int i = 0;
+		if(!K)
+			throw UnpassedUnit{ "TestingSLRX : Bad Output Result 1.4" };
 	}
 	catch (Exception::IllegalSLRXProduction const& Wtf)
 	{
@@ -200,7 +202,6 @@ void TestingSLRX()
 	{
 		throw;
 	}
-	*/
 
 	try
 	{
@@ -241,10 +242,15 @@ void TestingSLRX()
 		for (auto& Ite : Wtf)
 		{
 			auto P = Pro.Consume(*Ite.Ope, O++);
+			if(!P)
+				throw UnpassedUnit{ "TestingSLRX : Bad Output Result 1.5" };
 			volatile int i = 0;
 		}
 
 		auto End = Pro.EndOfFile();
+
+		if(!End)
+			throw UnpassedUnit{ "TestingSLRX : Bad Output Result 1.5" };
 
 		auto Func = [&](VariantElement Ele) -> std::any {
 			if (Ele.IsNoTerminal())
@@ -273,10 +279,30 @@ void TestingSLRX()
 			}
 		};
 
-		auto Result = ProcessParsingStepWithOutputType<int32_t>(Pro.Steps, Func);
+		auto Result = ProcessParsingStepWithOutputType<int32_t>(Pro.GetSteps(), Func);
 
 		if (Result != 1508)
 			throw UnpassedUnit{ "TestingSLRX : Bad Output Result 1.5" };
+
+		{
+			auto Buffer = TableWrapper::Create(tab);
+
+			TableProcessor Pro2(TableWrapper{ Buffer });
+
+			std::size_t O = 0;
+			for (auto& Ite : Wtf)
+			{
+				auto P = Pro2.Consume(*Ite.Ope, O++);
+				volatile int i = 0;
+			}
+			Pro2.EndOfFile();
+
+			auto Result = ProcessParsingStepWithOutputType<int32_t>(Pro2.GetSteps(), Func);
+
+			if(Result != 1508)
+				throw UnpassedUnit{ "TestingSLRX : Bad Output Result 1.5" };
+		}
+		
 	}
 	catch (Exception::IllegalSLRXProduction const&)
 	{
@@ -288,38 +314,5 @@ void TestingSLRX()
 	}
 
 	std::wcout << LR"(TestingSLRX Pass !)" << std::endl;
-
-	/*
-	try
-	{
-		
-
-		static Table TemTable(
-			*NT::Statement,
-			{
-				{*NT::Statement, {}, 1},
-				{*NT::Statement, {*NT::Statement, *T::Terminal, *T::Equal, *T::Rex}, 2},
-				{*NT::Statement, {*NT::Statement, *T::Terminal, *T::Equal, *T::Rex, *T::Colon, *T::LM_Brace, *T::Number, *T::RM_Brace}, 3},
-				{*NT::Statement, {*NT::Statement, *T::Start, *T::Equal, *T::Rex}, 4},
-			},
-			{}
-		);
-
-		std::vector<T> List = {T::Start, T::Equal, T::Rex, T::Terminal, T::Equal, T::Rex, T::Colon, T::LM_Brace, T::Number, T::RM_Brace};
-
-		CoreProcessor Pro(TemTable);
-
-		for (auto Ite : List)
-		{
-			Pro.Consume(*Ite);
-		}
-
-		auto Steps = Pro.EndOfFile();
-	}
-	catch (...)
-	{
-		throw;
-	}
-	*/
 
 }

@@ -18,9 +18,6 @@ namespace Potato::Ebnf
 		std::vector<std::u32string> NoTermialMapping;
 		std::vector<Reg::StandardT> RegTable;
 		std::vector<SLRX::TableWrapper::StandardT> DLrTable;
-
-
-		
 	};
 
 	struct TableWrapper

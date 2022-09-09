@@ -385,7 +385,7 @@ namespace Potato::Reg
 	{
 		using Result = typename HeadMatchProcessor::Result;
 
-		TableHeadMatchProcessor(TableWrapper Wrapper) : Wrapper(Wrapper), HeadMatchProcessor(DFA::StartupNode()) {}
+		TableHeadMatchProcessor(TableWrapper Wrapper) : Wrapper(Wrapper), HeadMatchProcessor(TableWrapper::StartupNode()) {}
 		TableHeadMatchProcessor(TableHeadMatchProcessor const&) = default;
 		std::optional<std::optional<Result>> ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy = false);
 		std::optional<Result> EndOfFile(std::size_t TokenIndex);
@@ -762,6 +762,9 @@ namespace Potato::Reg
 				Counter,
 				NodeCount,
 				NodeOffset,
+				ToIndeCount,
+				ActionCount,
+				ActionParameterCount,
 				EdgeCount,
 				EdgeOffset,
 				AcceptableCharCount,
