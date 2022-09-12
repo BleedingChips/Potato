@@ -40,6 +40,9 @@
     <ClInclude Include="..\..\Public\PotatoTMP.h">
       <Filter>Public</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Public\PotatoEbnf.h">
+      <Filter>Public</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Private\PotatoSLRX.cpp">
@@ -58,6 +61,9 @@
       <Filter>Private</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Private\PotatoStrFormat.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Private\PotatoEbnf.cpp">
       <Filter>Private</Filter>
     </ClCompile>
   </ItemGroup>

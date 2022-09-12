@@ -6,6 +6,7 @@
 namespace Potato::Ebnf
 {
 
+
 	using namespace Exception;
 
 	static constexpr SLRX::StandardT SmallBrace = 0;
@@ -15,8 +16,7 @@ namespace Potato::Ebnf
 	static constexpr SLRX::StandardT OrRight = 4;
 	static constexpr SLRX::StandardT MinMask = 5;
 
-	constexpr SLRX::Symbol AsNoT(SLRX::StandardT Index) { return SLRX::Symbol::AsNoTerminal(Index); }
-	constexpr SLRX::Symbol AsT(SLRX::StandardT Index) { return SLRX::Symbol::AsTerminal(Index); }
+	using SLRX::Symbol;
 
 	enum class T : SLRX::StandardT
 	{
@@ -62,14 +62,14 @@ namespace Potato::Ebnf
 
 	constexpr SLRX::Symbol operator*(NT sym) { return SLRX::Symbol{ SLRX::Symbol::ValueType::NOTERMIAL, static_cast<SLRX::StandardT>(sym) }; };
 
-	void AddRegex(Reg::MulityRegexCreator& Creator, std::u32string_view Str, T Enum)
+	void AddRegex(Reg::MulityRegCreater& Creator, std::u32string_view Str, T Enum)
 	{
-		Creator.AddRegex(Str, {static_cast<SLRX::StandardT>(Enum)}, Creator.GetCountedUniqueID(), false);
+		Creator.LowPriorityLink(Str, false, {static_cast<SLRX::StandardT>(Enum)});
 	}
 
 	Reg::TableWrapper EbnfStepReg() {
 		static auto List = []() {
-			Reg::MulityRegexCreator Creator;
+			Reg::MulityRegCreater Creator;
 			AddRegex(Creator, UR"(%%%%)", T::Barrier);
 			AddRegex(Creator, UR"([0-9]+)", T::Number);
 			AddRegex(Creator, UR"([0-9a-zA-Z_\z]+)", T::Terminal);
@@ -93,7 +93,7 @@ namespace Potato::Ebnf
 			AddRegex(Creator, UR"(\)\+)", T::RightPriority);
 			AddRegex(Creator, UR"(/\*.*?\*/)", T::Command);
 			AddRegex(Creator, UR"(//[^\n]*\n)", T::Command);
-			return Creator.Generate();
+			return *Creator.GenerateTableBuffer();
 		}();
 		return Reg::TableWrapper(List);
 	}
@@ -138,9 +138,28 @@ namespace Potato::Ebnf
 	struct LexicalTuple
 	{
 		SLRX::Symbol Value;
-		std::u32string_view Str;
-		std::size_t Offset;
+		std::u32string Str;
+		Misc::IndexSpan<> StrIndex;
 	};
+
+	struct LexicalProcessor
+	{
+		
+		struct Result
+		{
+			std::size_t BufferIndex;
+			std::size_t BufferIndex;
+		};
+
+		bool Consume(char32_t Char, Misc::IndexSpan<> BufferSpan);
+		bool EndOfFile();
+
+
+		std::vector<LexicalTuple> Tuples;
+	};
+
+	template<typename CT>
+	std::vector<LexicalTuple> PeroceeLexical(std::basic_string_view<CT> Str);
 
 	std::array<Misc::IndexSpan<>, 3> ProcessLexical(std::vector<LexicalTuple>& OutputTuple, std::u32string_view Str)
 	{
@@ -151,10 +170,9 @@ namespace Potato::Ebnf
 		std::u32string_view StrIte = Str;
 		while (!StrIte.empty())
 		{
-			auto Re = Reg::ProcessGreedyFrontMatch(StepReg, StrIte);
+			auto Re = Reg::HeadMatch(StepReg, StrIte, true);
 			if (Re.has_value())
 			{
-				
 				auto Enum = static_cast<T>(Re->AcceptData.Mask);
 				switch (Enum)
 				{
@@ -286,7 +304,7 @@ namespace Potato::Ebnf
 		return Table.Wrapper;
 	};
 
-	UnserilizeTable::UnserilizeTable(std::u32string_view Str)
+	EBNFX::EBNFX(std::u32string_view Str)
 	{
 		struct Storaget
 		{
@@ -296,7 +314,7 @@ namespace Potato::Ebnf
 
 		std::vector<Storaget> Mapping;
 		SLRX::StandardT TempNoTerminalCount = std::numeric_limits<SLRX::StandardT>::max();
-		Reg::MulityRegexCreator Creator;
+		Reg::MulityRegCreater Creator;
 
 		std::vector<LexicalTuple> SymbolTuple;
 		auto StepIndexs = ProcessLexical(SymbolTuple, Str);
@@ -314,15 +332,37 @@ namespace Potato::Ebnf
 #endif
 
 		// Step1
-		try
 		{
-
-			SLRX::CoreProcessor Pro(EbnfStep1SLRX());
+			SLRX::TableProcessor Pro(EbnfStep1SLRX());
 
 			for (auto Index = StepIndexs[0].Begin(); Index < StepIndexs[0].End(); ++Index)
 			{
-				Pro.Consume(SymbolTuple[Index].Value, Index);
+				if (!Pro.Consume(SymbolTuple[Index].Value, Index))
+				{
+					throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongEbnf, SymbolTuple[Index].Offset};
+				}
 			}
+
+			if(!Pro.EndOfFile())
+			{
+				if(StepIndexs.size() >= StepIndexs[0].End())
+				{
+					auto& Ref = SymbolTuple[StepIndexs[0].End() - 1];
+					throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongEbnf, Ref.Offset + Ref.Str.size()};
+				}
+					
+			}
+				
+		}
+		
+
+		// Step1
+		try
+		{
+
+			
+
+			assert(Re2);
 
 			auto Steps = Pro.EndOfFile();
 
@@ -907,6 +947,7 @@ namespace Potato::Ebnf
 		}
 	}
 
+	/*
 	auto TableWrapper::Create(UnserilizeTable const& Table) ->std::vector<StorageT>
 	{
 		using namespace Misc::SerilizerHelper;

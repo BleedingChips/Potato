@@ -7,19 +7,27 @@
 namespace Potato::Ebnf
 {
 
-	struct UnserilizeTable
+	struct EBNFX
 	{
+		EBNFX(std::u32string_view Str);
+		EBNFX(EBNFX const&) = default;
+		EBNFX(EBNFX&&) = default;
 
-		UnserilizeTable(std::u32string_view Str);
-		UnserilizeTable(UnserilizeTable const&) = default;
-		UnserilizeTable(UnserilizeTable&&) = default;
+		struct TerminalTuple
+		{
+			std::u32string Name;
+			Reg::StandardT MappedMask;
+		};
 
-		std::vector<std::u32string> TerminalMappings;
+		std::vector<TerminalTuple> TerminalMappings;
 		std::vector<std::u32string> NoTermialMapping;
-		std::vector<Reg::StandardT> RegTable;
-		std::vector<SLRX::TableWrapper::StandardT> DLrTable;
+		Reg::DFA Lexical;
+		SLRX::LRX Syntax;
 	};
 
+
+
+	/*
 	struct TableWrapper
 	{
 		using StorageT = uint32_t;
@@ -55,7 +63,9 @@ namespace Potato::Ebnf
 		std::span<Reg::TableWrapper::StandardT const> RegWrapper;
 		std::span<SLRX::TableWrapper::StandardT const> SLRXWrapper;
 	};
+	*/
 
+	/*
 	struct EbnfSymbolTuple
 	{
 		SLRX::Symbol Value;
@@ -126,17 +136,6 @@ namespace Potato::Ebnf
 		NTElement& AsNoTerminal() { return std::get<NTElement>(Element); }
 	};
 
-	/*
-	struct StepProcrssor
-	{
-		StepProcrssor(TableWrapper Wrapper) : Processor(Wrapper.AsSLRXWrapper()), Wrapper(Wrapper){}
-		void Consume();
-	public:
-		SLRX::CoreProcessor Processor;
-		TableWrapper Wrapper;
-	};
-	*/
-
 	std::any ProcessStep(TableWrapper Wrapper, std::span<EbnfSymbolTuple const> InputSymbol, std::any(*F)(StepElement Element, void* Data), void* Data);
 
 	template<typename Func>
@@ -153,7 +152,7 @@ namespace Potato::Ebnf
 		auto Result = ProcessStep(Wrapper, InputSymbol, F);
 		return std::any_cast<FN>(Result);
 	}
-
+	*/
 }
 
 namespace Potato::Ebnf::Exception
