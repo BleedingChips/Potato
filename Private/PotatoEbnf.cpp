@@ -45,7 +45,7 @@ namespace Potato::Ebnf
 		ItSelf,
 	};
 
-	constexpr SLRX::Symbol operator*(T sym) { return SLRX::Symbol::AsTerminal(static_cast<SLRX::StandardT>(sym)); };
+	constexpr Symbol operator*(T sym) { return Symbol::AsTerminal(static_cast<SLRX::StandardT>(sym)); };
 
 	enum class NT : SLRX::StandardT
 	{
@@ -60,7 +60,7 @@ namespace Potato::Ebnf
 		OrStatement,
 	};
 
-	constexpr SLRX::Symbol operator*(NT sym) { return SLRX::Symbol{ SLRX::Symbol::ValueType::NOTERMIAL, static_cast<SLRX::StandardT>(sym) }; };
+	constexpr Symbol operator*(NT sym) { return Symbol::AsNoTerminal(static_cast<SLRX::StandardT>(sym)); };
 
 	void AddRegex(Reg::MulityRegCreater& Creator, std::u32string_view Str, T Enum)
 	{
@@ -120,58 +120,47 @@ namespace Potato::Ebnf
 	}
 	*/
 
-	std::size_t FindOrAddSymbol(std::u32string_view Source, std::vector<std::u32string>& Output)
+
+	SLRX::Symbol FindOrAddTerminalSymbol(std::u32string_view Source, std::vector<EBNFX::TerminalElement>& Output)
 	{
-		for (std::size_t IteIndex = 0; IteIndex < Output.size(); ++IteIndex)
+		auto Ite = std::find_if(Output.begin(), Output.end(), [=](EBNFX::TerminalElement const& Ref){
+			return Ref.Name == Source;
+		});
+		if(Ite == Output.end())
 		{
-			auto& Ite = Output[IteIndex];
-			if (Ite == Source)
-			{
-				return IteIndex;
-			}
+			Symbol Sym = Symbol::AsTerminal(static_cast<SLRX::StandardT>(Output.size()));
+			Output.push_back({std::u32string{Source}, Sym });
+			return Sym;
+			
+		}else{
+			return Ite->MappedSymbol;
 		}
-		auto OldIndex = Output.size();
-		Output.push_back(std::u32string{Source});
-		return OldIndex;
 	}
+
 
 	struct LexicalTuple
 	{
 		SLRX::Symbol Value;
-		std::u32string Str;
+		std::u32string_view Str;
 		Misc::IndexSpan<> StrIndex;
 	};
 
-	struct LexicalProcessor
+	struct LexicalResult
 	{
-		
-		struct Result
-		{
-			std::size_t BufferIndex;
-			std::size_t BufferIndex;
-		};
-
-		bool Consume(char32_t Char, Misc::IndexSpan<> BufferSpan);
-		bool EndOfFile();
-
-
-		std::vector<LexicalTuple> Tuples;
+		std::vector<LexicalTuple> Datas;
+		bool Accept = false;
 	};
 
-	template<typename CT>
-	std::vector<LexicalTuple> PeroceeLexical(std::basic_string_view<CT> Str);
-
-	std::array<Misc::IndexSpan<>, 3> ProcessLexical(std::vector<LexicalTuple>& OutputTuple, std::u32string_view Str)
+	LexicalResult ProcessLexical(std::u32string_view Str)
 	{
-		std::size_t State = 0;
-		std::array<Misc::IndexSpan<>, 3> Indexs;
+		LexicalResult Output;
 		auto StepReg = EbnfStepReg();
 		std::size_t Offset = 0;
 		std::u32string_view StrIte = Str;
 		while (!StrIte.empty())
 		{
 			auto Re = Reg::HeadMatch(StepReg, StrIte, true);
-			if (Re.has_value())
+			if (Re)
 			{
 				auto Enum = static_cast<T>(Re->AcceptData.Mask);
 				switch (Enum)
@@ -182,7 +171,7 @@ namespace Potato::Ebnf
 				case T::Number:
 				case T::NoTerminal:
 				case T::Terminal:
-					OutputTuple.push_back({*Enum, StrIte.substr(0, Re->MainCapture.Count()), Offset});
+					Output.Datas.push_back({*Enum, StrIte.substr(0, Re->MainCapture.Count()), {Offset, Re->MainCapture.Count()}});
 					break;
 				case T::NoProductionNoTerminal:
 				case T::Rex:
@@ -190,39 +179,31 @@ namespace Potato::Ebnf
 					auto Wrapper = Re->GetCaptureWrapper();
 					assert(Wrapper.HasSubCapture());
 					auto SpanIndex = Wrapper.GetTopSubCapture().GetCapture();
-					OutputTuple.push_back({ *Enum, 
+					Output.Datas.push_back({ *Enum,
 						StrIte.substr(SpanIndex.Begin(), SpanIndex.Count()),
 						Offset
 						});
 				}
 					break;
 				case T::Barrier:
-					if (State >= 3) [[unlikely]]
-					{
-						throw Exception::UnacceptableEbnf{UnacceptableEbnf::TypeT::WrongEbnf, Re->MainCapture.Begin()};
-					}
-					else {
-						Indexs[State].Length = OutputTuple.size() - Indexs[State].Offset;
-						++State;
-						Indexs[State].Offset = OutputTuple.size();
-					}
+					Output.Datas.push_back({ *Enum,
+							{},
+							Offset
+						});
 					break;
 				default:
-					OutputTuple.push_back({ *Enum, StrIte.substr(0, Re->MainCapture.Count()), Offset });
+					Output.Datas.push_back({ *Enum, StrIte.substr(0, Re->MainCapture.Count()), {Offset, Re->MainCapture.Count()} });
 					break;
 				}
 				Offset += Re->MainCapture.Count();
 				StrIte = StrIte.substr(Re->MainCapture.Count());
-				if (StrIte.empty())
-				{
-					Indexs[State].Length = OutputTuple.size() - Indexs[State].Offset;
-				}
 			}
 			else {
-				throw Exception::UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongEbnf, Offset };
+				return Output;
 			}
 		}
-		return Indexs;
+		Output.Accept = true;
+		return Output;
 	}
 
 	SLRX::TableWrapper EbnfStep1SLRX() {
@@ -304,20 +285,136 @@ namespace Potato::Ebnf
 		return Table.Wrapper;
 	};
 
-	EBNFX::EBNFX(std::u32string_view Str)
+	EBNFX EBNFX::Create(std::u32string_view Str)
 	{
-		struct Storaget
-		{
-			SLRX::Symbol Sym;
-			std::size_t Index;
-		};
 
-		std::vector<Storaget> Mapping;
-		SLRX::StandardT TempNoTerminalCount = std::numeric_limits<SLRX::StandardT>::max();
-		Reg::MulityRegCreater Creator;
+		try{
+			struct Storaget
+			{
+				SLRX::Symbol Sym;
+				std::size_t Index;
+			};
 
-		std::vector<LexicalTuple> SymbolTuple;
-		auto StepIndexs = ProcessLexical(SymbolTuple, Str);
+			std::vector<Storaget> Mapping;
+			SLRX::StandardT TempNoTerminalCount = std::numeric_limits<SLRX::StandardT>::max();
+			Reg::MulityRegCreater Creator;
+			std::vector<TerminalElement> TerEles;
+			std::vector<LexicalMapping> MappingMask;
+
+			auto SymbolTuple = ProcessLexical(Str);
+
+			if (!SymbolTuple.Accept)
+			{
+				std::size_t LastTokenIndex = SymbolTuple.Datas.empty() ? 0 : SymbolTuple.Datas.rbegin()->StrIndex.End();
+				throw Exception::UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongEbnfLexical, LastTokenIndex };
+			}
+
+			auto InputSpan = std::span(SymbolTuple.Datas);
+
+			std::size_t SymbolIte = 0;
+
+			// Step1
+			{
+				SLRX::TableProcessor Pro(EbnfStep1SLRX());
+
+				for (; SymbolIte < SymbolTuple.Datas.size(); ++SymbolIte)
+				{
+					auto& Cur = SymbolTuple.Datas[SymbolIte];
+					if (Cur.Value == *T::Barrier)
+						break;
+					else {
+						if (!Pro.Consume(Cur.Value, SymbolIte))
+						{
+							throw Exception::UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongEbnfSyntax, Cur.StrIndex.Begin() };
+						}
+					}
+				}
+				if (!Pro.EndOfFile())
+				{
+					std::size_t End = (SymbolIte < SymbolTuple.Datas.size() ? SymbolTuple.Datas[SymbolIte].StrIndex.Begin() : 0);
+
+					throw Exception::UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongEbnfSyntax, End };
+				}
+
+				SLRX::ProcessParsingStep(Pro.GetSteps(), [&](SLRX::VariantElement Ele) -> std::any {
+					if (Ele.IsTerminal())
+					{
+						auto TE = Ele.AsTerminal();
+						auto Enum = static_cast<T>(TE.Value.Value);
+						switch (Enum)
+						{
+						case T::Terminal:
+						case T::Rex:
+							return std::u32string_view{ SymbolTuple.Datas[TE.TokenIndex].Str };
+						case T::Number:
+						{
+							Reg::StandardT Num;
+							StrFormat::DirectScan(SymbolTuple.Datas[TE.TokenIndex].Str, Num);
+							return Num;
+						}
+						default:
+							assert(false);
+							return {};
+						}
+					}
+					else {
+						auto NTE = Ele.AsNoTerminal();
+						switch (NTE.Mask)
+						{
+							switch (NTE.Mask)
+							{
+							case 2:
+							{
+								auto Name = NTE[1].Consume<std::u32string_view>();
+								auto Sym = FindOrAddTerminalSymbol(Name, TerEles);
+								auto Reg = NTE[3].Consume<std::u32string_view>();
+								Creator.LowPriorityLink(Reg, false, { static_cast<Reg::StandardT>(MappingMask.size()) });
+								MappingMask.push_back({ Sym, 0 });
+								return {};
+							}
+							case 3:
+							{
+								auto Name = NTE[1].Consume<std::u32string_view>();
+								auto Sym = FindOrAddTerminalSymbol(Name, TerEles);
+								auto Reg = NTE[3].Consume<std::u32string_view>();
+								Creator.LowPriorityLink(Reg, false, { static_cast<Reg::StandardT>(MappingMask.size()) });
+								MappingMask.push_back({ Sym, NTE[6].Consume<Reg::StandardT>() });
+								return {};
+							}
+							case 4:
+							{
+								auto Reg = NTE[3].Consume<std::u32string_view>();
+								Creator.LowPriorityLink(Reg, false, { std::numeric_limits<Reg::StandardT>::max() });
+								return {};
+							}
+							default:
+								return {};
+								break;
+							}
+						}
+					}
+					return {};
+					});
+			}
+
+			// Step2
+			{
+
+			}
+
+
+
+		}catch(...)
+		{	
+			throw;
+		}
+
+		
+
+
+		
+
+
 		if(StepIndexs[1].Count() == 0) [[unlikely]]
 			throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongEbnf, StepIndexs[0].End()};
 #if _DEBUG
@@ -876,24 +973,6 @@ namespace Potato::Ebnf
 
 		try
 		{
-			/*
-			std::size_t MaxNoTerminal = NoTermialMapping.size();
-			for (auto& Ite : Builder)
-			{
-				assert(Ite.ProductionValue.IsNoTerminal());
-				if (Ite.ProductionValue.Value > MaxNoTerminal)
-				{
-					Ite.ProductionValue.Value = Ite.ProductionValue.Value - std::numeric_limits<SLRX::StandardT>::max() + MaxNoTerminal;
-				}
-				for (auto& Ite2 : Ite.Element)
-				{
-					if (Ite2.Type == SLRX::ProductionBuilderElement::TypeT::IsValue && Ite2.ProductionValue.IsNoTerminal() && Ite2.ProductionValue.Value > MaxNoTerminal)
-					{
-						Ite2.ProductionValue.Value = Ite2.ProductionValue.Value - std::numeric_limits<std::size_t>::max() + MaxNoTerminal;
-					}
-				}
-			}
-			*/
 
 			RegTable = Creator.Generate();
 			if (!MaxForwardDetected.has_value())
@@ -946,6 +1025,7 @@ namespace Potato::Ebnf
 			throw;
 		}
 	}
+	*/
 
 	/*
 	auto TableWrapper::Create(UnserilizeTable const& Table) ->std::vector<StorageT>

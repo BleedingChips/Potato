@@ -9,17 +9,24 @@ namespace Potato::Ebnf
 
 	struct EBNFX
 	{
-		EBNFX(std::u32string_view Str);
-		EBNFX(EBNFX const&) = default;
-		EBNFX(EBNFX&&) = default;
 
-		struct TerminalTuple
+		struct LexicalMapping
 		{
-			std::u32string Name;
-			Reg::StandardT MappedMask;
+			SLRX::Symbol Value;
+			Reg::StandardT Mask;
 		};
 
-		std::vector<TerminalTuple> TerminalMappings;
+		struct TerminalElement
+		{
+			std::u32string Name;
+			SLRX::Symbol MappedSymbol;
+		};
+
+		static EBNFX Create(std::u32string_view Str);
+ 
+		std::vector<LexicalMapping> MappingMask;
+		std::vector<TerminalElement> TerEles;
+
 		std::vector<std::u32string> NoTermialMapping;
 		Reg::DFA Lexical;
 		SLRX::LRX Syntax;
@@ -208,7 +215,8 @@ namespace Potato::Ebnf::Exception
 	{
 		enum class TypeT
 		{
-			WrongEbnf,
+			WrongEbnfLexical,
+			WrongEbnfSyntax,
 			WrongRegex,
 			WrongLr,
 			WrongPriority,

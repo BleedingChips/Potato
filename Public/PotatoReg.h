@@ -394,24 +394,34 @@ namespace Potato::Reg
 		TableWrapper Wrapper;
 	};
 
-	auto Match(DFAMatchProcessor& Processor, std::u32string_view Str) ->std::optional<DFAMatchProcessor::Result>;
-	auto Match(TableMatchProcessor& Processor, std::u32string_view Str)->std::optional<TableMatchProcessor::Result>;
-	inline auto Match(DFA const& Table, std::u32string_view Str)->std::optional<DFAMatchProcessor::Result>{
+	template<typename ResultT>
+	struct MatchResult
+	{
+		std::optional<ResultT> SuccessdResult;
+		std::size_t LastTokenIndex;
+		operator bool () const { return SuccessdResult.has_value(); }
+		ResultT* operator->() { return SuccessdResult.operator->(); }
+		ResultT const* operator->() const { return SuccessdResult.operator->(); }
+	};
+
+	auto Match(DFAMatchProcessor& Processor, std::u32string_view Str) ->MatchResult<DFAMatchProcessor::Result>;
+	auto Match(TableMatchProcessor& Processor, std::u32string_view Str)->MatchResult<TableMatchProcessor::Result>;
+	inline auto Match(DFA const& Table, std::u32string_view Str)->MatchResult<DFAMatchProcessor::Result>{
 		DFAMatchProcessor Pro{Table};
 		return Match(Pro, Str);
 	}
-	inline auto Match(TableWrapper Wrapper, std::u32string_view Str)->std::optional<TableMatchProcessor::Result> {
+	inline auto Match(TableWrapper Wrapper, std::u32string_view Str)->MatchResult<TableMatchProcessor::Result> {
 		TableMatchProcessor Pro{ Wrapper };
 		return Match(Pro, Str);
 	}
-	auto HeadMatch(DFAHeadMatchProcessor& Table, std::u32string_view Str, bool Greddy = false)->std::optional<DFAHeadMatchProcessor::Result>;
-	inline auto HeadMatch(DFA const& Table, std::u32string_view Str, bool Greddy = false)->std::optional<DFAHeadMatchProcessor::Result>
+	auto HeadMatch(DFAHeadMatchProcessor& Table, std::u32string_view Str, bool Greddy = false)->MatchResult<DFAHeadMatchProcessor::Result>;
+	inline auto HeadMatch(DFA const& Table, std::u32string_view Str, bool Greddy = false)->MatchResult<DFAHeadMatchProcessor::Result>
 	{
 		DFAHeadMatchProcessor Pro{ Table };
 		return HeadMatch(Pro, Str, Greddy);
 	}
-	auto HeadMatch(TableHeadMatchProcessor& Table, std::u32string_view Str, bool Greddy = false)->std::optional<TableHeadMatchProcessor::Result>;
-	inline auto HeadMatch(TableWrapper Table, std::u32string_view Str, bool Greddy = false)->std::optional<TableHeadMatchProcessor::Result>
+	auto HeadMatch(TableHeadMatchProcessor& Table, std::u32string_view Str, bool Greddy = false)->MatchResult<TableHeadMatchProcessor::Result>;
+	inline auto HeadMatch(TableWrapper Table, std::u32string_view Str, bool Greddy = false)->MatchResult<TableHeadMatchProcessor::Result>
 	{
 		TableHeadMatchProcessor Pro{ Table };
 		return HeadMatch(Pro, Str, Greddy);
@@ -733,7 +743,6 @@ namespace Potato::Reg
 
 		struct UnaccaptableRegex : public Interface
 		{
-
 			enum class TypeT
 			{
 				OutOfCharRange,
@@ -754,6 +763,8 @@ namespace Potato::Reg
 			UnaccaptableRegex(UnaccaptableRegex const&) = default;
 			virtual char const* what() const override;
 		};
+
+		
 
 		struct RegexOutOfRange : public Interface
 		{
@@ -787,6 +798,13 @@ namespace Potato::Reg
 			CircleShifting() = default;
 			CircleShifting(CircleShifting const&) = default;
 			virtual char const* what() const override;
+		};
+
+		template<typename ExceptionType, typename CharT>
+		struct ExceptionWithString : public ExceptionType
+		{
+			std::basic_string<CharT> Str;
+			ExceptionWithString(ExceptionType Type, std::basic_string<CharT> S) : ExceptionType(std::move(Type)), Str(S) {}
 		};
 	}
 

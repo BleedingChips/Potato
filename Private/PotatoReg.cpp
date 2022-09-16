@@ -6,7 +6,6 @@
 
 namespace Potato::Reg
 {
-
 	
 	SeqIntervalT const& MaxIntervalRange() { 
 		static SeqIntervalT Temp{ IntervalT{ 1, MaxChar() } };
@@ -38,7 +37,7 @@ namespace Potato::Reg
 		Colon, // :
 	};
 
-	constexpr Symbol operator*(T Input) { return Symbol{ Symbol::ValueType::TERMINAL, static_cast<SLRX::StandardT>(Input) }; };
+	constexpr Symbol operator*(T Input) { return Symbol::AsTerminal(static_cast<SLRX::StandardT>(Input)); };
 
 	enum class NT : SLRX::StandardT
 	{
@@ -53,24 +52,21 @@ namespace Potato::Reg
 		FinalCharList,
 	};
 
-	constexpr Symbol operator*(NT Input) { return Symbol{ Symbol::ValueType::NOTERMIAL, static_cast<SLRX::StandardT>(Input) }; };
+	constexpr Symbol operator*(NT Input) { return Symbol::AsNoTerminal(static_cast<SLRX::StandardT>(Input)); };
 
-	struct LexerElement
-	{
-		T Value;
-		char32_t MappingSymbol;
-		std::variant<SeqIntervalT, char32_t> Acceptable;
-		std::size_t TokenIndex;
-	};
-
-	struct LexerTranslater
+	struct RegLexer
 	{
 
-		std::span<LexerElement const> GetSpan() const { return StoragedSymbol;};
+		struct Element
+		{
+			T Value;
+			std::variant<SeqIntervalT, char32_t> Acceptable;
+		};
 
-		void Insert(bool IsRaw, char32_t InputSymbol);
-		void EndOfFile();
-		std::size_t GetNextTokenIndex() const { return TokenIndexIte; }
+		std::span<Element const> GetSpan() const { return StoragedSymbol;};
+
+		bool Consume(bool IsRaw, char32_t InputSymbol);
+		bool EndOfFile();
 
 	protected:
 
@@ -91,27 +87,22 @@ namespace Potato::Reg
 		std::size_t RecordTokenIndex = 0;
 		std::size_t TokenIndexIte = 0;
 
-		void PushSymbolData(T InputSymbol, char32_t Character, std::variant<SeqIntervalT, char32_t> Value, std::size_t TokenIndex) { 
-			StoragedSymbol.push_back({InputSymbol, Character, std::move(Value), TokenIndex });
-		}
-		std::vector<LexerElement> StoragedSymbol;
+		std::vector<Element> StoragedSymbol;
 	};
 
-	void LexerTranslater::Insert(bool IsRaw, char32_t InputSymbol)
+	bool RegLexer::Consume(bool IsRaw, char32_t InputSymbol)
 	{
 		if (InputSymbol < MaxChar())
 		{
-			auto TokenIndex = TokenIndexIte;
-			++TokenIndexIte;
 			if (IsRaw)
 			{
 				if (CurrentState == State::Normal)
 				{
-					PushSymbolData(T::SingleChar, InputSymbol, InputSymbol, TokenIndex);
+					StoragedSymbol.push_back({T::SingleChar, {InputSymbol}});
 					return;
 				}
 				else {
-					throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::RawRegexInNotNormalState, InputSymbol, TokenIndex };
+					return false;
 				}
 			}
 
@@ -2628,17 +2619,17 @@ namespace Potato::Reg
 		return HeadMatchProcessorEndOfFile(*this, TokenIndex, Wrapper, TableWrapper::StartupNode());
 	}
 
-	auto Match(DFAMatchProcessor& Pro, std::u32string_view Str)->std::optional<DFAMatchProcessor::Result>
+	auto Match(DFAMatchProcessor& Pro, std::u32string_view Str)->MatchResult<DFAMatchProcessor::Result>
 	{
 		for (std::size_t I = 0; I < Str.size(); ++I)
 		{
 			if (!Pro.ConsumeSymbol(Str[I], I))
-				return {};
+				return {{}, I };
 		}
-		return Pro.EndOfFile(Str.size());
+		return {Pro.EndOfFile(Str.size()), Str.size()};
 	}
 	
-	auto HeadMatch(DFAHeadMatchProcessor& Pro, std::u32string_view Str, bool Greedy)->std::optional<DFAHeadMatchProcessor::Result>
+	auto HeadMatch(DFAHeadMatchProcessor& Pro, std::u32string_view Str, bool Greedy)->MatchResult<DFAHeadMatchProcessor::Result>
 	{
 		for (std::size_t I = 0; I < Str.size(); ++I)
 		{
@@ -2647,25 +2638,25 @@ namespace Potato::Reg
 			{
 				if (Re->has_value())
 				{
-					return **Re;
+					return {**Re, I};
 				}
 			}else
 				break;
 		}
-		return Pro.EndOfFile(Str.size());
+		return {Pro.EndOfFile(Str.size()), Str.size()};
 	}
 
-	auto Match(TableMatchProcessor& Pro, std::u32string_view Str)->std::optional<TableMatchProcessor::Result>
+	auto Match(TableMatchProcessor& Pro, std::u32string_view Str)->MatchResult<TableMatchProcessor::Result>
 	{
 		for (std::size_t I = 0; I < Str.size(); ++I)
 		{
 			if (!Pro.ConsumeSymbol(Str[I], I))
-				return {};
+				return {{}, I};
 		}
-		return Pro.EndOfFile(Str.size());
+		return {Pro.EndOfFile(Str.size()), Str.size()};
 	}
 
-	auto HeadMatch(TableHeadMatchProcessor& Pro, std::u32string_view Str, bool Greedy)->std::optional<TableHeadMatchProcessor::Result>
+	auto HeadMatch(TableHeadMatchProcessor& Pro, std::u32string_view Str, bool Greedy)->MatchResult<TableHeadMatchProcessor::Result>
 	{
 		for (std::size_t I = 0; I < Str.size(); ++I)
 		{
@@ -2674,23 +2665,33 @@ namespace Potato::Reg
 			{
 				if (Re->has_value())
 				{
-					return **Re;
+					return {**Re, I};
 				}
 			}
 			else
 				break;
 		}
-		return Pro.EndOfFile(Str.size());
+		return {Pro.EndOfFile(Str.size()), Str.size() };
 	}
 
 	void MulityRegCreater::LowPriorityLink(std::u32string_view Str, bool IsRow, Accept Acce)
 	{
-		if (ETable.has_value())
-		{
-			ETable->Link(EpsilonNFA::Create(Str, IsRow, Acce));
+		try {
+			if (ETable.has_value())
+			{
+				ETable->Link(EpsilonNFA::Create(Str, IsRow, Acce));
+			}
+			else {
+				ETable = EpsilonNFA::Create(Str, IsRow, Acce);
+			}
 		}
-		else {
-			ETable = EpsilonNFA::Create(Str, IsRow, Acce);
+		catch (UnaccaptableRegex const& R)
+		{
+			throw ExceptionWithString<UnaccaptableRegex, char32_t>{R, std::u32string{ Str }};
+		}
+		catch (...)
+		{
+			throw;
 		}
 	}
 
@@ -2698,7 +2699,7 @@ namespace Potato::Reg
 	{
 		if (ETable.has_value())
 		{
-			return DFA{*ETable};
+			return DFA{ *ETable };
 		}
 		else {
 			return {};

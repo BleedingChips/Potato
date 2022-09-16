@@ -20,7 +20,7 @@ namespace Potato::StrFormat
 		while (!Str.empty())
 		{
 			auto Re = Reg::HeadMatch(Wrapper, Str);
-			if (Re.has_value())
+			if (Re)
 			{
 				auto Wrapper = Re->GetCaptureWrapper().GetTopSubCapture();
 				assert(Wrapper.HasCapture());
