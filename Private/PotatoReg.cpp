@@ -65,10 +65,8 @@ namespace Potato::Reg
 
 		std::span<Element const> GetSpan() const { return StoragedSymbol;};
 
-		bool Consume(bool IsRaw, char32_t InputSymbol);
+		bool Consume(char32_t InputSymbol);
 		bool EndOfFile();
-
-	protected:
 
 		enum class State
 		{
@@ -77,9 +75,14 @@ namespace Potato::Reg
 			BigNumber,
 			Number,
 			Done,
+			Raw,
 		};
 
-		State CurrentState = State::Normal;
+		RegLexer(bool IsRaw) : CurrentState(IsRaw ? State::Raw : State::Normal) {}
+
+	protected:
+
+		State CurrentState;
 		std::size_t Number = 0;
 		char32_t NumberChar = 0;
 		bool NumberIsBig = false;
@@ -90,22 +93,10 @@ namespace Potato::Reg
 		std::vector<Element> StoragedSymbol;
 	};
 
-	bool RegLexer::Consume(bool IsRaw, char32_t InputSymbol)
+	bool RegLexer::Consume(char32_t InputSymbol)
 	{
 		if (InputSymbol < MaxChar())
 		{
-			if (IsRaw)
-			{
-				if (CurrentState == State::Normal)
-				{
-					StoragedSymbol.push_back({T::SingleChar, {InputSymbol}});
-					return;
-				}
-				else {
-					return false;
-				}
-			}
-
 			switch (CurrentState)
 			{
 			case State::Normal:
@@ -113,60 +104,59 @@ namespace Potato::Reg
 				switch (InputSymbol)
 				{
 				case U'-':
-					PushSymbolData(T::Min, InputSymbol, InputSymbol, TokenIndex);
+					StoragedSymbol.push_back({T::Min,  InputSymbol});
 					break;
 				case U'[':
-					PushSymbolData(T::BracketsLeft, InputSymbol, InputSymbol, TokenIndex);
+					StoragedSymbol.push_back({T::BracketsLeft, InputSymbol});
 					break;
 				case U']':
-					PushSymbolData(T::BracketsRight, InputSymbol, InputSymbol, TokenIndex);
+					StoragedSymbol.push_back({T::BracketsRight, InputSymbol});
 					break;
 				case U'{':
-					PushSymbolData(T::CurlyBracketsLeft, InputSymbol, InputSymbol, TokenIndex);
+					StoragedSymbol.push_back({T::CurlyBracketsLeft, InputSymbol});
 					break;
 				case U'}':
-					PushSymbolData(T::CurlyBracketsRight, InputSymbol, InputSymbol, TokenIndex);
+					StoragedSymbol.push_back({T::CurlyBracketsRight, InputSymbol});
 					break;
 				case U',':
-					PushSymbolData(T::Comma, InputSymbol, InputSymbol, TokenIndex);
+					StoragedSymbol.push_back({T::Comma, InputSymbol});
 					break;
 				case U'(':
-					PushSymbolData(T::ParenthesesLeft, InputSymbol, InputSymbol, TokenIndex);
+					StoragedSymbol.push_back({T::ParenthesesLeft, InputSymbol});
 					break;
 				case U')':
-					PushSymbolData(T::ParenthesesRight, InputSymbol, InputSymbol, TokenIndex);
+					StoragedSymbol.push_back({T::ParenthesesRight, InputSymbol});
 					break;
 				case U'*':
-					PushSymbolData(T::Mulity, InputSymbol, InputSymbol, TokenIndex);
+					StoragedSymbol.push_back({T::Mulity, InputSymbol});
 					break;
 				case U'?':
-					PushSymbolData(T::Question, InputSymbol, InputSymbol, TokenIndex);
+					StoragedSymbol.push_back({T::Question, InputSymbol});
 					break;
 				case U'.':
-					PushSymbolData(T::CharSet, InputSymbol, MaxIntervalRange(), TokenIndex);
+					StoragedSymbol.push_back({T::CharSet, MaxIntervalRange()});
 					break;
 				case U'|':
-					PushSymbolData(T::Or, InputSymbol, InputSymbol, TokenIndex);
+					StoragedSymbol.push_back({T::Or, InputSymbol});
 					break;
 				case U'+':
-					PushSymbolData(T::Add, InputSymbol, InputSymbol, TokenIndex);
+					StoragedSymbol.push_back({T::Add, InputSymbol});
 					break;
 				case U'^':
-					PushSymbolData(T::Not, InputSymbol, InputSymbol, TokenIndex);
+					StoragedSymbol.push_back({T::Not, InputSymbol});
 					break;
 				case U':':
-					PushSymbolData(T::Colon, InputSymbol, InputSymbol, TokenIndex);
+					StoragedSymbol.push_back({T::Colon, InputSymbol});
 					break;
 				case U'\\':
 					CurrentState = State::Transfer;
 					RecordSymbol = InputSymbol;
-					RecordTokenIndex = TokenIndex;
 					break;
 				default:
 					if (InputSymbol >= U'0' && InputSymbol <= U'9')
-						PushSymbolData(T::Num, InputSymbol, InputSymbol, TokenIndex);
+						StoragedSymbol.push_back({T::Num, InputSymbol});
 					else
-						PushSymbolData(T::SingleChar, InputSymbol, InputSymbol, TokenIndex);
+						StoragedSymbol.push_back({T::SingleChar, InputSymbol});
 					break;
 				}
 				break;
@@ -176,54 +166,54 @@ namespace Potato::Reg
 				switch (InputSymbol)
 				{
 				case U'd':
-					PushSymbolData(T::CharSet, InputSymbol, SeqIntervalT{ {U'0', U'9' + 1} }, RecordTokenIndex);
+					StoragedSymbol.push_back({T::CharSet, SeqIntervalT{ {U'0', U'9' + 1} }});
 					CurrentState = State::Normal;
 					break;
 				case U'D':
 				{
 					SeqIntervalT Tem{ { {1, U'0'},{U'9' + 1, MaxChar()} } };
-					PushSymbolData(T::CharSet, InputSymbol, std::move(Tem), RecordTokenIndex);
+					StoragedSymbol.push_back({T::CharSet, std::move(Tem)});
 					CurrentState = State::Normal;
 					break;
 				}
 				case U'f':
-					PushSymbolData(T::SingleChar, InputSymbol, U'\f', RecordTokenIndex);
+					StoragedSymbol.push_back({T::SingleChar, U'\f'});
 					CurrentState = State::Normal;
 					break;
 				case U'n':
-					PushSymbolData(T::SingleChar, InputSymbol, U'\n', RecordTokenIndex);
+					StoragedSymbol.push_back({T::SingleChar, U'\n'});
 					CurrentState = State::Normal;
 					break;
 				case U'r':
-					PushSymbolData(T::SingleChar, InputSymbol, U'\r', RecordTokenIndex);
+					StoragedSymbol.push_back({T::SingleChar, U'\r'});
 					CurrentState = State::Normal;
 					break;
 				case U't':
-					PushSymbolData(T::SingleChar, InputSymbol, U'\t', RecordTokenIndex);
+					StoragedSymbol.push_back({T::SingleChar, U'\t'});
 					CurrentState = State::Normal;
 					break;
 				case U'v':
-					PushSymbolData(T::SingleChar, InputSymbol, U'\v', RecordTokenIndex);
+					StoragedSymbol.push_back({T::SingleChar, U'\v'});
 					CurrentState = State::Normal;
 					break;
 				case U's':
 				{
 					SeqIntervalT tem({ IntervalT{ 1, 33 }, IntervalT{127, 128} });
-					PushSymbolData(T::CharSet, InputSymbol, std::move(tem), RecordTokenIndex);
+					StoragedSymbol.push_back({T::CharSet, std::move(tem)});
 					CurrentState = State::Normal;
 					break;
 				}
 				case U'S':
 				{
 					SeqIntervalT tem({ IntervalT{33, 127}, IntervalT{128, MaxChar()} });
-					PushSymbolData(T::CharSet, InputSymbol, std::move(tem), RecordTokenIndex);
+					StoragedSymbol.push_back({T::CharSet, std::move(tem)});
 					CurrentState = State::Normal;
 					break;
 				}
 				case U'w':
 				{
 					SeqIntervalT tem({ IntervalT{ U'a', U'z' + 1 }, IntervalT{ U'A', U'Z' + 1 }, IntervalT{ U'_', U'_' + 1} });
-					PushSymbolData(T::CharSet, InputSymbol, std::move(tem), RecordTokenIndex);
+					StoragedSymbol.push_back({T::CharSet, std::move(tem)});
 					CurrentState = State::Normal;
 					break;
 				}
@@ -231,14 +221,14 @@ namespace Potato::Reg
 				{
 					SeqIntervalT tem({ IntervalT{ U'a', U'z' + 1 }, IntervalT{ U'A', U'Z' + 1 }, IntervalT{ U'_', U'_' + 1} });
 					SeqIntervalT total({ 1, MaxChar() });
-					PushSymbolData(T::CharSet, InputSymbol, tem.Complementary(MaxIntervalRange()), RecordTokenIndex);
+					StoragedSymbol.push_back({T::CharSet, tem.Complementary(MaxIntervalRange())});
 					CurrentState = State::Normal;
 					break;
 				}
 				case U'z':
 				{
 					SeqIntervalT tem(IntervalT{ 256, MaxChar() });
-					PushSymbolData(T::CharSet, InputSymbol, std::move(tem), RecordTokenIndex);
+					StoragedSymbol.push_back({T::CharSet, std::move(tem)});
 					CurrentState = State::Normal;
 					break;
 				}
@@ -259,7 +249,7 @@ namespace Potato::Reg
 					break;
 				}
 				default:
-					PushSymbolData(T::SingleChar, InputSymbol, InputSymbol, RecordTokenIndex);
+					StoragedSymbol.push_back({T::SingleChar, InputSymbol});
 					CurrentState = State::Normal;
 					break;
 				}
@@ -284,29 +274,32 @@ namespace Potato::Reg
 					NumberChar += InputSymbol - U'A' + 10;
 				}
 				else {
-					throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::UnaccaptableNumber, InputSymbol, TokenIndex };
+					return false;
 				}
 				if ((Number == 4 && !NumberIsBig) || (NumberIsBig && Number == 6))
 				{
-					PushSymbolData(T::SingleChar, InputSymbol, NumberChar, RecordTokenIndex);
+					StoragedSymbol.push_back({T::SingleChar, NumberChar});
 					CurrentState = State::Normal;
 				}
 				break;
 			}
+			case State::Raw:
+				StoragedSymbol.push_back({ T::SingleChar, {InputSymbol} });
+				break;
 			default:
 				assert(false);
 			}
 		}else {
-			throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::OutOfCharRange, InputSymbol, TokenIndexIte};
+			return false;
 		}
 	}
 
-	void LexerTranslater::EndOfFile()
+	bool RegLexer::EndOfFile()
 	{
-		if(CurrentState == State::Normal)
+		if(CurrentState == State::Normal || CurrentState == State::Raw)
 			CurrentState = State::Done;
 		else
-			throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::UnSupportEof, Reg::EndOfFile(), TokenIndexIte};
+			return false;
 	}
 
 	const SLRX::TableWrapper RexSLRXWrapper()
@@ -643,7 +636,7 @@ namespace Potato::Reg
 		}
 	}
 
-	std::any RegTerminalFunction(Potato::SLRX::TElement& Ele, LexerTranslater& Translater)
+	std::any RegTerminalFunction(Potato::SLRX::TElement& Ele, RegLexer& Translater)
 	{
 		auto& Ref = Translater.GetSpan()[Ele.TokenIndex].Acceptable;
 		if (std::holds_alternative<char32_t>(Ref))
@@ -892,7 +885,7 @@ namespace Potato::Reg
 		}
 	}
 
-	void CreateUnfaTable(LexerTranslater& Translater, EpsilonNFA& Output, Accept AcceptData)
+	void CreateUnfaTable(RegLexer& Translater, EpsilonNFA& Output, Accept AcceptData)
 	{
 		auto N1 = Output.NewNode(0);
 		auto N2 = Output.NewNode(0);
