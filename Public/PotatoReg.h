@@ -23,6 +23,7 @@ namespace Potato::Reg
 	struct Accept
 	{
 		StandardT Mask = 0;
+		StandardT SubMask = 0;
 		std::strong_ordering operator<=>(Accept const&) const = default;
 	};
 
@@ -83,7 +84,7 @@ namespace Potato::Reg
 			std::size_t Out;
 		};
 
-		static EpsilonNFA Create(std::u32string_view Str, bool IsRaw, Accept AcceptData);
+		static EpsilonNFA Create(std::u8string_view Str, bool IsRaw, Accept AcceptData);
 
 		void Link(EpsilonNFA const& OtherTable, bool ThisHasHigherPriority = true);
 
@@ -124,7 +125,7 @@ namespace Potato::Reg
 		std::vector<Node> Nodes;
 
 		NFA(EpsilonNFA const& Table);
-		NFA(std::u32string_view Str, bool IsRow = false, Accept Mask = {0}) : NFA(EpsilonNFA::Create(Str, IsRow, Mask)) {}
+		NFA(std::u8string_view Str, bool IsRow = false, Accept Mask = {0}) : NFA(EpsilonNFA::Create(Str, IsRow, Mask)) {}
 	};
 
 	struct DFA
@@ -165,7 +166,7 @@ namespace Potato::Reg
 
 		DFA(EpsilonNFA const& ETable) : DFA(NFA{ETable}) {}
 		DFA(NFA const& Input);
-		DFA(std::u32string_view Str, bool IsRaw = false, Accept Mask = {0}) : DFA(EpsilonNFA::Create(Str, IsRaw, Mask)) {}
+		DFA(std::u8string_view Str, bool IsRaw = false, Accept Mask = {0}) : DFA(EpsilonNFA::Create(Str, IsRaw, Mask)) {}
 		
 	};
 
@@ -204,7 +205,7 @@ namespace Potato::Reg
 		static std::size_t CalculateRequireSpaceWithStanderT(DFA const& Tab);
 		static std::size_t SerializeTo(DFA const& Tab, std::span<StandardT> Source);
 		static std::vector<StandardT> Create(DFA const& Tab);
-		static std::vector<StandardT> Create(std::u32string_view Reg, bool IsRow = false, Accept Acce = {0}) { return Create(DFA{Reg, IsRow, Acce}); }
+		static std::vector<StandardT> Create(std::u8string_view Reg, bool IsRow = false, Accept Acce = {0}) { return Create(DFA{Reg, IsRow, Acce}); }
 
 		TableWrapper(std::span<StandardT const> Wrapper) : Wrapper(Wrapper) {}
 		TableWrapper() = default;
@@ -220,7 +221,7 @@ namespace Potato::Reg
 
 	struct Table
 	{
-		Table(std::u32string_view Str, bool IsRow, Accept AcceptData) : SerializeBuffer(TableWrapper::Create(Str, IsRow, AcceptData)) {}
+		Table(std::u8string_view Str, bool IsRow, Accept AcceptData) : SerializeBuffer(TableWrapper::Create(Str, IsRow, AcceptData)) {}
 		TableWrapper AsWrapper() const { return TableWrapper{ SerializeBuffer }; };
 	protected:
 		std::vector<StandardT> SerializeBuffer;
@@ -387,6 +388,7 @@ namespace Potato::Reg
 
 		TableHeadMatchProcessor(TableWrapper Wrapper) : Wrapper(Wrapper), HeadMatchProcessor(TableWrapper::StartupNode()) {}
 		TableHeadMatchProcessor(TableHeadMatchProcessor const&) = default;
+		std::optional<std::span<char8_t const>> ConsumeSymbol(std::span<char8_t const> Symbol, std::size_t TokenIndex, bool Greedy = false);
 		std::optional<std::optional<Result>> ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy = false);
 		std::optional<Result> EndOfFile(std::size_t TokenIndex);
 		void Clear() { HeadMatchProcessor::Clear(TableWrapper::StartupNode()); }
@@ -404,24 +406,24 @@ namespace Potato::Reg
 		ResultT const* operator->() const { return SuccessdResult.operator->(); }
 	};
 
-	auto Match(DFAMatchProcessor& Processor, std::u32string_view Str) ->MatchResult<DFAMatchProcessor::Result>;
-	auto Match(TableMatchProcessor& Processor, std::u32string_view Str)->MatchResult<TableMatchProcessor::Result>;
-	inline auto Match(DFA const& Table, std::u32string_view Str)->MatchResult<DFAMatchProcessor::Result>{
+	auto Match(DFAMatchProcessor& Processor, std::u8string_view Str) ->MatchResult<DFAMatchProcessor::Result>;
+	auto Match(TableMatchProcessor& Processor, std::u8string_view Str)->MatchResult<TableMatchProcessor::Result>;
+	inline auto Match(DFA const& Table, std::u8string_view Str)->MatchResult<DFAMatchProcessor::Result>{
 		DFAMatchProcessor Pro{Table};
 		return Match(Pro, Str);
 	}
-	inline auto Match(TableWrapper Wrapper, std::u32string_view Str)->MatchResult<TableMatchProcessor::Result> {
+	inline auto Match(TableWrapper Wrapper, std::u8string_view Str)->MatchResult<TableMatchProcessor::Result> {
 		TableMatchProcessor Pro{ Wrapper };
 		return Match(Pro, Str);
 	}
-	auto HeadMatch(DFAHeadMatchProcessor& Table, std::u32string_view Str, bool Greddy = false)->MatchResult<DFAHeadMatchProcessor::Result>;
-	inline auto HeadMatch(DFA const& Table, std::u32string_view Str, bool Greddy = false)->MatchResult<DFAHeadMatchProcessor::Result>
+	auto HeadMatch(DFAHeadMatchProcessor& Table, std::u8string_view Str, bool Greddy = false)->MatchResult<DFAHeadMatchProcessor::Result>;
+	inline auto HeadMatch(DFA const& Table, std::u8string_view Str, bool Greddy = false)->MatchResult<DFAHeadMatchProcessor::Result>
 	{
 		DFAHeadMatchProcessor Pro{ Table };
 		return HeadMatch(Pro, Str, Greddy);
 	}
-	auto HeadMatch(TableHeadMatchProcessor& Table, std::u32string_view Str, bool Greddy = false)->MatchResult<TableHeadMatchProcessor::Result>;
-	inline auto HeadMatch(TableWrapper Table, std::u32string_view Str, bool Greddy = false)->MatchResult<TableHeadMatchProcessor::Result>
+	auto HeadMatch(TableHeadMatchProcessor& Table, std::u8string_view Str, bool Greddy = false)->MatchResult<TableHeadMatchProcessor::Result>;
+	inline auto HeadMatch(TableWrapper Table, std::u8string_view Str, bool Greddy = false)->MatchResult<TableHeadMatchProcessor::Result>
 	{
 		TableHeadMatchProcessor Pro{ Table };
 		return HeadMatch(Pro, Str, Greddy);
@@ -435,8 +437,8 @@ namespace Potato::Reg
 		MulityRegCreater& operator= (MulityRegCreater const&)  = default;
 		MulityRegCreater& operator= (MulityRegCreater &&) = default;
 
-		MulityRegCreater(std::u32string_view Str, bool IsRow, Accept Acce) : ETable(EpsilonNFA::Create(Str, IsRow, Acce)) {}
-		void LowPriorityLink(std::u32string_view Str, bool IsRow, Accept Acce);
+		MulityRegCreater(std::u8string_view Str, bool IsRow, Accept Acce) : ETable(EpsilonNFA::Create(Str, IsRow, Acce)) {}
+		void LowPriorityLink(std::u8string_view Str, bool IsRow, Accept Acce);
 		std::optional<DFA> GenerateDFA() const;
 		std::optional<std::vector<StandardT>> GenerateTableBuffer() const;
 
@@ -751,20 +753,17 @@ namespace Potato::Reg
 				RawRegexInNotNormalState,
 				BadRegex,
 			};
-
 			TypeT Type;
-			char32_t Character;
-			std::size_t TokenIndex;
-			UnaccaptableRegex(TypeT Type, char32_t Character, std::size_t TokenIndex)
-				: Type(Type), Character(Character), TokenIndex(TokenIndex)
+			std::u8string TotalString;
+			std::size_t BadOffset;
+			UnaccaptableRegex(TypeT Type, std::u8string Str, std::size_t BadOffset)
+				: Type(Type), TotalString(std::move(Str)), BadOffset(BadOffset)
 			{
 			}
 			UnaccaptableRegex() = default;
 			UnaccaptableRegex(UnaccaptableRegex const&) = default;
 			virtual char const* what() const override;
 		};
-
-		
 
 		struct RegexOutOfRange : public Interface
 		{
@@ -798,13 +797,6 @@ namespace Potato::Reg
 			CircleShifting() = default;
 			CircleShifting(CircleShifting const&) = default;
 			virtual char const* what() const override;
-		};
-
-		template<typename ExceptionType, typename CharT>
-		struct ExceptionWithString : public ExceptionType
-		{
-			std::basic_string<CharT> Str;
-			ExceptionWithString(ExceptionType Type, std::basic_string<CharT> S) : ExceptionType(std::move(Type)), Str(S) {}
 		};
 	}
 

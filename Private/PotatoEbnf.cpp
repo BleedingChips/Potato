@@ -62,7 +62,7 @@ namespace Potato::Ebnf
 
 	constexpr Symbol operator*(NT sym) { return Symbol::AsNoTerminal(static_cast<SLRX::StandardT>(sym)); };
 
-	void AddRegex(Reg::MulityRegCreater& Creator, std::u32string_view Str, T Enum)
+	void AddRegex(Reg::MulityRegCreater& Creator, std::u8string_view Str, T Enum)
 	{
 		Creator.LowPriorityLink(Str, false, {static_cast<SLRX::StandardT>(Enum)});
 	}
@@ -70,29 +70,29 @@ namespace Potato::Ebnf
 	Reg::TableWrapper EbnfStepReg() {
 		static auto List = []() {
 			Reg::MulityRegCreater Creator;
-			AddRegex(Creator, UR"(%%%%)", T::Barrier);
-			AddRegex(Creator, UR"([0-9]+)", T::Number);
-			AddRegex(Creator, UR"([0-9a-zA-Z_\z]+)", T::Terminal);
-			AddRegex(Creator, UR"(<[0-9a-zA-Z_\z]+>)", T::NoTerminal);
-			AddRegex(Creator, UR"(<\$([0-9]+)>)", T::NoProductionNoTerminal);
-			AddRegex(Creator, UR"(:=)", T::Equal);
-			AddRegex(Creator, UR"(\'([^\s]+)\')", T::Rex);
-			AddRegex(Creator, UR"(;)", T::Semicolon);
-			AddRegex(Creator, UR"(:)", T::Colon);
-			AddRegex(Creator, UR"(\s+)", T::Empty);
-			AddRegex(Creator, UR"(\$)", T::Start);
-			AddRegex(Creator, UR"(\|)", T::Or);
-			AddRegex(Creator, UR"(\&)", T::ItSelf);
-			AddRegex(Creator, UR"(\[)", T::LM_Brace);
-			AddRegex(Creator, UR"(\])", T::RM_Brace);
-			AddRegex(Creator, UR"(\{)", T::LB_Brace);
-			AddRegex(Creator, UR"(\})", T::RB_Brace);
-			AddRegex(Creator, UR"(\()", T::LS_Brace);
-			AddRegex(Creator, UR"(\))", T::RS_Brace);
-			AddRegex(Creator, UR"(\+\()", T::LeftPriority);
-			AddRegex(Creator, UR"(\)\+)", T::RightPriority);
-			AddRegex(Creator, UR"(/\*.*?\*/)", T::Command);
-			AddRegex(Creator, UR"(//[^\n]*\n)", T::Command);
+			AddRegex(Creator, u8R"(%%%%)", T::Barrier);
+			AddRegex(Creator, u8R"([0-9]+)", T::Number);
+			AddRegex(Creator, u8R"([0-9a-zA-Z_\z]+)", T::Terminal);
+			AddRegex(Creator, u8R"(<[0-9a-zA-Z_\z]+>)", T::NoTerminal);
+			AddRegex(Creator, u8R"(<\$([0-9]+)>)", T::NoProductionNoTerminal);
+			AddRegex(Creator, u8R"(:=)", T::Equal);
+			AddRegex(Creator, u8R"(\'([^\s]+)\')", T::Rex);
+			AddRegex(Creator, u8R"(;)", T::Semicolon);
+			AddRegex(Creator, u8R"(:)", T::Colon);
+			AddRegex(Creator, u8R"(\s+)", T::Empty);
+			AddRegex(Creator, u8R"(\$)", T::Start);
+			AddRegex(Creator, u8R"(\|)", T::Or);
+			AddRegex(Creator, u8R"(\&)", T::ItSelf);
+			AddRegex(Creator, u8R"(\[)", T::LM_Brace);
+			AddRegex(Creator, u8R"(\])", T::RM_Brace);
+			AddRegex(Creator, u8R"(\{)", T::LB_Brace);
+			AddRegex(Creator, u8R"(\})", T::RB_Brace);
+			AddRegex(Creator, u8R"(\()", T::LS_Brace);
+			AddRegex(Creator, u8R"(\))", T::RS_Brace);
+			AddRegex(Creator, u8R"(\+\()", T::LeftPriority);
+			AddRegex(Creator, u8R"(\)\+)", T::RightPriority);
+			AddRegex(Creator, u8R"(/\*.*?\*/)", T::Command);
+			AddRegex(Creator, u8R"(//[^\n]*\n)", T::Command);
 			return *Creator.GenerateTableBuffer();
 		}();
 		return Reg::TableWrapper(List);
@@ -121,27 +121,26 @@ namespace Potato::Ebnf
 	*/
 
 
-	SLRX::Symbol FindOrAddTerminalSymbol(std::u32string_view Source, std::vector<EBNFX::TerminalElement>& Output)
+	std::size_t FindOrAddSymbol(std::u8string_view Source, std::vector<std::u8string>& Output)
 	{
-		auto Ite = std::find_if(Output.begin(), Output.end(), [=](EBNFX::TerminalElement const& Ref){
-			return Ref.Name == Source;
+		auto Ite = std::find_if(Output.begin(), Output.end(), [=](std::u8string const& Ref){
+			return Ref == Source;
 		});
 		if(Ite == Output.end())
 		{
-			Symbol Sym = Symbol::AsTerminal(static_cast<SLRX::StandardT>(Output.size()));
-			Output.push_back({std::u32string{Source}, Sym });
-			return Sym;
+			auto Index = Output.size();
+			Output.push_back(std::u8string{Source});
+			return Index;
 			
 		}else{
-			return Ite->MappedSymbol;
+			return static_cast<std::size_t>(std::distance(Output.begin(), Ite));
 		}
 	}
-
 
 	struct LexicalTuple
 	{
 		SLRX::Symbol Value;
-		std::u32string_view Str;
+		std::u8string_view Str;
 		Misc::IndexSpan<> StrIndex;
 	};
 
@@ -151,12 +150,12 @@ namespace Potato::Ebnf
 		bool Accept = false;
 	};
 
-	LexicalResult ProcessLexical(std::u32string_view Str)
+	LexicalResult ProcessLexical(std::u8string_view Str)
 	{
 		LexicalResult Output;
 		auto StepReg = EbnfStepReg();
 		std::size_t Offset = 0;
-		std::u32string_view StrIte = Str;
+		std::u8string_view StrIte = Str;
 		while (!StrIte.empty())
 		{
 			auto Re = Reg::HeadMatch(StepReg, StrIte, true);
@@ -285,7 +284,7 @@ namespace Potato::Ebnf
 		return Table.Wrapper;
 	};
 
-	EBNFX EBNFX::Create(std::u32string_view Str)
+	EBNFX EBNFX::Create(std::u8string_view Str)
 	{
 
 		try{
@@ -298,15 +297,15 @@ namespace Potato::Ebnf
 			std::vector<Storaget> Mapping;
 			SLRX::StandardT TempNoTerminalCount = std::numeric_limits<SLRX::StandardT>::max();
 			Reg::MulityRegCreater Creator;
-			std::vector<TerminalElement> TerEles;
-			std::vector<LexicalMapping> MappingMask;
+			std::vector<std::u8string> TerEles;
+			std::vector<std::u8string> MappingMask;
 
 			auto SymbolTuple = ProcessLexical(Str);
 
 			if (!SymbolTuple.Accept)
 			{
 				std::size_t LastTokenIndex = SymbolTuple.Datas.empty() ? 0 : SymbolTuple.Datas.rbegin()->StrIndex.End();
-				throw Exception::UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongEbnfLexical, LastTokenIndex };
+				throw Exception::UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongEbnfLexical, Str, LastTokenIndex };
 			}
 
 			auto InputSpan = std::span(SymbolTuple.Datas);
@@ -315,7 +314,10 @@ namespace Potato::Ebnf
 
 			// Step1
 			{
+
 				SLRX::TableProcessor Pro(EbnfStep1SLRX());
+
+				auto Span = std::span();
 
 				for (; SymbolIte < SymbolTuple.Datas.size(); ++SymbolIte)
 				{
@@ -345,7 +347,7 @@ namespace Potato::Ebnf
 						{
 						case T::Terminal:
 						case T::Rex:
-							return std::u32string_view{ SymbolTuple.Datas[TE.TokenIndex].Str };
+							return std::u8string_view{ SymbolTuple.Datas[TE.TokenIndex].Str };
 						case T::Number:
 						{
 							Reg::StandardT Num;
@@ -365,10 +367,10 @@ namespace Potato::Ebnf
 							{
 							case 2:
 							{
-								auto Name = NTE[1].Consume<std::u32string_view>();
-								auto Sym = FindOrAddTerminalSymbol(Name, TerEles);
-								auto Reg = NTE[3].Consume<std::u32string_view>();
-								Creator.LowPriorityLink(Reg, false, { static_cast<Reg::StandardT>(MappingMask.size()) });
+								auto Name = NTE[1].Consume<std::u8string_view>();
+								auto Sym = static_cast<Reg::StandardT>(FindOrAddSymbol(Name, TerEles));
+								auto Reg = NTE[3].Consume<std::u8string_view>();
+								Creator.LowPriorityLink(Reg, false, {static_cast<Reg::StandardT>(MappingMask.size()) });
 								MappingMask.push_back({ Sym, 0 });
 								return {};
 							}
@@ -404,7 +406,7 @@ namespace Potato::Ebnf
 
 
 
-		}catch(...)
+		}catch(Reg::Exception::UnaccaptableRegex const& R)
 		{	
 			throw;
 		}

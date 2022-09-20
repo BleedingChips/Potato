@@ -61,11 +61,12 @@ namespace Potato::Reg
 		{
 			T Value;
 			std::variant<SeqIntervalT, char32_t> Acceptable;
+			std::size_t TokenIndex;
 		};
 
 		std::span<Element const> GetSpan() const { return StoragedSymbol;};
 
-		bool Consume(char32_t InputSymbol);
+		bool Consume(char32_t InputSymbol, std::size_t TokenIndex);
 		bool EndOfFile();
 
 		enum class State
@@ -93,7 +94,7 @@ namespace Potato::Reg
 		std::vector<Element> StoragedSymbol;
 	};
 
-	bool RegLexer::Consume(char32_t InputSymbol)
+	bool RegLexer::Consume(char32_t InputSymbol, std::size_t TokenIndex)
 	{
 		if (InputSymbol < MaxChar())
 		{
@@ -104,49 +105,49 @@ namespace Potato::Reg
 				switch (InputSymbol)
 				{
 				case U'-':
-					StoragedSymbol.push_back({T::Min,  InputSymbol});
+					StoragedSymbol.push_back({T::Min,  InputSymbol, TokenIndex });
 					break;
 				case U'[':
-					StoragedSymbol.push_back({T::BracketsLeft, InputSymbol});
+					StoragedSymbol.push_back({T::BracketsLeft, InputSymbol, TokenIndex });
 					break;
 				case U']':
-					StoragedSymbol.push_back({T::BracketsRight, InputSymbol});
+					StoragedSymbol.push_back({T::BracketsRight, InputSymbol, TokenIndex });
 					break;
 				case U'{':
-					StoragedSymbol.push_back({T::CurlyBracketsLeft, InputSymbol});
+					StoragedSymbol.push_back({T::CurlyBracketsLeft, InputSymbol, TokenIndex });
 					break;
 				case U'}':
-					StoragedSymbol.push_back({T::CurlyBracketsRight, InputSymbol});
+					StoragedSymbol.push_back({T::CurlyBracketsRight, InputSymbol, TokenIndex });
 					break;
 				case U',':
-					StoragedSymbol.push_back({T::Comma, InputSymbol});
+					StoragedSymbol.push_back({T::Comma, InputSymbol, TokenIndex });
 					break;
 				case U'(':
-					StoragedSymbol.push_back({T::ParenthesesLeft, InputSymbol});
+					StoragedSymbol.push_back({T::ParenthesesLeft, InputSymbol, TokenIndex });
 					break;
 				case U')':
-					StoragedSymbol.push_back({T::ParenthesesRight, InputSymbol});
+					StoragedSymbol.push_back({T::ParenthesesRight, InputSymbol, TokenIndex });
 					break;
 				case U'*':
-					StoragedSymbol.push_back({T::Mulity, InputSymbol});
+					StoragedSymbol.push_back({T::Mulity, InputSymbol, TokenIndex });
 					break;
 				case U'?':
-					StoragedSymbol.push_back({T::Question, InputSymbol});
+					StoragedSymbol.push_back({T::Question, InputSymbol, TokenIndex });
 					break;
 				case U'.':
-					StoragedSymbol.push_back({T::CharSet, MaxIntervalRange()});
+					StoragedSymbol.push_back({T::CharSet, MaxIntervalRange(), TokenIndex });
 					break;
 				case U'|':
-					StoragedSymbol.push_back({T::Or, InputSymbol});
+					StoragedSymbol.push_back({T::Or, InputSymbol, TokenIndex });
 					break;
 				case U'+':
-					StoragedSymbol.push_back({T::Add, InputSymbol});
+					StoragedSymbol.push_back({T::Add, InputSymbol, TokenIndex });
 					break;
 				case U'^':
-					StoragedSymbol.push_back({T::Not, InputSymbol});
+					StoragedSymbol.push_back({T::Not, InputSymbol, TokenIndex });
 					break;
 				case U':':
-					StoragedSymbol.push_back({T::Colon, InputSymbol});
+					StoragedSymbol.push_back({T::Colon, InputSymbol, TokenIndex });
 					break;
 				case U'\\':
 					CurrentState = State::Transfer;
@@ -154,9 +155,9 @@ namespace Potato::Reg
 					break;
 				default:
 					if (InputSymbol >= U'0' && InputSymbol <= U'9')
-						StoragedSymbol.push_back({T::Num, InputSymbol});
+						StoragedSymbol.push_back({T::Num, InputSymbol, TokenIndex });
 					else
-						StoragedSymbol.push_back({T::SingleChar, InputSymbol});
+						StoragedSymbol.push_back({T::SingleChar, InputSymbol, TokenIndex });
 					break;
 				}
 				break;
@@ -166,54 +167,54 @@ namespace Potato::Reg
 				switch (InputSymbol)
 				{
 				case U'd':
-					StoragedSymbol.push_back({T::CharSet, SeqIntervalT{ {U'0', U'9' + 1} }});
+					StoragedSymbol.push_back({T::CharSet, SeqIntervalT{ {U'0', U'9' + 1} }, TokenIndex });
 					CurrentState = State::Normal;
 					break;
 				case U'D':
 				{
 					SeqIntervalT Tem{ { {1, U'0'},{U'9' + 1, MaxChar()} } };
-					StoragedSymbol.push_back({T::CharSet, std::move(Tem)});
+					StoragedSymbol.push_back({T::CharSet, std::move(Tem), TokenIndex });
 					CurrentState = State::Normal;
 					break;
 				}
 				case U'f':
-					StoragedSymbol.push_back({T::SingleChar, U'\f'});
+					StoragedSymbol.push_back({T::SingleChar, U'\f', TokenIndex });
 					CurrentState = State::Normal;
 					break;
 				case U'n':
-					StoragedSymbol.push_back({T::SingleChar, U'\n'});
+					StoragedSymbol.push_back({T::SingleChar, U'\n', TokenIndex });
 					CurrentState = State::Normal;
 					break;
 				case U'r':
-					StoragedSymbol.push_back({T::SingleChar, U'\r'});
+					StoragedSymbol.push_back({T::SingleChar, U'\r', TokenIndex });
 					CurrentState = State::Normal;
 					break;
 				case U't':
-					StoragedSymbol.push_back({T::SingleChar, U'\t'});
+					StoragedSymbol.push_back({T::SingleChar, U'\t', TokenIndex });
 					CurrentState = State::Normal;
 					break;
 				case U'v':
-					StoragedSymbol.push_back({T::SingleChar, U'\v'});
+					StoragedSymbol.push_back({T::SingleChar, U'\v', TokenIndex });
 					CurrentState = State::Normal;
 					break;
 				case U's':
 				{
 					SeqIntervalT tem({ IntervalT{ 1, 33 }, IntervalT{127, 128} });
-					StoragedSymbol.push_back({T::CharSet, std::move(tem)});
+					StoragedSymbol.push_back({T::CharSet, std::move(tem), TokenIndex });
 					CurrentState = State::Normal;
 					break;
 				}
 				case U'S':
 				{
 					SeqIntervalT tem({ IntervalT{33, 127}, IntervalT{128, MaxChar()} });
-					StoragedSymbol.push_back({T::CharSet, std::move(tem)});
+					StoragedSymbol.push_back({T::CharSet, std::move(tem), TokenIndex });
 					CurrentState = State::Normal;
 					break;
 				}
 				case U'w':
 				{
 					SeqIntervalT tem({ IntervalT{ U'a', U'z' + 1 }, IntervalT{ U'A', U'Z' + 1 }, IntervalT{ U'_', U'_' + 1} });
-					StoragedSymbol.push_back({T::CharSet, std::move(tem)});
+					StoragedSymbol.push_back({T::CharSet, std::move(tem), TokenIndex });
 					CurrentState = State::Normal;
 					break;
 				}
@@ -221,14 +222,14 @@ namespace Potato::Reg
 				{
 					SeqIntervalT tem({ IntervalT{ U'a', U'z' + 1 }, IntervalT{ U'A', U'Z' + 1 }, IntervalT{ U'_', U'_' + 1} });
 					SeqIntervalT total({ 1, MaxChar() });
-					StoragedSymbol.push_back({T::CharSet, tem.Complementary(MaxIntervalRange())});
+					StoragedSymbol.push_back({T::CharSet, tem.Complementary(MaxIntervalRange()), TokenIndex });
 					CurrentState = State::Normal;
 					break;
 				}
 				case U'z':
 				{
 					SeqIntervalT tem(IntervalT{ 256, MaxChar() });
-					StoragedSymbol.push_back({T::CharSet, std::move(tem)});
+					StoragedSymbol.push_back({T::CharSet, std::move(tem), TokenIndex });
 					CurrentState = State::Normal;
 					break;
 				}
@@ -249,7 +250,7 @@ namespace Potato::Reg
 					break;
 				}
 				default:
-					StoragedSymbol.push_back({T::SingleChar, InputSymbol});
+					StoragedSymbol.push_back({T::SingleChar, InputSymbol, TokenIndex });
 					CurrentState = State::Normal;
 					break;
 				}
@@ -278,13 +279,13 @@ namespace Potato::Reg
 				}
 				if ((Number == 4 && !NumberIsBig) || (NumberIsBig && Number == 6))
 				{
-					StoragedSymbol.push_back({T::SingleChar, NumberChar});
+					StoragedSymbol.push_back({T::SingleChar, NumberChar, TokenIndex });
 					CurrentState = State::Normal;
 				}
 				break;
 			}
 			case State::Raw:
-				StoragedSymbol.push_back({ T::SingleChar, {InputSymbol} });
+				StoragedSymbol.push_back({ T::SingleChar, {InputSymbol}, TokenIndex });
 				break;
 			default:
 				assert(false);
@@ -885,7 +886,7 @@ namespace Potato::Reg
 		}
 	}
 
-	void CreateUnfaTable(RegLexer& Translater, EpsilonNFA& Output, Accept AcceptData)
+	std::optional<std::size_t> CreateUnfaTable(RegLexer& Translater, EpsilonNFA& Output, Accept AcceptData)
 	{
 		auto N1 = Output.NewNode(0);
 		auto N2 = Output.NewNode(0);
@@ -893,55 +894,58 @@ namespace Potato::Reg
 		Output.AddComsumeEdge(N2, N3, { {EndOfFile(), EndOfFile() + 1} });
 		auto Wrapper = RexSLRXWrapper();
 
-		try {
-			SLRX::TableProcessor Pro(Wrapper);
-			std::size_t TokenIndex = 0;
-			for (auto& Ite : Translater.GetSpan())
-			{
-				if(!Pro.Consume(*Ite.Value, TokenIndex))
-					throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Ite.MappingSymbol, TokenIndex };
-				TokenIndex++;
-			}
-			if(!Pro.EndOfFile())
-				throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Reg::EndOfFile(), TokenIndex};
-
-			EpsilonNFA::NodeSet Set = SLRX::ProcessParsingStepWithOutputType<EpsilonNFA::NodeSet>(Pro.GetSteps(),
-				[&](SLRX::VariantElement Elements)-> std::any {
-					if (Elements.IsTerminal())
-						return RegTerminalFunction(Elements.AsTerminal(), Translater);
-					else
-						return RegNoTerminalFunction(Elements.AsNoTerminal(), Output);
-				}
-			);
-			Output.AddComsumeEdge(N1, Set.In, {});
-			Output.AddAcceptableEdge(Set.Out, N2, AcceptData);
-		}
-		catch (SLRX::Exception::UnaccableSymbol const& Symbol)
+		SLRX::TableProcessor Pro(Wrapper);
+		std::size_t TokenIndex = 0;
+		auto Spans = Translater.GetSpan();
+		for (auto& Ite : Translater.GetSpan())
 		{
-			auto Span = Translater.GetSpan();
-			if (Span.size() > Symbol.TokenIndex)
-			{
-				auto& Ref = Span[Symbol.TokenIndex];
-				throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Ref.MappingSymbol, Ref.TokenIndex};
-			}
-			else {
-				throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Reg::EndOfFile(), Translater.GetNextTokenIndex()};
-			}	
+			if (!Pro.Consume(*Ite.Value, TokenIndex))
+				return { Ite.TokenIndex };
+			TokenIndex++;
 		}
+		if (!Pro.EndOfFile())
+			return Spans.empty() ? 0 : Spans.rbegin()->TokenIndex;
+
+		EpsilonNFA::NodeSet Set = SLRX::ProcessParsingStepWithOutputType<EpsilonNFA::NodeSet>(Pro.GetSteps(),
+			[&](SLRX::VariantElement Elements)-> std::any {
+				if (Elements.IsTerminal())
+					return RegTerminalFunction(Elements.AsTerminal(), Translater);
+				else
+					return RegNoTerminalFunction(Elements.AsNoTerminal(), Output);
+			}
+		);
+		Output.AddComsumeEdge(N1, Set.In, {});
+		Output.AddAcceptableEdge(Set.Out, N2, AcceptData);
+		return {};
 	}
 
-	EpsilonNFA EpsilonNFA::Create(std::u32string_view Str, bool IsRaw, Accept AcceptData)
+	EpsilonNFA EpsilonNFA::Create(std::u8string_view Str, bool IsRaw, Accept AcceptData)
 	{
 		EpsilonNFA Result;
-		LexerTranslater Tran;
-
-		for (auto Ite : Str)
+		RegLexer Tran(IsRaw);
+		std::size_t TokenIndex = 0;
+		auto Span = std::span(Str);
+		char32_t Tembuffer;
+		std::span<char32_t> OutSpan = {&Tembuffer, 1};
+		while (!Span.empty())
 		{
-			Tran.Insert(IsRaw, Ite);
+			auto Re = StrEncode::CharEncoder<char8_t, char32_t>::EncodeOnceUnSafe(Span, OutSpan);
+			assert(Re);
+			if(!Tran.Consume(Tembuffer, TokenIndex))
+				throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, std::u8string{Str}, TokenIndex };
+			Span = Span.subspan(Re.SourceSpace);
+			TokenIndex += Re.SourceSpace;
 		}
-		Tran.EndOfFile();
-		CreateUnfaTable(Tran, Result, AcceptData);
+		if (!Tran.EndOfFile())
+		{
+			throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, std::u8string{Str}, TokenIndex };
+		}
 
+		auto Re = CreateUnfaTable(Tran, Result, AcceptData);
+		if (Re.has_value())
+		{
+			throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, std::u8string{Str}, *Re };
+		}
 		return Result;
 	}
 
@@ -1431,6 +1435,7 @@ namespace Potato::Reg
 					{
 						auto Accr = std::get<Accept>(Ite3.Datas);
 						NewOne.Parameter.push_back(Accr.Mask);
+						NewOne.Parameter.push_back(Accr.SubMask);
 						NewOne.List.push_back(ActionT::Accept);
 						break;
 					}
@@ -2104,11 +2109,11 @@ namespace Potato::Reg
 					if (CounterTestPass && !Result.AcceptData)
 					{
 						assert(CorrentBlockIndex.has_value());
-						assert(Parameter.size() >= 1);
-						Result.AcceptData.AcceptData = { Parameter[0] };
+						assert(Parameter.size() >= 2);
+						Result.AcceptData.AcceptData = { Parameter[0], Parameter[1]};
 						Result.AcceptData.CaptureSpan = {CaptureOffset, Target.CaptureBlocks.size() - CaptureOffset};
 					}
-					Parameter = Parameter.subspan(1);
+					Parameter = Parameter.subspan(2);
 					break;
 				default:
 					assert(false);
@@ -2193,11 +2198,11 @@ namespace Potato::Reg
 					if (CounterTestPass && !Result.AcceptData)
 					{
 						assert(CorrentBlockIndex.has_value());
-						assert(Parameter.size() >= 1);
+						assert(Parameter.size() >= 2);
 						Result.AcceptData.CaptureSpan = CacheCaptureIndex;
-						Result.AcceptData.AcceptData = { Parameter[0] };
+						Result.AcceptData.AcceptData = { Parameter[0], Parameter[1]};
 					}
-					Parameter = Parameter.subspan(1);
+					Parameter = Parameter.subspan(2);
 					break;
 				default:
 					assert(false);
@@ -2612,79 +2617,83 @@ namespace Potato::Reg
 		return HeadMatchProcessorEndOfFile(*this, TokenIndex, Wrapper, TableWrapper::StartupNode());
 	}
 
-	auto Match(DFAMatchProcessor& Pro, std::u32string_view Str)->MatchResult<DFAMatchProcessor::Result>
+	template<typename Processor, typename CharT>
+	auto MatchTemp(Processor& Pro, std::basic_string_view<CharT> Str) ->MatchResult<typename Processor::Result>
 	{
-		for (std::size_t I = 0; I < Str.size(); ++I)
+		char32_t TempBuffer;
+		std::span<char32_t> OutputSpan{ &TempBuffer, 1 };
+		std::size_t TotalSize = Str.size();
+
+		while (!Str.empty())
 		{
-			if (!Pro.ConsumeSymbol(Str[I], I))
-				return {{}, I };
+			auto Re2 = StrEncode::CharEncoder<CharT, char32_t>::EncodeOnceUnSafe(Str, OutputSpan);
+			assert(Re2);
+			auto Re = Pro.ConsumeSymbol(TempBuffer, TotalSize - Str.size());
+			if (Re)
+			{
+				Str = Str.substr(Re2.SourceSpace);
+			}
+			else {
+				return { {}, TotalSize - Str.size() };
+			}
 		}
-		return {Pro.EndOfFile(Str.size()), Str.size()};
+		return { Pro.EndOfFile(TotalSize), TotalSize };
+	}
+
+	auto Match(DFAMatchProcessor& Pro, std::u8string_view Str)->MatchResult<DFAMatchProcessor::Result>
+	{
+		return MatchTemp(Pro, Str);
 	}
 	
-	auto HeadMatch(DFAHeadMatchProcessor& Pro, std::u32string_view Str, bool Greedy)->MatchResult<DFAHeadMatchProcessor::Result>
+	auto Match(TableMatchProcessor& Pro, std::u8string_view Str)->MatchResult<TableMatchProcessor::Result>
 	{
-		for (std::size_t I = 0; I < Str.size(); ++I)
+		return MatchTemp(Pro, Str);
+	}
+
+	template<typename Processor, typename CharT>
+	auto HeadMatchTemp(Processor& Pro, std::basic_string_view<CharT> Str, bool Greedy) ->MatchResult<typename Processor::Result>
+	{
+		char32_t TempBuffer;
+		std::span<char32_t> OutputSpan{ &TempBuffer, 1 };
+		std::size_t TotalSize = Str.size();
+
+		while (!Str.empty())
 		{
-			auto Re = Pro.ConsumeSymbol(Str[I], I, Greedy);
+			auto Re2 = StrEncode::CharEncoder<CharT, char32_t>::EncodeOnceUnSafe(Str, OutputSpan);
+			assert(Re2);
+			auto Re = Pro.ConsumeSymbol(TempBuffer, TotalSize - Str.size(), Greedy);
 			if (Re.has_value())
 			{
 				if (Re->has_value())
 				{
-					return {**Re, I};
+					return { **Re, TotalSize - Str.size() };
 				}
-			}else
-				break;
-		}
-		return {Pro.EndOfFile(Str.size()), Str.size()};
-	}
-
-	auto Match(TableMatchProcessor& Pro, std::u32string_view Str)->MatchResult<TableMatchProcessor::Result>
-	{
-		for (std::size_t I = 0; I < Str.size(); ++I)
-		{
-			if (!Pro.ConsumeSymbol(Str[I], I))
-				return {{}, I};
-		}
-		return {Pro.EndOfFile(Str.size()), Str.size()};
-	}
-
-	auto HeadMatch(TableHeadMatchProcessor& Pro, std::u32string_view Str, bool Greedy)->MatchResult<TableHeadMatchProcessor::Result>
-	{
-		for (std::size_t I = 0; I < Str.size(); ++I)
-		{
-			auto Re = Pro.ConsumeSymbol(Str[I], I, Greedy);
-			if (Re.has_value())
-			{
-				if (Re->has_value())
-				{
-					return {**Re, I};
-				}
+				Str = Str.substr(Re2.SourceSpace);
 			}
 			else
 				break;
 		}
-		return {Pro.EndOfFile(Str.size()), Str.size() };
+		return { Pro.EndOfFile(TotalSize), TotalSize };
 	}
 
-	void MulityRegCreater::LowPriorityLink(std::u32string_view Str, bool IsRow, Accept Acce)
+	auto HeadMatch(DFAHeadMatchProcessor& Pro, std::u8string_view Str, bool Greedy)->MatchResult<DFAHeadMatchProcessor::Result>
 	{
-		try {
-			if (ETable.has_value())
-			{
-				ETable->Link(EpsilonNFA::Create(Str, IsRow, Acce));
-			}
-			else {
-				ETable = EpsilonNFA::Create(Str, IsRow, Acce);
-			}
-		}
-		catch (UnaccaptableRegex const& R)
+		return HeadMatchTemp(Pro, Str, Greedy);
+	}
+
+	auto HeadMatch(TableHeadMatchProcessor& Pro, std::u8string_view Str, bool Greedy)->MatchResult<TableHeadMatchProcessor::Result>
+	{
+		return HeadMatchTemp(Pro, Str, Greedy);
+	}
+
+	void MulityRegCreater::LowPriorityLink(std::u8string_view Str, bool IsRow, Accept Acce)
+	{
+		if (ETable.has_value())
 		{
-			throw ExceptionWithString<UnaccaptableRegex, char32_t>{R, std::u32string{ Str }};
+			ETable->Link(EpsilonNFA::Create(Str, IsRow, Acce));
 		}
-		catch (...)
-		{
-			throw;
+		else {
+			ETable = EpsilonNFA::Create(Str, IsRow, Acce);
 		}
 	}
 

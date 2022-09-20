@@ -8,7 +8,7 @@ namespace Potato::StrFormat
 {
 	
 	Reg::TableWrapper FormatPatternWrapper() {
-		static auto Table =  Reg::TableWrapper::Create(UR"(.*?(\{([^\{\}]*?)\}))");
+		static auto Table =  Reg::TableWrapper::Create(u8R"(.*?(\{([^\{\}]*?)\}))");
 		return Reg::TableWrapper{ Table };
 	}
 
@@ -79,9 +79,9 @@ namespace Potato::StrFormat
 		}
 	}
 
-	std::vector<PatternElement<char32_t>> PatternElement<char32_t>::Create(std::u32string_view Str) { return CreateImp(Str); }
-	std::size_t PatternElement<char32_t>::FlushSize(std::size_t Count, std::span<PatternElement<char32_t> const>& Source) { return FlushSizeImp(Count, Source); }
-	void PatternElement<char32_t>::FlushBuffer(std::span<PatternElement<char32_t> const>& Source, std::span<char32_t>& Output) { return FlushBufferImp(Source, Output); }
+	std::vector<PatternElement<char8_t>> PatternElement<char8_t>::Create(std::u8string_view Str) { return CreateImp(Str); }
+	std::size_t PatternElement<char8_t>::FlushSize(std::size_t Count, std::span<PatternElement<char8_t> const>& Source) { return FlushSizeImp(Count, Source); }
+	void PatternElement<char8_t>::FlushBuffer(std::span<PatternElement<char8_t> const>& Source, std::span<char8_t>& Output) { return FlushBufferImp(Source, Output); }
 
 	/*
 	std::vector<PatternElement<char16_t>> PatternElement<char16_t>::Create(std::u16string_view Str) { return CreateImp(Str); }

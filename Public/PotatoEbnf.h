@@ -10,24 +10,10 @@ namespace Potato::Ebnf
 	struct EBNFX
 	{
 
-		struct LexicalMapping
-		{
-			SLRX::Symbol Value;
-			Reg::StandardT Mask;
-		};
-
-		struct TerminalElement
-		{
-			std::u32string Name;
-			SLRX::Symbol MappedSymbol;
-		};
-
-		static EBNFX Create(std::u32string_view Str);
+		static EBNFX Create(std::u8string_view Str);
  
-		std::vector<LexicalMapping> MappingMask;
-		std::vector<TerminalElement> TerEles;
-
-		std::vector<std::u32string> NoTermialMapping;
+		std::vector<std::u8string> MappingTerminalSymbols;
+		std::vector<std::u8string> MappingNoterminalSymbols;
 		Reg::DFA Lexical;
 		SLRX::LRX Syntax;
 	};
@@ -230,8 +216,11 @@ namespace Potato::Ebnf::Exception
 			UnfindedStartSymbol,
 		};
 		TypeT Type;
+		std::u8string LastStr;
 		std::size_t TokenIndex;
-		UnacceptableEbnf(TypeT Type, std::size_t TokenIndex) : Type(Type), TokenIndex(TokenIndex) {}
+		UnacceptableEbnf(TypeT Type, std::u8string_view TotalStr, std::size_t TokenIndex) : Type(Type), TokenIndex(TokenIndex) {
+			LastStr = std::u8string{ TokenIndex < 10 ? TotalStr.substr(0, TokenIndex) : TotalStr.substr(TokenIndex - 10, 10)};
+		}
 		UnacceptableEbnf(UnacceptableEbnf const&) = default;
 		virtual char const* what() const override;
 	};

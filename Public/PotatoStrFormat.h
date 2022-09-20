@@ -254,7 +254,7 @@ namespace Potato::StrFormat
 		std::basic_string_view<char32_t> String;
 		static std::size_t FlushSize(std::size_t Count, std::span<PatternElement<char32_t> const>& Source);
 		static void FlushBuffer(std::span<PatternElement<char32_t> const>& Source, std::span<char32_t>& Output);
-		static std::vector<PatternElement<char32_t>> Create(std::u32string_view Str);
+		static std::vector<PatternElement<char32_t>> Create(std::u8string_view Str);
 	};
 
 	template<>
