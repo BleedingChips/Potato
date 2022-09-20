@@ -310,32 +310,29 @@ namespace Potato::Ebnf
 
 			auto InputSpan = std::span(SymbolTuple.Datas);
 
-			std::size_t SymbolIte = 0;
+			std::size_t SpanSize = InputSpan.size();
 
 			// Step1
 			{
 
 				SLRX::TableProcessor Pro(EbnfStep1SLRX());
 
-				auto Span = std::span();
-
-				for (; SymbolIte < SymbolTuple.Datas.size(); ++SymbolIte)
+				while(!InputSpan.empty())
 				{
-					auto& Cur = SymbolTuple.Datas[SymbolIte];
+					auto& Cur = *InputSpan.rbegin();
 					if (Cur.Value == *T::Barrier)
 						break;
 					else {
-						if (!Pro.Consume(Cur.Value, SymbolIte))
+						if (!Pro.Consume(Cur.Value, SpanSize - InputSpan.size()))
 						{
-							throw Exception::UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongEbnfSyntax, Cur.StrIndex.Begin() };
+							throw Exception::UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongEbnfSyntax, Str, Cur.StrIndex.Begin() };
 						}
 					}
+					InputSpan = InputSpan.subspan(1);
 				}
 				if (!Pro.EndOfFile())
 				{
-					std::size_t End = (SymbolIte < SymbolTuple.Datas.size() ? SymbolTuple.Datas[SymbolIte].StrIndex.Begin() : 0);
-
-					throw Exception::UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongEbnfSyntax, End };
+					throw Exception::UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongEbnfSyntax, Str, InputSpan.empty() ? InputSpan.rbegin()->StrIndex.Begin() : SpanSize };
 				}
 
 				SLRX::ProcessParsingStep(Pro.GetSteps(), [&](SLRX::VariantElement Ele) -> std::any {
@@ -370,23 +367,22 @@ namespace Potato::Ebnf
 								auto Name = NTE[1].Consume<std::u8string_view>();
 								auto Sym = static_cast<Reg::StandardT>(FindOrAddSymbol(Name, TerEles));
 								auto Reg = NTE[3].Consume<std::u8string_view>();
-								Creator.LowPriorityLink(Reg, false, {static_cast<Reg::StandardT>(MappingMask.size()) });
-								MappingMask.push_back({ Sym, 0 });
+								Creator.LowPriorityLink(Reg, false, { Sym, 0 });
 								return {};
 							}
 							case 3:
 							{
-								auto Name = NTE[1].Consume<std::u32string_view>();
-								auto Sym = FindOrAddTerminalSymbol(Name, TerEles);
-								auto Reg = NTE[3].Consume<std::u32string_view>();
-								Creator.LowPriorityLink(Reg, false, { static_cast<Reg::StandardT>(MappingMask.size()) });
-								MappingMask.push_back({ Sym, NTE[6].Consume<Reg::StandardT>() });
+								auto Name = NTE[1].Consume<std::u8string_view>();
+								auto Sym = static_cast<Reg::StandardT>(FindOrAddSymbol(Name, TerEles));
+								auto Reg = NTE[3].Consume<std::u8string_view>();
+								auto Mask = NTE[6].Consume<Reg::StandardT>();
+								Creator.LowPriorityLink(Reg, false, { Sym, Mask });
 								return {};
 							}
 							case 4:
 							{
-								auto Reg = NTE[3].Consume<std::u32string_view>();
-								Creator.LowPriorityLink(Reg, false, { std::numeric_limits<Reg::StandardT>::max() });
+								auto Reg = NTE[3].Consume<std::u8string_view>();
+								Creator.LowPriorityLink(Reg, false, { std::numeric_limits<Reg::StandardT>::max(),  std::numeric_limits<Reg::StandardT>::max() });
 								return {};
 							}
 							default:
@@ -408,7 +404,7 @@ namespace Potato::Ebnf
 
 		}catch(Reg::Exception::UnaccaptableRegex const& R)
 		{	
-			throw;
+			throw UnacceptableRegex{R.TotalString};
 		}
 
 		
@@ -416,7 +412,7 @@ namespace Potato::Ebnf
 
 		
 
-
+		/*
 		if(StepIndexs[1].Count() == 0) [[unlikely]]
 			throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongEbnf, StepIndexs[0].End()};
 #if _DEBUG
@@ -1321,10 +1317,12 @@ namespace Potato::Ebnf
 	}
 
 }
+*/
 
 namespace Potato::Ebnf::Exception
 {
 	char const* Interface::what() const { return "Ebnf Exception"; }
+	char const* UnacceptableRegex::what() const { return "UnacceptableRegex Exception"; }
 	char const* UnacceptableEbnf::what() const { return "UnacceptableEbnf Exception"; }
 	char const* OutofRange::what() const { return "OutofRange Exception"; }
 	char const* UnacceptableSymbol::what() const { return "UnacceptableSymbol Exception"; }
@@ -1394,17 +1392,6 @@ namespace Potato::Ebnf::Exception
 		: Type(IS.Type), MaxForwardDetectNum(IS.MaxForwardDetectNum), DetectNum(IS.MaxForwardDetectNum)
 		, Steps1(Translate(IS.Steps1, TMapping, NTMapping)), Steps2(Translate(IS.Steps2, TMapping, NTMapping))
 	{
-		volatile int i = 0;
-		/*
-		for (auto& Ite : IS.EffectProductions)
-		{
-			auto FindIte = std::find_if(EffectProductions.begin(), EffectProductions.end(), [&](Productions const& P){ return Ite.ProductionIndex == P.ProductionIndex; });
-			if (FindIte == EffectProductions.end())
-			{
-				if()
-			}
-		}
-		*/
 	}
 
 }

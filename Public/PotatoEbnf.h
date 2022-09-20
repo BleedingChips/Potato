@@ -197,6 +197,14 @@ namespace Potato::Ebnf::Exception
 		virtual char const* what() const override;
 	};
 
+	struct UnacceptableRegex : public Interface
+	{
+		std::u8string Regex;
+		UnacceptableRegex(std::u8string Regex) : Regex(std::move(Regex)) {}
+		UnacceptableRegex(UnacceptableRegex const&) = default;
+		virtual char const* what() const override;
+	};
+
 	struct UnacceptableEbnf : public Interface
 	{
 		enum class TypeT
