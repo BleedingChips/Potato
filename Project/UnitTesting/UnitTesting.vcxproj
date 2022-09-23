@@ -147,6 +147,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="EbnfSample.cpp" />
     <ClCompile Include="MiscSample.cpp" />
     <ClCompile Include="RegSample.cpp" />
     <ClCompile Include="SLRXSample.cpp" />

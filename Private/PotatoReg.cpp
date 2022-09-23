@@ -290,6 +290,7 @@ namespace Potato::Reg
 			default:
 				assert(false);
 			}
+			return true;
 		}else {
 			return false;
 		}
@@ -297,8 +298,11 @@ namespace Potato::Reg
 
 	bool RegLexer::EndOfFile()
 	{
-		if(CurrentState == State::Normal || CurrentState == State::Raw)
+		if (CurrentState == State::Normal || CurrentState == State::Raw)
+		{
 			CurrentState = State::Done;
+			return true;
+		}	
 		else
 			return false;
 	}
@@ -1611,6 +1615,7 @@ namespace Potato::Reg
 						case EdgeT::CounterPush:
 						case EdgeT::CounterPop:
 						case EdgeT::CounterAdd:
+						case EdgeT::Acceptable:
 							HasContentChangedEdge = true;
 							break;
 						default:

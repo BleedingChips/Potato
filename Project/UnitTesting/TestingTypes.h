@@ -16,5 +16,5 @@ void TestingStrEncode();
 void TestingSLRX();
 void TestingStrFormat();
 void TestingReg();
-void TestingEbnf() noexcept;
+void TestingEbnf();
 void TestingIntrusivePointer();

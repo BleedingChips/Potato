@@ -10,9 +10,9 @@ namespace Potato::SLRX
 
 	TElement::TElement(ParsingStep const& value) : Value(value.Value), TokenIndex(value.Shift.TokenIndex) {}
 
-	NTElement::NTElement(ParsingStep const& StepValue, std::size_t FirstTokenIndex, DataT* DataPtr) :
+	NTElement::NTElement(ParsingStep const& StepValue, std::size_t FirstTokenIndex, std::span<DataT> Datas) :
 		Value(StepValue.Value), ProductionIndex(StepValue.Reduce.ProductionIndex), Mask(StepValue.Reduce.Mask), 
-		FirstTokenIndex(FirstTokenIndex), Datas(DataPtr, StepValue.Reduce.ProductionCount)
+		FirstTokenIndex(FirstTokenIndex), Datas(Datas)
 	{}
 
 	bool ParsingStepProcessor::Consume(ParsingStep Input)
@@ -36,7 +36,7 @@ namespace Potato::SLRX
 				{
 					TokenFirstIndex = DataBuffer[CurrentAdress - 1].FirstTokenIndex;
 				}
-				NTElement ele{ Input, TokenFirstIndex, DataBuffer.data() + CurrentAdress };
+				NTElement ele{ Input, TokenFirstIndex, std::span(DataBuffer).subspan(CurrentAdress)};
 				auto Result = ExecuteFunction(VariantElement{ std::move(ele) });
 				DataBuffer.resize(CurrentAdress);
 				DataBuffer.push_back({ ele.Value, TokenFirstIndex, std::move(Result) });

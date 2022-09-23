@@ -9,14 +9,129 @@ namespace Potato::Ebnf
 
 	struct EBNFX
 	{
-
 		static EBNFX Create(std::u8string_view Str);
- 
 		std::vector<std::u8string> MappingTerminalSymbols;
 		std::vector<std::u8string> MappingNoterminalSymbols;
 		Reg::DFA Lexical;
 		SLRX::LRX Syntax;
 	};
+
+	struct ParsingStep
+	{
+		SLRX::Symbol Value;
+
+		struct ReduceT {
+			std::size_t ProductionIndex;
+			std::size_t ProductionCount;
+			SLRX::StandardT Mask;
+		};
+
+		struct ShiftT {
+			std::u8string_view CaptureValue;
+			Reg::StandardT Mask;
+			std::size_t TokenIndex;
+		};
+
+		std::variant<ReduceT, ShiftT> Datas;
+	};
+
+	struct TElement
+	{
+		SLRX::Symbol Value;
+		ParsingStep::ShiftT Shift;
+	};
+
+	struct NTElement
+	{
+		SLRX::Symbol Value;
+		ParsingStep::ReduceT Reduce;
+		std::span<SLRX::NTElement::DataT> Datas;
+		SLRX::NTElement::DataT& operator[](std::size_t index) { return Datas[index]; }
+	};
+
+	struct VariantElement
+	{
+		std::variant<TElement, NTElement> Element;
+		bool IsTerminal() const { return std::holds_alternative<TElement>(Element); }
+		bool IsNoTerminal() const { return std::holds_alternative<NTElement>(Element); }
+		TElement& AsTerminal() { return std::get<TElement>(Element); }
+		NTElement& AsNoTerminal() { return std::get<NTElement>(Element); }
+	};
+
+	struct Condition
+	{
+		enum class TypeT
+		{
+			Normal, // Normal
+			Or,
+			Parentheses, // ()
+			SquareBrackets, // []
+			CurlyBrackets, // {}
+		};
+
+		TypeT Type;
+		std::size_t AppendData;
+		std::vector<SLRX::NTElement::DataT> Datas;
+	};
+
+	
+
+	struct LexicalElement
+	{
+		std::u8string_view CaptureValue;
+		SLRX::Symbol Value;
+		std::size_t Mask;
+	};
+
+	struct LexicalElementTuple
+	{
+		LexicalElement Ele;
+		Misc::IndexSpan<> StrIndex;
+	};
+
+	struct CoreProcessor
+	{
+
+		template<typename RT>
+		struct Result
+		{
+			std::optional<RT> Element;
+			std::size_t Length;
+			operator bool() const { return Element.has_value(); }
+		};
+
+		struct LexicalResult
+		{
+			std::optional<LexicalElement> Element;
+			std::size_t Length;
+			operator bool() const { return Element.has_value(); }
+		};
+
+		static Result<LexicalElement> LexicalConsumeOnce(EBNFX const& Table, std::u8string_view Str);
+		static Result<std::vector<LexicalElementTuple>> LexicalProcess(EBNFX const& Table, std::u8string_view Str);
+		static Result<std::vector<ParsingStep>> SynatxProcess(EBNFX const& Table, std::span<LexicalElementTuple const> Tuples);
+		static std::any StepProcess(std::span<ParsingStep const> Tuples, std::function<std::any(VariantElement& Ele)> Func);
+
+		template<typename RequireType>
+		static std::optional<RequireType> StepProcessWithOutput(std::span<ParsingStep const> Tuples, std::function<std::any(VariantElement& Ele)> Func) {
+			auto Re = StepProcess(Tuples, std::move(Fun));
+			if (Re.has_value())
+			{
+				auto Re2 = std::any_cast<RequireType*>(Re);
+				if (Re2 != nullptr)
+				{
+					return std::move(*Re2);
+				}
+			}
+			return {};
+		}
+	};
+
+
+	
+
+
+	//std::any ProcessEbnf(std::u8string_view Str, std::function<std::any(VariantElement&)> RespondFunction);
 
 
 

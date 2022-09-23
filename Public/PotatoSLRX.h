@@ -59,6 +59,12 @@ namespace Potato::SLRX
 		constexpr bool IsReduce() const { return IsNoTerminal(); }
 	};
 
+	struct PredictParsingStep
+	{
+		std::size_t ParsingStepInsertToken;
+		std::size_t ReferenceStepIndex;
+	};
+
 	struct TElement
 	{
 		Symbol Value;
@@ -98,7 +104,7 @@ namespace Potato::SLRX
 		std::size_t FirstTokenIndex;
 		std::span<DataT> Datas;
 		DataT& operator[](std::size_t index) { return Datas[index]; }
-		NTElement(ParsingStep const& StepValue, std::size_t FiestTokenIndex, DataT* DataPtr);
+		NTElement(ParsingStep const& StepValue, std::size_t FiestTokenIndex, std::span<DataT> Datas);
 		NTElement(NTElement const&) = default;
 		NTElement& operator=(NTElement const&) = default;
 	};
@@ -441,6 +447,8 @@ namespace Potato::SLRX
 		std::size_t RequireNode;
 		std::vector<ParsingStep> Steps;
 		std::span<ParsingStep const> GetSteps() const { return std::span(Steps); }
+		std::vector<PredictParsingStep> GeneratePrediceReduce();
+		void MergePrediceReduce(std::span<PredictParsingStep const> Predict);
 
 		void Clear(std::size_t StartupNodeIndex);
 

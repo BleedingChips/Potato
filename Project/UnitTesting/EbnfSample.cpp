@@ -7,11 +7,11 @@ using namespace Potato::Ebnf;
 using namespace Potato;
 
 
-void TestingEbnf() noexcept
+void TestingEbnf()
 {
 	
-	std::u32string_view EbnfCode1 =
-		UR"(
+	std::u8string_view EbnfCode1 =
+		u8R"(
 $ := '\s+'
 Num := '[1-9][0-9]*' : [1]
 
@@ -31,8 +31,8 @@ $ := <Exp>;
 +('*' '/') +('+' '-')
 )";
 
-	std::u32string_view EbnfCode2 =
-		UR"(
+	std::u8string_view EbnfCode2 =
+		u8R"(
 $ := '\s+'
 Num := '[1-9][0-9]*' : [1]
 
@@ -45,6 +45,21 @@ $ := <Exp>;
 
 %%%%
 )";
+
+
+	Ebnf::EBNFX Bnfx = EBNFX::Create(EbnfCode1);
+	 
+	std::u8string_view Str = u8R"(1223 + 2312+12321- 232 +232)";
+
+	std::vector<LexicalElementTuple> Tuples;
+
+	auto Re2 = CoreProcessor::LexicalProcess(Bnfx, Str);
+	auto Steps = CoreProcessor::SynatxProcess(Bnfx, std::span(*Re2.Element));
+
+	volatile int i = 0;
+
+
+	/*
 
 	auto TableBuffer = TableWrapper::Create(EbnfCode1);
 
@@ -92,5 +107,8 @@ $ := <Exp>;
 	if (Ite != 59)
 		throw UnpassedUnit{ "TestingEbnf : Bad Output Result" };
 
+	*/
+
 	std::wcout << LR"(TestingEbnf Pass !)" << std::endl;
+
 }
