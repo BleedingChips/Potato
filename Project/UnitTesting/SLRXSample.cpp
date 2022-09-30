@@ -256,7 +256,7 @@ void TestingSLRX()
 			if (Ele.IsNoTerminal())
 			{
 				auto NE = Ele.AsNoTerminal();
-				switch (NE.Mask)
+				switch (NE.Reduce.Mask)
 				{
 				case 1:
 					return NE[0].Consume();
@@ -275,7 +275,7 @@ void TestingSLRX()
 			}
 			else {
 				auto TE = Ele.AsTerminal();
-				return Wtf[TE.TokenIndex].Value;
+				return Wtf[TE.Shift.TokenIndex].Value;
 			}
 		};
 

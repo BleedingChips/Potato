@@ -8,51 +8,64 @@ namespace Potato::SLRX
 
 	using namespace Exception;
 
-	TElement::TElement(ParsingStep const& value) : Value(value.Value), TokenIndex(value.Shift.TokenIndex) {}
+	TElement::TElement(ParsingStep const& value) : Value(value.Value), Shift(value.Shift) {}
 
-	NTElement::NTElement(ParsingStep const& StepValue, std::size_t FirstTokenIndex, std::span<DataT> Datas) :
-		Value(StepValue.Value), ProductionIndex(StepValue.Reduce.ProductionIndex), Mask(StepValue.Reduce.Mask), 
-		FirstTokenIndex(FirstTokenIndex), Datas(Datas)
+	NTElement::NTElement(ParsingStep const& StepValue, Misc::IndexSpan<> TokenIndex, std::span<DataT> Datas) :
+		Value(StepValue.Value), Reduce(StepValue.Reduce), TokenIndex(TokenIndex),
+		Datas(Datas)
 	{}
 
-	bool ParsingStepProcessor::Consume(ParsingStep Input)
+	auto ParsingStepProcessor::Translate(ParsingStep Input) ->std::optional<Result>
 	{
 		if (Input.IsTerminal())
 		{
 			TElement Ele{ Input };
-			auto Result = ExecuteFunction(VariantElement{ std::move(Ele) });
-			DataBuffer.push_back({ Ele.Value, Ele.TokenIndex, std::move(Result) });
+			return Result{
+				VariantElement{Ele}, 
+				NTElement::MetaData{Input.Value, {Input.Shift.TokenIndex, 1}}
+			};
 		}
 		else {
-			if (DataBuffer.size() >= Input.Reduce.ProductionCount)
+			if (Input.Reduce.IsPredict)
 			{
-				std::size_t CurrentAdress = DataBuffer.size() - Input.Reduce.ProductionCount;
-				std::size_t TokenFirstIndex = 0;
-				if (CurrentAdress < DataBuffer.size())
-				{
-					TokenFirstIndex = DataBuffer[CurrentAdress].FirstTokenIndex;
-				}
-				else if (CurrentAdress >= 1)
-				{
-					TokenFirstIndex = DataBuffer[CurrentAdress - 1].FirstTokenIndex;
-				}
-				NTElement ele{ Input, TokenFirstIndex, std::span(DataBuffer).subspan(CurrentAdress)};
-				auto Result = ExecuteFunction(VariantElement{ std::move(ele) });
+				NTElement ele{ Input, {}, {}};
+				return Result{VariantElement{ ele }, {} };
+			}
+			else if(DataBuffer.size() >= Input.Reduce.ElementCount)
+			{
+				assert(TemporaryDataBuffer.empty());
+				std::size_t CurrentAdress = DataBuffer.size() - Input.Reduce.ElementCount;
+				TemporaryDataBuffer.insert(TemporaryDataBuffer.end(), std::move_iterator(DataBuffer.begin() + CurrentAdress), std::move_iterator(DataBuffer.end()));
 				DataBuffer.resize(CurrentAdress);
-				DataBuffer.push_back({ ele.Value, TokenFirstIndex, std::move(Result) });
+				Misc::IndexSpan<> TokenIndex;
+				if (!TemporaryDataBuffer.empty())
+				{
+					auto Start = TemporaryDataBuffer.begin()->Mate.TokenIndex.Begin();
+					TokenIndex = { Start, TemporaryDataBuffer.rbegin()->Mate.TokenIndex.End() - Start };
+				}
+				else {
+					TokenIndex = { DataBuffer.empty() ? 0 : DataBuffer.rbegin()->Mate.TokenIndex.End(), 0 };
+				}
+				NTElement ele{ Input, TokenIndex, std::span(TemporaryDataBuffer) };
+				return Result{VariantElement{ ele }, NTElement::MetaData{ Input.Value, TokenIndex } };
 			}
 			else {
-				return false;
+				return {};
 			}
 		}
-		return true;
+	}
+
+	void ParsingStepProcessor::Push(NTElement::MetaData Element, std::any Result)
+	{
+		TemporaryDataBuffer.clear();
+		DataBuffer.push_back({ Element, std::move(Result)});
 	}
 
 	std::optional<std::any> ParsingStepProcessor::EndOfFile()
 	{
 		if (DataBuffer.size() == 1)
 		{
-			auto Result = DataBuffer[0].Consume();
+			auto Result = DataBuffer[0].Data.Consume();
 			DataBuffer.clear();
 			return Result;
 		}
@@ -727,7 +740,7 @@ namespace Potato::SLRX
 
 					auto Ite = Ref.Reduces[ReduceIndex];
 
-					SearchRecord.push_back({ Index, Ite.ProductionElementCount });
+					SearchRecord.push_back({ Index, Ite.Reduce.ElementCount });
 
 					while (!SearchRecord.empty())
 					{
@@ -745,7 +758,7 @@ namespace Potato::SLRX
 								if (Ite.ReduceSymbol == ShiftIte.RequireSymbol)
 								{
 									bool Accept = ShiftIte.ProductionIndex.empty() ||
-										((std::find(ShiftIte.ProductionIndex.begin(), ShiftIte.ProductionIndex.end(), Ite.ProductionIndex) != ShiftIte.ProductionIndex.end()) == !ShiftIte.ReverseStorage);
+										((std::find(ShiftIte.ProductionIndex.begin(), ShiftIte.ProductionIndex.end(), Ite.Reduce.ProductionIndex) != ShiftIte.ProductionIndex.end()) == !ShiftIte.ReverseStorage);
 									if (Accept)
 									{
 										Fined = true;
@@ -763,7 +776,7 @@ namespace Potato::SLRX
 								return Element.ToNode == Top.Node && Element.LastState == LastState;
 								}) == LastSpan.end())
 							{
-								FFRef.push_back(FastReduce{ Top.Node, 1 - static_cast<std::ptrdiff_t>(Ite.ProductionElementCount), LastState, Ite });
+								FFRef.push_back(FastReduce{ Top.Node, 1 - static_cast<std::ptrdiff_t>(Ite.Reduce.ProductionIndex), LastState, Ite });
 							}
 						}
 						else {
@@ -848,7 +861,7 @@ namespace Potato::SLRX
 					assert(CurRef.Reduces.size() <= 1 && CurRef.RequireNodes.empty());
 
 					auto FindIte = std::find_if(CurRef.Reduces.begin(), CurRef.Reduces.end(), [&](ReduceProperty const& R) {
-						return R.Property.ProductionIndex == Ite.Property.ProductionIndex;
+						return R.Property.Reduce.ProductionIndex == Ite.Property.Reduce.ProductionIndex;
 						});
 
 					if (FindIte == CurRef.Reduces.end())
@@ -895,7 +908,7 @@ namespace Potato::SLRX
 				auto& Ref = TempNode[ConfligNodeIte];
 
 				for (auto& Ite2 : Ref.Reduces)
-					StartupSet.Elements.push_back({ Ite2.ToNode, Ite2.Reduce, Ite2.Property.ProductionIndex, {{ConfligNodeIte, 0}, {Ite2.ToNode, Ite2.Reduce}}, 0});
+					StartupSet.Elements.push_back({ Ite2.ToNode, Ite2.Reduce, Ite2.Property.Reduce.ProductionIndex, {{ConfligNodeIte, 0}, {Ite2.ToNode, Ite2.Reduce}}, 0});
 
 				if (!Ref.Shifts.empty())
 					StartupSet.Elements.push_back({ ConfligNodeIte, 0, ShiftSimulateProductionIndex, {{ConfligNodeIte, 0}}, 0 });
@@ -1121,7 +1134,7 @@ namespace Potato::SLRX
 						else {
 
 							auto Find1 = std::find_if(TempNodeRef.Reduces.begin(), TempNodeRef.Reduces.end(), [&](FastReduce const& P) {
-								return P.Property.ProductionIndex == TopEle.UniqueID;
+								return P.Property.Reduce.ProductionIndex == TopEle.UniqueID;
 							});
 
 							assert(Find1 != TempNodeRef.Reduces.end());
@@ -1130,7 +1143,7 @@ namespace Potato::SLRX
 							auto& ReduceRef = NodeRef.Reduces;
 
 							auto Find = std::find_if(ReduceRef.begin(), ReduceRef.end(), [=](ReduceProperty const& R){
-								return R.Property.ProductionIndex == TopEle.UniqueID;
+								return R.Property.Reduce.ProductionIndex == TopEle.UniqueID;
 							});
 
 							std::size_t PropertyOffset = NodeRef.Reduces.size();
@@ -1144,7 +1157,7 @@ namespace Potato::SLRX
 								NewElement.Property = Find1->Property;
 								for (auto& Ite22 : TempNodeRef.Reduces)
 								{
-									if (Ite22.Property.ProductionIndex == TopEle.UniqueID)
+									if (Ite22.Property.Reduce.ProductionIndex == TopEle.UniqueID)
 									{
 										NewElement.Tuples.push_back({ Ite22.LastState, Ite22.ToNode });
 									}
@@ -1328,10 +1341,10 @@ namespace Potato::SLRX
 			{
 				ReduceOffset.push_back(Reader.GetIteSpacePositon() - CurNodeOffset);
 				auto Property = Reader.ReadObject<ZipReducePropertyT>();
-				Property->Mask = Ite2.Property.ReduceMask;
+				Reader.CrossTypeSetThrow<OutOfRange>(Property->Mask, Ite2.Property.Reduce.Mask, OutOfRange::TypeT::Mask, Ite2.Property.Reduce.Mask);
 				Property->NoTerminalValue = Ite2.Property.ReduceSymbol.Value;
-				Reader.CrossTypeSetThrow<OutOfRange>(Property->ProductionIndex, Ite2.Property.ProductionIndex, OutOfRange::TypeT::ReduceProperty, Ite2.Property.ProductionIndex);
-				Reader.CrossTypeSetThrow<OutOfRange>(Property->ProductionCount, Ite2.Property.ProductionElementCount, OutOfRange::TypeT::ReduceProperty, Ite2.Property.ProductionElementCount);
+				Reader.CrossTypeSetThrow<OutOfRange>(Property->ProductionIndex, Ite2.Property.Reduce.ProductionIndex, OutOfRange::TypeT::ReduceProperty, Ite2.Property.Reduce.ProductionIndex);
+				Reader.CrossTypeSetThrow<OutOfRange>(Property->ProductionCount, Ite2.Property.Reduce.ElementCount, OutOfRange::TypeT::ReduceProperty, Ite2.Property.Reduce.ElementCount);
 				Reader.CrossTypeSetThrow<OutOfRange>(Property->ReduceTupleCount, Ite2.Tuples.size(), OutOfRange::TypeT::ReduceProperty, Ite2.Tuples.size());
 				auto Span = *Reader.ReadObjectArray<ZipReduceTupleT>(Ite2.Tuples.size());
 				ReduceTupleRecord.push_back({Span, std::span(Ite2.Tuples)});
@@ -1417,8 +1430,8 @@ namespace Potato::SLRX
 					assert(NodeRef.Reduces.size() > Ite.ReferenceIndex);
 					auto& CurReduceTuple = NodeRef.Reduces[Ite.ReferenceIndex];
 					Re.Reduce = CurReduceTuple.Property;
-					assert(States.size() > Re.Reduce->ProductionElementCount);
-					auto RefState = States[States.size() - Re.Reduce->ProductionElementCount - 1];
+					assert(States.size() > Re.Reduce->Reduce.ElementCount);
+					auto RefState = States[States.size() - Re.Reduce->Reduce.ElementCount - 1];
 					auto FindIte = std::find_if(CurReduceTuple.Tuples.begin(), CurReduceTuple.Tuples.end(), [=](LRX::ReduceTuple Tupe) {
 						return Tupe.LastState == RefState;
 						});
@@ -1489,12 +1502,12 @@ namespace Potato::SLRX
 						auto ReduceP = ReducePropertyReader.ReadObject<TableWrapper::ZipReducePropertyT>();
 						LR0::Reduce Reduce;
 						Reduce.ReduceSymbol = Symbol::AsNoTerminal(ReduceP->NoTerminalValue);
-						Reduce.ReduceMask = ReduceP->Mask;
-						Reduce.ProductionIndex = ReduceP->ProductionIndex;
-						Reduce.ProductionElementCount = ReduceP->ProductionCount;
+						Reduce.Reduce.Mask = ReduceP->Mask;
+						Reduce.Reduce.ProductionIndex = ReduceP->ProductionIndex;
+						Reduce.Reduce.ElementCount = ReduceP->ProductionCount;
 						Re.Reduce = Reduce;
-						assert(States.size() > Re.Reduce->ProductionElementCount);
-						auto RefState = States[States.size() - Re.Reduce->ProductionElementCount - 1];
+						assert(States.size() > Re.Reduce->Reduce.ElementCount);
+						auto RefState = States[States.size() - Re.Reduce->Reduce.ElementCount - 1];
 						auto ReduceTuples = *ReducePropertyReader.ReadObjectArray<TableWrapper::ZipReduceTupleT>(ReduceP->ReduceTupleCount);
 						auto FindIte = std::find_if(ReduceTuples.begin(), ReduceTuples.end(), [=](TableWrapper::ZipReduceTupleT Tupe) {
 							return Tupe.LastState == RefState;
@@ -1546,8 +1559,8 @@ namespace Potato::SLRX
 			if (NodeRef.Reduces.size() == 1)
 			{
 				auto& Ref = *NodeRef.Reduces.begin();
-				assert(States.size() > Ref.Property.ProductionElementCount);
-				auto LastState = States[States.size() - Ref.Property.ProductionElementCount - 1];
+				assert(States.size() > Ref.Property.Reduce.ElementCount);
+				auto LastState = States[States.size() - Ref.Property.Reduce.ElementCount - 1];
 				auto FindIte = std::find_if(Ref.Tuples.begin(), Ref.Tuples.end(), [=](LRX::ReduceTuple Tup) {
 					return Tup.LastState == LastState;
 					});
@@ -1575,13 +1588,13 @@ namespace Potato::SLRX
 				auto ReduceP = NodeReader.ReadObject<TableWrapper::ZipReducePropertyT>();
 				LR0::Reduce Reduce;
 				Reduce.ReduceSymbol = Symbol::AsNoTerminal(ReduceP->NoTerminalValue);
-				Reduce.ReduceMask = ReduceP->Mask;
-				Reduce.ProductionIndex = ReduceP->ProductionIndex;
-				Reduce.ProductionElementCount = ReduceP->ProductionCount;
+				Reduce.Reduce.Mask = ReduceP->Mask;
+				Reduce.Reduce.ProductionIndex = ReduceP->ProductionIndex;
+				Reduce.Reduce.ElementCount = ReduceP->ProductionCount;
 				ReduceResult Result;
 				Result.Reduce = Reduce;
-				assert(States.size() > Reduce.ProductionElementCount);
-				auto RefState = States[States.size() - Reduce.ProductionElementCount - 1];
+				assert(States.size() > Reduce.Reduce.ElementCount);
+				auto RefState = States[States.size() - Reduce.Reduce.ElementCount - 1];
 				auto ReduceTuples = *NodeReader.ReadObjectArray<TableWrapper::ZipReduceTupleT>(ReduceP->ReduceTupleCount);
 				auto FindIte = std::find_if(ReduceTuples.begin(), ReduceTuples.end(), [=](TableWrapper::ZipReduceTupleT Tupe) {
 					return Tupe.LastState == RefState;
@@ -1595,6 +1608,106 @@ namespace Potato::SLRX
 		return {};
 	}
 
+	std::optional<std::vector<ParsingStep>> CoreProcessor::InsertPredictStep(std::span<ParsingStep const> Steps)
+	{
+
+		struct PredictIndex
+		{
+			std::size_t InsertPosition;
+			std::size_t ReferenceReduceIndex;
+		};
+
+		
+
+		std::size_t StackCount = 0;
+		std::size_t IndexsCount = 0;
+
+		for (auto Ite : Steps)
+		{
+			if(Ite.IsTerminal())
+				StackCount += 1;
+			else {
+				assert(StackCount >= Ite.Reduce.ElementCount);
+				StackCount -= Ite.Reduce.ElementCount;
+				StackCount += 1;
+				IndexsCount += 1;
+			}
+		}
+
+		std::vector<PredictIndex> Indexs;
+		std::vector<std::size_t> Stacks;
+
+		Indexs.reserve(IndexsCount);
+		Stacks.reserve(StackCount);
+
+		for (std::size_t Index = 0; Index < Steps.size(); ++Index)
+		{
+			auto Cur = Steps[Index];
+			if (Cur.IsTerminal())
+			{
+				Stacks.push_back(Index);
+			}
+			else {
+				if (Cur.Reduce.ElementCount == 0)
+				{
+					Indexs.push_back({Index, Index});
+					Stacks.push_back(Index);
+				}
+				else {
+					assert(Stacks.size() >= Cur.Reduce.ElementCount);
+					auto Last = Stacks[Stacks.size() - Cur.Reduce.ElementCount];
+					Stacks.resize(Stacks.size() - Cur.Reduce.ElementCount);
+					Stacks.push_back(Last);
+					Indexs.push_back({ Last, Index });
+				}
+			}
+		}
+
+		std::sort(Indexs.begin(), Indexs.end(), [](PredictIndex const& I1, PredictIndex const& I2) -> bool{
+			if(I1.InsertPosition < I2.InsertPosition)
+				return true;
+			else if(I1.InsertPosition == I2.InsertPosition)
+				return I1.ReferenceReduceIndex > I2.ReferenceReduceIndex;
+			else
+				return false;
+		});
+
+		std::vector<ParsingStep> Result;
+		Result.reserve(Steps.size() + Indexs.size());
+
+		auto Spans = std::span(Indexs);
+
+		for (std::size_t Index = 0; Index < Steps.size(); ++Index)
+		{
+			auto Cur = Steps[Index];
+
+			while (!Spans.empty())
+			{
+				auto Top = Spans[0];
+				if (Top.InsertPosition == Index)
+				{
+					auto Ref = Steps[Top.ReferenceReduceIndex];
+					assert(Ref.IsNoTerminal());
+					Ref.Reduce.IsPredict = true;
+					Result.push_back(Ref);
+					Spans = Spans.subspan(1);
+				}
+				else if (Top.InsertPosition > Index)
+				{
+					break;
+				}
+				else {
+					Spans = Spans.subspan(1);
+				}	
+			}
+
+			Result.push_back(Cur);
+		}
+
+		return Result;
+
+	}
+
 	template<typename Table> void TemplateTryReduce(Table& Tab, CoreProcessor& Pro)
 	{
 		if (Pro.RequireNode == 0)
@@ -1604,14 +1717,14 @@ namespace Potato::SLRX
 				auto Re = CoreProcessor::TryReduce(Tab, Pro.CurrentTopState, std::span(Pro.States));
 				if (Re.has_value())
 				{
-					Pro.States.resize(Pro.States.size() - Re->Reduce.ProductionElementCount);
+					Pro.States.resize(Pro.States.size() - Re->Reduce.Reduce.ElementCount);
 					Pro.States.push_back(Re->State);
 					Pro.CurrentTopState = Re->State;
 					ParsingStep Step;
 					Step.Value = Re->Reduce.ReduceSymbol;
-					Step.Reduce.Mask = Re->Reduce.ReduceMask;
-					Step.Reduce.ProductionIndex = Re->Reduce.ProductionIndex;
-					Step.Reduce.ProductionCount = Re->Reduce.ProductionElementCount;
+					Step.Reduce.Mask = Re->Reduce.Reduce.Mask;
+					Step.Reduce.ProductionIndex = Re->Reduce.Reduce.ProductionIndex;
+					Step.Reduce.ElementCount = Re->Reduce.Reduce.ElementCount;
 					Pro.Steps.push_back(Step);
 				}
 				else {
@@ -1632,15 +1745,16 @@ namespace Potato::SLRX
 			{
 				if (Re->Reduce.has_value())
 				{
-					Pro.States.resize(Pro.States.size() - Re->Reduce->ProductionElementCount);
+					Pro.States.resize(Pro.States.size() - Re->Reduce->Reduce.ElementCount);
 					Pro.States.push_back(Re->State);
 					Pro.RequireNode = Re->RequireNode;
 					Pro.CurrentTopState = Re->State;
 					ParsingStep Step;
 					Step.Value = Re->Reduce->ReduceSymbol;
-					Step.Reduce.Mask = Re->Reduce->ReduceMask;
-					Step.Reduce.ProductionIndex = Re->Reduce->ProductionIndex;
-					Step.Reduce.ProductionCount = Re->Reduce->ProductionElementCount;
+					Step.Reduce.Mask = Re->Reduce->Reduce.Mask;
+					Step.Reduce.ProductionIndex = Re->Reduce->Reduce.ProductionIndex;
+					Step.Reduce.ElementCount = Re->Reduce->Reduce.ElementCount;
+					Step.Reduce.IsPredict = false;
 					Pro.Steps.push_back(Step);
 					SymbolsIndex = 0;
 					TemplateTryReduce(Tab, Pro);

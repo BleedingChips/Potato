@@ -17,7 +17,7 @@ Num := '[1-9][0-9]*' : [1]
 
 %%%%
 
-$ := <Exp>;
+$ := <Exp> 6;
 
 <Exp> := Num : [1];
 	:= <Exp> '+' <Exp> : [2];
@@ -49,12 +49,24 @@ $ := <Exp>;
 
 	Ebnf::EBNFX Bnfx = EBNFX::Create(EbnfCode1);
 	 
-	std::u8string_view Str = u8R"(1223 + 2312+12321- 232 +232)";
+	std::u8string_view Str = u8R"(1223 + 2312+12321- 232 *232)";
 
-	std::vector<LexicalElementTuple> Tuples;
+	LexicalEBNFXProcessor Pro1(Bnfx);
 
-	auto Re2 = CoreProcessor::LexicalProcess(Bnfx, Str);
-	auto Steps = CoreProcessor::SynatxProcess(Bnfx, std::span(*Re2.Element));
+	while (!Str.empty())
+	{
+		auto I = Pro1.Consume(Str);
+		if (I.has_value())
+		{
+			Str = *I;
+		}
+		else {
+			volatile int i = 0;
+		}
+	}
+
+	auto List = SyntaxEBNFXProcessor::Process(Bnfx, Pro1.GetSpan(), true);
+
 
 	volatile int i = 0;
 

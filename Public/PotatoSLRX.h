@@ -41,34 +41,52 @@ namespace Potato::SLRX
 	struct ParsingStep
 	{
 		Symbol Value;
-		union
-		{
-			struct ReduceT {
-				std::size_t ProductionIndex;
-				std::size_t ProductionCount;
-				StandardT Mask;
-			}Reduce;
 
-			struct ShiftT {
-				std::size_t TokenIndex;
-			}Shift;
+		struct ReduceT
+		{
+			std::size_t ProductionIndex;
+			std::size_t ElementCount;
+			SLRX::StandardT Mask;
+			bool IsPredict;
 		};
+
+		struct ShiftT
+		{
+			std::size_t TokenIndex;
+		};
+
+		union {
+			ReduceT Reduce;
+			ShiftT Shift;
+		};
+
 		constexpr bool IsTerminal() const { return Value.IsTerminal(); }
 		constexpr bool IsNoTerminal() const { return Value.IsNoTerminal(); }
 		constexpr bool IsShift() const { return IsTerminal(); }
 		constexpr bool IsReduce() const { return IsNoTerminal(); }
 	};
 
-	struct PredictParsingStep
+	struct ElementData
 	{
-		std::size_t ParsingStepInsertToken;
-		std::size_t ReferenceStepIndex;
+		std::any Data;
+
+		template<typename Type>
+		std::remove_reference_t<Type> Consume() { return std::move(std::any_cast<std::add_lvalue_reference_t<Type>>(Data)); }
+		std::any Consume() { return std::move(Data); }
+		template<typename Type>
+		std::optional<Type> TryConsume() {
+			auto P = std::any_cast<Type>(&Data);
+			if (P != nullptr)
+				return std::move(*P);
+			else
+				return std::nullopt;
+		}
 	};
 
 	struct TElement
 	{
 		Symbol Value;
-		std::size_t TokenIndex;
+		ParsingStep::ShiftT Shift;
 		TElement(ParsingStep const& value);
 		TElement(TElement const&) = default;
 		TElement& operator=(TElement const&) = default;
@@ -77,34 +95,31 @@ namespace Potato::SLRX
 	struct NTElement
 	{
 
-		struct DataT
+		struct MetaData
 		{
 			Symbol Value;
-			std::size_t FirstTokenIndex;
-			std::any Data;
-
-			operator Symbol() const { return Value; }
-			template<typename Type>
-			std::remove_reference_t<Type> Consume() { return std::move(std::any_cast<std::add_lvalue_reference_t<Type>>(Data)); }
-			std::any Consume() { return std::move(Data); }
-			template<typename Type>
-			std::optional<Type> TryConsume() {
-				auto P = std::any_cast<Type>(&Data);
-				if (P != nullptr)
-					return std::move(*P);
-				else
-					return std::nullopt;
-			}
+			Misc::IndexSpan<> TokenIndex;
 		};
 
+		struct DataT
+		{
+			MetaData Mate;
+			ElementData Data;
+
+			template<typename Type>
+				decltype(auto) Consume() { return Data.Consume<Type>(); }
+			
+			decltype(auto) Consume() { return Data.Consume();}
+			template<typename Type>
+				decltype(auto) TryConsume() { return Data.TryConsume<Type>(); }
+		};
 
 		Symbol Value;
-		std::size_t ProductionIndex;
-		StandardT Mask;
-		std::size_t FirstTokenIndex;
+		ParsingStep::ReduceT Reduce;
+		Misc::IndexSpan<> TokenIndex;
 		std::span<DataT> Datas;
 		DataT& operator[](std::size_t index) { return Datas[index]; }
-		NTElement(ParsingStep const& StepValue, std::size_t FiestTokenIndex, std::span<DataT> Datas);
+		NTElement(ParsingStep const& StepValue, Misc::IndexSpan<> TokenIndex, std::span<DataT> Datas);
 		NTElement(NTElement const&) = default;
 		NTElement& operator=(NTElement const&) = default;
 	};
@@ -120,23 +135,41 @@ namespace Potato::SLRX
 
 	struct ParsingStepProcessor
 	{
-		bool Consume(ParsingStep Input);
+
+		struct Result
+		{
+			VariantElement Element;
+			std::optional<NTElement::MetaData> MetaData;
+		};
+
+		std::optional<Result> Translate(ParsingStep Input);
+		void Push(NTElement::MetaData Element, std::any Result);
 		std::optional<std::any> EndOfFile();
 
-		ParsingStepProcessor(std::function<std::any(VariantElement)> Func)
-			: ExecuteFunction(std::move(Func)) {};
+		ParsingStepProcessor() = default;
+		ParsingStepProcessor(ParsingStepProcessor&&) = default;
+		ParsingStepProcessor(ParsingStepProcessor const&) = default;
+
 	private:
-		std::function<std::any(VariantElement)> ExecuteFunction;
+
+		std::vector<NTElement::DataT> TemporaryDataBuffer;
 		std::vector<NTElement::DataT> DataBuffer;
 	};
 
 	template<typename Fun>
 	std::optional<std::any> ProcessParsingStep(std::span<ParsingStep const> Input, Fun&& Func) requires(std::is_invocable_r_v<std::any, Fun, VariantElement>)
 	{
-		ParsingStepProcessor TempProcesser(std::forward<Fun>(Func));
+		ParsingStepProcessor TempProcesser;
 		for (auto Ite : Input)
 		{
-			if(!TempProcesser.Consume(Ite))
+			auto Re = TempProcesser.Translate(Ite);
+			if (Re.has_value())
+			{
+				auto [Ele, Data] = *Re;
+				auto Re2 = Func(Ele);
+				if(Data.has_value())
+					TempProcesser.Push(*Data, std::move(Re2));
+			}else
 				return {};
 		}
 		return TempProcesser.EndOfFile();
@@ -257,15 +290,11 @@ namespace Potato::SLRX
 		struct Reduce
 		{
 			Symbol ReduceSymbol;
-			std::size_t ProductionIndex;
-			std::size_t ProductionElementCount;
-			StandardT ReduceMask;
+			ParsingStep::ReduceT Reduce;
 			operator ParsingStep () const {
 				ParsingStep New;
 				New.Value = ReduceSymbol;
-				New.Reduce.ProductionCount = ProductionElementCount;
-				New.Reduce.Mask = ReduceMask;
-				New.Reduce.ProductionIndex = ProductionIndex;
+				New.Reduce = Reduce;
 				return New;
 			}
 		};
@@ -440,6 +469,8 @@ namespace Potato::SLRX
 
 		static std::optional<ReduceResult> TryReduce(LRX const& Table, std::size_t TopState, std::span<std::size_t const> States);
 		static std::optional<ReduceResult> TryReduce(TableWrapper Table, std::size_t TopState, std::span<std::size_t const> States);
+
+		static std::optional<std::vector<ParsingStep>> InsertPredictStep(std::span<ParsingStep const> Steps);
 		
 		std::deque<CoreProcessor::CacheSymbol> CacheSymbols;
 		std::vector<std::size_t> States;
@@ -447,10 +478,9 @@ namespace Potato::SLRX
 		std::size_t RequireNode;
 		std::vector<ParsingStep> Steps;
 		std::span<ParsingStep const> GetSteps() const { return std::span(Steps); }
-		std::vector<PredictParsingStep> GeneratePrediceReduce();
-		void MergePrediceReduce(std::span<PredictParsingStep const> Predict);
 
 		void Clear(std::size_t StartupNodeIndex);
+		void ClearSteps(){ Steps.clear(); }
 
 	};
 
@@ -468,6 +498,8 @@ namespace Potato::SLRX
 			CoreProcessor::Clear(LRX::StartupOffset());
 			TryReduce();
 		}
+
+		void ClearSteps(){ CoreProcessor::ClearSteps(); }
 
 		std::span<ParsingStep const> GetSteps() const { return CoreProcessor::GetSteps(); }
 

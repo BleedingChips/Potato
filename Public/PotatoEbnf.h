@@ -16,37 +16,100 @@ namespace Potato::Ebnf
 		SLRX::LRX Syntax;
 	};
 
+	struct LexicalElement
+	{
+		std::u8string_view CaptureValue;
+		std::u8string_view SymbolStr;
+		SLRX::Symbol Value;
+		std::size_t Mask;
+		Misc::IndexSpan<> StrIndex;
+	};
+
+	template<typename RT>
+	struct Result
+	{
+		std::optional<RT> Element;
+		std::size_t LastOffset;
+		operator bool() const { return Element.has_value(); }
+	};
+
+	struct LexicalEBNFXProcessor
+	{
+		std::optional<std::u8string_view> Consume(std::u8string_view Str);
+		LexicalEBNFXProcessor(EBNFX const& Table, std::size_t Offset = 0) : Table(Table), StrOffset(Offset) {}
+		std::span<LexicalElement> GetSpan(){ return std::span(Elements); }
+	private:
+		EBNFX const& Table;
+		std::vector<LexicalElement> Elements;
+		std::size_t StrOffset;
+	};
+
 	struct ParsingStep
 	{
-		SLRX::Symbol Value;
+		std::u8string_view Symbol;
 
 		struct ReduceT {
-			std::size_t ProductionIndex;
-			std::size_t ProductionCount;
-			SLRX::StandardT Mask;
+			std::size_t Mask;
+			std::size_t ProductionElementCount;
+			bool IsPredict;
+			bool IsNoNameReduce;
 		};
 
 		struct ShiftT {
 			std::u8string_view CaptureValue;
-			Reg::StandardT Mask;
-			std::size_t TokenIndex;
+			std::size_t Mask;
+			Misc::IndexSpan<> StrIndex;
 		};
+		std::variant<ReduceT, ShiftT> Data;
+		bool IsTerminal() const { return std::holds_alternative<ShiftT>(Data); }
+	};
 
-		std::variant<ReduceT, ShiftT> Datas;
+	struct SyntaxEBNFXProcessor
+	{
+		bool Consume(LexicalElement Element);
+		bool EndOfFile();
+		SyntaxEBNFXProcessor(EBNFX const& Table) : Table(Table), Pro(Table.Syntax) {}
+		std::span<ParsingStep> GetSteps() { return std::span(ParsingSteps); }
+		static Result<std::vector<ParsingStep>> Process(EBNFX const& Table, std::span<LexicalElement const> Eles, bool Predict = false);
+	protected:
+		SLRX::LRXProcessor Pro;
+		EBNFX const& Table;
+		std::vector<LexicalElement> TemporaryElementBuffer;
+		std::vector<ParsingStep> ParsingSteps;
+		std::size_t HandleStep(std::span<SLRX::ParsingStep const> Steps);
 	};
 
 	struct TElement
 	{
-		SLRX::Symbol Value;
+		std::u8string_view Symbol;
 		ParsingStep::ShiftT Shift;
 	};
 
 	struct NTElement
 	{
-		SLRX::Symbol Value;
+		struct MetaData
+		{
+			std::u8string_view Symbol;
+			Misc::IndexSpan<> TokenIndex;
+		};
+
+		struct DataT
+		{
+			MetaData Meta;
+			SLRX::ElementData Data;
+
+			template<typename Type>
+			decltype(auto) Consume() { Data.Consume<Type>(); }
+
+			decltype(auto) Consume() { return Data.Consume(); }
+			template<typename Type>
+			decltype(auto) TryConsume() { return Data.TryConsume<Type>(); }
+		};
+
+		std::u8string_view Symbol;
 		ParsingStep::ReduceT Reduce;
-		std::span<SLRX::NTElement::DataT> Datas;
-		SLRX::NTElement::DataT& operator[](std::size_t index) { return Datas[index]; }
+		std::span<DataT> Datas;
+		DataT& operator[](std::size_t index) { return Datas[index]; }
 	};
 
 	struct VariantElement
@@ -74,58 +137,39 @@ namespace Potato::Ebnf
 		std::vector<SLRX::NTElement::DataT> Datas;
 	};
 
-	
+	/*
 
-	struct LexicalElement
+	struct CoreSyntaxProcessor
 	{
-		std::u8string_view CaptureValue;
-		SLRX::Symbol Value;
-		std::size_t Mask;
+		static ParsingStep Translate(std::span<LexicalElement const> Tokens, SLRX::ParsingStep Step);
 	};
 
-	struct LexicalElementTuple
+	struct EBNFXProcessor
 	{
-		LexicalElement Ele;
-		Misc::IndexSpan<> StrIndex;
+		bool Consume(LexicalElement Ele, Misc::IndexSpan<> StrIndex);
+		bool EndOfFile();
+		EBNFXProcessor(EBNFX const& Table) : Table(Table), Processor(Table.Syntax) {}
+		void Reset();
+	private:
+		std::vector<std::tuple<LexicalElement, Misc::IndexSpan<>>> TemporaryBuffer;
+		SLRX::LRXProcessor Processor;
+		std::vector<ParsingStep> Steps;
+		EBNFX const& Table;
 	};
 
-	struct CoreProcessor
+	struct StepProcessor
 	{
+		std::optional<std::tuple<VariantElement, NTElement::MetaData>> Translate(ParsingStep InputStep);
+		void Push(NTElement::MetaData Data, std::any InputData);
+		bool EndOfFile();
 
-		template<typename RT>
-		struct Result
-		{
-			std::optional<RT> Element;
-			std::size_t Length;
-			operator bool() const { return Element.has_value(); }
-		};
+	private:
 
-		struct LexicalResult
-		{
-			std::optional<LexicalElement> Element;
-			std::size_t Length;
-			operator bool() const { return Element.has_value(); }
-		};
-
-		static Result<LexicalElement> LexicalConsumeOnce(EBNFX const& Table, std::u8string_view Str);
-		static Result<std::vector<LexicalElementTuple>> LexicalProcess(EBNFX const& Table, std::u8string_view Str);
-		static Result<std::vector<ParsingStep>> SynatxProcess(EBNFX const& Table, std::span<LexicalElementTuple const> Tuples);
-		static std::any StepProcess(std::span<ParsingStep const> Tuples, std::function<std::any(VariantElement& Ele)> Func);
-
-		template<typename RequireType>
-		static std::optional<RequireType> StepProcessWithOutput(std::span<ParsingStep const> Tuples, std::function<std::any(VariantElement& Ele)> Func) {
-			auto Re = StepProcess(Tuples, std::move(Fun));
-			if (Re.has_value())
-			{
-				auto Re2 = std::any_cast<RequireType*>(Re);
-				if (Re2 != nullptr)
-				{
-					return std::move(*Re2);
-				}
-			}
-			return {};
-		}
+		std::vector<NTElement::StoragetT> TemporaryDatasBuffer;
+		std::vector<NTElement::StoragetT> DataBuffer;
 	};
+
+	*/
 
 
 	

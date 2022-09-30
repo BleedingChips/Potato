@@ -25,7 +25,6 @@ namespace Potato::Ebnf
 		Equal,
 		Rex,
 		NoTerminal,
-		NoProductionNoTerminal,
 		StartSymbol,
 		LB_Brace,
 		RB_Brace,
@@ -74,7 +73,6 @@ namespace Potato::Ebnf
 				AddRegex(Creator, u8R"([0-9]+)", T::Number);
 				AddRegex(Creator, u8R"([0-9a-zA-Z_\z]+)", T::Terminal);
 				AddRegex(Creator, u8R"(<[0-9a-zA-Z_\z]+>)", T::NoTerminal);
-				AddRegex(Creator, u8R"(<\$([0-9]+)>)", T::NoProductionNoTerminal);
 				AddRegex(Creator, u8R"(:=)", T::Equal);
 				AddRegex(Creator, u8R"(\'([^\s]+)\')", T::Rex);
 				AddRegex(Creator, u8R"(;)", T::Semicolon);
@@ -173,7 +171,6 @@ namespace Potato::Ebnf
 				case T::Terminal:
 					Output.Datas.push_back({*Enum, StrIte.substr(0, Re->MainCapture.Count()), {Offset, Re->MainCapture.Count()}});
 					break;
-				case T::NoProductionNoTerminal:
 				case T::Rex:
 				{
 					auto Wrapper = Re->GetCaptureWrapper();
@@ -229,7 +226,6 @@ namespace Potato::Ebnf
 				{*NT::Expression, {*T::Rex}, 4},
 				{*NT::Expression, {*T::Number}, 5},
 				{*NT::Expression, {*T::ItSelf}, 50},
-				{*NT::Expression, {*T::NoProductionNoTerminal}, 40},
 
 				{*NT::FunctionEnum, {*T::Colon, *T::LM_Brace, *T::Number, *T::RM_Brace}, 6},
 				{*NT::FunctionEnum, {}, 7},
@@ -345,11 +341,11 @@ namespace Potato::Ebnf
 						{
 						case T::Terminal:
 						case T::Rex:
-							return std::u8string_view{ SymbolTuple.Datas[TE.TokenIndex].Str };
+							return std::u8string_view{ SymbolTuple.Datas[TE.Shift.TokenIndex].Str };
 						case T::Number:
 						{
 							Reg::StandardT Num;
-							StrFormat::DirectScan(SymbolTuple.Datas[TE.TokenIndex].Str, Num);
+							StrFormat::DirectScan(SymbolTuple.Datas[TE.Shift.TokenIndex].Str, Num);
 							return Num;
 						}
 						default:
@@ -358,7 +354,7 @@ namespace Potato::Ebnf
 					}
 					else {
 						auto NTE = Ele.AsNoTerminal();
-						switch (NTE.Mask)
+						switch (NTE.Reduce.Mask)
 						{
 						case 2:
 						{
@@ -423,29 +419,19 @@ namespace Potato::Ebnf
 					if (Ele.IsNoTerminal())
 					{
 						auto Ref = Ele.AsNoTerminal();
-						switch (Ref.Mask)
+						switch (Ref.Reduce.Mask)
 						{
 						case 1:
 						case 4:
 							return SLRX::ProductionBuilderElement{ Ref[0].Consume<SLRX::Symbol>() };
 						case 5:
-							return SLRX::ProductionBuilderElement{ Ref[0].Consume<SLRX::StandardT>() + Ebnf::MinMask };
+							return SLRX::ProductionBuilderElement{ Ref[0].Consume<SLRX::StandardT>() };
 						case 50:
 							return SLRX::ProductionBuilderElement{ SLRX::ItSelf{} };
-						case 40:
-						{
-							auto Exp = Ref[0].Consume<SLRX::StandardT>();
-							auto CurSymbol = SLRX::Symbol::AsNoTerminal(TempNoTerminalCount--);
-							Builders.push_back({
-								CurSymbol,
-								Exp + Ebnf::MinMask
-								});
-							return SLRX::ProductionBuilderElement{ CurSymbol };
-						}
 						case 6:
-							return Ref[2].Consume<SLRX::StandardT>() + Ebnf::MinMask;
+							return Ref[2].Consume<SLRX::StandardT>();
 						case 7:
-							return Ebnf::MinMask;
+							return 0;
 						case 8:
 						{
 							auto Last = Ref[0].Consume<std::vector<SLRX::ProductionBuilderElement>>();
@@ -570,7 +556,7 @@ namespace Potato::Ebnf
 						{
 							if (!LastProductionStartSymbol.has_value()) [[unlikely]]
 							{
-								std::size_t TokenIndex = SymbolTuple.Datas[Ref.FirstTokenIndex].StrIndex.Begin();
+								std::size_t TokenIndex = SymbolTuple.Datas[Ref.TokenIndex.Begin()].StrIndex.Begin();
 								throw Exception::UnacceptableEbnf{ Exception::UnacceptableEbnf::TypeT::UnsetProductionHead, Str, TokenIndex };
 							}
 							auto List = Ref[1].Consume<std::vector<SLRX::ProductionBuilderElement>>();
@@ -586,7 +572,7 @@ namespace Potato::Ebnf
 						{
 							if (StartSymbol.has_value()) [[unlikely]]
 							{
-								std::size_t TokenIndex = SymbolTuple.Datas[Ref.FirstTokenIndex].StrIndex.Begin();
+								std::size_t TokenIndex = SymbolTuple.Datas[Ref.TokenIndex.Begin()].StrIndex.Begin();
 								throw Exception::UnacceptableEbnf{ Exception::UnacceptableEbnf::TypeT::StartSymbolAreadySet, Str, TokenIndex };
 							}
 							StartSymbol = Ref[2].Consume<SLRX::Symbol>();
@@ -604,16 +590,15 @@ namespace Potato::Ebnf
 						T TValue = static_cast<T>(Ref.Value.Value);
 						switch (TValue)
 						{
-						case T::NoProductionNoTerminal:
 						case T::Number:
 						{
 							SLRX::StandardT Index = 0;
-							StrFormat::DirectScan(SymbolTuple.Datas[Ref.TokenIndex].Str, Index);
+							StrFormat::DirectScan(SymbolTuple.Datas[Ref.Shift.TokenIndex].Str, Index);
 							return Index;
 						}
 						case T::Terminal:
 						{
-							auto Name = SymbolTuple.Datas[Ref.TokenIndex].Str;
+							auto Name = SymbolTuple.Datas[Ref.Shift.TokenIndex].Str;
 							auto Find = std::find(TerminalMapping.begin(), TerminalMapping.end(), Name);
 							if(Find != TerminalMapping.end())
 							{
@@ -622,11 +607,11 @@ namespace Potato::Ebnf
 								Misc::SerilizerHelper::CrossTypeSetThrow<OutofRange>(Value, Dis, OutofRange::TypeT::TerminalCount, Dis);
 								return SLRX::Symbol::AsTerminal(Value);
 							}
-							throw Exception::UnacceptableEbnf{ UnacceptableEbnf::TypeT::UnrecognizableTerminal, Str, SymbolTuple.Datas[Ref.TokenIndex].StrIndex.Begin()};
+							throw Exception::UnacceptableEbnf{ UnacceptableEbnf::TypeT::UnrecognizableTerminal, Str, SymbolTuple.Datas[Ref.Shift.TokenIndex].StrIndex.Begin()};
 						}
 						case T::NoTerminal:
 						{
-							auto Name = SymbolTuple.Datas[Ref.TokenIndex].Str;
+							auto Name = SymbolTuple.Datas[Ref.Shift.TokenIndex].Str;
 							auto Index = FindOrAddSymbol(Name, NoTerminalMapping);
 							SLRX::StandardT Value = 0;
 							Misc::SerilizerHelper::CrossTypeSetThrow<OutofRange>(Value, Index, OutofRange::TypeT::SymbolCount, Index);
@@ -634,7 +619,7 @@ namespace Potato::Ebnf
 						}
 						case T::Rex:
 						{
-							auto Name = SymbolTuple.Datas[Ref.TokenIndex].Str;
+							auto Name = SymbolTuple.Datas[Ref.Shift.TokenIndex].Str;
 							std::size_t OldSize = TerminalMapping.size();
 							auto Index = FindOrAddSymbol(Name, TerminalMapping);
 							SLRX::StandardT Value;
@@ -680,7 +665,7 @@ namespace Potato::Ebnf
 					if (Ele.IsNoTerminal())
 					{
 						auto NT = Ele.AsNoTerminal();
-						switch (NT.Mask)
+						switch (NT.Reduce.Mask)
 						{
 						case 1:
 							return NT[0].Consume();
@@ -720,7 +705,7 @@ namespace Potato::Ebnf
 						case T::Terminal:
 						case T::Rex:
 						{
-							auto Name = SymbolTuple.Datas[TRef.TokenIndex].Str;
+							auto Name = SymbolTuple.Datas[TRef.Shift.TokenIndex].Str;
 							auto FindIte = std::find(TerminalMapping.begin(), TerminalMapping.end(), Name);
 							if(FindIte != TerminalMapping.end())
 							{
@@ -729,7 +714,7 @@ namespace Potato::Ebnf
 								Misc::SerilizerHelper::CrossTypeSetThrow<OutofRange>(Value, Index, OutofRange::TypeT::TerminalCount, Index);
 								return SLRX::Symbol::AsTerminal(Value);
 							}
-							throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::UnrecognizableTerminal, Str, SymbolTuple.Datas[TRef.TokenIndex].StrIndex.Begin()};
+							throw UnacceptableEbnf{ UnacceptableEbnf::TypeT::UnrecognizableTerminal, Str, SymbolTuple.Datas[TRef.Shift.TokenIndex].StrIndex.Begin()};
 						}
 						break;
 						default:
@@ -746,7 +731,8 @@ namespace Potato::Ebnf
 			SLRX::LRX Lrx {
 				*StartSymbol,
 				Builders,
-				Priority
+				Priority,
+				MaxForwardDetected
 			};
 
 			return EBNFX{ std::move(TerminalMapping), std::move(NoTerminalMapping), std::move(Dfe), std::move(Lrx)};
@@ -760,58 +746,233 @@ namespace Potato::Ebnf
 		}
 	}
 
-	template<typename CharT>
-	auto TempCoreProConsume(EBNFX const& Table, std::basic_string_view<CharT> Str) ->CoreProcessor::Result<LexicalElement>
+	std::optional<std::u8string_view> LexicalEBNFXProcessor::Consume(std::u8string_view Str)
 	{
 		auto Re = Reg::HeadMatch(Table.Lexical, Str, true);
 		if (Re)
 		{
-			LexicalElement NewElement;
-			auto Capture = Re.SuccessdResult->GetCaptureWrapper();
-			if (Capture.HasSubCapture())
+			if (Re.SuccessdResult->AcceptData.SubMask != std::numeric_limits<Reg::StandardT>::max())
 			{
-				auto Cap = Capture.GetTopSubCapture().GetCapture();
-				NewElement.CaptureValue = Str.substr(Cap.Begin(), Cap.Count());
+				LexicalElement NewElement;
+				auto Capture = Re.SuccessdResult->GetCaptureWrapper();
+				if (Capture.HasSubCapture())
+				{
+					auto Cap = Capture.GetTopSubCapture().GetCapture();
+					NewElement.CaptureValue = Str.substr(Cap.Begin(), Cap.Count());
+				}
+				else {
+					NewElement.CaptureValue = Str.substr(0, Re->MainCapture.Count());
+				}
+				NewElement.Mask = Re->AcceptData.SubMask;
+				NewElement.Value = SLRX::Symbol::AsTerminal(Re->AcceptData.Mask);
+				if (NewElement.Mask != std::numeric_limits<decltype(Re->AcceptData.SubMask)>::max())
+				{
+					assert(Re->AcceptData.Mask < Table.MappingTerminalSymbols.size());
+					NewElement.SymbolStr = Table.MappingTerminalSymbols[Re->AcceptData.Mask];
+				}
+				NewElement.StrIndex = { StrOffset, Re.LastTokenIndex };
+				Elements.push_back(NewElement);
 			}
-			else {
-				NewElement.CaptureValue = Str.substr(0, Re->MainCapture.Count());
-			}
-			NewElement.Mask = Re->AcceptData.SubMask;
-			NewElement.Value = SLRX::Symbol::AsTerminal(Re->AcceptData.Mask);
-			return {NewElement, Re.LastTokenIndex};
+			StrOffset += Re.LastTokenIndex;
+			Str = Str.substr(Re.LastTokenIndex);
+			return Str;
 		}
 		else {
-			return {{}, Re.LastTokenIndex};
+			return { };
 		}
 	}
 
-	auto CoreProcessor::LexicalConsumeOnce(EBNFX const& Table, std::u8string_view Str) -> Result<LexicalElement>
+	std::tuple<ParsingStep, std::size_t> Translate(SLRX::ParsingStep In, std::span<LexicalElement const> Elements, EBNFX const& Table)
 	{
-		return TempCoreProConsume(Table, Str);
-	}
-
-	auto CoreProcessor::LexicalProcess(EBNFX const& Table, std::u8string_view Str) ->Result<std::vector<LexicalElementTuple>>
-	{
-		std::vector<LexicalElementTuple> Output;
-		std::size_t TotalSize = Str.size();
-		while (!Str.empty())
+		if (In.IsTerminal())
 		{
-			auto Re = CoreProcessor::LexicalConsumeOnce(Table, Str);
-			if (Re)
+			assert(In.Shift.TokenIndex < Elements.size());
+			assert(In.Value.Value < Table.MappingTerminalSymbols.size());
+			auto Ele = Elements[In.Shift.TokenIndex];
+			ParsingStep Step;
+			Step.Symbol = Table.MappingTerminalSymbols[In.Value.Value];
+			ParsingStep::ShiftT Shift{ Ele.CaptureValue, Ele.Mask, Ele.StrIndex };
+			Step.Data = Shift;
+			return { Step , In.Shift.TokenIndex + 1 };
+		}
+		else {
+			ParsingStep Step;
+			if (In.Value.Value < Table.MappingNoterminalSymbols.size())
 			{
-				//if(Re.Element->)
-				if (Re.Element->Mask != std::numeric_limits<Reg::StandardT>::max())
-				{
-					Output.push_back({ *Re.Element, {TotalSize - Str.size(), Re.Length} });
-				}
-				Str = Str.substr(Re.Length);
+				Step.Symbol = Table.MappingNoterminalSymbols[In.Value.Value];
 			}
 			else {
-				return {{}, TotalSize - Str.size()};
+				switch (In.Reduce.Mask)
+				{
+				case SmallBrace:
+					Step.Symbol = u8"(...)";
+					break;
+				case BigBrace:
+					Step.Symbol = u8"[...]";
+					break;
+				case MiddleBrace:
+					Step.Symbol = u8"{...}";
+					break;
+				case OrLeft:
+				case OrRight:
+					Step.Symbol = u8"...|...";
+					break;
+				default:
+					assert(false);
+				}
 			}
+			ParsingStep::ReduceT Reduce;
+			Reduce.Mask = In.Reduce.Mask;
+			Reduce.ProductionElementCount = In.Reduce.ElementCount;
+			Reduce.IsPredict = In.Reduce.IsPredict;
+			Reduce.IsNoNameReduce = In.Value.Value < Table.MappingNoterminalSymbols.size();
+			Step.Data = Reduce;
+			return { Step , 0};
 		}
-		return { std::move(Output), TotalSize - Str.size()};
 	}
+
+	std::size_t SyntaxEBNFXProcessor::HandleStep(std::span<SLRX::ParsingStep const> Steps)
+	{
+		std::size_t Max = 0;
+		for (auto Ite : Steps)
+		{
+			auto [Step, Ind] = Translate(Ite, TemporaryElementBuffer, Table);
+			Max = std::max(Max, Ind);
+			ParsingSteps.push_back(Step);
+		}
+		return Max;
+	}
+
+	bool SyntaxEBNFXProcessor::Consume(LexicalElement Element)
+	{
+		auto Re = Pro.Consume(Element.Value, TemporaryElementBuffer.size());
+		if (Re)
+		{
+			TemporaryElementBuffer.push_back(Element);
+			std::size_t Max = HandleStep(Pro.GetSteps());
+			Pro.ClearSteps();
+			if(Max >= TemporaryElementBuffer.size())
+				TemporaryElementBuffer.clear();
+		}
+		return Re;
+	}
+
+	bool SyntaxEBNFXProcessor::EndOfFile()
+	{
+		if (Pro.EndOfFile())
+		{
+			std::size_t Max = HandleStep(Pro.GetSteps());
+			Pro.Clear();
+			if (Max >= TemporaryElementBuffer.size())
+				TemporaryElementBuffer.clear();
+			assert(TemporaryElementBuffer.empty());
+			return true;
+		}
+		return false;
+	}
+
+	Result<std::vector<ParsingStep>> SyntaxEBNFXProcessor::Process(EBNFX const& Table, std::span<LexicalElement const> Eles, bool Predict)
+	{
+		SLRX::LRXProcessor Pro(Table.Syntax);
+
+		for (std::size_t I = 0; I < Eles.size(); ++I)
+		{
+			if(!Pro.Consume(Eles[I].Value, I))
+				return {{}, I};
+		}
+		if (!Pro.EndOfFile())
+		{
+			return {{}, Eles.size()};
+		}
+
+		if (!Predict)
+		{
+			std::vector<ParsingStep> Temp;
+			Temp.reserve(Pro.GetSteps().size());
+			for (auto Ite : Pro.GetSteps())
+			{
+				Temp.push_back(std::get<0>(Translate(Ite, Eles, Table)));
+			}
+			return {Temp, Eles.size()};
+		}
+		else {
+			auto TempSteps = SLRX::CoreProcessor::InsertPredictStep(Pro.GetSteps());
+			assert(TempSteps.has_value());
+			std::size_t Index = 0;
+			for (auto& Ite : *TempSteps)
+			{
+				if (Ite.IsNoTerminal() && Ite.Reduce.IsPredict && Ite.Value.Value >= Table.MappingNoterminalSymbols.size())
+				{
+
+				}
+				else {
+					++Index;
+				}
+			}
+			std::vector<ParsingStep> Temp;
+			Temp.reserve(Index);
+			for (auto& Ite : *TempSteps)
+			{
+				if (Ite.IsNoTerminal() && Ite.Reduce.IsPredict && Ite.Value.Value >= Table.MappingNoterminalSymbols.size())
+				{
+
+				}
+				else {
+					Temp.push_back(std::get<0>(Translate(Ite, Eles, Table)));
+				}
+			}
+			return { Temp, Eles.size() };
+		}
+	}
+
+	/*
+
+	void EBNFXProcessor::Reset()
+	{
+		TemporaryBuffer.clear();
+	}
+
+	bool EBNFXProcessor::Consume(LexicalElement Ele, Misc::IndexSpan<> StrIndex)
+	{
+		if (Processor.Consume(Ele.Value, TemporaryBuffer.size()))
+		{
+			TemporaryBuffer.push_back({Ele, StrIndex});
+			auto Span = Processor.GetSteps();
+			std::size_t MaxSpanSize = 0;
+			for (auto& Ite : Span)
+			{
+				if (Ite.IsTerminal())
+				{
+					MaxSpanSize = std::max(MaxSpanSize, Ite.Shift.TokenIndex + 1);
+					assert(Ite.Value.Value < Table.MappingTerminalSymbols.size());
+					ParsingStep Step;
+					Step.Symbol = Table.MappingTerminalSymbols[Ite.Value.Value];
+					ParsingStep::ShiftT Shift{Ele.CaptureValue, Ele.Mask, StrIndex };
+					Step.Data = Shift;
+					Steps.push_back(Step);
+				}
+				else if (Ite.IsNoTerminal())
+				{
+					ParsingStep Step;
+					if (Ite.Value.Value < Table.MappingNoterminalSymbols.size())
+						Step.Symbol = Table.MappingNoterminalSymbols[Ite.Value.Value];
+					ParsingStep::ReduceT Reduce;
+					Reduce.Mask = Ite.Reduce.ReduceMask;
+					Reduce.ProductionElementCount = Ite.Reduce.ProductionCount;
+					Step.Data = Reduce;
+					Steps.push_back(Step);
+				}
+			}
+			if(MaxSpanSize >= TemporaryBuffer.size())
+				TemporaryBuffer.clear();
+			Processor.Clear();
+		}
+		else {
+			return false;
+		}
+	}
+
+
 
 	Condition::TypeT Translate(SLRX::StandardT Mask)
 	{
@@ -830,7 +991,9 @@ namespace Potato::Ebnf
 			return Condition::TypeT::Normal;
 		}
 	}
+	*/
 
+	/*
 	auto CoreProcessor::SynatxProcess(EBNFX const& Table, std::span<LexicalElementTuple const> Tuples) ->Result<std::vector<ParsingStep>>
 	{
 		std::size_t TotalSize = Tuples.size();
@@ -864,25 +1027,22 @@ namespace Potato::Ebnf
 				ParsingStep::ShiftT Shift{
 					Ele.Ele.CaptureValue,
 					Ele.Ele.Mask,
-					Cur.Shift.TokenIndex
+					Ele.StrIndex
 				};
-				Steps.push_back({Cur.Value, Shift});
+				assert(Cur.Value.Value < Table.MappingTerminalSymbols.size());
+				Steps.push_back(ParsingStep{ Table.MappingTerminalSymbols[Cur.Value.Value], Shift});
 			}
 			else {
-
-				ParsingStep::ReduceT Reduce{
-					Cur.Reduce.ProductionIndex,
-					Cur.Reduce.ProductionCount,
-					Cur.Reduce.Mask
-				};
-
-				Steps.push_back({ Cur.Value, Reduce });
+				std::u8string_view Datas;
+				if(Cur.Value.Value < Table.MappingNoterminalSymbols.size());
+				
+				Steps.push_back({ Table.MappingNoterminalSymbols[Cur.Value.Value], Cur.Reduce });
 			}
 			StepSpan = StepSpan.subspan(1);
 		}
 		return { std::move(Steps), TotalSize };
-
 	}
+	*/
 
 	/*
 	std::any StepProcess(std::span<ParsingStep const> Tuples, std::function<std::any(VariantElement Ele)> Func)
@@ -893,12 +1053,11 @@ namespace Potato::Ebnf
 		{
 			auto Input = Tuples[0];
 
-			if (Input.Value.IsTerminal())
+			if (Input.IsTerminal())
 			{
-				TElement Ele{ Input.Value, std::get<ParsingStep::ShiftT>(Input.Datas) };
-				
+				TElement Ele{ Input.Symbol, std::get<ParsingStep::ShiftT>(Input.Datas) };		
 				auto Result = Func(VariantElement{ std::move(Ele)});
-				Datas.push_back({ Ele.Value, 0, std::move(Result) });
+				Datas.push_back({ Ele.Symbol, 0, std::move(Result) });
 			}
 			else {
 				auto Ref = std::get<ParsingStep::ReduceT>(Input.Datas);
@@ -916,6 +1075,8 @@ namespace Potato::Ebnf
 					}
 					std::vector<SLRX::NTElement::DataT> TemBuffer;
 					TemBuffer.insert(TemBuffer.end(), std::move_iterator(CurDatasSpan.begin()), std::move_iterator(CurDatasSpan.end()));
+					Datas.resize(Datas.size() - Ref.ProductionCount);
+
 					return Condition{ Condition::TypeT::Parentheses, 0, std::move(TemBuffer) };
 				}
 				case Ebnf::MiddleBrace:
@@ -926,13 +1087,13 @@ namespace Potato::Ebnf
 				}
 				case Ebnf::BigBrace:
 				{
-					if (NT.Datas.empty())
+					if (CurDatasSpan.empty())
 					{
 						return Condition{ Condition::TypeT::CurlyBrackets, 0, {} };
 					}
 					else {
-						auto Temp = NT[0].Consume<Condition>();
-						auto Span = std::span(NT.Datas).subspan(1);
+						auto Temp = CurDatasSpan[0].Consume<Condition>();
+						auto Span = CurDatasSpan.subspan(1);
 						Temp.Datas.insert(Temp.Datas.end(), std::move_iterator(Span.begin()), std::move_iterator(Span.end()));
 						Temp.AppendData += 1;
 						return std::move(Temp);
@@ -1942,7 +2103,7 @@ namespace Potato::Ebnf::Exception
 				if (Ite.Value.Value < NTMapping.size())
 				{
 					assert(Ite.Reduce.Mask >= MinMask);
-					Result.push_back({ NTMap{NTMapping[Ite.Value.Value], Ite.Reduce.ProductionCount, Ite.Reduce.Mask - MinMask} });
+					Result.push_back({ NTMap{NTMapping[Ite.Value.Value], Ite.Reduce.ElementCount, Ite.Reduce.Mask - MinMask} });
 				}
 				else {
 					static constexpr SLRX::StandardT SmallBrace = 0;
