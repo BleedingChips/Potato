@@ -223,6 +223,9 @@ namespace Potato::Misc
 			SpanReader SubSpan(std::size_t Index) const { auto New = *this; New.IteBuffer = IteBuffer.subspan(Index); return New; }
 			SpanReader& operator=(SpanReader const&) = default;
 			std::size_t GetSize() const { return IteBuffer.size(); }
+			std::span<StorageT> GetIteSpan() { return IteBuffer; }
+			void OffsetIteSpan(std::size_t Offset) { IteBuffer = IteBuffer.subspan(Offset); }
+			void ResetIteSpan(std::size_t Offset = 0){ IteBuffer = TotalBuffer.subspan(Offset); }
 
 			std::span<StorageT> TotalBuffer;
 			std::span<StorageT> IteBuffer;

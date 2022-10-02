@@ -22,10 +22,7 @@
     <ClInclude Include="..\..\Public\PotatoInterval.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Public\PotatoIntrusivePointer.h">
-      <Filter>Public</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Public\PotatoIR.h">
+    <ClInclude Include="..\..\Public\PotatoTMP.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Public\PotatoReg.h">
@@ -34,33 +31,21 @@
     <ClInclude Include="..\..\Public\PotatoStrEncode.h">
       <Filter>Public</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Public\PotatoStrFormat.h">
-      <Filter>Public</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Public\PotatoTMP.h">
-      <Filter>Public</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Public\PotatoEbnf.h">
       <Filter>Public</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\Private\PotatoSLRX.cpp">
-      <Filter>Private</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\Private\PotatoMisc.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Private\PotatoIR.cpp">
+    <ClCompile Include="..\..\Private\PotatoSLRX.cpp">
       <Filter>Private</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Private\PotatoReg.cpp">
       <Filter>Private</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Private\PotatoStrEncode.cpp">
-      <Filter>Private</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Private\PotatoStrFormat.cpp">
       <Filter>Private</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Private\PotatoEbnf.cpp">

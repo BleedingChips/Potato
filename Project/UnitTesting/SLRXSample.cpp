@@ -178,7 +178,7 @@ void TestingSLRX()
 		, 1
 		);
 
-		LRXProcessor Pro(tab);
+		SymbolProcessor Pro(tab);
 
 		std::vector<Symbol> Symbols = {*Terminal::Num, *Terminal::Num , *Terminal::Num , *Terminal::Num };
 
@@ -236,7 +236,7 @@ void TestingSLRX()
 			{Terminal::Num, 2}
 		};
 
-		LRXProcessor Pro(tab);
+		SymbolProcessor Pro(tab);
 
 		std::size_t O = 0;
 		for (auto& Ite : Wtf)
@@ -287,7 +287,7 @@ void TestingSLRX()
 		{
 			auto Buffer = TableWrapper::Create(tab);
 
-			TableProcessor Pro2(TableWrapper{ Buffer });
+			SymbolProcessor Pro2(TableWrapper{ Buffer });
 
 			std::size_t O = 0;
 			for (auto& Ite : Wtf)

@@ -1390,17 +1390,111 @@ namespace Potato::SLRX
 		return Re;
 	}
 
-	auto CoreProcessor::Consume(LRX const& Table, std::size_t TopState, std::span<std::size_t const> States, std::size_t NodeRequireOffset, Symbol Value, std::vector<Symbol>* SuggestSymbol) ->std::optional<ConsumeResult>
+	SymbolProcessor::SymbolProcessor(TableWrapper Wrapper) : Table(Wrapper){ 
+		assert(Wrapper); 
+		StartupOffset = Wrapper.StartupNodeIndex(); 
+		Clear();
+	}
+	SymbolProcessor::SymbolProcessor(LRX const& Wrapper) : Table(std::reference_wrapper(Wrapper)), StartupOffset(LRX::StartupOffset()) { Clear(); }
+
+	bool SymbolProcessor::Consume(Symbol Value, std::size_t TokenIndex, std::vector<Symbol>* SuggestSymbols)
 	{
 		assert(Value.IsTerminal());
-		assert(Table.Nodes.size() > TopState);
-		assert(*States.rbegin() == TopState);
+		assert(*States.rbegin() == CurrentTopState);
 
-		auto& NodeRef = Table.Nodes[TopState];
+		std::optional<ConsumeResult> Result;
 
-		assert(NodeRef.RequireNodes.size() > NodeRequireOffset);
+		if (std::holds_alternative<std::reference_wrapper<LRX const>>(Table))
+		{
+			Result = ConsumeImp(std::get<std::reference_wrapper<LRX const>>(Table).get(), Value, SuggestSymbols);
+		}
+		else {
+			Result = ConsumeImp(std::get<TableWrapper>(Table), Value, SuggestSymbols);
+		}
 
-		auto& NodeRequireArray = NodeRef.RequireNodes[NodeRequireOffset];
+		if (Result.has_value())
+		{
+			CacheSymbols.push_back(CacheSymbol{ Value, TokenIndex });
+			std::size_t SymbolsIndex = 0;
+			while (SymbolsIndex <= CacheSymbols.size())
+			{
+				if (Result->Reduce.has_value())
+				{
+					States.resize(States.size() - Result->Reduce->Reduce.ElementCount);
+					States.push_back(Result->State);
+					RequireNode = Result->RequireNode;
+					CurrentTopState = Result->State;
+					ParsingStep Step;
+					Step.Value = Result->Reduce->ReduceSymbol;
+					Step.Reduce.Mask = Result->Reduce->Reduce.Mask;
+					Step.Reduce.ProductionIndex = Result->Reduce->Reduce.ProductionIndex;
+					Step.Reduce.ElementCount = Result->Reduce->Reduce.ElementCount;
+					Step.Reduce.IsPredict = false;
+					Steps.push_back(Step);
+					SymbolsIndex = 0;
+					TryReduce();
+				}
+				else {
+					if (Result->RequireNode == 0)
+					{
+						States.push_back(Result->State);
+						RequireNode = Result->RequireNode;
+						CurrentTopState = Result->State;
+						auto LastSymbol = *CacheSymbols.begin();
+						CacheSymbols.pop_front();
+						SymbolsIndex = 0;
+						if (LastSymbol.Value != Symbol::EndOfFile())
+						{
+							ParsingStep Step;
+							Step.Value = LastSymbol.Value;
+							Step.Shift.TokenIndex = LastSymbol.TokenIndex;
+							Steps.push_back(Step);
+							TryReduce();
+						}
+						else {
+							assert(CacheSymbols.empty());
+							assert(States.size() == 3);
+						}
+					}
+					else {
+						RequireNode = Result->RequireNode;
+						return true;
+					}
+				}
+				if (!CacheSymbols.empty())
+				{
+					if (std::holds_alternative<std::reference_wrapper<LRX const>>(Table))
+					{
+						Result = ConsumeImp(std::get<std::reference_wrapper<LRX const>>(Table).get(), CacheSymbols[SymbolsIndex].Value, nullptr);
+					}
+					else {
+						Result = ConsumeImp(std::get<TableWrapper>(Table), CacheSymbols[SymbolsIndex].Value, nullptr);
+					}
+					++SymbolsIndex;
+					assert(Result.has_value());
+				}
+				else {
+					return true;
+				}
+			}
+			return true;
+		}
+		else {
+			return false;
+		}
+	}
+
+	auto SymbolProcessor::ConsumeImp(LRX const& Table, Symbol Value, std::vector<Symbol>* SuggestSymbol)const ->std::optional<ConsumeResult>
+	{
+		assert(Value.IsTerminal());
+		assert(Table.Nodes.size() > CurrentTopState);
+		assert(*States.rbegin() == CurrentTopState);
+
+		auto& NodeRef = Table.Nodes[CurrentTopState];
+
+		assert(NodeRef.RequireNodes.size() > RequireNode);
+
+		auto& NodeRequireArray = NodeRef.RequireNodes[RequireNode];
 
 		assert(!NodeRequireArray.empty());
 
@@ -1413,7 +1507,7 @@ namespace Potato::SLRX
 				case LRX::RequireNodeType::SymbolValue:
 				{
 					ConsumeResult Re;
-					Re.State = TopState;
+					Re.State = CurrentTopState;
 					Re.RequireNode = Ite.ReferenceIndex;
 					return Re;
 				}
@@ -1454,18 +1548,18 @@ namespace Potato::SLRX
 		
 	}
 
-	auto CoreProcessor::Consume(TableWrapper Wrapper, std::size_t TopState, std::span<std::size_t const> States, std::size_t NodeRequireOffset, Symbol Value, std::vector<Symbol>* SuggestSymbol) ->std::optional<ConsumeResult>
+	auto SymbolProcessor::ConsumeImp(TableWrapper Wrapper, Symbol Value, std::vector<Symbol>* SuggestSymbol)  const ->std::optional<ConsumeResult> 
 	{
-		assert(Wrapper.TotalBufferSize() > TopState);
-		assert(*States.rbegin() == TopState);
+		assert(Wrapper.TotalBufferSize() > CurrentTopState);
+		assert(*States.rbegin() == CurrentTopState);
 
-		auto Reader = Wrapper.GetSpanReader(TopState);
+		auto Reader = Wrapper.GetSpanReader(CurrentTopState);
 
 		auto Node = Reader.ReadObject<TableWrapper::ZipNodeT>();
 
 		assert(Node->RequireNodeDescCount != 0);
 
-		auto NodeDescReader = Reader.SubSpan(NodeRequireOffset);
+		auto NodeDescReader = Reader.SubSpan(RequireNode);
 
 		auto Desc = NodeDescReader.ReadObject<TableWrapper::ZipRequireNodeDescT>();
 
@@ -1484,7 +1578,7 @@ namespace Potato::SLRX
 					case LRX::RequireNodeType::SymbolValue:
 					{
 						ConsumeResult Re;
-						Re.State = TopState;
+						Re.State = CurrentTopState;
 						Re.RequireNode = Ite.ToIndexOffset;
 						return Re;
 					}
@@ -1540,19 +1634,53 @@ namespace Potato::SLRX
 		return {};
 	}
 
-	void CoreProcessor::Clear(std::size_t StartupNodeIndex)
+	void SymbolProcessor::Clear()
 	{
 		Steps.clear();
 		States.clear();
-		States.push_back(StartupNodeIndex);
-		CurrentTopState = StartupNodeIndex;
+		CurrentTopState = StartupOffset;
+		States.push_back(CurrentTopState);
 		RequireNode = 0;
+		TryReduce();
 	}
 
-	auto CoreProcessor::TryReduce(LRX const& Table, std::size_t TopState, std::span<std::size_t const> States) -> std::optional<ReduceResult>
+	void SymbolProcessor::TryReduce()
 	{
-		assert(Table.Nodes.size() > TopState);
-		auto& NodeRef = Table.Nodes[TopState];
+		if (RequireNode == 0)
+		{
+			while (true)
+			{
+				std::optional<ReduceResult> Re;
+				if (std::holds_alternative<std::reference_wrapper<LRX const>>(Table))
+				{
+					Re = TryReduceImp(std::get<std::reference_wrapper<LRX const>>(Table).get());
+				}
+				else {
+					Re = TryReduceImp(std::get<TableWrapper>(Table));
+				}
+				if (Re.has_value())
+				{
+					States.resize(States.size() - Re->Reduce.Reduce.ElementCount);
+					States.push_back(Re->State);
+					CurrentTopState = Re->State;
+					ParsingStep Step;
+					Step.Value = Re->Reduce.ReduceSymbol;
+					Step.Reduce.Mask = Re->Reduce.Reduce.Mask;
+					Step.Reduce.ProductionIndex = Re->Reduce.Reduce.ProductionIndex;
+					Step.Reduce.ElementCount = Re->Reduce.Reduce.ElementCount;
+					Steps.push_back(Step);
+				}
+				else {
+					break;
+				}
+			}
+		}
+	}
+
+	auto SymbolProcessor::TryReduceImp(LRX const& Table) const -> std::optional<ReduceResult>
+	{
+		assert(Table.Nodes.size() > CurrentTopState);
+		auto& NodeRef = Table.Nodes[CurrentTopState];
 		if (NodeRef.RequireNodes.empty())
 		{
 			assert(NodeRef.Reduces.size() <= 1);
@@ -1574,11 +1702,11 @@ namespace Potato::SLRX
 		return {};
 	}
 
-	auto CoreProcessor::TryReduce(TableWrapper Wrapper, std::size_t TopState, std::span<std::size_t const> States) -> std::optional<ReduceResult>
+	auto SymbolProcessor::TryReduceImp(TableWrapper Wrapper) const -> std::optional<ReduceResult>
 	{
-		assert(Wrapper.TotalBufferSize() > TopState);
-		assert(*States.rbegin() == TopState);
-		auto NodeReader = Wrapper.GetSpanReader(TopState);
+		assert(Wrapper.TotalBufferSize() > CurrentTopState);
+		assert(*States.rbegin() == CurrentTopState);
+		auto NodeReader = Wrapper.GetSpanReader(CurrentTopState);
 		auto Node = NodeReader.ReadObject<TableWrapper::ZipNodeT>();
 		if (Node->RequireNodeDescCount == 0)
 		{
@@ -1608,7 +1736,7 @@ namespace Potato::SLRX
 		return {};
 	}
 
-	std::optional<std::vector<ParsingStep>> CoreProcessor::InsertPredictStep(std::span<ParsingStep const> Steps)
+	std::optional<std::vector<ParsingStep>> SymbolProcessor::InsertPredictStep(std::span<ParsingStep const> Steps)
 	{
 
 		struct PredictIndex
@@ -1616,8 +1744,6 @@ namespace Potato::SLRX
 			std::size_t InsertPosition;
 			std::size_t ReferenceReduceIndex;
 		};
-
-		
 
 		std::size_t StackCount = 0;
 		std::size_t IndexsCount = 0;
@@ -1706,122 +1832,6 @@ namespace Potato::SLRX
 
 		return Result;
 
-	}
-
-	template<typename Table> void TemplateTryReduce(Table& Tab, CoreProcessor& Pro)
-	{
-		if (Pro.RequireNode == 0)
-		{
-			while (true)
-			{
-				auto Re = CoreProcessor::TryReduce(Tab, Pro.CurrentTopState, std::span(Pro.States));
-				if (Re.has_value())
-				{
-					Pro.States.resize(Pro.States.size() - Re->Reduce.Reduce.ElementCount);
-					Pro.States.push_back(Re->State);
-					Pro.CurrentTopState = Re->State;
-					ParsingStep Step;
-					Step.Value = Re->Reduce.ReduceSymbol;
-					Step.Reduce.Mask = Re->Reduce.Reduce.Mask;
-					Step.Reduce.ProductionIndex = Re->Reduce.Reduce.ProductionIndex;
-					Step.Reduce.ElementCount = Re->Reduce.Reduce.ElementCount;
-					Pro.Steps.push_back(Step);
-				}
-				else {
-					break;
-				}
-			}
-		}
-	}
-
-	template<typename Table> bool TemplateConsume(Table& Tab, CoreProcessor& Pro, Symbol Value, std::size_t TokenIndex, std::vector<Symbol>* SuggestSymbols)
-	{
-		auto Re = CoreProcessor::Consume(Tab, Pro.CurrentTopState, std::span(Pro.States), Pro.RequireNode, Value, SuggestSymbols);
-		if (Re.has_value())
-		{
-			Pro.CacheSymbols.push_back({ Value, TokenIndex });
-			std::size_t SymbolsIndex = 0;
-			while (SymbolsIndex <= Pro.CacheSymbols.size())
-			{
-				if (Re->Reduce.has_value())
-				{
-					Pro.States.resize(Pro.States.size() - Re->Reduce->Reduce.ElementCount);
-					Pro.States.push_back(Re->State);
-					Pro.RequireNode = Re->RequireNode;
-					Pro.CurrentTopState = Re->State;
-					ParsingStep Step;
-					Step.Value = Re->Reduce->ReduceSymbol;
-					Step.Reduce.Mask = Re->Reduce->Reduce.Mask;
-					Step.Reduce.ProductionIndex = Re->Reduce->Reduce.ProductionIndex;
-					Step.Reduce.ElementCount = Re->Reduce->Reduce.ElementCount;
-					Step.Reduce.IsPredict = false;
-					Pro.Steps.push_back(Step);
-					SymbolsIndex = 0;
-					TemplateTryReduce(Tab, Pro);
-				}
-				else {
-					if (Re->RequireNode == 0)
-					{
-						Pro.States.push_back(Re->State);
-						Pro.RequireNode = Re->RequireNode;
-						Pro.CurrentTopState = Re->State;
-						auto LastSymbol = *Pro.CacheSymbols.begin();
-						Pro.CacheSymbols.pop_front();
-						SymbolsIndex = 0;
-						if (LastSymbol.Value != Symbol::EndOfFile())
-						{
-							ParsingStep Step;
-							Step.Value = LastSymbol.Value;
-							Step.Shift.TokenIndex = LastSymbol.TokenIndex;
-							Pro.Steps.push_back(Step);
-							TemplateTryReduce(Tab, Pro);
-						}
-						else {
-							assert(Pro.CacheSymbols.empty());
-							assert(Pro.States.size() == 3);
-						}
-					}
-					else {
-						Pro.RequireNode = Re->RequireNode;
-						return true;
-					}
-				}
-				if (!Pro.CacheSymbols.empty())
-				{
-					std::vector<Symbol> Sug;
-					Re = CoreProcessor::Consume(Tab, Pro.CurrentTopState, std::span(Pro.States), Pro.RequireNode, Pro.CacheSymbols[SymbolsIndex].Value, &Sug);
-					++SymbolsIndex;
-					assert(Re.has_value());
-				}
-				else {
-					return true;
-				}
-			}
-			return true;
-		}
-		else {
-			return false;
-		}
-	}
-
-	bool LRXProcessor::Consume(Symbol Value, std::size_t TokenIndex, std::vector<Symbol>* SuggestSymbols)
-	{
-		return TemplateConsume(Reference, *this, Value, TokenIndex, SuggestSymbols);
-	}
-
-	void LRXProcessor::TryReduce()
-	{
-		TemplateTryReduce(Reference, *this);
-	}
-
-	bool TableProcessor::Consume(Symbol Value, std::size_t TokenIndex, std::vector<Symbol>* SuggestSymbols)
-	{
-		return TemplateConsume(Wrapper, *this, Value, TokenIndex, SuggestSymbols);
-	}
-
-	void TableProcessor::TryReduce()
-	{
-		TemplateTryReduce(Wrapper, *this);
 	}
 
 	namespace Exception

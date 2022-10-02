@@ -44,21 +44,19 @@ namespace Potato::SLRX
 
 		struct ReduceT
 		{
-			std::size_t ProductionIndex;
-			std::size_t ElementCount;
-			SLRX::StandardT Mask;
-			bool IsPredict;
+			std::size_t ProductionIndex =0 ;
+			std::size_t ElementCount = 0;
+			SLRX::StandardT Mask = 0;
+			bool IsPredict = false;
 		};
 
 		struct ShiftT
 		{
-			std::size_t TokenIndex;
+			std::size_t TokenIndex = 0;
 		};
 
-		union {
-			ReduceT Reduce;
-			ShiftT Shift;
-		};
+		ReduceT Reduce;
+		ShiftT Shift;
 
 		constexpr bool IsTerminal() const { return Value.IsTerminal(); }
 		constexpr bool IsNoTerminal() const { return Value.IsNoTerminal(); }
@@ -441,7 +439,7 @@ namespace Potato::SLRX
 
 	};
 
-	struct CoreProcessor
+	struct SymbolProcessor
 	{
 
 		struct CacheSymbol
@@ -450,6 +448,20 @@ namespace Potato::SLRX
 			std::size_t TokenIndex;
 		};
 
+		SymbolProcessor(TableWrapper Wrapper);
+		SymbolProcessor(LRX const& Wrapper);
+		bool Consume(Symbol Value, std::size_t TokenIndex, std::vector<Symbol>* SuggestSymbols = nullptr);
+		std::span<ParsingStep const> GetSteps() const { return std::span(Steps); }
+		void Clear();
+		void ClearSteps() { Steps.clear(); }
+
+		static std::optional<std::vector<ParsingStep>> InsertPredictStep(std::span<ParsingStep const> Steps);
+
+		std::optional<std::vector<ParsingStep>> InsertPredictStep(){ return InsertPredictStep(std::span(Steps)); }
+		bool EndOfFile(std::vector<Symbol>* SuggestSymbols = nullptr) { return Consume(Symbol::EndOfFile(), 0, SuggestSymbols); }
+
+	private:
+
 		struct ConsumeResult
 		{
 			std::size_t State;
@@ -457,9 +469,8 @@ namespace Potato::SLRX
 			std::optional<LR0::Reduce> Reduce;
 		};
 
-		static std::optional<ConsumeResult> Consume(LRX const& Table, std::size_t TopState, std::span<std::size_t const> States, std::size_t NodeRequireOffset, Symbol Value, std::vector<Symbol>* SuggestSymbol);
-		static std::optional<ConsumeResult> Consume(TableWrapper Wrapper, std::size_t TopState, std::span<std::size_t const> States, std::size_t NodeRequireOffset, Symbol Value, std::vector<Symbol>* SuggestSymbol);
-
+		std::optional<ConsumeResult> ConsumeImp(LRX const&, Symbol Value, std::vector<Symbol>* SuggestSymbols = nullptr) const;
+		std::optional<ConsumeResult> ConsumeImp(TableWrapper , Symbol Value, std::vector<Symbol>* SuggestSymbols = nullptr) const;
 
 		struct ReduceResult
 		{
@@ -467,70 +478,18 @@ namespace Potato::SLRX
 			std::size_t State;
 		};
 
-		static std::optional<ReduceResult> TryReduce(LRX const& Table, std::size_t TopState, std::span<std::size_t const> States);
-		static std::optional<ReduceResult> TryReduce(TableWrapper Table, std::size_t TopState, std::span<std::size_t const> States);
+		std::optional<ReduceResult> TryReduceImp(LRX const& Table) const;
+		std::optional<ReduceResult> TryReduceImp(TableWrapper Table) const;
 
-		static std::optional<std::vector<ParsingStep>> InsertPredictStep(std::span<ParsingStep const> Steps);
-		
-		std::deque<CoreProcessor::CacheSymbol> CacheSymbols;
+		void TryReduce();
+
+		std::deque<CacheSymbol> CacheSymbols;
 		std::vector<std::size_t> States;
 		std::size_t CurrentTopState;
 		std::size_t RequireNode;
 		std::vector<ParsingStep> Steps;
-		std::span<ParsingStep const> GetSteps() const { return std::span(Steps); }
-
-		void Clear(std::size_t StartupNodeIndex);
-		void ClearSteps(){ Steps.clear(); }
-
-	};
-
-	struct LRXProcessor : protected CoreProcessor
-	{
-
-		LRXProcessor(LRX const& Ref) : Reference(Ref) {
-			Clear();
-		}
-
-		bool Consume(Symbol Value, std::size_t TokenIndex, std::vector<Symbol>* SuggestSymbols = nullptr);
-		bool EndOfFile(std::vector<Symbol>* SuggestSymbols = nullptr) { return Consume(Symbol::EndOfFile(), 0, SuggestSymbols); }
-
-		void Clear() {
-			CoreProcessor::Clear(LRX::StartupOffset());
-			TryReduce();
-		}
-
-		void ClearSteps(){ CoreProcessor::ClearSteps(); }
-
-		std::span<ParsingStep const> GetSteps() const { return CoreProcessor::GetSteps(); }
-
-	protected:
-
-		void TryReduce();
-
-		LRX const& Reference;
-	};
-
-	struct TableProcessor : public CoreProcessor
-	{
-		TableProcessor(TableWrapper Wrapper) : Wrapper(Wrapper) {
-			Clear();
-		}
-
-		bool Consume(Symbol Value, std::size_t TokenIndex, std::vector<Symbol>* SuggestSymbols = nullptr);
-		bool EndOfFile(std::vector<Symbol>* SuggestSymbols = nullptr) { return Consume(Symbol::EndOfFile(), 0, SuggestSymbols); }
-
-		void Clear() {
-			CoreProcessor::Clear(Wrapper.StartupNodeIndex());
-			TryReduce();
-		}
-
-		std::span<ParsingStep const> GetSteps() const { return CoreProcessor::GetSteps(); }
-
-	protected:
-
-		void TryReduce();
-
-		TableWrapper Wrapper;
+		std::variant<TableWrapper, std::reference_wrapper<LRX const>> Table;
+		std::size_t StartupOffset;
 	};
 
 	struct Table

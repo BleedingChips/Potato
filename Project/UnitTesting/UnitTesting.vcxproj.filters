@@ -21,22 +21,10 @@
     <ClCompile Include="SLRXSample.cpp">
       <Filter>Resource Files</Filter>
     </ClCompile>
-    <ClCompile Include="IntrusicePointerSample.cpp">
-      <Filter>Resource Files</Filter>
-    </ClCompile>
-    <ClCompile Include="MiscSample.cpp">
+    <ClCompile Include="TMPSample.cpp">
       <Filter>Resource Files</Filter>
     </ClCompile>
     <ClCompile Include="RegSample.cpp">
-      <Filter>Resource Files</Filter>
-    </ClCompile>
-    <ClCompile Include="StrEncodeSample.cpp">
-      <Filter>Resource Files</Filter>
-    </ClCompile>
-    <ClCompile Include="StrFormatSample.cpp">
-      <Filter>Resource Files</Filter>
-    </ClCompile>
-    <ClCompile Include="TMPSample.cpp">
       <Filter>Resource Files</Filter>
     </ClCompile>
     <ClCompile Include="EbnfSample.cpp">

@@ -898,7 +898,7 @@ namespace Potato::Reg
 		Output.AddComsumeEdge(N2, N3, { {EndOfFile(), EndOfFile() + 1} });
 		auto Wrapper = RexSLRXWrapper();
 
-		SLRX::TableProcessor Pro(Wrapper);
+		SLRX::SymbolProcessor Pro(Wrapper);
 		std::size_t TokenIndex = 0;
 		auto Spans = Translater.GetSpan();
 		for (auto& Ite : Translater.GetSpan())
@@ -2446,9 +2446,9 @@ namespace Potato::Reg
 		return KAResult;
 	}
 
-	void MatchProcessor::Clear(std::size_t StartupNodeIndex)
+	void MatchProcessor::Clear()
 	{
-		NodeIndex = StartupNodeIndex;
+		NodeIndex = StartupNodeOffset;
 		Contents.Clear();
 		TempBuffer.Clear();
 	}
@@ -2470,93 +2470,59 @@ namespace Potato::Reg
 		return false;
 	}
 
-	template<typename TableT>
-	std::optional<MatchProcessor::Result> MatchProcessorEndOfFile(MatchProcessor& Pro, std::size_t TokenIndex, TableT& Table, std::size_t StartupIndex)
+	bool MatchProcessor::Consume(char32_t Symbol, std::size_t TokenIndex) {
+		assert(Symbol != Reg::EndOfFile());
+		TempBuffer.Clear();
+		std::optional<CoreProcessor::Result> Re;
+		if (std::holds_alternative<std::reference_wrapper<DFA const>>(Table))
+		{
+			Re = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<std::reference_wrapper<DFA const>>(Table).get(), Symbol, TokenIndex, false);
+		}
+		else {
+			Re = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<TableWrapper>(Table), Symbol, TokenIndex, false);
+		}
+		if (Re.has_value())
+		{
+			assert(!Re->AcceptData);
+			NodeIndex = Re->NextNodeIndex;
+			if (Re->ContentNeedChange)
+				std::swap(TempBuffer, Contents);
+			return true;
+		}
+		return false;
+	}
+
+	auto MatchProcessor::EndOfFile(std::size_t TokenIndex) -> std::optional<Result>
 	{
-		Pro.TempBuffer.Clear();
-		auto Re = CoreProcessor::ConsumeSymbol(Pro.TempBuffer, Pro.Contents, Pro.NodeIndex, Table, Reg::EndOfFile(), TokenIndex, false);
+		TempBuffer.Clear();
+		std::optional<CoreProcessor::Result> Re;
+		if (std::holds_alternative<std::reference_wrapper<DFA const>>(Table))
+		{
+			Re = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<std::reference_wrapper<DFA const>>(Table).get(), Reg::EndOfFile(), TokenIndex, false);
+		}
+		else {
+			Re = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<TableWrapper>(Table), Reg::EndOfFile(), TokenIndex, false);
+		}
 		if (Re.has_value())
 		{
 			assert(Re->AcceptData);
 			MatchProcessor::Result NRe;
 			NRe.AcceptData = *Re->AcceptData.AcceptData;
-			auto Span = Re->AcceptData.CaptureSpan.Slice(Pro.Contents.CaptureBlocks);
+			auto Span = Re->AcceptData.CaptureSpan.Slice(Contents.CaptureBlocks);
 			for (auto Ite : Span)
 			{
 				NRe.SubCaptures.push_back(Ite.CaptureData);
 			}
-			Pro.Clear(StartupIndex);
+			Clear();
 			return NRe;
 		}
 		return {};
 	}
 
-	bool DFAMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex) {
-		return MatchProcessorConsumeSymbol(*this, Tables, Symbol, TokenIndex);
-	}
-
-	auto DFAMatchProcessor::EndOfFile(std::size_t TokenIndex) ->std::optional<Result>
-	{
-		return MatchProcessorEndOfFile(*this, TokenIndex, Tables, DFA::StartupNode());
-	}
-
-	bool TableMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex) {
-		return MatchProcessorConsumeSymbol(*this, Wrapper, Symbol, TokenIndex);
-	}
-	auto TableMatchProcessor::EndOfFile(std::size_t TokenIndex) ->std::optional<Result> {
-		return MatchProcessorEndOfFile(*this, TokenIndex, Wrapper, TableWrapper::StartupNode());
-	}
-
 	template<typename TableT>
 	std::optional<std::optional<HeadMatchProcessor::Result>> HeadMatchProcessorConsumeSymbol(HeadMatchProcessor& Pro, char32_t Symbol, std::size_t TokenIndex, TableT& Table, std::size_t StartupNodeIndex, bool Greedy = false)
 	{
-		assert(Symbol != Reg::EndOfFile());
-		Pro.TempBuffer.Clear();
-		auto Re1 = CoreProcessor::KeepAcceptConsumeSymbol(Pro.TempBuffer, Pro.Contents, Pro.NodeIndex, Table, Symbol, TokenIndex);
-		if (Re1.AcceptData)
-		{
-			HeadMatchProcessor::Result Re;
-			if (Pro.CacheResult.has_value())
-			{
-				Re = std::move(*Pro.CacheResult);
-				Pro.CacheResult.reset();
-			}
-			Re.AcceptData = *Re1.AcceptData.AcceptData;
-			std::span<ProcessorContent::CaptureBlock const> Span = Re1.ContentNeedChange ? std::span(Pro.TempBuffer.CaptureBlocks) : std::span(Pro.Contents.CaptureBlocks);
-			Re.SubCaptures.clear();
-			for (auto Ite : Span)
-				Re.SubCaptures.push_back(Ite.CaptureData);
-			Re.MainCapture = { 0, TokenIndex };
-			Pro.CacheResult = std::move(Re);
-
-			if (!Greedy && !Re1.MeetAcceptRequireConsume)
-			{
-				auto Re = std::move(Pro.CacheResult);
-				Pro.Clear(StartupNodeIndex);
-				return Re;
-			}
-		}
-
-		auto Re2 = CoreProcessor::ConsumeSymbol(Pro.TempBuffer, Pro.Contents, Pro.NodeIndex, Table, Symbol, TokenIndex, true);
-		if (Re2.has_value())
-		{
-			assert(!Re2->AcceptData);
-			Pro.NodeIndex = Re2->NextNodeIndex;
-			if (Re2->ContentNeedChange)
-				std::swap(Pro.TempBuffer, Pro.Contents);
-			return std::optional<HeadMatchProcessor::Result>{};
-		}
-		else {
-			if (Pro.CacheResult.has_value())
-			{
-				auto Re = std::move(Pro.CacheResult);
-				Pro.Clear(StartupNodeIndex);
-				return Re;
-			}
-			else {
-				return {};
-			}
-		}
+		
 	}
 
 	template<typename TableT>
@@ -2594,36 +2560,124 @@ namespace Potato::Reg
 	}
 	
 
-	void HeadMatchProcessor::Clear(std::size_t StartupNodeIndex)
+	void HeadMatchProcessor::Clear()
 	{
 		Contents.Clear();
 		TempBuffer.Clear();
 		CacheResult.reset();
-		NodeIndex = StartupNodeIndex;
+		NodeIndex = StartupNode;
 	}
 
-	auto DFAHeadMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy) ->std::optional<std::optional<Result>>
+	auto HeadMatchProcessor::Consume(char32_t Symbol, std::size_t TokenIndex) ->std::optional<std::optional<Result>>
 	{
-		return HeadMatchProcessorConsumeSymbol(*this, Symbol, TokenIndex, Table, DFA::StartupNode(), Greedy);
+		assert(Symbol != Reg::EndOfFile());
+		TempBuffer.Clear();
+		CoreProcessor::KeepAcceptResult Re1;
+		if (std::holds_alternative<std::reference_wrapper<DFA const>>(Table))
+		{
+			Re1 = CoreProcessor::KeepAcceptConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<std::reference_wrapper<DFA const>>(Table).get(), Symbol, TokenIndex);
+		}
+		else {
+			Re1 = CoreProcessor::KeepAcceptConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<TableWrapper>(Table), Symbol, TokenIndex);
+		}
+		if (Re1.AcceptData)
+		{
+			HeadMatchProcessor::Result Re;
+			if (CacheResult.has_value())
+			{
+				Re = std::move(*CacheResult);
+				CacheResult.reset();
+			}
+			Re.AcceptData = *Re1.AcceptData.AcceptData;
+			std::span<ProcessorContent::CaptureBlock const> Span = Re1.ContentNeedChange ? std::span(TempBuffer.CaptureBlocks) : std::span(Contents.CaptureBlocks);
+			Re.SubCaptures.clear();
+			for (auto Ite : Span)
+				Re.SubCaptures.push_back(Ite.CaptureData);
+			Re.MainCapture = { 0, TokenIndex };
+			CacheResult = std::move(Re);
+
+			if (!Greedy && !Re1.MeetAcceptRequireConsume)
+			{
+				auto Re = std::move(CacheResult);
+				Clear();
+				return Re;
+			}
+		}
+
+		std::optional<CoreProcessor::Result> Re2;
+		if (std::holds_alternative<std::reference_wrapper<DFA const>>(Table))
+		{
+			Re2 = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<std::reference_wrapper<DFA const>>(Table).get(), Symbol, TokenIndex, true);
+		}
+		else {
+			Re2 = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<TableWrapper>(Table), Symbol, TokenIndex, true);
+		}
+
+		if (Re2.has_value())
+		{
+			assert(!Re2->AcceptData);
+			NodeIndex = Re2->NextNodeIndex;
+			if (Re2->ContentNeedChange)
+				std::swap(TempBuffer, Contents);
+			return std::optional<HeadMatchProcessor::Result>{};
+		}
+		else {
+			if (CacheResult.has_value())
+			{
+				auto Re = std::move(CacheResult);
+				Clear();
+				return Re;
+			}
+			else {
+				return {};
+			}
+		}
 	}
 
-	auto DFAHeadMatchProcessor::EndOfFile(std::size_t TokenIndex)->std::optional<Result>
+	auto HeadMatchProcessor::EndOfFile(std::size_t TokenIndex) -> std::optional<Result>
 	{
-		return HeadMatchProcessorEndOfFile(*this, TokenIndex, Table, DFA::StartupNode());
+		TempBuffer.Clear();
+
+		std::optional<CoreProcessor::Result> Re1;
+		if (std::holds_alternative<std::reference_wrapper<DFA const>>(Table))
+		{
+			Re1 = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<std::reference_wrapper<DFA const>>(Table).get(), Reg::EndOfFile(), TokenIndex, true);
+		}
+		else {
+			Re1 = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<TableWrapper>(Table), Reg::EndOfFile(), TokenIndex, true);
+		}
+
+		if (Re1.has_value())
+		{
+			assert(Re1->AcceptData);
+			HeadMatchProcessor::Result Re;
+			if (CacheResult.has_value())
+			{
+				Re = std::move(*CacheResult);
+				CacheResult.reset();
+			}
+			Re.AcceptData = *Re1->AcceptData.AcceptData;
+			std::span<ProcessorContent::CaptureBlock const> Span = Re1->ContentNeedChange ? std::span(TempBuffer.CaptureBlocks) : std::span(Contents.CaptureBlocks);
+			Re.SubCaptures.clear();
+			for (auto Ite : Span)
+				Re.SubCaptures.push_back(Ite.CaptureData);
+			Re.MainCapture = { 0, TokenIndex };
+			Clear();
+			return Re;
+		}
+		if (CacheResult.has_value())
+		{
+			HeadMatchProcessor::Result Re = std::move(*CacheResult);
+			Clear();
+			return Re;
+		}
+		else {
+			return {};
+		}
 	}
 
-	auto TableHeadMatchProcessor::ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy) ->std::optional<std::optional<Result>>
-	{
-		return HeadMatchProcessorConsumeSymbol(*this, Symbol, TokenIndex, Wrapper, TableWrapper::StartupNode(), Greedy);
-	}
-
-	auto TableHeadMatchProcessor::EndOfFile(std::size_t TokenIndex)->std::optional<Result>
-	{
-		return HeadMatchProcessorEndOfFile(*this, TokenIndex, Wrapper, TableWrapper::StartupNode());
-	}
-
-	template<typename Processor, typename CharT>
-	auto MatchTemp(Processor& Pro, std::basic_string_view<CharT> Str) ->MatchResult<typename Processor::Result>
+	template<typename CharT>
+	auto MatchTemp(MatchProcessor& Pro, std::basic_string_view<CharT> Str) ->MatchResult<typename MatchProcessor::Result>
 	{
 		char32_t TempBuffer;
 		std::span<char32_t> OutputSpan{ &TempBuffer, 1 };
@@ -2633,7 +2687,7 @@ namespace Potato::Reg
 		{
 			auto Re2 = StrEncode::CharEncoder<CharT, char32_t>::EncodeOnceUnSafe(Str, OutputSpan);
 			assert(Re2);
-			auto Re = Pro.ConsumeSymbol(TempBuffer, TotalSize - Str.size());
+			auto Re = Pro.Consume(TempBuffer, TotalSize - Str.size());
 			if (Re)
 			{
 				Str = Str.substr(Re2.SourceSpace);
@@ -2645,18 +2699,13 @@ namespace Potato::Reg
 		return { Pro.EndOfFile(TotalSize), TotalSize };
 	}
 
-	auto Match(DFAMatchProcessor& Pro, std::u8string_view Str)->MatchResult<DFAMatchProcessor::Result>
-	{
-		return MatchTemp(Pro, Str);
-	}
-	
-	auto Match(TableMatchProcessor& Pro, std::u8string_view Str)->MatchResult<TableMatchProcessor::Result>
+	auto Match(MatchProcessor& Pro, std::u8string_view Str)->MatchResult<MatchProcessor::Result>
 	{
 		return MatchTemp(Pro, Str);
 	}
 
-	template<typename Processor, typename CharT>
-	auto HeadMatchTemp(Processor& Pro, std::basic_string_view<CharT> Str, bool Greedy) ->MatchResult<typename Processor::Result>
+	template<typename CharT>
+	auto HeadMatchTemp(HeadMatchProcessor& Pro, std::basic_string_view<CharT> Str) ->MatchResult<typename HeadMatchProcessor::Result>
 	{
 		char32_t TempBuffer;
 		std::span<char32_t> OutputSpan{ &TempBuffer, 1 };
@@ -2666,7 +2715,7 @@ namespace Potato::Reg
 		{
 			auto Re2 = StrEncode::CharEncoder<CharT, char32_t>::EncodeOnceUnSafe(Str, OutputSpan);
 			assert(Re2);
-			auto Re = Pro.ConsumeSymbol(TempBuffer, TotalSize - Str.size(), Greedy);
+			auto Re = Pro.Consume(TempBuffer, TotalSize - Str.size());
 			if (Re.has_value())
 			{
 				if (Re->has_value())
@@ -2681,14 +2730,9 @@ namespace Potato::Reg
 		return { Pro.EndOfFile(TotalSize), TotalSize };
 	}
 
-	auto HeadMatch(DFAHeadMatchProcessor& Pro, std::u8string_view Str, bool Greedy)->MatchResult<DFAHeadMatchProcessor::Result>
+	auto HeadMatch(HeadMatchProcessor& Pro, std::u8string_view Str)->MatchResult<HeadMatchProcessor::Result>
 	{
-		return HeadMatchTemp(Pro, Str, Greedy);
-	}
-
-	auto HeadMatch(TableHeadMatchProcessor& Pro, std::u8string_view Str, bool Greedy)->MatchResult<TableHeadMatchProcessor::Result>
-	{
-		return HeadMatchTemp(Pro, Str, Greedy);
+		return HeadMatchTemp(Pro, Str);
 	}
 
 	void MulityRegCreater::LowPriorityLink(std::u8string_view Str, bool IsRow, Accept Acce)

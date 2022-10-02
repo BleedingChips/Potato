@@ -17,7 +17,7 @@ Num := '[1-9][0-9]*' : [1]
 
 %%%%
 
-$ := <Exp> 6;
+$ := <Exp> ;
 
 <Exp> := Num : [1];
 	:= <Exp> '+' <Exp> : [2];
@@ -49,23 +49,86 @@ $ := <Exp>;
 
 	Ebnf::EBNFX Bnfx = EBNFX::Create(EbnfCode1);
 	 
-	std::u8string_view Str = u8R"(1223 + 2312+12321- 232 *232)";
+	std::u8string_view Str = u8R"((1+3+4*2) / 4)";
 
-	LexicalEBNFXProcessor Pro1(Bnfx);
+	LexicalProcessor Pro1(Bnfx);
 
-	while (!Str.empty())
+	auto Tabe2 = TableWrapper::Create(EbnfCode1);
+
+	auto Ite = Str;
+
+
+	while (!Ite.empty())
 	{
-		auto I = Pro1.Consume(Str);
+		auto I = Pro1.Consume(Ite, Str.size() - Ite.size());
 		if (I.has_value())
 		{
-			Str = *I;
+			Ite = *I;
 		}
 		else {
 			volatile int i = 0;
 		}
 	}
 
-	auto List = SyntaxEBNFXProcessor::Process(Bnfx, Pro1.GetSpan(), true);
+	LexicalProcessor Pro(TableWrapper{Tabe2});
+
+	Ite = Str;
+
+	while (!Ite.empty())
+	{
+		auto I = Pro.Consume(Ite, Str.size() - Ite.size());
+		if (I.has_value())
+		{
+			Ite = *I;
+		}
+		else {
+			volatile int i = 0;
+		}
+	}
+
+	auto List = SyntaxProcessor::Process(Bnfx, Pro1.GetSpan(), false);
+
+	auto Re = ProcessStep(std::span(*List.Element), [](VariantElement Ele)->std::any{
+		if (Ele.IsTerminal())
+		{
+			auto Te = Ele.AsTerminal();
+			if (Te.Shift.Mask == 1)
+			{
+				int64_t I = 0;
+				StrFormat::DirectScan(Te.Shift.CaptureValue, I);
+				return I;
+			}
+			return {};
+		}
+		else {
+			auto Te = Ele.AsNoTerminal();
+			if (!Te.Reduce.IsPredict)
+			{
+				switch (Te.Reduce.Mask)
+				{
+				case 1:
+					return Te[0].Consume();
+				case 2:
+				{
+					auto I1 = Te[0].Consume<int64_t>();
+					auto I2 = Te[2].Consume<int64_t>();
+					return I1 + I2;
+				}
+				case 3:
+					return Te[0].Consume<int64_t>() * Te[2].Consume<int64_t>();
+				case 4:
+					return Te[0].Consume<int64_t>() / Te[2].Consume<int64_t>();
+				case 5:
+					return Te[0].Consume<int64_t>() - Te[2].Consume<int64_t>();
+				case 6:
+					return Te[1].Consume();
+				}
+			}
+			return {};
+		}
+	});
+
+	auto P = std::any_cast<int64_t>(*Re);
 
 
 	volatile int i = 0;

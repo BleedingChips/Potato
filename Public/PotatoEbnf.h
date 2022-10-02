@@ -14,6 +14,31 @@ namespace Potato::Ebnf
 		std::vector<std::u8string> MappingNoterminalSymbols;
 		Reg::DFA Lexical;
 		SLRX::LRX Syntax;
+
+		SLRX::LRX const& GetSyntaxWrapper() const { return Syntax; }
+		Reg::DFA const& GetLexicalWrapper() const { return Lexical; }
+		std::optional<std::u8string_view> ReadSymbol(SLRX::Symbol Value) const;
+		bool IsNoName(SLRX::Symbol Value) const;
+	};
+
+	using StandardT = Reg::StandardT;
+
+	struct TableWrapper
+	{
+		static std::size_t CalculateRequireSpace(EBNFX const& Ref);
+		static std::size_t SerilizeTo(std::span<StandardT> OutputBuffer, EBNFX const& Ref);
+		static std::vector<StandardT> Create(EBNFX const& Le);
+		static std::vector<StandardT> Create(std::u8string_view Str) {
+			return Create(EBNFX::Create(Str));
+		}
+
+		SLRX::TableWrapper GetSyntaxWrapper() const;
+		Reg::TableWrapper GetLexicalWrapper() const;
+		std::optional<std::u8string_view> ReadSymbol(SLRX::Symbol Value) const;
+		operator bool() const { return !Wrapper.empty(); }
+		bool IsNoName(SLRX::Symbol Value) const;
+
+		std::span<StandardT const> Wrapper; 
 	};
 
 	struct LexicalElement
@@ -33,15 +58,21 @@ namespace Potato::Ebnf
 		operator bool() const { return Element.has_value(); }
 	};
 
-	struct LexicalEBNFXProcessor
+	struct LexicalProcessor
 	{
-		std::optional<std::u8string_view> Consume(std::u8string_view Str);
-		LexicalEBNFXProcessor(EBNFX const& Table, std::size_t Offset = 0) : Table(Table), StrOffset(Offset) {}
-		std::span<LexicalElement> GetSpan(){ return std::span(Elements); }
-	private:
-		EBNFX const& Table;
+
+		std::optional<std::u8string_view> Consume(std::u8string_view Str, std::size_t MarkedOffset);
+
+		LexicalProcessor(EBNFX const& Table) : Pro(Table.GetLexicalWrapper(), true), Table(Table) {}
+		LexicalProcessor(TableWrapper Table) : Pro(Table.GetLexicalWrapper(), true), Table(Table) {}
+		std::span<LexicalElement> GetSpan() { return std::span(Elements); }
+		void Clear() { Elements.clear(); }
+
+	protected:
+
 		std::vector<LexicalElement> Elements;
-		std::size_t StrOffset;
+		Reg::HeadMatchProcessor Pro;
+		std::variant<TableWrapper, std::reference_wrapper<EBNFX const>> Table;
 	};
 
 	struct ParsingStep
@@ -64,19 +95,29 @@ namespace Potato::Ebnf
 		bool IsTerminal() const { return std::holds_alternative<ShiftT>(Data); }
 	};
 
-	struct SyntaxEBNFXProcessor
+	struct SyntaxProcessor
 	{
 		bool Consume(LexicalElement Element);
 		bool EndOfFile();
-		SyntaxEBNFXProcessor(EBNFX const& Table) : Table(Table), Pro(Table.Syntax) {}
 		std::span<ParsingStep> GetSteps() { return std::span(ParsingSteps); }
-		static Result<std::vector<ParsingStep>> Process(EBNFX const& Table, std::span<LexicalElement const> Eles, bool Predict = false);
+		static Result<std::vector<ParsingStep>> Process(EBNFX const& Table, std::span<LexicalElement const> Eles, bool Predict = false) {
+			SyntaxProcessor Pro{Table};
+			return Process(Pro, Eles, Predict);
+		}
+		static Result<std::vector<ParsingStep>> Process(TableWrapper Table, std::span<LexicalElement const> Eles, bool Predict = false) {
+			SyntaxProcessor Pro{ Table };
+			return Process(Pro, Eles, Predict);
+		}
+		SyntaxProcessor(EBNFX const& Table) : Pro(Table.GetSyntaxWrapper()), Table(Table) {}
+		SyntaxProcessor(TableWrapper Table) : Pro(Table.GetSyntaxWrapper()), Table(Table) {}
 	protected:
-		SLRX::LRXProcessor Pro;
-		EBNFX const& Table;
+		static Result<std::vector<ParsingStep>> Process(SyntaxProcessor& Pro, std::span<LexicalElement const> Eles, bool Predict = false);
+		SLRX::SymbolProcessor Pro;
 		std::vector<LexicalElement> TemporaryElementBuffer;
 		std::vector<ParsingStep> ParsingSteps;
+		std::variant<TableWrapper, std::reference_wrapper<EBNFX const>> Table;
 		std::size_t HandleStep(std::span<SLRX::ParsingStep const> Steps);
+		std::tuple<ParsingStep, std::size_t> Translate(SLRX::ParsingStep In, std::span<LexicalElement const> TemporaryElementBuffer) const;
 	};
 
 	struct TElement
@@ -90,7 +131,7 @@ namespace Potato::Ebnf
 		struct MetaData
 		{
 			std::u8string_view Symbol;
-			Misc::IndexSpan<> TokenIndex;
+			Misc::IndexSpan<> StrIndex;
 		};
 
 		struct DataT
@@ -99,7 +140,7 @@ namespace Potato::Ebnf
 			SLRX::ElementData Data;
 
 			template<typename Type>
-			decltype(auto) Consume() { Data.Consume<Type>(); }
+			decltype(auto) Consume() { return Data.Consume<Type>(); }
 
 			decltype(auto) Consume() { return Data.Consume(); }
 			template<typename Type>
@@ -134,8 +175,51 @@ namespace Potato::Ebnf
 
 		TypeT Type;
 		std::size_t AppendData;
-		std::vector<SLRX::NTElement::DataT> Datas;
+		std::vector<NTElement::DataT> Datas;
 	};
+
+	struct PasringStepProcessor
+	{
+		struct Result
+		{
+			std::optional<VariantElement> Element;
+			std::optional<NTElement::MetaData> MetaData;
+		};
+
+		std::optional<Result> Consume(ParsingStep Step);
+		void Push(NTElement::MetaData MetaData, std::any Data) { TemporaryDatas.clear(); Datas.push_back({ MetaData, std::move(Data)}); }
+		std::optional<std::any> EndOfFile();
+
+	private:
+
+		std::vector<NTElement::DataT> Datas;
+		std::vector<NTElement::DataT> TemporaryDatas;
+	};
+
+	template<typename Func>
+	std::optional<std::any> ProcessStep(std::span<ParsingStep const> Steps, Func&& F)
+	{
+		PasringStepProcessor Pro;
+		for (auto Ite : Steps)
+		{
+			auto Re = Pro.Consume(Ite);
+			if (Re.has_value())
+			{
+				if (Re->Element.has_value())
+				{
+					auto Ie = std::forward<Func>(F)(*Re->Element);
+					if (Re->MetaData.has_value())
+					{
+						Pro.Push(*Re->MetaData, std::move(Ie));
+					}
+				}
+			}
+			else {
+				return {};
+			}
+		}
+		return Pro.EndOfFile();
+	}
 
 	/*
 

@@ -315,38 +315,19 @@ namespace Potato::Reg
 			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ SubCaptures }; }
 		};
 
-		void Clear(std::size_t StartupNodeIndex);
-		MatchProcessor(std::size_t StartupNode) : NodeIndex(StartupNode) {}
-		MatchProcessor(MatchProcessor const&) = default;
+		MatchProcessor(DFA const& Table) : Table(Table), StartupNodeOffset(DFA::StartupNode()), NodeIndex(DFA::StartupNode()) {}
+		MatchProcessor(TableWrapper Table) : Table(Table), StartupNodeOffset(Table.StartupNode()), NodeIndex(Table.StartupNode()) {}
+		bool Consume(char32_t Symbol, std::size_t TokenIndex);
+		std::optional<Result> EndOfFile(std::size_t TokenIndex);
+		void Clear();
+
+	private:
 
 		ProcessorContent Contents;
 		ProcessorContent TempBuffer;
 		std::size_t NodeIndex = 0;
-	};
-
-	struct DFAMatchProcessor : protected MatchProcessor
-	{
-		using Result = typename MatchProcessor::Result;
-
-		DFAMatchProcessor(DFA const& Tables) : Tables(Tables), MatchProcessor(DFA::StartupNode()) {}
-		DFAMatchProcessor(DFAMatchProcessor const&) = default;
-		bool ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex);
-		std::optional<Result> EndOfFile(std::size_t TokenIndex);
-		void Clear(){ MatchProcessor::Clear(DFA::StartupNode()); }
-	protected:
-		DFA const& Tables;
-	};
-
-	struct TableMatchProcessor : protected MatchProcessor
-	{
-		using Result = typename MatchProcessor::Result;
-
-		TableMatchProcessor(TableWrapper Wrapper) : Wrapper(Wrapper), MatchProcessor(TableWrapper::StartupNode()) {}
-		TableMatchProcessor(TableMatchProcessor const&) = default;
-		bool ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex);
-		std::optional<Result> EndOfFile(std::size_t TokenIndex);
-		void Clear() { MatchProcessor::Clear(TableWrapper::StartupNode()); }
-		TableWrapper Wrapper;
+		std::size_t StartupNodeOffset;
+		std::variant<TableWrapper, std::reference_wrapper<DFA const>> Table;
 	};
 
 	struct HeadMatchProcessor
@@ -359,41 +340,21 @@ namespace Potato::Reg
 			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ SubCaptures }; }
 		};
 
-		HeadMatchProcessor(std::size_t StartupNodeIndex) : NodeIndex(StartupNodeIndex) {}
+		HeadMatchProcessor(DFA const& Table, bool Greedy = false) : Table(Table), StartupNode(DFA::StartupNode()), NodeIndex(DFA::StartupNode()), Greedy(Greedy) {}
+		HeadMatchProcessor(TableWrapper Table, bool Greedy = false) : Table(Table), StartupNode(Table.StartupNode()), NodeIndex(Table.StartupNode()), Greedy(Greedy) {}
 		HeadMatchProcessor(HeadMatchProcessor const&) = default;
-		void Clear(std::size_t StartupNodeIndex);
+
+		std::optional<std::optional<Result>> Consume(char32_t Symbol, std::size_t TokenIndex);
+		std::optional<Result> EndOfFile(std::size_t TokenIndex);
+		void Clear();
 
 		ProcessorContent Contents;
 		ProcessorContent TempBuffer;
 		std::optional<Result> CacheResult;
 		std::size_t NodeIndex = 0;
-	};
-
-	struct DFAHeadMatchProcessor : protected HeadMatchProcessor
-	{
-		using Result = typename HeadMatchProcessor::Result;
-
-		DFAHeadMatchProcessor(DFA const& Tables) : Table(Tables), HeadMatchProcessor(DFA::StartupNode()) {}
-		DFAHeadMatchProcessor(DFAHeadMatchProcessor const&) = default;
-		std::optional<std::optional<Result>> ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy = false);
-		std::optional<Result> EndOfFile(std::size_t TokenIndex);
-		void Clear(){ HeadMatchProcessor::Clear(DFA::StartupNode()); }
-	protected:
-		DFA const& Table;
-	};
-
-	struct TableHeadMatchProcessor : protected HeadMatchProcessor
-	{
-		using Result = typename HeadMatchProcessor::Result;
-
-		TableHeadMatchProcessor(TableWrapper Wrapper) : Wrapper(Wrapper), HeadMatchProcessor(TableWrapper::StartupNode()) {}
-		TableHeadMatchProcessor(TableHeadMatchProcessor const&) = default;
-		std::optional<std::span<char8_t const>> ConsumeSymbol(std::span<char8_t const> Symbol, std::size_t TokenIndex, bool Greedy = false);
-		std::optional<std::optional<Result>> ConsumeSymbol(char32_t Symbol, std::size_t TokenIndex, bool Greedy = false);
-		std::optional<Result> EndOfFile(std::size_t TokenIndex);
-		void Clear() { HeadMatchProcessor::Clear(TableWrapper::StartupNode()); }
-	protected:
-		TableWrapper Wrapper;
+		std::size_t StartupNode = 0;
+		bool Greedy = false;
+		std::variant<TableWrapper, std::reference_wrapper<DFA const>> Table;
 	};
 
 	template<typename ResultT>
@@ -406,27 +367,26 @@ namespace Potato::Reg
 		ResultT const* operator->() const { return SuccessdResult.operator->(); }
 	};
 
-	auto Match(DFAMatchProcessor& Processor, std::u8string_view Str) ->MatchResult<DFAMatchProcessor::Result>;
-	auto Match(TableMatchProcessor& Processor, std::u8string_view Str)->MatchResult<TableMatchProcessor::Result>;
-	inline auto Match(DFA const& Table, std::u8string_view Str)->MatchResult<DFAMatchProcessor::Result>{
-		DFAMatchProcessor Pro{Table};
+	auto Match(MatchProcessor& Processor, std::u8string_view Str) ->MatchResult<MatchProcessor::Result>;
+	inline auto Match(DFA const& Table, std::u8string_view Str)->MatchResult<MatchProcessor::Result>{
+		MatchProcessor Pro{Table};
 		return Match(Pro, Str);
 	}
-	inline auto Match(TableWrapper Wrapper, std::u8string_view Str)->MatchResult<TableMatchProcessor::Result> {
-		TableMatchProcessor Pro{ Wrapper };
+	inline auto Match(TableWrapper Wrapper, std::u8string_view Str)->MatchResult<MatchProcessor::Result> {
+		MatchProcessor Pro{ Wrapper };
 		return Match(Pro, Str);
 	}
-	auto HeadMatch(DFAHeadMatchProcessor& Table, std::u8string_view Str, bool Greddy = false)->MatchResult<DFAHeadMatchProcessor::Result>;
-	inline auto HeadMatch(DFA const& Table, std::u8string_view Str, bool Greddy = false)->MatchResult<DFAHeadMatchProcessor::Result>
+	auto HeadMatch(HeadMatchProcessor& Table, std::u8string_view Str)->MatchResult<HeadMatchProcessor::Result>;
+	inline auto HeadMatch(DFA const& Table, std::u8string_view Str, bool Greddy = false)->MatchResult<HeadMatchProcessor::Result>
 	{
-		DFAHeadMatchProcessor Pro{ Table };
-		return HeadMatch(Pro, Str, Greddy);
+		HeadMatchProcessor Pro{ Table, Greddy };
+		return HeadMatch(Pro, Str);
 	}
-	auto HeadMatch(TableHeadMatchProcessor& Table, std::u8string_view Str, bool Greddy = false)->MatchResult<TableHeadMatchProcessor::Result>;
-	inline auto HeadMatch(TableWrapper Table, std::u8string_view Str, bool Greddy = false)->MatchResult<TableHeadMatchProcessor::Result>
+
+	inline auto HeadMatch(TableWrapper Table, std::u8string_view Str, bool Greddy = false)->MatchResult<HeadMatchProcessor::Result>
 	{
-		TableHeadMatchProcessor Pro{ Table };
-		return HeadMatch(Pro, Str, Greddy);
+		HeadMatchProcessor Pro{ Table, Greddy };
+		return HeadMatch(Pro, Str);
 	}
 
 	struct MulityRegCreater

@@ -12,9 +12,9 @@ int main()
 
 		//TestingStrEncode();
 
-		//TestingSLRX();
+		TestingSLRX();
 
-		//TestingReg();
+		TestingReg();
 
 		//TestingStrFormat();
 
