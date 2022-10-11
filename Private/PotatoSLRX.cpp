@@ -834,24 +834,6 @@ namespace Potato::SLRX
 
 				for (auto& Ite : Ref.Shifts)
 				{
-					/*
-					std::vector<Symbol> Symbols;
-					Symbols.push_back(Ite.RequireSymbol);
-
-					auto FindIte = std::find(CurRef.Shifts.begin(), CurRef.Shifts.end(), Ite.ToNode);
-
-					std::size_t ShiftsOffset = 0;
-
-					if (FindIte != CurRef.Shifts.end())
-					{
-						ShiftsOffset = static_cast<std::size_t>(std::distance(CurRef.Shifts.begin(), FindIte));
-					}
-					else {
-						ShiftsOffset = CurRef.Shifts.size();
-						CurRef.Shifts.push_back(Ite.ToNode);
-					}
-					*/
-
 					CurRef.RequireNodes[0].push_back({RequireNodeType::ShiftProperty, Ite.RequireSymbol, Ite.ToNode});
 				}
 

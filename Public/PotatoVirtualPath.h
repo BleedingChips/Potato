@@ -7,7 +7,7 @@
 #include "PotatoMisc.h"
 #include "PotatoIntrusivePointer.h"
 
-namespace Potato::Path
+namespace Potato::VirtualPath
 {
 	
 	struct Path
@@ -29,7 +29,7 @@ namespace Potato::Path
 			Upper,
 		};
 
-		Path(std::wstring_view InputPath);
+		Path(std::u8string_view InputPath);
 		/*
 		Path(Path&&) = default;
 		Path(Path const&) = default;
@@ -82,7 +82,7 @@ namespace Potato::Path
 		};
 		
 		Style Style = Style::Unknow;
-		std::wstring Paths;
+		std::u8string Paths;
 		std::vector<Element> Elements;
 		Misc::IndexSpan<> FileName;
 		Misc::IndexSpan<> Extension;

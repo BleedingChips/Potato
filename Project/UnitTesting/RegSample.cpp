@@ -271,17 +271,6 @@ void TestingReg()
 			throw UnpassedUnit{ "Testing Reg Failure Case 13" };
 	}
 
-	{
-		DFA T(u8R"(\'([^\s]+)\')");
-
-		std::u8string_view Str = u8R"('a')";
-
-		auto Re = HeadMatch(T, Str, true);
-
-		volatile int i = 0;
-
-	}
-
 
 	std::wcout << LR"(TestingReg Pass !)" << std::endl;
 }

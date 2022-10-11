@@ -1,6 +1,6 @@
 #include "../Public/PotatoReg.h"
-#include "../Public/PotatoDLr.h"
-#include "../Public/PotatoPath.h"
+#include "../Public/PotatoSLRX.h"
+#include "../Public/PotatoVirtualPath.h"
 
 #include <filesystem>
 #include <fstream>
@@ -36,7 +36,7 @@ $ := <Ste>
 }
 */
 
-namespace Potato::Path
+namespace Potato::VirtualPath
 {
 
 	enum class T
@@ -50,7 +50,7 @@ namespace Potato::Path
 		UnixRoot,
 	};
 
-	inline constexpr DLr::Symbol operator*(T Input) { return { DLr::Symbol::ValueType::TERMINAL, static_cast<std::size_t>(Input)}; }
+	inline constexpr SLRX::Symbol operator*(T Input) { return SLRX::Symbol::AsTerminal(static_cast<SLRX::StandardT>(Input)); }
 
 	enum class NT
 	{
@@ -62,30 +62,27 @@ namespace Potato::Path
 		Path,
 	};
 
-	inline constexpr DLr::Symbol operator*(NT Input) { return { DLr::Symbol::ValueType::NOTERMIAL, static_cast<std::size_t>(Input) }; }
+	inline constexpr SLRX::Symbol operator*(NT Input) { return SLRX::Symbol::AsNoTerminal(static_cast<SLRX::StandardT>(Input)); }
 
 
 	Reg::TableWrapper FSRegWrapper() {
 		static auto Tables = [](){
-			Reg::MulityRegexCreator Creator;
-			Creator.AddRegex(UR"([^/\\]+(\.[^/\\])?)", {static_cast<Reg::SerilizeT>(T::NormalPath)}, Creator.GetCountedUniqueID());
-			Creator.AddRegex(UR"($[^\./\\]+:)", {static_cast<Reg::SerilizeT>(T::MappingRoot)}, Creator.GetCountedUniqueID());
-			Creator.AddRegex(UR"([^\./\\]+:)", {static_cast<Reg::SerilizeT>(T::DosRoot)}, Creator.GetCountedUniqueID());
-			Creator.AddRegex(UR"(/|\\)", {static_cast<Reg::SerilizeT>(T::Delimiter)}, Creator.GetCountedUniqueID());
-			Creator.AddRegex(UR"(\.)", {static_cast<Reg::SerilizeT>(T::SelfPath)}, Creator.GetCountedUniqueID());
-			Creator.AddRegex(UR"(\.\.)", {static_cast<Reg::SerilizeT>(T::UpperPath)}, Creator.GetCountedUniqueID());
-			return Creator.Generate();
+			Reg::MulityRegCreater Creator;
+			Creator.LowPriorityLink(u8R"([^/\\]+(\.[^/\\])?)", false,  {static_cast<Reg::StandardT>(T::NormalPath)});
+			Creator.LowPriorityLink(u8R"($[^\./\\]+:)", false, {static_cast<Reg::StandardT>(T::MappingRoot)});
+			Creator.LowPriorityLink(u8R"([^\./\\]+:)", false, {static_cast<Reg::StandardT>(T::DosRoot)});
+			Creator.LowPriorityLink(u8R"(/|\\)", false, {static_cast<Reg::StandardT>(T::Delimiter)});
+			Creator.LowPriorityLink(u8R"(\.)", false, {static_cast<Reg::StandardT>(T::SelfPath)});
+			Creator.LowPriorityLink(u8R"(\.\.)", false, {static_cast<Reg::StandardT>(T::UpperPath)});
+			return *Creator.GenerateTableBuffer();
 		}();
 		return Reg::TableWrapper{Tables};
 	}
 
-	DLr::TableWrapper FSDLrWrapper() {
-		static DLr::Table Tables(
+	SLRX::TableWrapper FSSLRXWrapper() {
+		static SLRX::Table Tables(
 			*NT::Path,
 			{
-				{*NT::Root, {*T::DosRoot}, 0},
-				//{*NT::Root, {*T::}, 0},
-
 				{*NT::Delimiter, {*T::Delimiter}, 0},
 				{*NT::Delimiter, {*NT::Delimiter, *T::Delimiter}, 1},
 				{*NT::NormalFile, {*T::NormalPath}, 2},
@@ -111,49 +108,79 @@ namespace Potato::Path
 
 
 
-	Path::Path(std::wstring_view InputPath)
+	Path::Path(std::u8string_view InputPath)
 	{
-		/*
 		auto Wrapper = FSRegWrapper();
-		bool Success = true;
 
-		std::vector<std::tuple<DLr::Symbol, std::wstring_view, Misc::IndexSpan<>>> Symbols;
-		std::size_t Offset = 0;
-		while (!InputPath.empty())
+		Reg::HeadMatchProcessor Pro(FSRegWrapper(), true);
+
+		struct PathElement
 		{
-			auto Re = Reg::ProcessGreedMarch(Wrapper, InputPath);
-			if (Re.has_value())
-			{
-				Symbols.push_back({
-					DLr::Symbol::AsTerminal(Re->AcceptData.Mask),
-					InputPath.substr(0, Re->MainCapture.Count()),
+			T Value;
+			std::u8string_view Str;
+			Misc::IndexSpan<> StrIndex;
+		};
 
+		std::vector<PathElement> Symbols;
+
+		auto ItePath = InputPath;
+
+		while (!ItePath.empty())
+		{
+			auto Re = Reg::HeadMatch(Pro, ItePath);
+			if (Re)
+			{
+				Pro.Clear();
+				Symbols.push_back({
+					static_cast<T>(Re->AcceptData.Mask),
+					Re->MainCapture.Slice(ItePath),
+					{InputPath.size() - ItePath.size(), Re->MainCapture.Count()}
 				});
-				volatile int i = 0;
-				InputPath = InputPath.substr(Re->MainCapture.Count());
-				Offset += Re->MainCapture.Count();
+				ItePath = ItePath.substr(Re->MainCapture.Count());
 			}
 			else {
-				Success = false;
-				break;
+				return;
 			}
 		}
 
-		auto Steps = DLr::ProcessSymbol(FSDLrWrapper(), 0, [&](std::size_t Index) -> DLr::Symbol{
-			if(Index < Symbols.size())
-				return std::get<0>(Symbols[Index]);
-			return DLr::Symbol::EndOfFile();
-		});
+		SLRX::SymbolProcessor Pro2(FSSLRXWrapper());
 
-		DLr::ProcessStep(Steps, [this](DLr::StepElement Ele) -> std::any{
+		std::size_t TokenIndex = 0;
+		for (auto Ite : Symbols)
+		{
+			if(!Pro2.Consume(SLRX::Symbol::AsTerminal(static_cast<SLRX::StandardT>(Ite.Value)), TokenIndex))
+				return;
+			++TokenIndex;
+		}
+
+		if(!Pro2.EndOfFile())
+			return;
+
+		SLRX::ProcessParsingStep(Pro2.GetSteps(), [&](SLRX::VariantElement Ele) -> std::any {
 			if (Ele.IsTerminal())
 			{
 				auto TEle = Ele.AsTerminal();
-				return std::get<std::wstring_view>(Symbols[TEle.TokenIndex]);
+				auto Val = Symbols[TEle.Shift.TokenIndex];
+
+				switch (Val.Value)
+				{
+				case T::DosRoot:
+				case T::UnixRoot:
+				case T::MappingRoot:
+					return Element{ ElementStyle::Root, Val.StrIndex};
+				case T::NormalPath:
+					return Element{ ElementStyle::File, Val.StrIndex };
+				case T::SelfPath:
+					return Element{ ElementStyle::Self, Val.StrIndex };
+				case T::UpperPath:
+					return Element{ ElementStyle::Upper, Val.StrIndex };
+				default:
+					return {};
+				}
 			}
 			else {
 				auto NTEle = Ele.AsNoTerminal();
-				switch (NTEle.Mask)
+				switch (NTEle.Reduce.Mask)
 				{
 				case 0:
 				case 1:
@@ -161,14 +188,12 @@ namespace Potato::Path
 				case 2:
 					return NTEle[0].Consume();
 				case 3:
+					return {};
 				}
 			}
 			return {};
-		});
-		*/
-
-
-		volatile int i = 0;
+			}
+		);
 	}
 
 

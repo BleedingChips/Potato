@@ -313,6 +313,6 @@ void TestingSLRX()
 		throw UnpassedUnit{ "TestingSLRX : Bad Output Result 1.5" };
 	}
 
-	std::wcout << LR"(TestingSLRX Pass !)" << std::endl;
+	std::cout << "TestingSLRX Pass !" << std::endl;
 
 }
