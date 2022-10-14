@@ -140,7 +140,7 @@ namespace Potato::Misc
 		StorageType Offset = 0;
 		StorageType Length = 0;
 		template<typename ArrayType>
-		auto Slice(ArrayType& Type) const ->std::span<std::remove_reference_t<decltype(*Type.data())>>
+		auto Slice(ArrayType&& Type) const ->std::span<std::remove_reference_t<decltype(*Type.data())>>
 		{
 			return std::span<std::remove_reference_t<decltype(*Type.begin())>>(Type.data() + Begin(), Length);
 		};

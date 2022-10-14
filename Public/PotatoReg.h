@@ -357,6 +357,33 @@ namespace Potato::Reg
 		std::variant<TableWrapper, std::reference_wrapper<DFA const>> Table;
 	};
 
+	struct SearchMatchProcessor
+	{
+		struct Result
+		{
+			Misc::IndexSpan<> MainCapture;
+			std::vector<Capture> SubCaptures;
+			Accept AcceptData;
+			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ SubCaptures }; }
+		};
+
+		SearchMatchProcessor(DFA const& Table, bool Greedy = false) : Table(Table), StartupNode(DFA::StartupNode()), NodeIndex(DFA::StartupNode()), Greedy(Greedy) {}
+		SearchMatchProcessor(TableWrapper Table, bool Greedy = false) : Table(Table), StartupNode(Table.StartupNode()), NodeIndex(Table.StartupNode()), Greedy(Greedy) {}
+		SearchMatchProcessor(SearchMatchProcessor const&) = default;
+
+		std::optional<std::optional<Result>> Consume(char32_t Symbol, std::size_t TokenIndex);
+		std::optional<Result> EndOfFile(std::size_t TokenIndex);
+		void Clear();
+
+		ProcessorContent Contents;
+		ProcessorContent TempBuffer;
+		std::optional<Result> CacheResult;
+		std::size_t NodeIndex = 0;
+		std::size_t StartupNode = 0;
+		bool Greedy = false;
+		std::variant<TableWrapper, std::reference_wrapper<DFA const>> Table;
+	};
+
 	template<typename ResultT>
 	struct MatchResult
 	{
@@ -365,6 +392,8 @@ namespace Potato::Reg
 		operator bool () const { return SuccessdResult.has_value(); }
 		ResultT* operator->() { return SuccessdResult.operator->(); }
 		ResultT const* operator->() const { return SuccessdResult.operator->(); }
+		ResultT& operator*() { return *SuccessdResult; }
+		ResultT const& operator*() const { return *SuccessdResult; }
 	};
 
 	auto Match(MatchProcessor& Processor, std::u8string_view Str) ->MatchResult<MatchProcessor::Result>;

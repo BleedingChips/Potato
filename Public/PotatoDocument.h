@@ -11,7 +11,7 @@ namespace Potato::Document
 	using EncodeInfo = StrEncode::EncodeInfo;
 
 
-	enum class DocumenetBomT
+	enum class BomT
 	{
 		NoBom,
 		UTF8,
@@ -21,16 +21,16 @@ namespace Potato::Document
 		UTF32BE
 	};
 
-	constexpr bool IsNativeEndian(DocumenetBomT T)
+	constexpr bool IsNativeEndian(BomT T)
 	{
 		switch (T)
 		{
-		case DocumenetBomT::UTF16LE:
-		case DocumenetBomT::UTF32LE:
+		case BomT::UTF16LE:
+		case BomT::UTF32LE:
 			return std::endian::native == std::endian::little;
 			break;
-		case DocumenetBomT::UTF16BE:
-		case DocumenetBomT::UTF32BE:
+		case BomT::UTF16BE:
+		case BomT::UTF32BE:
 			return std::endian::native == std::endian::big;
 			break;
 		default:
@@ -44,12 +44,12 @@ namespace Potato::Document
 
 	template<>
 	struct UnicodeTypeToBom<char32_t> {
-		static constexpr  DocumenetBomT Value = (std::endian::native == std::endian::little ? DocumenetBomT::UTF32LE : DocumenetBomT::UTF32BE);
+		static constexpr  BomT Value = (std::endian::native == std::endian::little ? BomT::UTF32LE : BomT::UTF32BE);
 	};
 
 	template<>
 	struct UnicodeTypeToBom<char16_t> {
-		static constexpr  DocumenetBomT Value = (std::endian::native == std::endian::little ? DocumenetBomT::UTF16LE : DocumenetBomT::UTF16BE);
+		static constexpr  BomT Value = (std::endian::native == std::endian::little ? BomT::UTF16LE : BomT::UTF16BE);
 	};
 
 	template<>
@@ -57,16 +57,15 @@ namespace Potato::Document
 
 	template<>
 	struct UnicodeTypeToBom<char8_t> {
-		static constexpr  DocumenetBomT Value = DocumenetBomT::NoBom;
+		static constexpr  BomT Value = BomT::NoBom;
 	};
 
-	DocumenetBomT DetectBom(std::span<std::byte const> bom) noexcept;
-	std::span<std::byte const> ToBinary(DocumenetBomT type) noexcept;
+	BomT DetectBom(std::span<std::byte const> bom) noexcept;
+	std::span<std::byte const> ToBinary(BomT type) noexcept;
 
-	struct DocumentReaderWrapper
+	struct ReaderBuffer
 	{
-
-		DocumentReaderWrapper(DocumentReaderWrapper const&) = default;
+		ReaderBuffer(ReaderBuffer const&) = default;
 
 		enum class StateT
 		{
@@ -110,32 +109,32 @@ namespace Potato::Document
 				}, KeepLine);
 		}
 
-		DocumenetBomT GetBom() const { return Bom; }
+		BomT GetBom() const { return Bom; }
 
 		explicit operator bool() const { return Available.Count() != 0; }
 
 	private:
 
-		DocumentReaderWrapper(DocumenetBomT Bom, std::span<std::byte> TemporaryBuffer) : Bom(Bom), DocumentSpan(TemporaryBuffer), Available{ 0, 0 } {}
+		ReaderBuffer(BomT Bom, std::span<std::byte> TemporaryBuffer) : Bom(Bom), DocumentSpan(TemporaryBuffer), Available{ 0, 0 } {}
 
-		DocumenetBomT Bom = DocumenetBomT::NoBom;
+		BomT Bom = BomT::NoBom;
 		std::span<std::byte> DocumentSpan;
 		Misc::IndexSpan<> Available;
 		std::size_t TotalCharacter = 0;
 
-		friend struct DocumentReader;
+		friend struct Reader;
 	};
 
 	template<typename UnicodeT, typename Function>
-	auto DocumentReaderWrapper::Read(Function&& Func, std::size_t MaxCharacter)->ReadResult requires(std::is_invocable_r_v<std::optional<std::span<UnicodeT>>, Function, EncodeInfo>)
+	auto ReaderBuffer::Read(Function&& Func, std::size_t MaxCharacter)->ReadResult requires(std::is_invocable_r_v<std::optional<std::span<UnicodeT>>, Function, EncodeInfo>)
 	{
 		if (Available.Count() == 0)
 			return { StateT::EmptyBuffer, 0, 0 };
 		std::span<std::byte> CurSpan = DocumentSpan.subspan(Available.Begin(), Available.Count());
 		switch (GetBom())
 		{
-		case DocumenetBomT::NoBom:
-		case DocumenetBomT::UTF8:
+		case BomT::NoBom:
+		case BomT::UTF8:
 		{
 			std::span<char8_t> Cur{ reinterpret_cast<char8_t*>(CurSpan.data()), CurSpan.size() / sizeof(char8_t) };
 			EncodeInfo Info = StrEncoder<char8_t, UnicodeT>::RequireSpaceUnSafe(Cur, MaxCharacter);
@@ -154,15 +153,15 @@ namespace Potato::Document
 	}
 
 	template<typename UnicodeT, typename Function>
-	auto DocumentReaderWrapper::ReadLine(Function&& Func, bool KeepLine)->ReadResult requires(std::is_invocable_r_v<std::optional<std::span<UnicodeT>>, Function, EncodeInfo>)
+	auto ReaderBuffer::ReadLine(Function&& Func, bool KeepLine)->ReadResult requires(std::is_invocable_r_v<std::optional<std::span<UnicodeT>>, Function, EncodeInfo>)
 	{
 		if (Available.Count() == 0)
 			return { StateT::EmptyBuffer, 0, 0 };
 		std::span<std::byte> CurSpan = DocumentSpan.subspan(Available.Begin(), Available.Count());
 		switch (GetBom())
 		{
-		case DocumenetBomT::NoBom:
-		case DocumenetBomT::UTF8:
+		case BomT::NoBom:
+		case BomT::UTF8:
 		{
 			std::span<char8_t> Cur{ reinterpret_cast<char8_t*>(CurSpan.data()), CurSpan.size() / sizeof(char8_t) };
 			EncodeInfo Info = StrEncoder<char8_t, UnicodeT>::RequireSpaceLineUnsafe(Cur, KeepLine);
@@ -180,16 +179,16 @@ namespace Potato::Document
 		}
 	}
 
-	struct DocumentReader
+	struct Reader
 	{
-		DocumentReader(std::filesystem::path path);
-		DocumentReader(DocumentReader const&) = default;
-		DocumentReader& operator=(DocumentReader const&) = default;
+		Reader(std::filesystem::path path);
+		Reader(Reader const&) = default;
+		Reader& operator=(Reader const&) = default;
 		explicit operator bool() const { return File.is_open(); }
 
 		void ResetIterator();
 
-		DocumenetBomT GetBom() const { return Bom; }
+		BomT GetBom() const { return Bom; }
 
 		enum class FlushResult
 		{
@@ -199,46 +198,45 @@ namespace Potato::Document
 			BadString
 		};
 
-		FlushResult Flush(DocumentReaderWrapper& Reader);
+		FlushResult Flush(ReaderBuffer& Reader);
 
 		std::size_t RecalculateLastSize();
 
-		DocumentReaderWrapper CreateWrapper(std::span<std::byte> TemporaryBuffer) const { return DocumentReaderWrapper{ Bom, TemporaryBuffer }; }
+		ReaderBuffer CreateWrapper(std::span<std::byte> TemporaryBuffer) const { return ReaderBuffer{ Bom, TemporaryBuffer }; }
 
 	private:
 
-		DocumenetBomT Bom = DocumenetBomT::NoBom;
+		BomT Bom = BomT::NoBom;
 		std::ifstream File;
 		std::size_t TextOffset = 0;
 	};
 
-	struct ImmediateDocumentReader
+	struct ImmediateReader
 	{
-		ImmediateDocumentReader(std::filesystem::path Path);
+		ImmediateReader(std::filesystem::path Path);
 		bool IsGood() const { return Buffer.has_value(); }
 		std::optional<std::u8string_view> TryCastU8() const;
 	private:
 		std::optional<std::vector<std::byte>> Buffer;
-		DocumenetBomT Bom = DocumenetBomT::NoBom;
+		BomT Bom = BomT::NoBom;
 	};
 
-	struct DocumentEncoder
+	struct Encoder
 	{
+		static EncodeInfo RequireSpaceUnsafe(std::u32string_view Str, BomT Bom, bool WriteBom = false);
+		static EncodeInfo RequireSpaceUnsafe(std::u16string_view Str, BomT Bom, bool WriteBom = false);
+		static EncodeInfo RequireSpaceUnsafe(std::u8string_view Str, BomT Bom, bool WriteBom = false);
+		static EncodeInfo RequireSpaceUnsafe(std::wstring_view Str, BomT Bom, bool WriteBom = false);
 
-		static EncodeInfo RequireSpaceUnsafe(std::u32string_view Str, DocumenetBomT Bom, bool WriteBom = false);
-		static EncodeInfo RequireSpaceUnsafe(std::u16string_view Str, DocumenetBomT Bom, bool WriteBom = false);
-		static EncodeInfo RequireSpaceUnsafe(std::u8string_view Str, DocumenetBomT Bom, bool WriteBom = false);
-		static EncodeInfo RequireSpaceUnsafe(std::wstring_view Str, DocumenetBomT Bom, bool WriteBom = false);
-
-		static EncodeInfo EncodeUnsafe(std::span<std::byte> Span, std::u32string_view Str, DocumenetBomT Bom, bool WriteBom = false);
-		static EncodeInfo EncodeUnsafe(std::span<std::byte> Span, std::u16string_view Str, DocumenetBomT Bom, bool WriteBom = false);
-		static EncodeInfo EncodeUnsafe(std::span<std::byte> Span, std::u8string_view Str, DocumenetBomT Bom, bool WriteBom = false);
-		static EncodeInfo EncodeUnsafe(std::span<std::byte> Span, std::wstring_view Str, DocumenetBomT Bom, bool WriteBom = false);
+		static EncodeInfo EncodeUnsafe(std::span<std::byte> Span, std::u32string_view Str, BomT Bom, bool WriteBom = false);
+		static EncodeInfo EncodeUnsafe(std::span<std::byte> Span, std::u16string_view Str, BomT Bom, bool WriteBom = false);
+		static EncodeInfo EncodeUnsafe(std::span<std::byte> Span, std::u8string_view Str, BomT Bom, bool WriteBom = false);
+		static EncodeInfo EncodeUnsafe(std::span<std::byte> Span, std::wstring_view Str, BomT Bom, bool WriteBom = false);
 	};
 
-	struct DocumentWriter
+	struct Writer
 	{
-		DocumentWriter(std::filesystem::path Path, DocumenetBomT BomType = DocumenetBomT::NoBom);
+		Writer(std::filesystem::path Path, BomT BomType = BomT::NoBom);
 		explicit operator bool() const { return File.is_open(); }
 		EncodeInfo Write(std::u32string_view Str);
 		EncodeInfo Write(std::u16string_view Str);
@@ -246,7 +244,48 @@ namespace Potato::Document
 		EncodeInfo Write(std::wstring_view Str);
 	private:
 		std::ofstream File;
-		DocumenetBomT BomType;
+		BomT BomType;
 		std::vector<std::byte> TemporaryBuffer;
 	};
+
+	struct SperateResult
+	{
+		std::u8string_view LineStr;
+		std::u8string_view Last;
+
+		enum class LineMode
+		{
+			N,
+			RN
+		}Mode;
+	};
+
+	struct LineSperater
+	{
+		enum class LineMode
+		{
+			N,
+			RN
+		};
+
+		struct Result
+		{
+			std::optional<LineMode> Mode;
+			std::u8string_view Str;
+		};
+
+		LineSperater(std::u8string_view InStr) : TotalStr(InStr), IteStr(InStr) {}
+
+		Result Consume(bool KeepLineSymbol = true);
+		std::size_t GetItePosition() const { return TotalStr.size() - IteStr.size(); }
+		std::u8string_view GetTotalStr() const { return TotalStr; };
+		operator bool() const { return !IteStr.empty(); }
+		void Clear() { IteStr = TotalStr; }
+
+	private:
+
+		std::u8string_view TotalStr;
+		std::u8string_view IteStr;
+	};
+
 }

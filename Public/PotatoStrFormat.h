@@ -193,6 +193,25 @@ namespace Potato::StrFormat
 		std::optional<std::size_t> FormatSize(std::basic_string_view<UnicodeType> Parameter, SourceType const& Input);
 	};
 
+	template<typename ...Formatter>
+	struct FormatterWrapper
+	{
+
+		template<typename Formatter>
+		struct SubFormatter
+		{
+			Formatter Formatter;
+			std::size_t Index;
+		};
+
+		std::tuple<SubFormatter<Formatter>...> Wrapper;
+		std::size_t TotalLength;
+	};
+
+
+
+
+
 	/*
 	template<typename Function, typename UnicodeType, typename CharTria, typename TargetType>
 	std::optional<std::size_t> DirectFormat(Function&& Func, std::basic_string_view<UnicodeType, CharTria> Par, TargetType const& Type)

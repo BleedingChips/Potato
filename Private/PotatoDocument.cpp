@@ -8,34 +8,34 @@ namespace Potato::Document
 	const unsigned char utf32_le_bom[] = { 0x00, 0x00, 0xFE, 0xFF };
 	const unsigned char utf32_be_bom[] = { 0xFF, 0xFe, 0x00, 0x00 };
 
-	DocumenetBomT DetectBom(std::span<std::byte const> bom) noexcept {
+	BomT DetectBom(std::span<std::byte const> bom) noexcept {
 		if (bom.size() >= std::size(utf8_bom) && std::memcmp(bom.data(), utf8_bom, std::size(utf8_bom)) == 0)
-			return DocumenetBomT::UTF8;
+			return BomT::UTF8;
 		if (bom.size() >= std::size(utf16_le_bom) && std::memcmp(bom.data(), utf16_le_bom, std::size(utf16_le_bom)) == 0)
-			return DocumenetBomT::UTF16LE;
+			return BomT::UTF16LE;
 		if (bom.size() >= std::size(utf32_le_bom) && std::memcmp(bom.data(), utf32_le_bom, std::size(utf32_le_bom)) == 0)
-			return DocumenetBomT::UTF32LE;
+			return BomT::UTF32LE;
 		if (bom.size() >= std::size(utf16_be_bom) && std::memcmp(bom.data(), utf16_be_bom, std::size(utf16_be_bom)) == 0)
-			return DocumenetBomT::UTF16BE;
+			return BomT::UTF16BE;
 		if (bom.size() >= std::size(utf32_be_bom) && std::memcmp(bom.data(), utf32_be_bom, std::size(utf32_be_bom)) == 0)
-			return DocumenetBomT::UTF32BE;
-		return DocumenetBomT::NoBom;
+			return BomT::UTF32BE;
+		return BomT::NoBom;
 	}
 
-	std::span<std::byte const> ToBinary(DocumenetBomT type) noexcept
+	std::span<std::byte const> ToBinary(BomT type) noexcept
 	{
 		switch (type)
 		{
-		case DocumenetBomT::UTF8: return { reinterpret_cast<std::byte const*>(utf8_bom), std::size(utf8_bom) };
-		case DocumenetBomT::UTF16LE: return { reinterpret_cast<std::byte const*>(utf16_le_bom), std::size(utf16_le_bom) };
-		case DocumenetBomT::UTF32LE: return { reinterpret_cast<std::byte const*>(utf32_le_bom), std::size(utf32_le_bom) };
-		case DocumenetBomT::UTF16BE: return { reinterpret_cast<std::byte const*>(utf16_be_bom), std::size(utf16_be_bom) };
-		case DocumenetBomT::UTF32BE: return { reinterpret_cast<std::byte const*>(utf32_be_bom), std::size(utf32_be_bom) };
+		case BomT::UTF8: return { reinterpret_cast<std::byte const*>(utf8_bom), std::size(utf8_bom) };
+		case BomT::UTF16LE: return { reinterpret_cast<std::byte const*>(utf16_le_bom), std::size(utf16_le_bom) };
+		case BomT::UTF32LE: return { reinterpret_cast<std::byte const*>(utf32_le_bom), std::size(utf32_le_bom) };
+		case BomT::UTF16BE: return { reinterpret_cast<std::byte const*>(utf16_be_bom), std::size(utf16_be_bom) };
+		case BomT::UTF32BE: return { reinterpret_cast<std::byte const*>(utf32_be_bom), std::size(utf32_be_bom) };
 		default: return {};
 		}
 	}
 
-	std::optional<std::size_t> ReadUtf8(std::ifstream& File, DocumenetBomT TargetBom, std::span<std::byte> Output)
+	std::optional<std::size_t> ReadUtf8(std::ifstream& File, BomT TargetBom, std::span<std::byte> Output)
 	{
 		std::array<char8_t, StrEncode::CharEncoder<char8_t, char32_t>::MaxSourceBufferLength> Head;
 		auto OldPos = File.tellg();
@@ -47,8 +47,8 @@ namespace Potato::Document
 		}
 		switch (TargetBom)
 		{
-		case DocumenetBomT::NoBom:
-		case DocumenetBomT::UTF8:
+		case BomT::NoBom:
+		case BomT::UTF8:
 		{
 			auto EncodeInfo = StrEncode::CharEncoder<char8_t, char8_t>::RequireSpaceOnce(Span);
 			if (EncodeInfo.SourceSpace != 0 && Output.size() / sizeof(char8_t) >= EncodeInfo.TargetSpace)
@@ -64,8 +64,8 @@ namespace Potato::Document
 				return {};
 			}
 		}
-		case DocumenetBomT::UTF16BE:
-		case DocumenetBomT::UTF16LE:
+		case BomT::UTF16BE:
+		case BomT::UTF16LE:
 		{
 			auto EncodeInfo = StrEncode::CharEncoder<char8_t, char16_t>::RequireSpaceOnce(Span);
 			if (EncodeInfo.SourceSpace != 0 && Output.size() / sizeof(char16_t) >= EncodeInfo.TargetSpace)
@@ -81,8 +81,8 @@ namespace Potato::Document
 				return {};
 			}
 		}
-		case DocumenetBomT::UTF32BE:
-		case DocumenetBomT::UTF32LE:
+		case BomT::UTF32BE:
+		case BomT::UTF32LE:
 		{
 			auto EncodeInfo = StrEncode::CharEncoder<char8_t, char32_t>::RequireSpaceOnce(Span);
 			if (EncodeInfo.SourceSpace != 0 && Output.size() / sizeof(char32_t) >= EncodeInfo.TargetSpace)
@@ -104,7 +104,7 @@ namespace Potato::Document
 		}
 	}
 
-	DocumentReader::DocumentReader(std::filesystem::path path)
+	Reader::Reader(std::filesystem::path path)
 		: File(path, std::ios::binary | std::ios::in)
 	{
 		bool R = File.good();
@@ -134,13 +134,13 @@ namespace Potato::Document
 		}
 	}
 
-	void DocumentReader::ResetIterator()
+	void Reader::ResetIterator()
 	{
 		assert(*this);
 		File.seekg(TextOffset, File.beg);
 	}
 
-	std::size_t DocumentReader::RecalculateLastSize()
+	std::size_t Reader::RecalculateLastSize()
 	{
 		auto Cur = File.tellg();
 		File.seekg(0, File.end);
@@ -149,7 +149,7 @@ namespace Potato::Document
 		return static_cast<std::size_t>(End - Cur);
 	}
 
-	auto DocumentReader::Flush(DocumentReaderWrapper& Reader) ->FlushResult
+	auto Reader::Flush(ReaderBuffer& Reader) ->FlushResult
 	{
 		if (Reader.GetBom() == GetBom())
 		{
@@ -169,8 +169,8 @@ namespace Potato::Document
 				bool NeedReverso = IsNativeEndian(GetBom());
 				switch (GetBom())
 				{
-				case DocumenetBomT::UTF16LE:
-				case DocumenetBomT::UTF16BE:
+				case BomT::UTF16LE:
+				case BomT::UTF16BE:
 				{
 					if (NeedReverso)
 						ReversoByte<2>(ReadedSpan);
@@ -187,8 +187,8 @@ namespace Potato::Document
 					else
 						return FlushResult::Finish;
 				}
-				case DocumenetBomT::UTF32LE:
-				case DocumenetBomT::UTF32BE:
+				case BomT::UTF32LE:
+				case BomT::UTF32BE:
 				{
 					if (NeedReverso)
 						ReversoByte<4>(ReadedSpan);
@@ -231,12 +231,12 @@ namespace Potato::Document
 	}
 
 	template<typename UnocideT>
-	EncodeInfo DocumentRequireSpaceUnsafe(std::basic_string_view<UnocideT> Str, DocumenetBomT Bom, bool WriteBom)
+	EncodeInfo DocumentRequireSpaceUnsafe(std::basic_string_view<UnocideT> Str, BomT Bom, bool WriteBom)
 	{
 		switch (Bom)
 		{
-		case DocumenetBomT::NoBom:
-		case DocumenetBomT::UTF8:
+		case BomT::NoBom:
+		case BomT::UTF8:
 		{
 			auto Info = StrEncode::StrEncoder<UnocideT, char8_t>::RequireSpaceUnSafe(Str);
 			Info.TargetSpace = Info.TargetSpace * sizeof(char8_t);
@@ -251,7 +251,7 @@ namespace Potato::Document
 	}
 
 	template<typename UnocideT>
-	EncodeInfo DocumentEncodeUnsafe(std::span<std::byte> OutputBuffer, std::basic_string_view<UnocideT> Str, DocumenetBomT Bom, bool WriteBom = false)
+	EncodeInfo DocumentEncodeUnsafe(std::span<std::byte> OutputBuffer, std::basic_string_view<UnocideT> Str, BomT Bom, bool WriteBom = false)
 	{
 		if (WriteBom)
 		{
@@ -261,8 +261,8 @@ namespace Potato::Document
 		}
 		switch (Bom)
 		{
-		case DocumenetBomT::NoBom:
-		case DocumenetBomT::UTF8:
+		case BomT::NoBom:
+		case BomT::UTF8:
 		{
 			std::span<char8_t> Buffer = { reinterpret_cast<char8_t*>(OutputBuffer.data()), OutputBuffer.size() / sizeof(char8_t) };
 			auto Info = StrEncode::StrEncoder<UnocideT, char8_t>::EncodeUnSafe(Str, Buffer);
@@ -277,15 +277,15 @@ namespace Potato::Document
 		return {};
 	}
 
-	ImmediateDocumentReader::ImmediateDocumentReader(std::filesystem::path Path) {
-		DocumentReader Reader(Path);
+	ImmediateReader::ImmediateReader(std::filesystem::path Path) {
+		Reader Reader(Path);
 		if (Reader)
 		{
 			std::vector<std::byte> TempBuffer;
 			TempBuffer.resize(Reader.RecalculateLastSize());
 			auto Wrapper = Reader.CreateWrapper(std::span(TempBuffer));
 			auto Re = Reader.Flush(Wrapper);
-			if (Re == DocumentReader::FlushResult::Finish)
+			if (Re == Reader::FlushResult::Finish)
 			{
 				Buffer = std::move(TempBuffer);
 				Bom = Wrapper.GetBom();
@@ -293,9 +293,9 @@ namespace Potato::Document
 		}
 	}
 
-	std::optional<std::u8string_view> ImmediateDocumentReader::TryCastU8() const
+	std::optional<std::u8string_view> ImmediateReader::TryCastU8() const
 	{
-		if (Buffer.has_value() && (Bom == DocumenetBomT::NoBom || Bom == DocumenetBomT::UTF8))
+		if (Buffer.has_value() && (Bom == BomT::NoBom || Bom == BomT::UTF8))
 		{
 			std::u8string_view Re = {reinterpret_cast<char8_t const*>(Buffer->data()), Buffer->size()};
 			return Re;
@@ -304,28 +304,28 @@ namespace Potato::Document
 	}
 
 
-	EncodeInfo DocumentEncoder::RequireSpaceUnsafe(std::u32string_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentRequireSpaceUnsafe(Str, Bom, WriteBom); }
-	EncodeInfo DocumentEncoder::RequireSpaceUnsafe(std::u16string_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentRequireSpaceUnsafe(Str, Bom, WriteBom); }
-	EncodeInfo DocumentEncoder::RequireSpaceUnsafe(std::u8string_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentRequireSpaceUnsafe(Str, Bom, WriteBom); }
-	EncodeInfo DocumentEncoder::RequireSpaceUnsafe(std::wstring_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentRequireSpaceUnsafe(Str, Bom, WriteBom); }
+	EncodeInfo Encoder::RequireSpaceUnsafe(std::u32string_view Str, BomT Bom, bool WriteBom) { return DocumentRequireSpaceUnsafe(Str, Bom, WriteBom); }
+	EncodeInfo Encoder::RequireSpaceUnsafe(std::u16string_view Str, BomT Bom, bool WriteBom) { return DocumentRequireSpaceUnsafe(Str, Bom, WriteBom); }
+	EncodeInfo Encoder::RequireSpaceUnsafe(std::u8string_view Str, BomT Bom, bool WriteBom) { return DocumentRequireSpaceUnsafe(Str, Bom, WriteBom); }
+	EncodeInfo Encoder::RequireSpaceUnsafe(std::wstring_view Str, BomT Bom, bool WriteBom) { return DocumentRequireSpaceUnsafe(Str, Bom, WriteBom); }
 
-	EncodeInfo DocumentEncoder::EncodeUnsafe(std::span<std::byte> Span, std::u32string_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
-	EncodeInfo DocumentEncoder::EncodeUnsafe(std::span<std::byte> Span, std::u16string_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
-	EncodeInfo DocumentEncoder::EncodeUnsafe(std::span<std::byte> Span, std::u8string_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
-	EncodeInfo DocumentEncoder::EncodeUnsafe(std::span<std::byte> Span, std::wstring_view Str, DocumenetBomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
+	EncodeInfo Encoder::EncodeUnsafe(std::span<std::byte> Span, std::u32string_view Str, BomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
+	EncodeInfo Encoder::EncodeUnsafe(std::span<std::byte> Span, std::u16string_view Str, BomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
+	EncodeInfo Encoder::EncodeUnsafe(std::span<std::byte> Span, std::u8string_view Str, BomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
+	EncodeInfo Encoder::EncodeUnsafe(std::span<std::byte> Span, std::wstring_view Str, BomT Bom, bool WriteBom) { return DocumentEncodeUnsafe(Span, Str, Bom, WriteBom); }
 
 	template<typename UnicodeT>
-	EncodeInfo WriteFile(std::ofstream& File, DocumenetBomT Bom, std::vector<std::byte>& Buffer, std::basic_string_view<UnicodeT> Re)
+	EncodeInfo WriteFile(std::ofstream& File, BomT Bom, std::vector<std::byte>& Buffer, std::basic_string_view<UnicodeT> Re)
 	{
-		auto Info = DocumentEncoder::RequireSpaceUnsafe(Re, Bom, false);
+		auto Info = Encoder::RequireSpaceUnsafe(Re, Bom, false);
 		Buffer.resize(Info.TargetSpace);
-		auto Info2 = DocumentEncoder::EncodeUnsafe(Buffer, Re, Bom, false);
+		auto Info2 = Encoder::EncodeUnsafe(Buffer, Re, Bom, false);
 		File.write(reinterpret_cast<char const*>(Buffer.data()), Info2.TargetSpace / sizeof(char));
 		Buffer.clear();
 		return Info;
 	}
 
-	DocumentWriter::DocumentWriter(std::filesystem::path Path, DocumenetBomT BomType)
+	Writer::Writer(std::filesystem::path Path, BomT BomType)
 		: File(Path, std::ios::binary), BomType(BomType)
 	{
 		if (File.is_open())
@@ -338,8 +338,38 @@ namespace Potato::Document
 		}
 	}
 
-	EncodeInfo DocumentWriter::Write(std::u32string_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
-	EncodeInfo DocumentWriter::Write(std::u16string_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
-	EncodeInfo DocumentWriter::Write(std::u8string_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
-	EncodeInfo DocumentWriter::Write(std::wstring_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
+	EncodeInfo Writer::Write(std::u32string_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
+	EncodeInfo Writer::Write(std::u16string_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
+	EncodeInfo Writer::Write(std::u8string_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
+	EncodeInfo Writer::Write(std::wstring_view Str) { return WriteFile(File, BomType, TemporaryBuffer, Str); }
+
+
+	auto LineSperater::Consume(bool KeepLineSymbol) ->Result
+	{
+		auto Index = IteStr.find(u8'\n');
+		if (Index != std::u8string_view::npos)
+		{
+			Result Re;
+			Re.Str = IteStr.substr(0, Index + 1);
+			IteStr = IteStr.substr(Index + 1);
+			std::size_t CutSize = 1;
+			if (Re.Str.size() >= 2 && Re.Str[Re.Str.size() - 2] == u8'\r')
+			{
+				CutSize = 2;
+				Re.Mode = LineMode::RN;
+			}
+			else {
+				Re.Mode = LineMode::N;
+			}
+			if(!KeepLineSymbol)
+				Re.Str = Re.Str.substr(CutSize);
+			return Re;
+		}
+		else {
+			Result Re;
+			Re.Str = IteStr;
+			IteStr = {};
+			return Re;
+		}
+	}
 }
