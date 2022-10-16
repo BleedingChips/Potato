@@ -16,7 +16,7 @@ int main()
 
 		TestingReg();
 
-		//TestingStrFormat();
+		TestingStrFormat();
 
 		TestingEbnf();
 
