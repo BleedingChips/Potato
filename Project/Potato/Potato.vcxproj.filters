@@ -54,28 +54,10 @@
     <ClCompile Include="..\..\Private\PotatoMisc.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Private\PotatoSLRX.cpp">
-      <Filter>Private</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Private\PotatoReg.cpp">
-      <Filter>Private</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Private\PotatoStrEncode.cpp">
-      <Filter>Private</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Private\PotatoEbnf.cpp">
-      <Filter>Private</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\Private\PotatoIR.cpp">
       <Filter>Private</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Private\PotatoStrFormat.cpp">
-      <Filter>Private</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Private\PotatoDocument.cpp">
-      <Filter>Private</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Private\PotatoVirtualPath.cpp">
+    <ClCompile Include="..\..\Private\PotatoSLRX.cpp">
       <Filter>Private</Filter>
     </ClCompile>
   </ItemGroup>

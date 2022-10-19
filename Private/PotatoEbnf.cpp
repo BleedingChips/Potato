@@ -445,6 +445,7 @@ namespace Potato::Ebnf
 								});
 							Builders.push_back({
 								CurSymbol,
+								{},
 								Ebnf::BigBrace
 								});
 							return SLRX::ProductionBuilderElement{ CurSymbol };
@@ -460,6 +461,7 @@ namespace Potato::Ebnf
 								});
 							Builders.push_back({
 								CurSymbol,
+								{},
 								Ebnf::MiddleBrace
 								});
 							return SLRX::ProductionBuilderElement{ CurSymbol };
@@ -991,6 +993,7 @@ namespace Potato::Ebnf
 		}
 		else {
 			ParsingStep Step;
+			Step.IsPredict = In.IsPredict;
 			if (Sym.has_value())
 			{
 				Step.Symbol = *Sym;
@@ -1018,7 +1021,6 @@ namespace Potato::Ebnf
 			ParsingStep::ReduceT Reduce;
 			Reduce.Mask = In.Reduce.Mask;
 			Reduce.ProductionElementCount = In.Reduce.ElementCount;
-			Reduce.IsPredict = In.Reduce.IsPredict;
 			Reduce.IsNoNameReduce = !Sym.has_value();
 			Step.Data = Reduce;
 			return { Step , 0 };
@@ -1094,7 +1096,7 @@ namespace Potato::Ebnf
 			std::size_t Index = 0;
 			for (auto& Ite : *TempSteps)
 			{
-				if (Ite.IsNoTerminal() && Ite.Reduce.IsPredict)
+				if (Ite.IsNoTerminal() && Ite.IsPredict)
 				{
 					if (std::holds_alternative<std::reference_wrapper<EBNFX const>>(Pro.Table))
 					{
@@ -1113,7 +1115,7 @@ namespace Potato::Ebnf
 			Temp.reserve(Index);
 			for (auto& Ite : *TempSteps)
 			{
-				if (Ite.IsNoTerminal() && Ite.Reduce.IsPredict)
+				if (Ite.IsNoTerminal() && Ite.IsPredict)
 				{
 					if (std::holds_alternative<std::reference_wrapper<EBNFX const>>(Pro.Table))
 					{

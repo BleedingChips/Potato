@@ -168,7 +168,7 @@ namespace Potato::StrFormat
 		};
 
 		template<typename SourceT, typename UnicodeT>
-		struct FromatterWrapper
+		struct FormatterWrapper
 		{
 			SourceT&& Source;
 			Formatter<std::remove_cvref_t<SourceT>, UnicodeT> Formatter;
@@ -194,7 +194,7 @@ namespace Potato::StrFormat
 	template<typename UnicodeT, typename ...SourceT>
 	struct FormatterReference
 	{
-		std::tuple<Implement::FromatterWrapper<SourceT, UnicodeT>...> Formatters;
+		std::tuple<Implement::FormatterWrapper<SourceT, UnicodeT>...> Formatters;
 		std::size_t TotalSize;
 		std::span<typename FormatPattern<UnicodeT>::Element const> Elements;
 		std::size_t GetRequireSize() const { return TotalSize; }
@@ -281,8 +281,8 @@ namespace Potato::StrFormat
 	template<typename UnicodeT, typename ...SourceT>
 	std::optional<FormatterReference<UnicodeT, SourceT...>> CreateFormatReference(FormatPattern<UnicodeT> const& Pattern, SourceT&& ...AT) {
 		FormatterReference<UnicodeT, SourceT...> Result{
-			std::tuple<Implement::FromatterWrapper<SourceT, UnicodeT>...>{
-				Implement::FromatterWrapper<SourceT, UnicodeT>{std::forward<SourceT>(AT)}...
+			std::tuple<Implement::FormatterWrapper<SourceT, UnicodeT>...>{
+				Implement::FormatterWrapper<SourceT, UnicodeT>{std::forward<SourceT>(AT)}...
 			},
 			0, 
 			std::span(Pattern.Elements)
@@ -310,6 +310,49 @@ namespace Potato::StrFormat
 				if(Wrapper->FormatTo(Result))
 					return Result;
 			}
+		}
+		return {};
+	}
+
+	template<typename UnicodeT, typename SourceT>
+	struct DirectFormatterReference
+	{
+		Implement::FormatterWrapper<SourceT, UnicodeT> Formatter;
+		std::basic_string_view<UnicodeT> Pars;
+		std::size_t GetRequireSize() const { return Formatter.Length; }
+		bool FormatTo(std::span<UnicodeT> Buffer) const {
+			assert(Buffer.size() >= GetRequireSize());
+			return Formatter.Formatter.Format(Buffer, Pars, Formatter.Source);
+		}
+	};
+
+	template<typename UnicodeT, typename SourceT>
+	std::optional<DirectFormatterReference<UnicodeT, SourceT>> CreateDirectFormatterReference(std::basic_string_view<UnicodeT> Str, SourceT&& S)
+	{
+		DirectFormatterReference<UnicodeT, SourceT> Re{
+			{std::forward<SourceT>(S)}, Str
+		};
+		auto FS = Re.Formatter.Formatter.FormatSize(Str, S);
+		if (FS.has_value())
+		{
+			Re.Formatter.Length = *FS;
+			return Re;
+		}
+		else {
+			return {};
+		}
+	}
+
+	template<typename SourceT>
+	std::optional<std::u8string> DirectFormat(std::u8string_view Par, SourceT&& S)
+	{
+		auto Re = CreateDirectFormatterReference(Par, std::forward<SourceT>(S));
+		if (Re.has_value())
+		{
+			std::u8string TRe;
+			TRe.resize(Re->GetRequireSize());
+			if(Re->FormatTo(TRe))
+				return TRe;
 		}
 		return {};
 	}
@@ -429,23 +472,4 @@ namespace Potato::StrFormat
 	template<typename SUnicodeT, typename CharTrais, typename Allocator, typename UnicodeType>
 	struct Formatter<std::basic_string<SUnicodeT, CharTrais, Allocator>, UnicodeType>: Formatter<std::basic_string_view<SUnicodeT, CharTrais>, UnicodeType> {};;
 
-}
-
-namespace Potato::StrFormat::Exception
-{
-
-	struct FormatterInterface : std::exception
-	{
-		virtual ~FormatterInterface() = default;
-		virtual char const* what() const override { return nullptr; }
-	};
-
-	struct UnsupportPatternString : public FormatterInterface
-	{
-		std::u32string Pattern;
-		UnsupportPatternString(std::u32string Pattern) : Pattern(std::move(Pattern)) {};
-		UnsupportPatternString(UnsupportPatternString const&) = default;
-		UnsupportPatternString(UnsupportPatternString&&) = default;
-		virtual char const* what() const override { return nullptr; }
-	};
 }

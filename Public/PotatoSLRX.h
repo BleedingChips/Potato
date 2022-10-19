@@ -41,13 +41,13 @@ namespace Potato::SLRX
 	struct ParsingStep
 	{
 		Symbol Value;
+		bool IsPredict = false;
 
 		struct ReduceT
 		{
 			std::size_t ProductionIndex =0 ;
 			std::size_t ElementCount = 0;
-			SLRX::StandardT Mask = 0;
-			bool IsPredict = false;
+			SLRX::StandardT Mask = 0;	
 		};
 
 		struct ShiftT
@@ -59,7 +59,8 @@ namespace Potato::SLRX
 		ShiftT Shift;
 
 		constexpr bool IsTerminal() const { return Value.IsTerminal(); }
-		constexpr bool IsNoTerminal() const { return Value.IsNoTerminal(); }
+		constexpr bool IsNoTerminal() const { return !IsPredict && Value.IsNoTerminal(); }
+		constexpr bool IsPredictNoTerminal() const { return IsPredict && Value.IsNoTerminal(); }
 		constexpr bool IsShift() const { return IsTerminal(); }
 		constexpr bool IsReduce() const { return IsNoTerminal(); }
 	};
@@ -88,6 +89,12 @@ namespace Potato::SLRX
 		TElement(ParsingStep const& value);
 		TElement(TElement const&) = default;
 		TElement& operator=(TElement const&) = default;
+	};
+
+	struct PredictElement
+	{
+		Symbol Value;
+		ParsingStep::ReduceT Reduce;
 	};
 
 	struct NTElement
@@ -124,11 +131,13 @@ namespace Potato::SLRX
 
 	struct VariantElement
 	{
-		std::variant<TElement, NTElement> Element;
+		std::variant<TElement, NTElement, PredictElement> Element;
 		bool IsTerminal() const { return std::holds_alternative<TElement>(Element); }
 		bool IsNoTerminal() const  { return std::holds_alternative<NTElement>(Element); }
+		bool IsPredict() const { return std::holds_alternative<PredictElement>(Element); }
 		TElement& AsTerminal() { return std::get<TElement>(Element); }
 		NTElement& AsNoTerminal() { return std::get<NTElement>(Element); }
+		PredictElement& AsPredict() { return std::get<PredictElement>(Element); }
 	};
 
 	struct ParsingStepProcessor
@@ -218,13 +227,16 @@ namespace Potato::SLRX
 
 	struct ProductionBuilder
 	{
-		ProductionBuilder(Symbol ProductionValue, std::vector<ProductionBuilderElement> ProductionElement, StandardT ProductionMask)
-			: ProductionValue(ProductionValue), Element(std::move(ProductionElement)), ProductionMask(ProductionMask) {}
+		ProductionBuilder(Symbol ProductionValue, std::vector<ProductionBuilderElement> ProductionElement, StandardT ProductionMask = 0, bool NeedPredict = false)
+			: ProductionValue(ProductionValue), Element(std::move(ProductionElement)), ProductionMask(ProductionMask), NeedPredict(NeedPredict) {}
+		
+		/*
 		ProductionBuilder(Symbol ProductionValue, StandardT ProductionMask) : ProductionBuilder(ProductionValue, {}, ProductionMask) {}
 		ProductionBuilder(Symbol ProductionValue, std::vector<ProductionBuilderElement> ProductionElement)
 			: ProductionBuilder(ProductionValue, std::move(ProductionElement), 0) {}
 		ProductionBuilder(Symbol ProductionValue)
 			: ProductionBuilder(ProductionValue, {}, 0) {}
+		*/
 
 		ProductionBuilder(const ProductionBuilder&) = default;
 		ProductionBuilder(ProductionBuilder&&) = default;
@@ -234,6 +246,7 @@ namespace Potato::SLRX
 		Symbol ProductionValue;
 		std::vector<ProductionBuilderElement> Element;
 		StandardT ProductionMask = 0;
+		bool NeedPredict = false;
 	};
 
 	struct ProductionInfo
@@ -252,6 +265,7 @@ namespace Potato::SLRX
 			Symbol Symbol;
 			StandardT ProductionMask;
 			std::vector<Element> Elements;
+			bool NeedPredict = false;
 		};
 
 		struct SearchElement
@@ -273,6 +287,7 @@ namespace Potato::SLRX
 
 		std::vector<Production> ProductionDescs;
 		std::map<Symbol, std::vector<std::size_t>> TrackedAcceptableNoTerminalSymbol;
+		bool NeedPredict = false;
 	};
 
 	struct LR0
@@ -283,12 +298,14 @@ namespace Potato::SLRX
 			std::size_t ToNode;
 			bool ReverseStorage;
 			std::vector<std::size_t> ProductionIndex;
+			bool NeedPredict = false;
 		};
 
 		struct Reduce
 		{
 			Symbol ReduceSymbol;
 			ParsingStep::ReduceT Reduce;
+			bool NeedPredict = false;
 			operator ParsingStep () const {
 				ParsingStep New;
 				New.Value = ReduceSymbol;
@@ -310,6 +327,7 @@ namespace Potato::SLRX
 			std::vector<ShiftEdge> Shifts;
 			std::vector<Reduce> Reduces;
 			std::vector<MappedProduction> MappedProduction;
+			bool NeedPredict = false;
 		};
 
 		std::vector<Node> Nodes;
@@ -328,6 +346,7 @@ namespace Potato::SLRX
 		{
 			std::size_t LastState;
 			std::size_t TargetState;
+			bool NeedPredict = false;
 		};
 
 		struct ReduceProperty
@@ -340,7 +359,8 @@ namespace Potato::SLRX
 		{
 			SymbolValue,
 			ShiftProperty,
-			ReduceProperty
+			NeedPredictShiftProperty,
+			ReduceProperty,
 		};
 
 		struct RequireNode
@@ -358,6 +378,7 @@ namespace Potato::SLRX
 		};
 
 		std::vector<Node> Nodes;
+		bool IsStarupNeedPredict = false;
 
 		LRX(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority, std::size_t MaxForwardDetect = 3)
 			: LRX(LR0{StartSymbol, std::move(Production), std::move(Priority)}, MaxForwardDetect) {}
@@ -368,6 +389,7 @@ namespace Potato::SLRX
 		LRX& operator=(LRX&&) = default;
 
 		static constexpr std::size_t StartupOffset() { return 1; }
+		bool StartupNeedPredict() const { return IsStarupNeedPredict; }
 	};
 
 	struct TableWrapper
@@ -388,7 +410,7 @@ namespace Potato::SLRX
 
 		struct alignas(alignof(StandardT)) ZipRequireNodeT
 		{
-			LRX::RequireNodeType Type : 2;
+			LRX::RequireNodeType Type : 3;
 			StandardT IsEndOfFile : 1;
 			StandardT ToIndexOffset;
 			StandardT Value;
@@ -404,6 +426,7 @@ namespace Potato::SLRX
 			HalfStandardT ProductionIndex;
 			HalfStandardT ProductionCount;
 			HalfStandardT ReduceTupleCount;
+			HalfStandardT NeedPredict;
 			StandardT Mask;
 			StandardT NoTerminalValue;
 
@@ -414,6 +437,7 @@ namespace Potato::SLRX
 		{
 			StandardT LastState;
 			StandardT ToState;
+			StandardT NeedPredict;
 		};
 
 		static std::size_t CalculateRequireSpace(LRX const& Ref);
@@ -433,6 +457,7 @@ namespace Potato::SLRX
 		operator bool() const { return !Buffer.empty(); }
 		std::size_t NodeCount() const { return Buffer[0]; }
 		std::size_t StartupNodeIndex() const { return Buffer[1]; }
+		bool StartupNeedPredict() const { return Buffer[2]; }
 		std::size_t TotalBufferSize() const { return Buffer.size(); }
 
 		std::span<StandardT const> Buffer;
@@ -451,9 +476,10 @@ namespace Potato::SLRX
 		SymbolProcessor(TableWrapper Wrapper);
 		SymbolProcessor(LRX const& Wrapper);
 		bool Consume(Symbol Value, std::size_t TokenIndex, std::vector<Symbol>* SuggestSymbols = nullptr);
-		std::span<ParsingStep const> GetSteps() const { return std::span(Steps); }
+		std::span<ParsingStep const> GetSteps() const;
+		
 		void Clear();
-		void ClearSteps() { Steps.clear(); }
+		void ClearSteps();
 
 		static std::optional<std::vector<ParsingStep>> InsertPredictStep(std::span<ParsingStep const> Steps);
 
@@ -462,11 +488,14 @@ namespace Potato::SLRX
 
 	private:
 
+		void PushSteps(ParsingStep Steps, bool NeedPredict);
+
 		struct ConsumeResult
 		{
 			std::size_t State;
 			std::size_t RequireNode;
 			std::optional<LR0::Reduce> Reduce;
+			bool NeedPredict = false;
 		};
 
 		std::optional<ConsumeResult> ConsumeImp(LRX const&, Symbol Value, std::vector<Symbol>* SuggestSymbols = nullptr) const;
@@ -476,6 +505,7 @@ namespace Potato::SLRX
 		{
 			LR0::Reduce Reduce;
 			std::size_t State;
+			bool NeedPredict = false;
 		};
 
 		std::optional<ReduceResult> TryReduceImp(LRX const& Table) const;
@@ -488,8 +518,17 @@ namespace Potato::SLRX
 		std::size_t CurrentTopState;
 		std::size_t RequireNode;
 		std::vector<ParsingStep> Steps;
+
+		struct PredictRecord
+		{
+			std::size_t Index;
+			bool NeedPredict;
+		};
+
+		std::vector<std::size_t> PredictRecord;
 		std::variant<TableWrapper, std::reference_wrapper<LRX const>> Table;
 		std::size_t StartupOffset;
+		bool StartupNeedPredict;
 	};
 
 	struct Table

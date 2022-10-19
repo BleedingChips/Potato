@@ -78,11 +78,11 @@ namespace Potato::Ebnf
 	struct ParsingStep
 	{
 		std::u8string_view Symbol;
+		bool IsPredict = false;
 
 		struct ReduceT {
 			std::size_t Mask;
 			std::size_t ProductionElementCount;
-			bool IsPredict;
 			bool IsNoNameReduce;
 		};
 

@@ -25,13 +25,17 @@ namespace Potato::SLRX
 				NTElement::MetaData{Input.Value, {Input.Shift.TokenIndex, 1}}
 			};
 		}
-		else {
-			if (Input.Reduce.IsPredict)
-			{
-				NTElement ele{ Input, {}, {}};
-				return Result{VariantElement{ ele }, {} };
-			}
-			else if(DataBuffer.size() >= Input.Reduce.ElementCount)
+		else if (Input.IsPredictNoTerminal())
+		{
+			PredictElement Ele{Input.Value, Input.Reduce};
+			return Result{
+				VariantElement{Ele},
+				{}
+			};
+		}
+		else if(Input.IsNoTerminal())
+		{
+			if(DataBuffer.size() >= Input.Reduce.ElementCount)
 			{
 				assert(TemporaryDataBuffer.empty());
 				std::size_t CurrentAdress = DataBuffer.size() - Input.Reduce.ElementCount;
@@ -53,6 +57,7 @@ namespace Potato::SLRX
 				return {};
 			}
 		}
+		return {};
 	}
 
 	void ParsingStepProcessor::Push(NTElement::MetaData Element, std::any Result)
@@ -88,6 +93,7 @@ namespace Potato::SLRX
 				Desc.Elements.push_back(std::move(EOFElement));
 			}
 			Desc.ProductionMask = 0;
+			Desc.NeedPredict = false;
 			ProductionDescs.push_back(std::move(Desc));
 		}
 
@@ -101,6 +107,8 @@ namespace Potato::SLRX
 			Production Desc;
 			Desc.Symbol = Ite.ProductionValue;
 			Desc.ProductionMask = Ite.ProductionMask;
+			Desc.NeedPredict = Ite.NeedPredict;
+			NeedPredict = (NeedPredict || Ite.NeedPredict);
 			std::size_t ElementIndex = 0;
 			for (auto& Ite2 : Ite.Element)
 			{
@@ -562,7 +570,7 @@ namespace Potato::SLRX
 					auto ProductionIndex = CurrentState[IndexIte2 - 1].ProductionIndex;
 					auto& ProduceRef = Infos.ProductionDescs[ProductionIndex];
 					TemporaryNode.Reduces.push_back(
-						Reduce{ ProduceRef.Symbol, ProductionIndex, ProduceRef.Elements.size(), ProduceRef.ProductionMask }
+						Reduce{ ProduceRef.Symbol, ProductionIndex, ProduceRef.Elements.size(), ProduceRef.ProductionMask, ProduceRef.NeedPredict }
 					);
 				}
 			}
@@ -590,7 +598,7 @@ namespace Potato::SLRX
 				auto AcceptablPISpan = Ite.AcceptableProductionIndex.Slice(AccepatbelProductionIndexs);
 				std::vector<std::size_t> TempAcce(AcceptablPISpan.begin(), AcceptablPISpan.end());
 				TemporaryNode.Shifts.push_back(
-					ShiftEdge{Ite.Symbol, *FindState, Ite.ReserveStorage, std::move(TempAcce)}
+					ShiftEdge{Ite.Symbol, *FindState, Ite.ReserveStorage, std::move(TempAcce), false}
 				);
 			}
 			auto CurStatusElementSpan = PreNode[SearchIte].Slice(Status);
@@ -615,6 +623,31 @@ namespace Potato::SLRX
 
 			Nodes.push_back(std::move(TemporaryNode));
 		}
+
+		if (Infos.NeedPredict)
+		{
+			for (auto& Ite : Nodes)
+			{
+				for (auto& Ite2 : Ite.MappedProduction)
+				{
+					if (Ite2.Production.NeedPredict)
+					{
+						Ite.NeedPredict = true;
+						break;
+					}
+				}
+			}
+
+			for (auto& Ite : Nodes)
+			{
+				for (auto& Ite2 : Ite.Shifts)
+				{
+					auto& NodeRef = Nodes[Ite2.ToNode];
+					if(NodeRef.NeedPredict)
+						Ite2.NeedPredict = true;
+				}
+			}
+		}
 	}
 
 	struct FastReduce
@@ -623,12 +656,14 @@ namespace Potato::SLRX
 		std::ptrdiff_t Reduce;
 		std::size_t LastState;
 		LR0::Reduce Property;
+		bool ReduceShiftNeedPredict = false;
 	};
 
 	struct FastShift
 	{
 		std::size_t ToNode;
 		Symbol RequireSymbol;
+		bool NeedPredict = false;
 	};
 
 	struct FastNode
@@ -687,6 +722,8 @@ namespace Potato::SLRX
 	LRX::LRX(LR0 const& Table, std::size_t MaxForwardDetect)
 	{
 
+		IsStarupNeedPredict = Table.Nodes[StartupOffset()].NeedPredict;
+
 		std::vector<FastNode> TempNode;
 
 		{
@@ -728,7 +765,7 @@ namespace Potato::SLRX
 				{
 					if (Ite.RequireSymbol.IsTerminal())
 					{
-						SHRef.push_back({ Ite.ToNode, Ite.RequireSymbol });
+						SHRef.push_back({ Ite.ToNode, Ite.RequireSymbol, Ite.NeedPredict });
 					}
 				}
 
@@ -753,6 +790,7 @@ namespace Potato::SLRX
 							auto LastState = Top.Node;
 
 							bool Fined = false;
+							bool NeedPredict = false;
 							for (auto& ShiftIte : CurNode.Shifts)
 							{
 								if (Ite.ReduceSymbol == ShiftIte.RequireSymbol)
@@ -763,6 +801,7 @@ namespace Potato::SLRX
 									{
 										Fined = true;
 										Top.Node = ShiftIte.ToNode;
+										NeedPredict = Ite.NeedPredict;
 										break;
 									}
 								}
@@ -776,7 +815,7 @@ namespace Potato::SLRX
 								return Element.ToNode == Top.Node && Element.LastState == LastState;
 								}) == LastSpan.end())
 							{
-								FFRef.push_back(FastReduce{ Top.Node, 1 - static_cast<std::ptrdiff_t>(Ite.Reduce.ProductionIndex), LastState, Ite });
+								FFRef.push_back(FastReduce{ Top.Node, 1 - static_cast<std::ptrdiff_t>(Ite.Reduce.ProductionIndex), LastState, Ite, NeedPredict });
 							}
 						}
 						else {
@@ -834,7 +873,11 @@ namespace Potato::SLRX
 
 				for (auto& Ite : Ref.Shifts)
 				{
-					CurRef.RequireNodes[0].push_back({RequireNodeType::ShiftProperty, Ite.RequireSymbol, Ite.ToNode});
+					CurRef.RequireNodes[0].push_back({
+						Ite.NeedPredict ? 
+							RequireNodeType::NeedPredictShiftProperty : 
+							RequireNodeType::ShiftProperty
+						, Ite.RequireSymbol, Ite.ToNode});
 				}
 
 				for (auto& Ite : Ref.Reduces)
@@ -852,7 +895,7 @@ namespace Potato::SLRX
 						NewProperty.Property = Ref.Reduces[0].Property;
 						for (auto& Ite : Ref.Reduces)
 						{
-							NewProperty.Tuples.push_back({ Ite.LastState, Ite.ToNode });
+							NewProperty.Tuples.push_back({ Ite.LastState, Ite.ToNode, Ite.ReduceShiftNeedPredict});
 						}
 						CurRef.Reduces.push_back(std::move(NewProperty));
 					}
@@ -1108,7 +1151,10 @@ namespace Potato::SLRX
 							assert(Find1 != TempNodeRef.Shifts.end());
 
 							LastRNode.push_back(RequireNode{
-								RequireNodeType::ShiftProperty,
+								Find1->NeedPredict ? 
+									RequireNodeType::NeedPredictShiftProperty :
+									RequireNodeType::ShiftProperty
+								,
 								*Symbols.rbegin(),
 								Find1->ToNode
 							});
@@ -1219,6 +1265,9 @@ namespace Potato::SLRX
 		// StartupOffset
 		Pre.WriteElement();
 
+		// StartupNeedPredict
+		Pre.WriteElement();
+
 		for (auto& Ite : Ref.Nodes)
 		{
 			Pre.WriteObject<ZipNodeT>();
@@ -1249,6 +1298,8 @@ namespace Potato::SLRX
 		Reader.CrossTypeSetThrow<OutOfRange>(*P1, Ref.Nodes.size(), OutOfRange::TypeT::NodeCount, Ref.Nodes.size());
 
 		auto StartupNode = Reader.NewElement();
+
+		*Reader.NewElement() = Ref.StartupNeedPredict();
 
 		std::size_t NodeIndex = 0;
 
@@ -1296,6 +1347,7 @@ namespace Potato::SLRX
 					case LRX::RequireNodeType::SymbolValue:
 						SymbolsRecord.push_back(Record);
 						break;
+					case LRX::RequireNodeType::NeedPredictShiftProperty:
 					case LRX::RequireNodeType::ShiftProperty:
 						ShiftRecord.push_back(Record);
 						break;
@@ -1328,6 +1380,7 @@ namespace Potato::SLRX
 				Reader.CrossTypeSetThrow<OutOfRange>(Property->ProductionIndex, Ite2.Property.Reduce.ProductionIndex, OutOfRange::TypeT::ReduceProperty, Ite2.Property.Reduce.ProductionIndex);
 				Reader.CrossTypeSetThrow<OutOfRange>(Property->ProductionCount, Ite2.Property.Reduce.ElementCount, OutOfRange::TypeT::ReduceProperty, Ite2.Property.Reduce.ElementCount);
 				Reader.CrossTypeSetThrow<OutOfRange>(Property->ReduceTupleCount, Ite2.Tuples.size(), OutOfRange::TypeT::ReduceProperty, Ite2.Tuples.size());
+				Property->NeedPredict = (Ite2.Property.NeedPredict ? 1 : 0);
 				auto Span = *Reader.ReadObjectArray<ZipReduceTupleT>(Ite2.Tuples.size());
 				ReduceTupleRecord.push_back({Span, std::span(Ite2.Tuples)});
 			}
@@ -1372,12 +1425,75 @@ namespace Potato::SLRX
 		return Re;
 	}
 
-	SymbolProcessor::SymbolProcessor(TableWrapper Wrapper) : Table(Wrapper){ 
+	SymbolProcessor::SymbolProcessor(TableWrapper Wrapper) : Table(Wrapper), StartupOffset(Wrapper.StartupNodeIndex()), StartupNeedPredict(Wrapper.StartupNeedPredict()) {
 		assert(Wrapper); 
-		StartupOffset = Wrapper.StartupNodeIndex(); 
+		
 		Clear();
 	}
-	SymbolProcessor::SymbolProcessor(LRX const& Wrapper) : Table(std::reference_wrapper(Wrapper)), StartupOffset(LRX::StartupOffset()) { Clear(); }
+	SymbolProcessor::SymbolProcessor(LRX const& Wrapper) : Table(std::reference_wrapper(Wrapper)), StartupOffset(LRX::StartupOffset()), StartupNeedPredict(Wrapper.StartupNeedPredict()) { Clear(); }
+
+	std::span<ParsingStep const> SymbolProcessor::GetSteps() const
+	{
+		if (PredictRecord.empty())
+		{
+			return std::span(Steps);
+		}
+		else {
+			auto Top = *PredictRecord.begin();
+			return std::span(Steps).subspan(0, Top);
+		}
+	}
+
+	void SymbolProcessor::ClearSteps()
+	{
+		if (PredictRecord.empty())
+		{
+			Steps.clear();
+		}
+		else {
+			auto Top = *PredictRecord.rbegin();
+			Steps.erase(Steps.begin(), Steps.begin() + Top);
+			for (auto& Ite : PredictRecord)
+				Ite -= Top;
+		}
+	}
+
+	void SymbolProcessor::PushSteps(ParsingStep InputStep, bool NeedPredict)
+	{
+		if (InputStep.IsTerminal())
+		{
+			assert(!InputStep.IsPredict);
+			if (NeedPredict || !PredictRecord.empty())
+			{
+				PredictRecord.push_back({Steps.size() });
+			}
+			Steps.push_back(InputStep);
+		}
+		else {
+			assert(InputStep.IsPredictNoTerminal() || InputStep.IsNoTerminal());
+			if (InputStep.IsPredict || NeedPredict || PredictRecord.size() >= InputStep.Reduce.ElementCount)
+			{
+				assert(PredictRecord.size() >= InputStep.Reduce.ElementCount);
+				auto ReduceSpan = std::span(PredictRecord).subspan(PredictRecord.size() - InputStep.Reduce.ElementCount, InputStep.Reduce.ElementCount);
+				std::size_t PredictOffset = Steps.size();
+				if (!ReduceSpan.empty())
+					PredictOffset = *ReduceSpan.begin();
+				PredictRecord.resize(PredictRecord.size() - InputStep.Reduce.ElementCount);
+				if(NeedPredict || !PredictRecord.empty())
+					PredictRecord.push_back(PredictOffset);
+				if (InputStep.IsPredict)
+				{
+					Steps.insert(Steps.begin() + PredictOffset, InputStep);
+					InputStep.IsPredict = false;
+				}	
+				Steps.push_back(InputStep);
+			}
+			else {
+				PredictRecord.clear();
+				Steps.push_back(InputStep);
+			}
+		}
+	}
 
 	bool SymbolProcessor::Consume(Symbol Value, std::size_t TokenIndex, std::vector<Symbol>* SuggestSymbols)
 	{
@@ -1411,8 +1527,8 @@ namespace Potato::SLRX
 					Step.Reduce.Mask = Result->Reduce->Reduce.Mask;
 					Step.Reduce.ProductionIndex = Result->Reduce->Reduce.ProductionIndex;
 					Step.Reduce.ElementCount = Result->Reduce->Reduce.ElementCount;
-					Step.Reduce.IsPredict = false;
-					Steps.push_back(Step);
+					Step.IsPredict = Result->Reduce->NeedPredict;
+					PushSteps(Step, Result->NeedPredict);
 					SymbolsIndex = 0;
 					TryReduce();
 				}
@@ -1430,7 +1546,7 @@ namespace Potato::SLRX
 							ParsingStep Step;
 							Step.Value = LastSymbol.Value;
 							Step.Shift.TokenIndex = LastSymbol.TokenIndex;
-							Steps.push_back(Step);
+							PushSteps(Step, Result->NeedPredict);
 							TryReduce();
 						}
 						else {
@@ -1493,11 +1609,13 @@ namespace Potato::SLRX
 					Re.RequireNode = Ite.ReferenceIndex;
 					return Re;
 				}
+				case LRX::RequireNodeType::NeedPredictShiftProperty:
 				case LRX::RequireNodeType::ShiftProperty:
 				{
 					ConsumeResult Re;
 					Re.State = Ite.ReferenceIndex;
 					Re.RequireNode = 0;
+					Re.NeedPredict = (Ite.Type == LRX::RequireNodeType::NeedPredictShiftProperty);
 					return Re;
 				}
 				case LRX::RequireNodeType::ReduceProperty:
@@ -1514,6 +1632,7 @@ namespace Potato::SLRX
 					assert(FindIte != CurReduceTuple.Tuples.end());
 					Re.State = FindIte->TargetState;
 					Re.RequireNode = 0;
+					Re.NeedPredict = FindIte->NeedPredict;
 					return Re;
 				}
 				}
@@ -1564,11 +1683,13 @@ namespace Potato::SLRX
 						Re.RequireNode = Ite.ToIndexOffset;
 						return Re;
 					}
+					case LRX::RequireNodeType::NeedPredictShiftProperty:
 					case LRX::RequireNodeType::ShiftProperty:
 					{
 						ConsumeResult Re;
 						Re.State = Ite.ToIndexOffset;
 						Re.RequireNode = 0;
+						Re.NeedPredict = (Ite.Type == LRX::RequireNodeType::NeedPredictShiftProperty);
 						return Re;
 					}
 					case LRX::RequireNodeType::ReduceProperty:
@@ -1581,6 +1702,7 @@ namespace Potato::SLRX
 						Reduce.Reduce.Mask = ReduceP->Mask;
 						Reduce.Reduce.ProductionIndex = ReduceP->ProductionIndex;
 						Reduce.Reduce.ElementCount = ReduceP->ProductionCount;
+						Reduce.NeedPredict = ReduceP->NeedPredict;
 						Re.Reduce = Reduce;
 						assert(States.size() > Re.Reduce->Reduce.ElementCount);
 						auto RefState = States[States.size() - Re.Reduce->Reduce.ElementCount - 1];
@@ -1591,6 +1713,7 @@ namespace Potato::SLRX
 						assert(FindIte != ReduceTuples.end());
 						Re.State = FindIte->ToState;
 						Re.RequireNode = 0;
+						Re.NeedPredict = FindIte->NeedPredict;
 						return Re;
 					}
 					}
@@ -1623,6 +1746,11 @@ namespace Potato::SLRX
 		CurrentTopState = StartupOffset;
 		States.push_back(CurrentTopState);
 		RequireNode = 0;
+		PredictRecord.clear();
+		if (StartupNeedPredict)
+		{
+			PredictRecord.push_back(Steps.size());
+		}
 		TryReduce();
 	}
 
@@ -1650,7 +1778,7 @@ namespace Potato::SLRX
 					Step.Reduce.Mask = Re->Reduce.Reduce.Mask;
 					Step.Reduce.ProductionIndex = Re->Reduce.Reduce.ProductionIndex;
 					Step.Reduce.ElementCount = Re->Reduce.Reduce.ElementCount;
-					Steps.push_back(Step);
+					PushSteps(Step, Re->NeedPredict);
 				}
 				else {
 					break;
@@ -1678,6 +1806,7 @@ namespace Potato::SLRX
 				ReduceResult Result;
 				Result.Reduce = Ref.Property;
 				Result.State = FindIte->TargetState;
+				Result.NeedPredict = FindIte->NeedPredict;
 				return Result;
 			}
 		}
@@ -1701,6 +1830,7 @@ namespace Potato::SLRX
 				Reduce.Reduce.Mask = ReduceP->Mask;
 				Reduce.Reduce.ProductionIndex = ReduceP->ProductionIndex;
 				Reduce.Reduce.ElementCount = ReduceP->ProductionCount;
+				Reduce.NeedPredict = ReduceP->NeedPredict;
 				ReduceResult Result;
 				Result.Reduce = Reduce;
 				assert(States.size() > Reduce.Reduce.ElementCount);
@@ -1711,6 +1841,7 @@ namespace Potato::SLRX
 					});
 				assert(FindIte != ReduceTuples.end());
 				Result.State = FindIte->ToState;
+				Result.NeedPredict = FindIte->NeedPredict;
 				return Result;
 			}
 			
@@ -1796,7 +1927,7 @@ namespace Potato::SLRX
 				{
 					auto Ref = Steps[Top.ReferenceReduceIndex];
 					assert(Ref.IsNoTerminal());
-					Ref.Reduce.IsPredict = true;
+					Ref.IsPredict = true;
 					Result.push_back(Ref);
 					Spans = Spans.subspan(1);
 				}

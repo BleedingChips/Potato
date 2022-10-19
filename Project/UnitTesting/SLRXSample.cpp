@@ -70,7 +70,7 @@ constexpr Symbol operator*(NT sym) { return Symbol::AsNoTerminal(static_cast<Sta
 
 void TestingSLRX()
 {
-
+	/*
 	try {
 		LRX Tab(
 			*Noterminal::Exp,
@@ -148,7 +148,7 @@ void TestingSLRX()
 		LRX tab(
 			*Noterminal::Exp,
 			{
-				{*Noterminal::Exp, {*Noterminal::Exp, *Noterminal::Exp, 1}, 1},
+				{*Noterminal::Exp, {*Noterminal::Exp, *Noterminal::Exp, 1}, 1, true},
 				{*Noterminal::Exp, {*Terminal::Num}, 2},
 			},
 		{
@@ -202,6 +202,7 @@ void TestingSLRX()
 	{
 		throw;
 	}
+	*/
 
 	try
 	{
@@ -209,7 +210,7 @@ void TestingSLRX()
 			*Noterminal::Exp,
 			{
 				{*Noterminal::Exp, {*Terminal::Num}, 1},
-				{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Add, *Noterminal::Exp}, 2},
+				{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Add, *Noterminal::Exp}, 2, true},
 				{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Multi, *Noterminal::Exp}, 3},
 				{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Sub, *Noterminal::Exp}, 4},
 				{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Dev, *Noterminal::Exp}, 5},
@@ -233,7 +234,9 @@ void TestingSLRX()
 			{Terminal::Multi, 40},
 			{Terminal::Num, 50},
 			{Terminal::Sub, 20},
-			{Terminal::Num, 2}
+			{Terminal::Num, 2},
+			{Terminal::Add, 20},
+			{Terminal::Num, 0}
 		};
 
 		SymbolProcessor Pro(tab);
@@ -273,10 +276,11 @@ void TestingSLRX()
 				}
 				return {};
 			}
-			else {
+			else if(Ele.IsTerminal()) {
 				auto TE = Ele.AsTerminal();
 				return Wtf[TE.Shift.TokenIndex].Value;
 			}
+			return {};
 		};
 
 		auto Result = ProcessParsingStepWithOutputType<int32_t>(Pro.GetSteps(), Func);

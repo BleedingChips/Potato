@@ -52,5 +52,7 @@ void TestingStrFormat()
 
 	auto Kcc = FormatTo(u8"sdsdfasdasd{asb}sdasd", I);
 
+	auto I22 = DirectFormat({}, I);
+
 	std::wcout << LR"(TestingStrFormat Pass !)" << std::endl;
 }
