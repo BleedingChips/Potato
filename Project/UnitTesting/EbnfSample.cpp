@@ -86,7 +86,7 @@ $ := <Exp>;
 		}
 	}
 
-	auto List = SyntaxProcessor::Process(Bnfx, Pro1.GetSpan(), false);
+	auto List = SyntaxProcessor::Process(Bnfx, Pro1.GetSpan());
 
 	auto Re = ProcessStep(std::span(*List.Element), [](VariantElement Ele)->std::any{
 		if (Ele.IsTerminal())
@@ -100,32 +100,35 @@ $ := <Exp>;
 			}
 			return {};
 		}
-		else {
+		else if(Ele.IsNoTerminal()) 
+		{
 			auto Te = Ele.AsNoTerminal();
-			if (!Te.Reduce.IsPredict)
+			switch (Te.Reduce.Mask)
 			{
-				switch (Te.Reduce.Mask)
-				{
-				case 1:
-					return Te[0].Consume();
-				case 2:
-				{
-					auto I1 = Te[0].Consume<int64_t>();
-					auto I2 = Te[2].Consume<int64_t>();
-					return I1 + I2;
-				}
-				case 3:
-					return Te[0].Consume<int64_t>() * Te[2].Consume<int64_t>();
-				case 4:
-					return Te[0].Consume<int64_t>() / Te[2].Consume<int64_t>();
-				case 5:
-					return Te[0].Consume<int64_t>() - Te[2].Consume<int64_t>();
-				case 6:
-					return Te[1].Consume();
-				}
+			case 1:
+				return Te[0].Consume();
+			case 2:
+			{
+				auto I1 = Te[0].Consume<int64_t>();
+				auto I2 = Te[2].Consume<int64_t>();
+				return I1 + I2;
 			}
-			return {};
+			case 3:
+				return Te[0].Consume<int64_t>() * Te[2].Consume<int64_t>();
+			case 4:
+				return Te[0].Consume<int64_t>() / Te[2].Consume<int64_t>();
+			case 5:
+				return Te[0].Consume<int64_t>() - Te[2].Consume<int64_t>();
+			case 6:
+				return Te[1].Consume();
+			}
 		}
+		else if (Ele.IsPredict())
+		{
+			auto Pre = Ele.AsPredict();
+			volatile int i = 0;
+		}
+		return {};
 	});
 
 	auto P = std::any_cast<int64_t>(*Re);

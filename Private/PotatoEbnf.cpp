@@ -206,6 +206,7 @@ namespace Potato::Ebnf
 				{*NT::Expression, {*T::ItSelf}, 50},
 
 				{*NT::FunctionEnum, {*T::Colon, *T::LM_Brace, *T::Number, *T::RM_Brace}, 6},
+				{*NT::FunctionEnum, {*T::Colon, *T::LM_Brace, *T::Number, *T::RM_Brace, *T::ItSelf}, 6},
 				{*NT::FunctionEnum, {}, 7},
 
 				{*NT::ExpressionStatement, {*NT::ExpressionStatement, 31, *NT::Expression}, 8},
@@ -372,6 +373,12 @@ namespace Potato::Ebnf
 
 				SLRX::SymbolProcessor Pro(EbnfStep2SLRX());
 
+				struct FunctionEnmu
+				{
+					SLRX::StandardT Mask = 0;
+					bool NeedPredict = false;
+				};
+
 				while (!InputSpan.empty())
 				{
 					auto& Cur = *InputSpan.begin();
@@ -407,9 +414,18 @@ namespace Potato::Ebnf
 						case 50:
 							return SLRX::ProductionBuilderElement{ SLRX::ItSelf{} };
 						case 6:
-							return Ref[2].Consume<SLRX::StandardT>();
+						{
+							FunctionEnmu Enum;
+							Enum.Mask = Ref[2].Consume<SLRX::StandardT>();
+							if(Ref.Datas.size() >= 5)
+								Enum.NeedPredict = true;
+							return Enum;
+						}
 						case 7:
-							return 0;
+						{
+							FunctionEnmu Enum;
+							return Enum;
+						}
 						case 8:
 						{
 							auto Last = Ref[0].Consume<std::vector<SLRX::ProductionBuilderElement>>();
@@ -524,11 +540,12 @@ namespace Potato::Ebnf
 						{
 							LastProductionStartSymbol = Ref[0].Consume<SLRX::Symbol>();
 							auto List = Ref[2].Consume<std::vector<SLRX::ProductionBuilderElement>>();
-							auto Mask = Ref[3].Consume<SLRX::StandardT>();
+							auto Mask = Ref[3].Consume<FunctionEnmu>();
 							Builders.push_back({
 								*LastProductionStartSymbol,
 								std::move(List),
-								Mask
+								Mask.Mask,
+								Mask.NeedPredict
 								});
 							return {};
 						}
@@ -540,11 +557,12 @@ namespace Potato::Ebnf
 								throw Exception::UnacceptableEbnf{ Exception::UnacceptableEbnf::TypeT::UnsetProductionHead, Str, TokenIndex };
 							}
 							auto List = Ref[1].Consume<std::vector<SLRX::ProductionBuilderElement>>();
-							auto Mask = Ref[2].Consume<SLRX::StandardT>();
+							auto Mask = Ref[2].Consume<FunctionEnmu>();
 							Builders.push_back({
 								*LastProductionStartSymbol,
 								std::move(List),
-								Mask
+								Mask.Mask,
+								Mask.NeedPredict
 								});
 							return {};
 						}
@@ -1067,7 +1085,7 @@ namespace Potato::Ebnf
 		return false;
 	}
 
-	Result<std::vector<ParsingStep>> SyntaxProcessor::Process(SyntaxProcessor& Pro, std::span<LexicalElement const> Eles, bool Predict)
+	Result<std::vector<ParsingStep>> SyntaxProcessor::Process(SyntaxProcessor& Pro, std::span<LexicalElement const> Eles)
 	{
 
 		for (std::size_t I = 0; I < Eles.size(); ++I)
@@ -1080,58 +1098,13 @@ namespace Potato::Ebnf
 			return { {}, Eles.size() };
 		}
 
-		if (!Predict)
+		std::vector<ParsingStep> Temp;
+		Temp.reserve(Pro.GetSteps().size());
+		for (auto Ite : Pro.Pro.GetSteps())
 		{
-			std::vector<ParsingStep> Temp;
-			Temp.reserve(Pro.GetSteps().size());
-			for (auto Ite : Pro.Pro.GetSteps())
-			{
-				Temp.push_back(std::get<0>(Pro.Translate(Ite, Eles)));
-			}
-			return { Temp, Eles.size() };
+			Temp.push_back(std::get<0>(Pro.Translate(Ite, Eles)));
 		}
-		else {
-			auto TempSteps = SLRX::SymbolProcessor::InsertPredictStep(Pro.Pro.GetSteps());
-			assert(TempSteps.has_value());
-			std::size_t Index = 0;
-			for (auto& Ite : *TempSteps)
-			{
-				if (Ite.IsNoTerminal() && Ite.IsPredict)
-				{
-					if (std::holds_alternative<std::reference_wrapper<EBNFX const>>(Pro.Table))
-					{
-						if(std::get<std::reference_wrapper<EBNFX const>>(Pro.Table).get().IsNoName(Ite.Value))
-							continue;
-					}
-					else if (std::holds_alternative<TableWrapper>(Pro.Table))
-					{
-						if (std::get<TableWrapper>(Pro.Table).IsNoName(Ite.Value))
-							continue;
-					}
-				}
-				++Index;
-			}
-			std::vector<ParsingStep> Temp;
-			Temp.reserve(Index);
-			for (auto& Ite : *TempSteps)
-			{
-				if (Ite.IsNoTerminal() && Ite.IsPredict)
-				{
-					if (std::holds_alternative<std::reference_wrapper<EBNFX const>>(Pro.Table))
-					{
-						if (std::get<std::reference_wrapper<EBNFX const>>(Pro.Table).get().IsNoName(Ite.Value))
-							continue;
-					}
-					else if (std::holds_alternative<TableWrapper>(Pro.Table))
-					{
-						if (std::get<TableWrapper>(Pro.Table).IsNoName(Ite.Value))
-							continue;
-					}
-				}
-				Temp.push_back(std::get<0>(Pro.Translate(Ite, Eles)));
-			}
-			return { Temp, Eles.size() };
-		}
+		return { Temp, Eles.size() };
 	}
 
 	auto PasringStepProcessor::Consume(ParsingStep Input) ->std::optional<Result>
@@ -1144,10 +1117,10 @@ namespace Potato::Ebnf
 		}
 		else {
 			auto Reduce = std::get<ParsingStep::ReduceT>(Input.Data);
-			if(Reduce.IsPredict)
+			if(Input.IsPredict)
 			{
 				assert(!Reduce.IsNoNameReduce);
-				NTElement Ele {Input.Symbol, Reduce, {}};
+				PredictElement Ele {Input.Symbol, Reduce};
 				return Result{ VariantElement{Ele}, {}};
 			}else{
 				TemporaryDatas.clear();
@@ -1273,8 +1246,6 @@ namespace Potato::Ebnf::Exception
 	char const* UnacceptableRegex::what() const { return "UnacceptableRegex Exception"; }
 	char const* UnacceptableEbnf::what() const { return "UnacceptableEbnf Exception"; }
 	char const* OutofRange::what() const { return "OutofRange Exception"; }
-	char const* UnacceptableSymbol::what() const { return "UnacceptableSymbol Exception"; }
-	char const* UnacceptableInput::what() const { return "UnacceptableInput Exception"; }
 	char const* IllegalEbnfProduction::what() const { return "IllegalEbnfProduction Exception"; }
 
 	auto IllegalEbnfProduction::Translate(std::span<SLRX::ParsingStep const> Steps, std::vector<std::u32string> const& TMapping, std::vector<std::u32string> const& NTMapping) -> std::vector<std::variant<TMap, NTMap>>
@@ -1295,7 +1266,8 @@ namespace Potato::Ebnf::Exception
 					Result.push_back({ TMap{TMapping[Ite.Value.Value]} });
 				}
 			}
-			else {
+			else if(Ite.IsNoTerminal()) 
+			{
 				if (Ite.Value.Value < NTMapping.size())
 				{
 					assert(Ite.Reduce.Mask >= MinMask);

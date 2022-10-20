@@ -287,7 +287,6 @@ namespace Potato::SLRX
 
 		std::vector<Production> ProductionDescs;
 		std::map<Symbol, std::vector<std::size_t>> TrackedAcceptableNoTerminalSymbol;
-		bool NeedPredict = false;
 	};
 
 	struct LR0
@@ -298,7 +297,6 @@ namespace Potato::SLRX
 			std::size_t ToNode;
 			bool ReverseStorage;
 			std::vector<std::size_t> ProductionIndex;
-			bool NeedPredict = false;
 		};
 
 		struct Reduce
@@ -327,7 +325,6 @@ namespace Potato::SLRX
 			std::vector<ShiftEdge> Shifts;
 			std::vector<Reduce> Reduces;
 			std::vector<MappedProduction> MappedProduction;
-			bool NeedPredict = false;
 		};
 
 		std::vector<Node> Nodes;
@@ -378,7 +375,6 @@ namespace Potato::SLRX
 		};
 
 		std::vector<Node> Nodes;
-		bool IsStarupNeedPredict = false;
 
 		LRX(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority, std::size_t MaxForwardDetect = 3)
 			: LRX(LR0{StartSymbol, std::move(Production), std::move(Priority)}, MaxForwardDetect) {}
@@ -389,7 +385,7 @@ namespace Potato::SLRX
 		LRX& operator=(LRX&&) = default;
 
 		static constexpr std::size_t StartupOffset() { return 1; }
-		bool StartupNeedPredict() const { return IsStarupNeedPredict; }
+		//bool StartupNeedPredict() const { return IsStarupNeedPredict; }
 	};
 
 	struct TableWrapper
@@ -457,7 +453,7 @@ namespace Potato::SLRX
 		operator bool() const { return !Buffer.empty(); }
 		std::size_t NodeCount() const { return Buffer[0]; }
 		std::size_t StartupNodeIndex() const { return Buffer[1]; }
-		bool StartupNeedPredict() const { return Buffer[2]; }
+		//bool StartupNeedPredict() const { return Buffer[2]; }
 		std::size_t TotalBufferSize() const { return Buffer.size(); }
 
 		std::span<StandardT const> Buffer;
@@ -481,10 +477,7 @@ namespace Potato::SLRX
 		void Clear();
 		void ClearSteps();
 
-		static std::optional<std::vector<ParsingStep>> InsertPredictStep(std::span<ParsingStep const> Steps);
-
-		std::optional<std::vector<ParsingStep>> InsertPredictStep(){ return InsertPredictStep(std::span(Steps)); }
-		bool EndOfFile(std::vector<Symbol>* SuggestSymbols = nullptr) { return Consume(Symbol::EndOfFile(), 0, SuggestSymbols); }
+		bool EndOfFile(std::vector<Symbol>* SuggestSymbols = nullptr) { bool Re =  Consume(Symbol::EndOfFile(), 0, SuggestSymbols); if(Re) PredictRecord.clear(); return Re; }
 
 	private:
 
@@ -528,7 +521,6 @@ namespace Potato::SLRX
 		std::vector<std::size_t> PredictRecord;
 		std::variant<TableWrapper, std::reference_wrapper<LRX const>> Table;
 		std::size_t StartupOffset;
-		bool StartupNeedPredict;
 	};
 
 	struct Table
@@ -682,54 +674,6 @@ namespace Potato::SLRX
 			std::size_t Value;
 			OutOfRange(TypeT Type, std::size_t Value) : Type(Type), Value(Value) {};
 			OutOfRange(OutOfRange const&) = default;
-			virtual char const* what() const override;
-		};
-
-		struct UnaccableSymbol : public Interface
-		{
-			Symbol LastSymbol;
-			std::size_t TokenIteratorIndex;
-			std::size_t TokenIndex;
-
-			struct Tuple
-			{
-				Symbol Value;
-				std::size_t TokenIndex;
-				std::strong_ordering operator<=>(Tuple const&) const = default;
-			};
-
-			std::vector<Tuple> RequireSymbols;
-
-			UnaccableSymbol(Symbol LastSymbol, std::size_t TokenIteratorIndex, std::size_t TokenIndex, std::vector<Tuple> RequireSymbols)
-				: LastSymbol(LastSymbol), TokenIteratorIndex(TokenIteratorIndex), TokenIndex(TokenIndex), RequireSymbols(std::move(RequireSymbols))
-			{
-
-			}
-			UnaccableSymbol(UnaccableSymbol const&) = default;
-			virtual char const* what() const override;
-		};
-
-		struct MaxAmbiguityProcesser : public Interface
-		{
-			Symbol InputSymbol;
-			std::size_t InputIndex;
-			std::size_t MaxProcesserNumber;
-
-			MaxAmbiguityProcesser(Symbol InputSymbol, std::size_t InputIndex, std::size_t MaxProcesserNumber)
-				: InputSymbol(InputSymbol), InputIndex(InputIndex), MaxProcesserNumber(MaxProcesserNumber)
-			{
-
-			}
-			MaxAmbiguityProcesser(MaxAmbiguityProcesser const&) = default;
-			virtual char const* what() const override;
-		};
-
-		struct UnsupportedStep : public Interface
-		{
-			Symbol Value;
-			std::size_t TokenIndex;
-			UnsupportedStep(Symbol Value, std::size_t TokenIndex) : Value(Value), TokenIndex (TokenIndex) {}
-			UnsupportedStep(UnsupportedStep const&) = default;
 			virtual char const* what() const override;
 		};
 	}

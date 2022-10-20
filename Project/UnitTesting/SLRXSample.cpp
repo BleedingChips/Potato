@@ -210,8 +210,8 @@ void TestingSLRX()
 			*Noterminal::Exp,
 			{
 				{*Noterminal::Exp, {*Terminal::Num}, 1},
-				{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Add, *Noterminal::Exp}, 2, true},
-				{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Multi, *Noterminal::Exp}, 3},
+				{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Add, *Noterminal::Exp}, 2},
+				{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Multi, *Noterminal::Exp}, 3, true},
 				{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Sub, *Noterminal::Exp}, 4},
 				{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Dev, *Noterminal::Exp}, 5},
 			},
@@ -309,10 +309,6 @@ void TestingSLRX()
 		
 	}
 	catch (Exception::IllegalSLRXProduction const&)
-	{
-		throw UnpassedUnit{ "TestingSLRX : Bad Output Result 1.5" };
-	}
-	catch (Exception::UnaccableSymbol const& IL)
 	{
 		throw UnpassedUnit{ "TestingSLRX : Bad Output Result 1.5" };
 	}

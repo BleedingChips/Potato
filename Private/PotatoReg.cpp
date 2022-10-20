@@ -1090,7 +1090,6 @@ namespace Potato::Reg
 
 					if (CircleDetected != Cur.Propertys.end())
 					{
-						volatile int i = 0;
 						throw Exception::CircleShifting{};
 					}
 

@@ -5,272 +5,142 @@
 using namespace Potato::Reg;
 
 
-void TestingReg()
+void TestMatch(std::u8string_view Reg, bool Raw, std::u8string_view Str, Accept Acce, const char* const Error)
 {
 
 
-	// Case 1
-	{
-		DFA Tab1(u8R"(abcd)", false, {2});
+	try {
+		DFA Tab1(Reg, Raw, Acce);
+		
+		
+		auto Re = Match(Tab1, Str);
+		if (!Re || Re->AcceptData != Acce)
+			throw UnpassedUnit{ Error };
 
-		std::u8string_view Source = u8R"(abcd)";
-
-		auto Re = Match(Tab1, Source);
-
-		if (!Re)
-		{
-			throw UnpassedUnit{"Testing Reg Failure Case 1"};
-		}
-
-		auto Wra = TableWrapper::Create(Tab1);
-
-		auto Re2 = Match(Tab1, Source);
-
-		if (!Re2)
-		{
-			throw UnpassedUnit{ "Testing Reg Failure Case 1" };
-		}
-
+		auto Tab2 = TableWrapper::Create(Tab1);
+		
+		auto Re2 = Match(TableWrapper{Tab2}, Str);
+		
+		if (!Re2 || Re2->AcceptData != Acce)
+			throw UnpassedUnit{ Error };
 	}
-
-	// Case 2
-
+	catch (Exception::Interface const&)
 	{
-		DFA Tab1(u8R"(.*cd)", false, { 2 });
-
-		std::u8string_view Source = u8R"(abcd)";
-
-		auto Re = Match(Tab1, Source);
-
-		if (!Re)
-		{
-			throw UnpassedUnit{ "Testing Reg Failure Case 2" };
-		}
-
-		auto Wra = TableWrapper::Create(Tab1);
-
-		auto Re2 = Match(Tab1, Source);
-
-		if (!Re2)
-		{
-			throw UnpassedUnit{ "Testing Reg Failure Case 2" };
-		}
+		throw UnpassedUnit{ Error };
 	}
+}
 
-	// Case 3
+void TestHeadMatch(std::u8string_view Reg, bool Raw, std::u8string_view Str, std::u8string_view RequireStr, Accept Acce, const char* const Error)
+{
+	try {
+		DFA Tab1(Reg, Raw, Acce);
 
+		auto Re = HeadMatch(Tab1, Str);
+		if (!Re || Re->MainCapture.Slice(Str) != RequireStr || Re->AcceptData != Acce)
+			throw UnpassedUnit{ Error };
+
+		auto Tab2 = TableWrapper::Create(Tab1);
+
+		auto Re2 = Match(TableWrapper{ Tab2 }, Str);
+
+		if (!Re2 || Re->MainCapture.Slice(Str) != RequireStr || Re->AcceptData != Acce)
+			throw UnpassedUnit{ Error };
+	}
+	catch (Exception::Interface const&)
 	{
-		DFA Tab1(u8R"(a{1,5})", false, { 2 });
-
-		std::u8string_view Source = u8R"(aaaa)";
-
-		auto Re = Match(Tab1, Source);
-
-		if (!Re)
-		{
-			throw UnpassedUnit{ "Testing Reg Failure Case 3" };
-		}
-
-		auto Wra = TableWrapper::Create(Tab1);
-
-		auto Re2 = Match(Tab1, Source);
-
-		if (!Re2)
-		{
-			throw UnpassedUnit{ "Testing Reg Failure Case 3" };
-		}
+		throw UnpassedUnit{ Error };
 	}
+}
 
-	// Case 4
-	{
-		DFA Tab1(u8R"(a*(bc)d*)", false, { 2 });
-
-		std::u8string_view Source = u8R"(aaaabcddd)";
-
-		auto Re = Match(Tab1, Source);
-
-		if (!Re)
-		{
-			throw UnpassedUnit{ "Testing Reg Failure Case 4" };
-		}
-
-		auto Wra = TableWrapper::Create(Tab1);
-
-		auto Re2 = Match(Tab1, Source);
-
-		if (!Re2)
-		{
-			throw UnpassedUnit{ "Testing Reg Failure Case 4" };
-		}
-	}
-
-	// Case 5
-
-	{
-		MulityRegCreater Crea;
-		Crea.LowPriorityLink(u8R"(what)", true, {0});
-		Crea.LowPriorityLink(u8R"(if)", true, { 1 });
-		Crea.LowPriorityLink(u8R"([a-z]+)", false, { 2 });
-		Crea.LowPriorityLink(u8R"(\s+)", false, { 3 });
-
-		auto DFA = *Crea.GenerateDFA();
-
-		std::u8string_view Str = u8R"(what whatif  if abd def)";
-
-		std::u8string_view S = Str;
-
-		std::vector<std::u8string_view> List;
-
-		while (!S.empty())
-		{
-			auto Re = HeadMatch(DFA, S, true);
-			if (!Re)
-			{
-				throw UnpassedUnit{ "Testing Reg Failure Case 5" };
-			}
-			else {
-				List.push_back(S.substr(0, Re->MainCapture.Count()));
-				S = S.substr(Re->MainCapture.Count());
-			}
-		}
-
-		if (List.size() != 9)
-		{
-			throw UnpassedUnit{ "Testing Reg Failure Case 5" };
-		}
-
-	}
-
-
-	// Case 6
-	{
-		std::u8string_view Str = u8R"(123456abcdef)";
-		std::u8string_view TStr = u8R"(123456)";
-
-		DFA T(TStr);
-
-		auto R = HeadMatch(T, Str);
-
-		if (!R || Str.substr(R->MainCapture.Begin(), R->MainCapture.Count()) != TStr)
-			throw UnpassedUnit{ "Testing Reg Failure Case 6" };
-	}
-
-	// Case 7
-	{
-		std::u8string_view Str = u8R"(2)";
-
-		DFA T(u8R"([0-9])");
-
-		auto R = Match(T, Str);
-
-		if (!R)
-			throw UnpassedUnit{ "Testing Reg Failure Case 7" };
-	}
-
-	// Case 8
-	{
-		std::u8string_view Str = u8R"(11111)";
-
-		DFA T(u8R"(1*)");
-
-		auto R = Match(T, Str);
-
-		if (!R)
-			throw UnpassedUnit{ "Testing Reg Failure Case 8" };
-	}
-
-	// Case 9
-	{
-		std::u8string_view Str = u8R"(11111)";
-
-		DFA T(u8R"(1+)");
-
-		auto R = Match(T, Str);
-
-		if (!R)
-			throw UnpassedUnit{ "Testing Reg Failure Case 9" };
-	}
-
-	
-	// Case 10
-	{
-		std::u8string_view Str = u8R"(11112222)";
-
-		DFA T(u8R"((1*)2*)");
-
-		auto R = Match(T, Str);
-
-		if (R && R->GetCaptureWrapper().HasSubCapture())
-		{
-			auto Capture = R->GetCaptureWrapper().GetTopSubCapture().GetCapture();
-			if(Str.substr(Capture.Begin(), Capture.Count()) != u8R"(1111)")
-				throw UnpassedUnit{ "Testing Reg Failure Case 10" };
-		}else
-			throw UnpassedUnit{ "Testing Reg Failure Case 10" };
-	}
-
-	// Case 11
-	{
-		std::u8string_view Str = u8R"(11111)";
-
-		DFA T(u8R"(1{1,7})");
-
-		auto R = Match(T, Str);
-
-		if (!R)
-			throw UnpassedUnit{ "Testing Reg Failure Case 11" };
-	}
-
-	std::u8string_view Str = u8R"(123456789abcdefABCDEF你好啊)";
-
-	// Case 12
-	{
-		DFA T(u8R"(.*?[a-zA-Z]+)");
-
-		auto R = HeadMatch(T, Str);
-
-		if (!R || Str.substr(R->MainCapture.Begin(), R->MainCapture.Count()) != u8R"(123456789abcdefABCDEF)")
-			throw UnpassedUnit{ "Testing Reg Failure Case 12" };
-	}
-
-	// Case 13
+void TestGreddyHeadMatch(const char* const Error)
+{
+	try
 	{
 		MulityRegCreater Crerator;
-		Crerator.LowPriorityLink(u8R"([1-4]+)", false, {1});
-		Crerator.LowPriorityLink(u8R"([1-9]+)", false, { 2 });
-		Crerator.LowPriorityLink(u8R"([a-z]+)", false, { 3 });
-		Crerator.LowPriorityLink(u8R"([A-Z]+)", false, { 4 });
-		Crerator.LowPriorityLink(u8R"((?:你|好|啊)+)", false, { 5 });
+		Crerator.LowPriorityLink(u8R"(\+)", false, { 2 });
+		Crerator.LowPriorityLink(u8R"(\s)", false, { 3 });
+		Crerator.LowPriorityLink(u8R"([0-9]+)", false, { 4 });
+		Crerator.LowPriorityLink(u8R"(while)", false, { 5 });
+		Crerator.LowPriorityLink(u8R"([a-zA-Z][a-z0-9A-Z]*)", false, { 1 });
+		auto Table = Crerator.GenerateDFA();
+
+
+		std::u8string_view Source = u8R"(abc abc while 12 + while123)";
+
+		struct Enum
+		{
+			std::size_t Mask;
+			std::u8string_view Str;
+			bool operator==(Enum const& I2) const{ return Mask == I2.Mask && Str == I2.Str; }
+		};
+
+		std::vector<Enum> TarEnums = {
+			{1, u8R"(abc)"},
+			{3, u8R"( )"},
+			{1, u8R"(abc)"},
+			{3, u8R"( )"},
+			{5, u8R"(while)"},
+			{3, u8R"( )"},
+			{4, u8R"(12)"},
+			{3, u8R"( )"},
+			{2, u8R"(+)"},
+			{3, u8R"( )"},
+			{1, u8R"(while123)"}
+		};
 
 		auto TTable = *Crerator.GenerateDFA();
 
-		std::vector<std::tuple<std::u8string_view, std::size_t>> List;
-
-		auto IteStr = Str;
-
-		while (!IteStr.empty())
 		{
-			auto R = HeadMatch(TTable, IteStr, true);
-			if (R)
+			std::vector<Enum> CurI;
+			auto Ite = Source;
+			HeadMatchProcessor Pro(TTable, true);
+			while (!Ite.empty())
 			{
-				List.push_back({ IteStr .substr(R->MainCapture.Begin(), R->MainCapture.Count()), R->AcceptData.Mask});
-			}else
-				throw UnpassedUnit{ "TestingReg : Bad Sample 8" };
-			IteStr = IteStr.substr(R->MainCapture.Count());
+				Pro.Clear();
+				auto Re = HeadMatch(Pro, Ite);
+				if(!Re)
+					throw UnpassedUnit{ Error };
+				CurI.push_back({Re->AcceptData.Mask, Re->MainCapture.Slice(Ite)});
+				Ite = Ite.substr(Re->MainCapture.Count());
+			}
+			if(CurI != TarEnums)
+				throw UnpassedUnit{ Error };
 		}
-
-		if (List.size() != 4)
-			throw UnpassedUnit{ "Testing Reg Failure Case 13" };
-		if (std::get<0>(List[0]) != u8R"(123456789)" || std::get<1>(List[0]) != 2)
-			throw UnpassedUnit{ "Testing Reg Failure Case 13" };
-		if (std::get<0>(List[1]) != u8R"(abcdef)" || std::get<1>(List[1]) != 3)
-			throw UnpassedUnit{ "Testing Reg Failure Case 13" };
-		if (std::get<0>(List[2]) != u8R"(ABCDEF)" || std::get<1>(List[2]) != 4)
-			throw UnpassedUnit{ "Testing Reg Failure Case 13" };
-		if (std::get<0>(List[3]) != u8R"(你好啊)" || std::get<1>(List[3]) != 5)
-			throw UnpassedUnit{ "Testing Reg Failure Case 13" };
 	}
+	catch (Exception::Interface const&)
+	{
+		throw UnpassedUnit{ Error };
+	}
+}
 
+
+void TestingReg()
+{
+
+	Accept DefaultAcc = {100, 2007};
+
+	TestMatch(u8R"(abcd)", false, u8R"(abcd)", DefaultAcc, "TestingReg:: Case 1");
+	TestMatch(u8R"({})", true, u8R"({})", DefaultAcc, "TestingReg:: Case 2");
+	TestMatch(u8R"([0-9])", false, u8R"(8)", DefaultAcc, "TestingReg:: Case 3");
+	TestMatch(u8R"([^0-9])", false, u8R"(a)", DefaultAcc, "TestingReg:: Case 4");
+	TestMatch(u8R"(a|b)", false, u8R"(a)", DefaultAcc, "TestingReg:: Case 5");
+	TestMatch(u8R"(a|b)", false, u8R"(b)", DefaultAcc, "TestingReg:: Case 6");
+	TestMatch(u8R"(a*)", false, u8R"(aaa)", DefaultAcc, "TestingReg:: Case 7");
+	TestMatch(u8R"(a+)", false, u8R"(aaa)", DefaultAcc, "TestingReg:: Case 8");
+	TestMatch(u8R"(ba?)", false, u8R"(b)", DefaultAcc, "TestingReg:: Case 9");
+	TestMatch(u8R"(ba?)", false, u8R"(ba)", DefaultAcc, "TestingReg:: Case 10");
+	TestMatch(u8R"((ba?))", false, u8R"(ba)", DefaultAcc, "TestingReg:: Case 11");
+	TestMatch(u8R"((?:ba?))", false, u8R"(ba)", DefaultAcc, "TestingReg:: Case 12");
+	TestMatch(u8R"((?:ba)?)", false, u8R"(ba)", DefaultAcc, "TestingReg:: Case 13");
+	TestMatch(u8R"(a{0,4})", false, u8R"(aaa)", DefaultAcc, "TestingReg:: Case 14");
+	TestMatch(u8R"(a{4})", false, u8R"(aaaa)", DefaultAcc, "TestingReg:: Case 15");
+	TestMatch(u8R"(a{4,})", false, u8R"(aaaa)", DefaultAcc, "TestingReg:: Case 16");
+	TestMatch(u8R"(a{,4})", false, u8R"(aaaa)", DefaultAcc, "TestingReg:: Case 17");
+
+	TestHeadMatch(u8R"(bca*)", false, u8R"(bcaaaa)", u8R"(bcaaaa)", DefaultAcc, "TestingReg:: Case 18");
+	TestHeadMatch(u8R"(bca*?)", false, u8R"(bcaaaa)", u8R"(bc)", DefaultAcc, "TestingReg:: Case 19");
+
+	TestGreddyHeadMatch("TestingReg:: Case 20");
 
 	std::wcout << LR"(TestingReg Pass !)" << std::endl;
 }

@@ -155,9 +155,15 @@
     <ClInclude Include="..\..\Public\PotatoTMP.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\Private\PotatoDocument.cpp" />
+    <ClCompile Include="..\..\Private\PotatoEbnf.cpp" />
     <ClCompile Include="..\..\Private\PotatoIR.cpp" />
     <ClCompile Include="..\..\Private\PotatoMisc.cpp" />
+    <ClCompile Include="..\..\Private\PotatoReg.cpp" />
     <ClCompile Include="..\..\Private\PotatoSLRX.cpp" />
+    <ClCompile Include="..\..\Private\PotatoStrEncode.cpp" />
+    <ClCompile Include="..\..\Private\PotatoStrFormat.cpp" />
+    <ClCompile Include="..\..\Private\PotatoVirtualPath.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

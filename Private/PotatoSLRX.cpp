@@ -108,7 +108,6 @@ namespace Potato::SLRX
 			Desc.Symbol = Ite.ProductionValue;
 			Desc.ProductionMask = Ite.ProductionMask;
 			Desc.NeedPredict = Ite.NeedPredict;
-			NeedPredict = (NeedPredict || Ite.NeedPredict);
 			std::size_t ElementIndex = 0;
 			for (auto& Ite2 : Ite.Element)
 			{
@@ -598,7 +597,7 @@ namespace Potato::SLRX
 				auto AcceptablPISpan = Ite.AcceptableProductionIndex.Slice(AccepatbelProductionIndexs);
 				std::vector<std::size_t> TempAcce(AcceptablPISpan.begin(), AcceptablPISpan.end());
 				TemporaryNode.Shifts.push_back(
-					ShiftEdge{Ite.Symbol, *FindState, Ite.ReserveStorage, std::move(TempAcce), false}
+					ShiftEdge{Ite.Symbol, *FindState, Ite.ReserveStorage, std::move(TempAcce)}
 				);
 			}
 			auto CurStatusElementSpan = PreNode[SearchIte].Slice(Status);
@@ -623,31 +622,6 @@ namespace Potato::SLRX
 
 			Nodes.push_back(std::move(TemporaryNode));
 		}
-
-		if (Infos.NeedPredict)
-		{
-			for (auto& Ite : Nodes)
-			{
-				for (auto& Ite2 : Ite.MappedProduction)
-				{
-					if (Ite2.Production.NeedPredict)
-					{
-						Ite.NeedPredict = true;
-						break;
-					}
-				}
-			}
-
-			for (auto& Ite : Nodes)
-			{
-				for (auto& Ite2 : Ite.Shifts)
-				{
-					auto& NodeRef = Nodes[Ite2.ToNode];
-					if(NodeRef.NeedPredict)
-						Ite2.NeedPredict = true;
-				}
-			}
-		}
 	}
 
 	struct FastReduce
@@ -656,14 +630,12 @@ namespace Potato::SLRX
 		std::ptrdiff_t Reduce;
 		std::size_t LastState;
 		LR0::Reduce Property;
-		bool ReduceShiftNeedPredict = false;
 	};
 
 	struct FastShift
 	{
 		std::size_t ToNode;
 		Symbol RequireSymbol;
-		bool NeedPredict = false;
 	};
 
 	struct FastNode
@@ -721,9 +693,6 @@ namespace Potato::SLRX
 
 	LRX::LRX(LR0 const& Table, std::size_t MaxForwardDetect)
 	{
-
-		IsStarupNeedPredict = Table.Nodes[StartupOffset()].NeedPredict;
-
 		std::vector<FastNode> TempNode;
 
 		{
@@ -765,7 +734,7 @@ namespace Potato::SLRX
 				{
 					if (Ite.RequireSymbol.IsTerminal())
 					{
-						SHRef.push_back({ Ite.ToNode, Ite.RequireSymbol, Ite.NeedPredict });
+						SHRef.push_back({ Ite.ToNode, Ite.RequireSymbol });
 					}
 				}
 
@@ -815,7 +784,7 @@ namespace Potato::SLRX
 								return Element.ToNode == Top.Node && Element.LastState == LastState;
 								}) == LastSpan.end())
 							{
-								FFRef.push_back(FastReduce{ Top.Node, 1 - static_cast<std::ptrdiff_t>(Ite.Reduce.ProductionIndex), LastState, Ite, NeedPredict });
+								FFRef.push_back(FastReduce{ Top.Node, 1 - static_cast<std::ptrdiff_t>(Ite.Reduce.ProductionIndex), LastState, Ite });
 							}
 						}
 						else {
@@ -874,8 +843,6 @@ namespace Potato::SLRX
 				for (auto& Ite : Ref.Shifts)
 				{
 					CurRef.RequireNodes[0].push_back({
-						Ite.NeedPredict ? 
-							RequireNodeType::NeedPredictShiftProperty : 
 							RequireNodeType::ShiftProperty
 						, Ite.RequireSymbol, Ite.ToNode});
 				}
@@ -895,7 +862,7 @@ namespace Potato::SLRX
 						NewProperty.Property = Ref.Reduces[0].Property;
 						for (auto& Ite : Ref.Reduces)
 						{
-							NewProperty.Tuples.push_back({ Ite.LastState, Ite.ToNode, Ite.ReduceShiftNeedPredict});
+							NewProperty.Tuples.push_back({ Ite.LastState, Ite.ToNode});
 						}
 						CurRef.Reduces.push_back(std::move(NewProperty));
 					}
@@ -1151,10 +1118,7 @@ namespace Potato::SLRX
 							assert(Find1 != TempNodeRef.Shifts.end());
 
 							LastRNode.push_back(RequireNode{
-								Find1->NeedPredict ? 
-									RequireNodeType::NeedPredictShiftProperty :
-									RequireNodeType::ShiftProperty
-								,
+								RequireNodeType::ShiftProperty,
 								*Symbols.rbegin(),
 								Find1->ToNode
 							});
@@ -1254,6 +1218,61 @@ namespace Potato::SLRX
 				}
 			}
 		}
+
+		std::vector<std::size_t> NodeNeedPredict;
+		NodeNeedPredict.resize(Nodes.size(), 0);
+
+		for (std::size_t I = 0; I < Nodes.size(); ++I)
+		{
+			auto& CRNode = Nodes[I];
+			for (auto& Ite : CRNode.Reduces)
+			{
+				if (Ite.Property.NeedPredict)
+				{
+					NodeNeedPredict[I] = 1;
+					break;
+				}
+			}
+		}
+
+		bool Change = true;
+		while (Change)
+		{
+			Change = false;
+
+			for (std::size_t I = 0; I < Nodes.size(); ++I)
+			{
+				auto& Ite = Nodes[I];
+				for (auto& Ite2 : Ite.RequireNodes)
+				{
+					for (auto& Ite3 : Ite2)
+					{
+						if (Ite3.Type == RequireNodeType::ShiftProperty)
+						{
+							if (NodeNeedPredict[Ite3.ReferenceIndex] == 1)
+							{
+								Ite3.Type = RequireNodeType::NeedPredictShiftProperty;
+								NodeNeedPredict[I] = 1;
+								Change = true;
+							}
+						}
+					}
+				}
+
+				for (auto& Ite2 : Ite.Reduces)
+				{
+					for (auto& Ite3 : Ite2.Tuples)
+					{
+						if (!Ite3.NeedPredict && NodeNeedPredict[Ite3.TargetState] == 1)
+						{
+							Ite3.NeedPredict = true;
+							NodeNeedPredict[I] = 1;
+							Change = true;
+						}
+					}
+				}
+			}
+		}
 	}
 
 	std::size_t TableWrapper::CalculateRequireSpace(LRX const& Ref)
@@ -1263,9 +1282,6 @@ namespace Potato::SLRX
 		Pre.WriteElement();
 
 		// StartupOffset
-		Pre.WriteElement();
-
-		// StartupNeedPredict
 		Pre.WriteElement();
 
 		for (auto& Ite : Ref.Nodes)
@@ -1298,8 +1314,6 @@ namespace Potato::SLRX
 		Reader.CrossTypeSetThrow<OutOfRange>(*P1, Ref.Nodes.size(), OutOfRange::TypeT::NodeCount, Ref.Nodes.size());
 
 		auto StartupNode = Reader.NewElement();
-
-		*Reader.NewElement() = Ref.StartupNeedPredict();
 
 		std::size_t NodeIndex = 0;
 
@@ -1425,12 +1439,12 @@ namespace Potato::SLRX
 		return Re;
 	}
 
-	SymbolProcessor::SymbolProcessor(TableWrapper Wrapper) : Table(Wrapper), StartupOffset(Wrapper.StartupNodeIndex()), StartupNeedPredict(Wrapper.StartupNeedPredict()) {
+	SymbolProcessor::SymbolProcessor(TableWrapper Wrapper) : Table(Wrapper), StartupOffset(Wrapper.StartupNodeIndex()) {
 		assert(Wrapper); 
 		
 		Clear();
 	}
-	SymbolProcessor::SymbolProcessor(LRX const& Wrapper) : Table(std::reference_wrapper(Wrapper)), StartupOffset(LRX::StartupOffset()), StartupNeedPredict(Wrapper.StartupNeedPredict()) { Clear(); }
+	SymbolProcessor::SymbolProcessor(LRX const& Wrapper) : Table(std::reference_wrapper(Wrapper)), StartupOffset(LRX::StartupOffset()) { Clear(); }
 
 	std::span<ParsingStep const> SymbolProcessor::GetSteps() const
 	{
@@ -1463,34 +1477,40 @@ namespace Potato::SLRX
 		if (InputStep.IsTerminal())
 		{
 			assert(!InputStep.IsPredict);
-			if (NeedPredict || !PredictRecord.empty())
+			if (NeedPredict)
 			{
 				PredictRecord.push_back({Steps.size() });
+			}
+			else {
+				PredictRecord.clear();
 			}
 			Steps.push_back(InputStep);
 		}
 		else {
 			assert(InputStep.IsPredictNoTerminal() || InputStep.IsNoTerminal());
-			if (InputStep.IsPredict || NeedPredict || PredictRecord.size() >= InputStep.Reduce.ElementCount)
+
+			std::size_t ReduceOffset = Steps.size();
+			if (PredictRecord.size() >= InputStep.Reduce.ElementCount)
 			{
-				assert(PredictRecord.size() >= InputStep.Reduce.ElementCount);
 				auto ReduceSpan = std::span(PredictRecord).subspan(PredictRecord.size() - InputStep.Reduce.ElementCount, InputStep.Reduce.ElementCount);
-				std::size_t PredictOffset = Steps.size();
 				if (!ReduceSpan.empty())
-					PredictOffset = *ReduceSpan.begin();
+					ReduceOffset = *ReduceSpan.begin();
 				PredictRecord.resize(PredictRecord.size() - InputStep.Reduce.ElementCount);
-				if(NeedPredict || !PredictRecord.empty())
-					PredictRecord.push_back(PredictOffset);
-				if (InputStep.IsPredict)
-				{
-					Steps.insert(Steps.begin() + PredictOffset, InputStep);
-					InputStep.IsPredict = false;
-				}	
-				Steps.push_back(InputStep);
+			}
+
+			if (InputStep.IsPredict)
+			{
+				Steps.insert(Steps.begin() + ReduceOffset, InputStep);
+				InputStep.IsPredict = false;
+			}
+
+			Steps.push_back(InputStep);
+			if (NeedPredict)
+			{
+				PredictRecord.push_back(ReduceOffset);
 			}
 			else {
 				PredictRecord.clear();
-				Steps.push_back(InputStep);
 			}
 		}
 	}
@@ -1747,10 +1767,6 @@ namespace Potato::SLRX
 		States.push_back(CurrentTopState);
 		RequireNode = 0;
 		PredictRecord.clear();
-		if (StartupNeedPredict)
-		{
-			PredictRecord.push_back(Steps.size());
-		}
 		TryReduce();
 	}
 
@@ -1778,6 +1794,7 @@ namespace Potato::SLRX
 					Step.Reduce.Mask = Re->Reduce.Reduce.Mask;
 					Step.Reduce.ProductionIndex = Re->Reduce.Reduce.ProductionIndex;
 					Step.Reduce.ElementCount = Re->Reduce.Reduce.ElementCount;
+					Step.IsPredict = Re->Reduce.NeedPredict;
 					PushSteps(Step, Re->NeedPredict);
 				}
 				else {
@@ -1849,104 +1866,6 @@ namespace Potato::SLRX
 		return {};
 	}
 
-	std::optional<std::vector<ParsingStep>> SymbolProcessor::InsertPredictStep(std::span<ParsingStep const> Steps)
-	{
-
-		struct PredictIndex
-		{
-			std::size_t InsertPosition;
-			std::size_t ReferenceReduceIndex;
-		};
-
-		std::size_t StackCount = 0;
-		std::size_t IndexsCount = 0;
-
-		for (auto Ite : Steps)
-		{
-			if(Ite.IsTerminal())
-				StackCount += 1;
-			else {
-				assert(StackCount >= Ite.Reduce.ElementCount);
-				StackCount -= Ite.Reduce.ElementCount;
-				StackCount += 1;
-				IndexsCount += 1;
-			}
-		}
-
-		std::vector<PredictIndex> Indexs;
-		std::vector<std::size_t> Stacks;
-
-		Indexs.reserve(IndexsCount);
-		Stacks.reserve(StackCount);
-
-		for (std::size_t Index = 0; Index < Steps.size(); ++Index)
-		{
-			auto Cur = Steps[Index];
-			if (Cur.IsTerminal())
-			{
-				Stacks.push_back(Index);
-			}
-			else {
-				if (Cur.Reduce.ElementCount == 0)
-				{
-					Indexs.push_back({Index, Index});
-					Stacks.push_back(Index);
-				}
-				else {
-					assert(Stacks.size() >= Cur.Reduce.ElementCount);
-					auto Last = Stacks[Stacks.size() - Cur.Reduce.ElementCount];
-					Stacks.resize(Stacks.size() - Cur.Reduce.ElementCount);
-					Stacks.push_back(Last);
-					Indexs.push_back({ Last, Index });
-				}
-			}
-		}
-
-		std::sort(Indexs.begin(), Indexs.end(), [](PredictIndex const& I1, PredictIndex const& I2) -> bool{
-			if(I1.InsertPosition < I2.InsertPosition)
-				return true;
-			else if(I1.InsertPosition == I2.InsertPosition)
-				return I1.ReferenceReduceIndex > I2.ReferenceReduceIndex;
-			else
-				return false;
-		});
-
-		std::vector<ParsingStep> Result;
-		Result.reserve(Steps.size() + Indexs.size());
-
-		auto Spans = std::span(Indexs);
-
-		for (std::size_t Index = 0; Index < Steps.size(); ++Index)
-		{
-			auto Cur = Steps[Index];
-
-			while (!Spans.empty())
-			{
-				auto Top = Spans[0];
-				if (Top.InsertPosition == Index)
-				{
-					auto Ref = Steps[Top.ReferenceReduceIndex];
-					assert(Ref.IsNoTerminal());
-					Ref.IsPredict = true;
-					Result.push_back(Ref);
-					Spans = Spans.subspan(1);
-				}
-				else if (Top.InsertPosition > Index)
-				{
-					break;
-				}
-				else {
-					Spans = Spans.subspan(1);
-				}	
-			}
-
-			Result.push_back(Cur);
-		}
-
-		return Result;
-
-	}
-
 	namespace Exception
 	{
 		char const* Interface::what() const {  return "PotatoDLrException"; };
@@ -1977,9 +1896,6 @@ namespace Potato::SLRX
 		}
 		char const* BadProduction::what() const { return "PotatoSLRXException::WrongProduction"; };
 		char const* OpePriorityConflict::what() const { return "PotatoSLRXException::OpePriorityConflict"; };
-		char const* UnaccableSymbol::what() const { return "PotatoSLRXException::UnaccableSymbol"; };
-		char const* MaxAmbiguityProcesser::what() const { return "PotatoSLRXException::MaxAmbiguityProcesser"; };
-		char const* UnsupportedStep::what() const { return "PotatoSLRXException::UnsupportedStep"; };
 		char const* OutOfRange::what() const { return "PotatoSLRXException::OutOfRange"; };
 	}
 
