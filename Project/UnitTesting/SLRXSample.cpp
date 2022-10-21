@@ -4,72 +4,225 @@
 
 using namespace Potato::SLRX;
 
-enum class Noterminal
+enum class Noterminal : StandardT
 {
 	Exp = 0,
 	Exp1 = 1,
 	Exp2 = 2,
 };
 
-constexpr Symbol operator*(Noterminal input) { return Symbol::AsNoTerminal(static_cast<std::size_t>(input)); }
+constexpr Symbol operator*(Noterminal input) { return Symbol::AsNoTerminal(static_cast<StandardT>(input)); }
 
-enum class Terminal
+enum class Terminal : StandardT
 {
 	Num = 0,
 	Add,
-	Multi,
 	Sub,
+	Mul,
 	Dev,
+	LeftBracket,
+	RigheBracket
 };
 
-constexpr Symbol operator*(Terminal input) { return Symbol::AsTerminal(static_cast<std::size_t>(input)); }
+constexpr Symbol operator*(Terminal input) { return Symbol::AsTerminal(static_cast<StandardT>(input)); }
 
-enum class T : StandardT
+std::map<Terminal, std::u8string_view> TerminalMapping = {
+	{Terminal::Num, std::u8string_view{u8"Num"}},
+	{Terminal::Add, std::u8string_view{u8"+"}},
+	{Terminal::Sub, std::u8string_view{u8"-"}},
+	{Terminal::Mul, std::u8string_view{u8"*"}},
+	{Terminal::Dev, std::u8string_view{u8"/"}},
+	{Terminal::LeftBracket, std::u8string_view{u8"{"}},
+	{Terminal::RigheBracket, std::u8string_view{u8"}"}}
+};
+
+struct StringMaker
 {
-	Empty = 0,
-	Terminal,
-	Equal,
-	Rex,
-	NoTerminal,
-	NoProductionNoTerminal,
-	StartSymbol,
-	LB_Brace,
-	RB_Brace,
-	LM_Brace,
-	RM_Brace,
-	LS_Brace,
-	RS_Brace,
-	LeftPriority,
-	RightPriority,
-	Or,
-	Number,
-	Start,
-	Colon,
-	Semicolon,
-	Command,
-	Barrier,
-	ItSelf,
+	struct PredictEle
+	{
+		ParsingStep::ReduceT Reudce;
+		std::size_t LastTokenIndex;
+	};
+
+	StringMaker(const char* Error) : Error(Error) {}
+
+	std::vector<PredictEle> PredictReduceStack;
+
+	std::any operator()(VariantElement Element) {
+		if (Element.IsTerminal())
+		{
+			++NextTokenIndex;
+			auto Ele = Element.AsTerminal();
+			return std::u8string{TerminalMapping[static_cast<Terminal>(Ele.Value.Value)]};
+		}
+		else if (Element.IsNoTerminal())
+		{
+			auto Ele = Element.AsNoTerminal();
+			bool HasPredict = false;
+
+			std::u8string Tem;
+
+			if (!PredictReduceStack.empty() && PredictReduceStack.rbegin()->Reudce.ProductionIndex == Ele.Reduce.ProductionIndex)
+			{
+				auto Last = *PredictReduceStack.rbegin();
+				PredictReduceStack.pop_back();
+				if (Ele.Datas.size() == 0 && Last.LastTokenIndex == NextTokenIndex || Ele.Datas.size() != 0 && Last.LastTokenIndex == Ele.Datas[0].Mate.TokenIndex.Begin())
+				{
+					Tem += u8"&(";
+				}
+				else {
+					throw UnpassedUnit{ Error };
+				}
+			}
+			else {
+				Tem += u8"(";
+			}
+			for (auto& Ite : Ele.Datas)
+			{
+				Tem += Ite.Consume<std::u8string>();
+			}
+			Tem += u8")";
+			return Tem;
+		}
+		else if (Element.IsPredict())
+		{
+			auto Ele = Element.AsPredict();
+			PredictReduceStack.push_back({Ele.Reduce, NextTokenIndex });
+			return {};
+		}
+		else {
+			return {};
+		}
+	}
+
+	std::size_t NextTokenIndex = 0;
+
+	const char* Error;
 };
 
-constexpr Symbol operator*(T sym) { return Symbol::AsTerminal(static_cast<StandardT>(sym)); };
-
-enum class NT : StandardT
+void TestTable(Symbol StartSymbol, std::vector<ProductionBuilder> Builder, std::vector<OpePriority> Ority, std::size_t MaxForwardDetect, std::span<Terminal const> Span, std::u8string_view TarStr, const char* Error)
 {
-	Statement,
-	FunctionEnum,
-	Expression,
-	NTExpression,
-	ExpressionStatement,
-	ExpressionList,
-	LeftOrStatement,
-	RightOrStatement,
-	OrStatement,
-};
+	try {
+		LRX Tab(
+			StartSymbol,
+			std::move(Builder),
+			std::move(Ority),
+			MaxForwardDetect
+		);
 
-constexpr Symbol operator*(NT sym) { return Symbol::AsNoTerminal(static_cast<StandardT>(sym)); };
+		SymbolProcessor Pro(Tab);
+
+		auto IteSpan = Span;
+		while (!IteSpan.empty())
+		{
+			auto Top = *IteSpan.begin();
+			if (!Pro.Consume(*Top, Span.size() - IteSpan.size()))
+				throw UnpassedUnit{ Error };
+			IteSpan = IteSpan.subspan(1);
+		}
+		if (!Pro.EndOfFile())
+			throw UnpassedUnit{ Error };
+
+		StringMaker Maker(Error);
+
+		auto Re = ProcessParsingStepWithOutputType<std::u8string>(Pro.GetSteps(), Maker);
+
+		if (Re != TarStr)
+			throw UnpassedUnit{ Error };
+
+		auto Buffer = TableWrapper::Create(Tab);
+
+		SymbolProcessor Pro3(TableWrapper{ Buffer });
+
+		IteSpan = Span;
+		while (!IteSpan.empty())
+		{
+			auto Top = *IteSpan.begin();
+			if (!Pro3.Consume(*Top, Span.size() - IteSpan.size()))
+				throw UnpassedUnit{ Error };
+			IteSpan = IteSpan.subspan(1);
+		}
+		if (!Pro3.EndOfFile())
+			throw UnpassedUnit{ Error };
+
+		StringMaker Maker2(Error);
+
+		auto Re2 = ProcessParsingStepWithOutputType<std::u8string>(Pro3.GetSteps(), Maker2);
+
+		if (Re2 != TarStr)
+			throw UnpassedUnit{ Error };
+	}
+	catch (Exception::Interface const& I)
+	{
+		throw UnpassedUnit{ Error };
+	}
+}
+
 
 void TestingSLRX()
-{
+{ 
+
+	std::vector<Terminal> Lists = { Terminal::Num, Terminal::Num, Terminal::Num, Terminal::Num, Terminal::Num };
+	std::vector<Terminal> Lists2 = { Terminal::Num, Terminal::Add, Terminal::Num, Terminal::Mul, Terminal::Num, Terminal::Add, Terminal::Num };
+	std::vector<Terminal> Lists3 = { Terminal::Num, Terminal::Num, Terminal::Num, Terminal::Num, Terminal::Num, Terminal::Num };
+
+	TestTable(
+		*Noterminal::Exp,
+		{
+				{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Num}, 2, true},
+				{*Noterminal::Exp, {}, 1, true},
+		},
+		{}, 3,
+		Lists,
+		u8"&(&(&(&(&(&()Num)Num)Num)Num)Num)",
+		"TestingSLRX : Case 1"
+	);
+
+	TestTable(
+		*Noterminal::Exp,
+		{
+				{*Noterminal::Exp, {*Noterminal::Exp, 2, *Noterminal::Exp}, 2},
+				{*Noterminal::Exp, {*Terminal::Num}, 1},
+		},
+		{}, 3,
+		Lists,
+		u8"((Num)((Num)((Num)((Num)(Num)))))",
+		"TestingSLRX : Case 2"
+	);
+
+	
+
+	TestTable(
+		*Noterminal::Exp,
+		{
+			{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Add, *Noterminal::Exp}, 3},
+			{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Mul, *Noterminal::Exp}, 4},
+			{*Noterminal::Exp, {*Terminal::Num}, 1},
+		},
+		{
+			{{*Terminal::Mul}, Associativity::Left}, 
+			{{*Terminal::Add}, Associativity::Right},
+		}, 3,
+		Lists2,
+		u8"((Num)+(((Num)*(Num))+(Num)))",
+		"TestingSLRX : Case 3"
+	);
+
+	TestTable(
+		*Noterminal::Exp,
+		{
+			{*Noterminal::Exp, {*Terminal::Num, *Terminal::Num, *Terminal::Num, *Terminal::Num, *Terminal::Num, *Terminal::Add}, 3},
+			{*Noterminal::Exp, {*Noterminal::Exp1, *Terminal::Num, *Terminal::Num, *Terminal::Num, *Terminal::Num, *Terminal::Num}, 3},
+			{*Noterminal::Exp1, {*Terminal::Num}, 4},
+		},
+		{
+		}, 5,
+		Lists3,
+		u8"((Num)NumNumNumNumNum)",
+		"TestingSLRX : Case 3"
+		);
+
+
 	/*
 	try {
 		LRX Tab(
@@ -82,16 +235,12 @@ void TestingSLRX()
 		}
 		);
 
-		throw UnpassedUnit{ "TestingSLRX : Bad Output Result 1.1" };
+		throw UnpassedUnit{ "TestingSLRX : Case 1" };
 	}
 	catch (Exception::IllegalSLRXProduction const& Wtf)
 	{
 		if (Wtf.Type != Exception::IllegalSLRXProduction::Category::EndlessReduce)
-			throw UnpassedUnit{ "TestingSLRX : Bad Output Result 1.1" };
-	}
-	catch (...)
-	{
-		throw;
+			throw UnpassedUnit{ "TestingSLRX : Case 1" };
 	}
 
 
@@ -107,12 +256,12 @@ void TestingSLRX()
 		}
 		);
 
-		throw UnpassedUnit{ "TestingSLRX : Bad Output Result 1.2" };
+		throw UnpassedUnit{ "TestingSLRX : Case 2" };
 	}
 	catch (Exception::IllegalSLRXProduction const& Wtf)
 	{
 		if (Wtf.Type != Exception::IllegalSLRXProduction::Category::ConfligReduce)
-			throw UnpassedUnit{ "TestingSLRX : Bad Output Result 1.2" };
+			throw UnpassedUnit{ "TestingSLRX : Case 2" };
 	}
 	catch (...)
 	{
@@ -136,11 +285,7 @@ void TestingSLRX()
 	}
 	catch (Exception::IllegalSLRXProduction const&)
 	{
-		throw UnpassedUnit{ "TestingSLRX : Bad Output Result 1.3" };
-	}
-	catch (...)
-	{
-		throw;
+		throw UnpassedUnit{ "TestingSLRX : Case 3" };
 	}
 
 
@@ -158,7 +303,7 @@ void TestingSLRX()
 	}
 	catch (Exception::IllegalSLRXProduction const& Wtf)
 	{
-		throw UnpassedUnit{ "TestingSLRX : Bad Output Result 1.4" };
+		throw UnpassedUnit{ "TestingSLRX : Case 4" };
 	}
 	catch (...)
 	{
@@ -198,12 +343,8 @@ void TestingSLRX()
 	{
 		throw UnpassedUnit{ "TestingSLRX : Bad Output Result 1.4" };
 	}
-	catch (...)
-	{
-		throw;
-	}
-	*/
 
+	/*
 	try
 	{
 		LRX tab(
@@ -312,6 +453,7 @@ void TestingSLRX()
 	{
 		throw UnpassedUnit{ "TestingSLRX : Bad Output Result 1.5" };
 	}
+	*/
 
 	std::cout << "TestingSLRX Pass !" << std::endl;
 

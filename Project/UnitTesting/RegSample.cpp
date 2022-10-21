@@ -30,6 +30,16 @@ void TestMatch(std::u8string_view Reg, bool Raw, std::u8string_view Str, Accept 
 	}
 }
 
+void TestMatchCapture(std::u8string_view Reg, std::u8string_view Str, std::u8string_view RequireStr, const char* Error)
+{
+
+	auto Tab1 = TableWrapper::Create(Reg);
+
+	auto Re = HeadMatch(TableWrapper{Tab1}, Str);
+	if (!Re || !Re->GetCaptureWrapper().HasSubCapture() || Re->GetCaptureWrapper().GetTopSubCapture().GetCapture().Slice(Str) != RequireStr)
+		throw UnpassedUnit{ Error };
+}
+
 void TestHeadMatch(std::u8string_view Reg, bool Raw, std::u8string_view Str, std::u8string_view RequireStr, Accept Acce, const char* const Error)
 {
 	try {
@@ -141,6 +151,8 @@ void TestingReg()
 	TestHeadMatch(u8R"(bca*?)", false, u8R"(bcaaaa)", u8R"(bc)", DefaultAcc, "TestingReg:: Case 19");
 
 	TestGreddyHeadMatch("TestingReg:: Case 20");
+
+	TestMatchCapture(u8R"(([0-9]+))", u8R"(123456)", u8R"(123456)", "TestingReg:: Case 21");
 
 	std::wcout << LR"(TestingReg Pass !)" << std::endl;
 }

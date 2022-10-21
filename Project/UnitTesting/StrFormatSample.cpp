@@ -4,55 +4,34 @@
 using namespace Potato::StrFormat;
 
 
+template<typename Target>
+void TestScan(std::u8string_view Pattern, std::u8string_view Str, Target Tar, const char* Error)
+{
+	std::remove_cvref_t<Target> Tem;
+	auto Re = MatchScan(Pattern, Str, Tem);
+	if(!Re)
+		throw UnpassedUnit{Error};
+	if(Tem != Tar)
+		throw UnpassedUnit{ Error };
+}
+
+template<typename ...Target>
+void TestFormat(std::u8string_view Pattern, std::u8string_view TarStr, const char* Error, Target&& ...Tar)
+{
+	auto FormatStr = FormatTo(Pattern, std::forward<Target>(Tar)...);
+	if (!FormatStr.has_value() || FormatStr != TarStr)
+	{
+		throw UnpassedUnit{ Error };
+	}
+}
+
+
 void TestingStrFormat()
 {
-	/*
-	FormatPattern<char8_t> Pattern(u8R"(12345{}6789{{}})");
 
-	std::u8string Output;
-	int32_t Data = 10086;
-	uint64_t Data2 = 10081;
-	Pattern.Format(Output, Data, Data2);
+	TestScan<int32_t>(u8R"(([0-9]+))", u8R"(123455)", 123455, "StrFormatTest : Case 1");
 
-	if (Output != u8R"(12345100866789{10081})")
-		throw UnpassedUnit{ "TestingStrFormat : Bad Format Output 0" };
-
-	std::u8string_view Str = u8R"(sdasdasd12445sdasdasd)";
-
-	int32_t R1 = 0;
-
-	HeadMatchScan(u8R"(.*?([0-9]+))", Str, R1);
-
-	if (R1 != 12445)
-		throw UnpassedUnit{ "TestingStrFormat : Bad SearchScan Output 1" };
-
-	uint64_t R2 = 0;
-
-	MatchScan(u8R"(sdasdasd([0-9]+)sdasdasd)", Str, R2);
-
-	if (R2 != 12445)
-		throw UnpassedUnit{ "TestingStrFormat : Bad SearchScan Output 2" };
-	*/
-
-	std::u8string_view Pat = u8"12345a{}a678a{}a9{{}}";
-
-	//std::u8string_view Pat = u8"}}}}";
-
-	auto Patterns = CreateFormatPattern(Pat);
-
-	int32_t I = 10086;
-	int32_t T = 10086;
-
-	auto K = CreateFormatReference(*Patterns, I, T);
-
-	std::u8string Datas;
-
-	Datas.resize(K->TotalSize);
-	K->FormatTo(Datas);
-
-	auto Kcc = FormatTo(u8"sdsdfasdasd{asb}sdasd", I);
-
-	auto I22 = DirectFormat({}, I);
+	TestFormat(u8R"(123456{{}}{}{{)", u8R"(123456{}123455{)","StrFormatTest : Case 1",  123455);
 
 	std::wcout << LR"(TestingStrFormat Pass !)" << std::endl;
 }

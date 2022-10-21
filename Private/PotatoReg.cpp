@@ -1913,21 +1913,25 @@ namespace Potato::Reg
 	std::optional<Misc::IndexSpan<>> CaptureWrapper::FindFirstCapture(std::span<Capture const> Captures)
 	{
 		std::size_t Stack = 0;
-		Misc::IndexSpan<> First;
+		std::optional<Misc::IndexSpan<>> First;
 		for (std::size_t Index = 0; Index < Captures.size(); ++Index)
 		{
 			auto Cur = Captures[Index];
 			if (Cur.IsBegin)
 			{
 				if (Stack == 0)
-					First.Offset = Index;
+				{
+					assert(!First.has_value());
+					First = {Index, 0};
+				}
 				++Stack;
 			}
 			else {
 				--Stack;
 				if (Stack == 0)
 				{
-					First.Length = Index - First.Offset + 1;
+					assert(First.has_value());
+					First->Length = Index - First->Offset + 1;
 					return First;
 				}
 			}
@@ -2507,57 +2511,17 @@ namespace Potato::Reg
 			assert(Re->AcceptData);
 			MatchProcessor::Result NRe;
 			NRe.AcceptData = *Re->AcceptData.AcceptData;
-			auto Span = Re->AcceptData.CaptureSpan.Slice(Contents.CaptureBlocks);
+			auto Span =  
+				Re->AcceptData.CaptureSpan.Slice(Re->ContentNeedChange ? TempBuffer.CaptureBlocks : Contents.CaptureBlocks);
 			for (auto Ite : Span)
 			{
 				NRe.SubCaptures.push_back(Ite.CaptureData);
 			}
-			Clear();
+			//Clear();
 			return NRe;
 		}
 		return {};
 	}
-
-	template<typename TableT>
-	std::optional<std::optional<HeadMatchProcessor::Result>> HeadMatchProcessorConsumeSymbol(HeadMatchProcessor& Pro, char32_t Symbol, std::size_t TokenIndex, TableT& Table, std::size_t StartupNodeIndex, bool Greedy = false)
-	{
-		
-	}
-
-	template<typename TableT>
-	std::optional<HeadMatchProcessor::Result> HeadMatchProcessorEndOfFile(HeadMatchProcessor& Pro, std::size_t TokenIndex, TableT& Table, std::size_t StartupNodeIndex)
-	{
-		Pro.TempBuffer.Clear();
-		auto Re1 = CoreProcessor::ConsumeSymbol(Pro.TempBuffer, Pro.Contents, Pro.NodeIndex, Table, Reg::EndOfFile(), TokenIndex, true);
-		if (Re1.has_value())
-		{
-			assert(Re1->AcceptData);
-			HeadMatchProcessor::Result Re;
-			if (Pro.CacheResult.has_value())
-			{
-				Re = std::move(*Pro.CacheResult);
-				Pro.CacheResult.reset();
-			}
-			Re.AcceptData = *Re1->AcceptData.AcceptData;
-			std::span<ProcessorContent::CaptureBlock const> Span = Re1->ContentNeedChange ? std::span(Pro.TempBuffer.CaptureBlocks) : std::span(Pro.Contents.CaptureBlocks);
-			Re.SubCaptures.clear();
-			for (auto Ite : Span)
-				Re.SubCaptures.push_back(Ite.CaptureData);
-			Re.MainCapture = { 0, TokenIndex };
-			Pro.Clear(StartupNodeIndex);
-			return Re;
-		}
-		if (Pro.CacheResult.has_value())
-		{
-			HeadMatchProcessor::Result Re = std::move(*Pro.CacheResult);
-			Pro.Clear(StartupNodeIndex);
-			return Re;
-		}
-		else {
-			return {};
-		}
-	}
-	
 
 	void HeadMatchProcessor::Clear()
 	{
@@ -2598,7 +2562,7 @@ namespace Potato::Reg
 			if (!Greedy && !Re1.MeetAcceptRequireConsume)
 			{
 				auto Re = std::move(CacheResult);
-				Clear();
+				//Clear();
 				return Re;
 			}
 		}
@@ -2624,7 +2588,7 @@ namespace Potato::Reg
 			if (CacheResult.has_value())
 			{
 				auto Re = std::move(CacheResult);
-				Clear();
+				//Clear();
 				return Re;
 			}
 			else {
@@ -2661,13 +2625,13 @@ namespace Potato::Reg
 			for (auto Ite : Span)
 				Re.SubCaptures.push_back(Ite.CaptureData);
 			Re.MainCapture = { 0, TokenIndex };
-			Clear();
+			//Clear();
 			return Re;
 		}
 		if (CacheResult.has_value())
 		{
 			HeadMatchProcessor::Result Re = std::move(*CacheResult);
-			Clear();
+			//Clear();
 			return Re;
 		}
 		else {

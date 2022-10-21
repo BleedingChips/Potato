@@ -784,7 +784,7 @@ namespace Potato::SLRX
 								return Element.ToNode == Top.Node && Element.LastState == LastState;
 								}) == LastSpan.end())
 							{
-								FFRef.push_back(FastReduce{ Top.Node, 1 - static_cast<std::ptrdiff_t>(Ite.Reduce.ProductionIndex), LastState, Ite });
+								FFRef.push_back(FastReduce{ Top.Node, 1 - static_cast<std::ptrdiff_t>(Ite.Reduce.ElementCount), LastState, Ite });
 							}
 						}
 						else {
@@ -1396,6 +1396,10 @@ namespace Potato::SLRX
 				Reader.CrossTypeSetThrow<OutOfRange>(Property->ReduceTupleCount, Ite2.Tuples.size(), OutOfRange::TypeT::ReduceProperty, Ite2.Tuples.size());
 				Property->NeedPredict = (Ite2.Property.NeedPredict ? 1 : 0);
 				auto Span = *Reader.ReadObjectArray<ZipReduceTupleT>(Ite2.Tuples.size());
+				for (std::size_t I = 0; I < Span.size(); ++I)
+				{
+					Span[I].NeedPredict = (Ite2.Tuples[I].NeedPredict ? 1 : 0);
+				}
 				ReduceTupleRecord.push_back({Span, std::span(Ite2.Tuples)});
 			}
 
