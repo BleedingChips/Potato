@@ -4,7 +4,142 @@
 
 using namespace Potato::Ebnf;
 
-using namespace Potato;
+
+struct StringMaker
+{
+	struct PredictEle
+	{
+		ParsingStep::ReduceT Reudce;
+		std::size_t LastTokenIndex;
+	};
+
+	StringMaker(const char* Error) : Error(Error) {}
+
+	std::vector<PredictEle> PredictReduceStack;
+
+	std::any operator()(VariantElement Element) {
+		if (Element.IsTerminal())
+		{
+			++NextTokenIndex;
+			auto Ele = Element.AsTerminal();
+			return std::u8string{ Ele.Shift.CaptureValue };
+		}
+		else if (Element.IsNoTerminal())
+		{
+			auto Ele = Element.AsNoTerminal();
+			bool HasPredict = false;
+
+			std::u8string Tem;
+
+			if (!PredictReduceStack.empty() && PredictReduceStack.rbegin()->Reudce.UniqueReduceID == Ele.Reduce.UniqueReduceID)
+			{
+				auto Last = *PredictReduceStack.rbegin();
+				PredictReduceStack.pop_back();
+				Tem += u8"&(";
+			}
+			else {
+				Tem += u8"(";
+			}
+			for (auto& Ite : Ele.Datas)
+			{
+				Tem += Ite.Consume<std::u8string>();
+			}
+			Tem += u8")";
+			return Tem;
+		}
+		else if (Element.IsPredict())
+		{
+			auto Ele = Element.AsPredict();
+			PredictReduceStack.push_back({ Ele.Reduce, NextTokenIndex });
+			return {};
+		}
+		else {
+			return {};
+		}
+	}
+
+	std::size_t NextTokenIndex = 0;
+
+	const char* Error;
+};
+
+void Test(std::u8string_view Table, std::u8string_view InputStr, std::u8string_view TargetReg, const char* Error)
+{
+	try {
+		EBNFX Tab = EBNFX::Create(Table);
+
+		{
+			auto IteStr = InputStr;
+
+			LexicalProcessor Pro{ Tab };
+
+			while (!IteStr.empty())
+			{
+				auto Re = Pro.Consume(IteStr, InputStr.size() - IteStr.size());
+				if (Re.has_value())
+				{
+					IteStr = *Re;
+				}
+				else {
+					throw UnpassedUnit{Error};
+				}
+			}
+
+			auto Steps = SyntaxProcessor::Process(Tab, Pro.GetSpan());
+
+			if (!Steps)
+			{
+				throw UnpassedUnit{ Error };
+			}
+
+			StringMaker Maker(Error);
+
+			auto Strs = ProcessParsingStepWithOutputType<std::u8string>(*Steps, Maker);
+
+			if(Strs != TargetReg)
+				throw UnpassedUnit{ Error };
+		}
+
+		{
+			auto TableBuffer = TableWrapper::Create(Tab);
+
+			LexicalProcessor Pro{ TableWrapper{TableBuffer} };
+
+			auto IteStr = InputStr;
+
+			while (!IteStr.empty())
+			{
+				auto Re = Pro.Consume(IteStr, InputStr.size() - IteStr.size());
+				if (Re.has_value())
+				{
+					IteStr = *Re;
+				}
+				else {
+					throw UnpassedUnit{ Error };
+				}
+			}
+
+			auto Steps = SyntaxProcessor::Process(Tab, Pro.GetSpan());
+
+			if (!Steps)
+			{
+				throw UnpassedUnit{ Error };
+			}
+
+			StringMaker Maker(Error);
+
+			auto Strs = ProcessParsingStepWithOutputType<std::u8string>(*Steps, Maker);
+
+			if (Strs != TargetReg)
+				throw UnpassedUnit{ Error };
+		}
+	}
+	catch (Exception::Interface const&)
+	{
+		throw UnpassedUnit{Error};
+	}
+}
+
 
 
 void TestingEbnf()
@@ -24,12 +159,17 @@ $ := <Exp> ;
 	:= <Exp> '*' <Exp> : [3];
 	:= <Exp> '/' <Exp> : [4];
 	:= <Exp> '-' <Exp> : [5];
-	:= '(' <Exp> ')' : [6];
+	:= '<' <Exp> '>' : [6];
 
 %%%%
 
 +('*' '/') +('+' '-')
 )";
+
+	std::u8string_view Source = u8R"(1*< 2 + 3 > * 4)";
+
+
+	//Test(EbnfCode1, Source, u8R"((((1)*(<((2)+(3))>))*(4)))", "TestingEbnf : Case 1");
 
 	std::u8string_view EbnfCode2 =
 		u8R"(
@@ -38,154 +178,17 @@ Num := '[1-9][0-9]*' : [1]
 
 %%%%
 
-$ := <Exp>;
+$ := <Exp> ;
 
 <Exp> := Num : [1];
-	:= <Exp> '+' <Exp> : [2];
+	:= <Exp> <Exp> $ : [2];
 
 %%%%
 )";
 
+	std::u8string_view Source2 = u8R"(123 123 123 456)";
 
-	Ebnf::EBNFX Bnfx = EBNFX::Create(EbnfCode1);
-	 
-	std::u8string_view Str = u8R"((1+3+4*2) / 4)";
-
-	LexicalProcessor Pro1(Bnfx);
-
-	auto Tabe2 = TableWrapper::Create(EbnfCode1);
-
-	auto Ite = Str;
-
-
-	while (!Ite.empty())
-	{
-		auto I = Pro1.Consume(Ite, Str.size() - Ite.size());
-		if (I.has_value())
-		{
-			Ite = *I;
-		}
-		else {
-			volatile int i = 0;
-		}
-	}
-
-	LexicalProcessor Pro(TableWrapper{Tabe2});
-
-	Ite = Str;
-
-	while (!Ite.empty())
-	{
-		auto I = Pro.Consume(Ite, Str.size() - Ite.size());
-		if (I.has_value())
-		{
-			Ite = *I;
-		}
-		else {
-			volatile int i = 0;
-		}
-	}
-
-	auto List = SyntaxProcessor::Process(Bnfx, Pro1.GetSpan());
-
-	auto Re = ProcessStep(std::span(*List.Element), [](VariantElement Ele)->std::any{
-		if (Ele.IsTerminal())
-		{
-			auto Te = Ele.AsTerminal();
-			if (Te.Shift.Mask == 1)
-			{
-				int64_t I = 0;
-				StrFormat::DirectScan(Te.Shift.CaptureValue, I);
-				return I;
-			}
-			return {};
-		}
-		else if(Ele.IsNoTerminal()) 
-		{
-			auto Te = Ele.AsNoTerminal();
-			switch (Te.Reduce.Mask)
-			{
-			case 1:
-				return Te[0].Consume();
-			case 2:
-			{
-				auto I1 = Te[0].Consume<int64_t>();
-				auto I2 = Te[2].Consume<int64_t>();
-				return I1 + I2;
-			}
-			case 3:
-				return Te[0].Consume<int64_t>() * Te[2].Consume<int64_t>();
-			case 4:
-				return Te[0].Consume<int64_t>() / Te[2].Consume<int64_t>();
-			case 5:
-				return Te[0].Consume<int64_t>() - Te[2].Consume<int64_t>();
-			case 6:
-				return Te[1].Consume();
-			}
-		}
-		else if (Ele.IsPredict())
-		{
-			auto Pre = Ele.AsPredict();
-			volatile int i = 0;
-		}
-		return {};
-	});
-
-	auto P = std::any_cast<int64_t>(*Re);
-
-
-	volatile int i = 0;
-
-
-	/*
-
-	auto TableBuffer = TableWrapper::Create(EbnfCode1);
-
-	auto Wrapper = TableWrapper{ TableBuffer };
-
-	std::u32string_view Str = UR"(1+24+12*3-4/(1+1))";
-
-	auto Symbols = ProcessSymbol(Wrapper, Str);
-
-	auto Ite = ProcessStepWithOutputType<std::size_t>(Wrapper, Symbols, [=](StepElement Ele)->std::any {
-		if (Ele.IsTerminal())
-		{
-			auto T = Ele.AsTerminal();
-			if (T.Mask == 1)
-			{
-				std::size_t Result = 0;
-				auto Syms = T.Index;
-				Potato::StrFormat::DirectScan(Str.substr(Syms.Begin(), Syms.Count()), Result);
-				return Result;
-			}
-		}
-		else {
-			auto NT = Ele.AsNoTerminal();
-			switch (NT.Mask)
-			{
-			case 1:
-				return NT[0].Consume();
-			case 2:
-				return NT[0].Consume<std::size_t>() + NT[2].Consume<std::size_t>();
-			case 3:
-				return NT[0].Consume<std::size_t>() * NT[2].Consume<std::size_t>();
-			case 4:
-				return NT[0].Consume<std::size_t>() / NT[2].Consume<std::size_t>();
-			case 5:
-				return NT[0].Consume<std::size_t>() - NT[2].Consume<std::size_t>();
-			case 6:
-				return NT[1].Consume();
-			default:
-				break;
-			}
-		}
-		return {};
-		});
-
-	if (Ite != 59)
-		throw UnpassedUnit{ "TestingEbnf : Bad Output Result" };
-
-	*/
+	Test(EbnfCode2, Source2, u8R"(((((123)(123))(123))(456)))", "TestingEbnf : Case 1");
 
 	std::wcout << LR"(TestingEbnf Pass !)" << std::endl;
 

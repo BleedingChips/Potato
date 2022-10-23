@@ -1,52 +1,339 @@
-[TOC]
-
 # Potato
 
-个人库，用来管理和存储一些常用的功能。
+个人库，用来管理和存储一些常用的功能，基于`MSVC`下的CPP最新标准。
 
-具体用法和单元测试，请参考Project/UnitTesting/XXXSample.cpp
+本库包含以下主要功能：
 
-## 1. PotatoTMP 
+1. [PotatoTMP](#PotatoTMP)
+	
+	模板元编程功能库。
+
+2. [PotatoIntrusivePointer](#PotatoIntrusivePointer)
+	
+	线程安全的嵌入式智能指针功能库。
+3. [PotatoStrEncode](#PotatoStrEncode)	
+	
+	`Unicode`之间的编码相互转换的功能库。
+4. [PotatoSLRX](#PotatoSLRX)
+	
+	基于柔性`LR(x)`的语法分析库。
+5. [PotatoReg](#PotatoReg)
+	
+	为词法分析特化实现的，基于DFA的正则表达式分析库。
+6. [PotatoStrFormat](#PotatoStrFormat)
+	
+	`std::format`类似物，提供数据与字符串之间的相互转化。
+7. [PotatoEnbf](#PotatoEnbf)
+	
+	`ENBF`词法/语法分析库。
+
+计划实现的功能：
+
+1. PotatoIR                 类型元数据，符号表，中间语言，一个可执行的最小系统。
+2. PotatoVirtualPath        虚拟路径系统。
+
+## 目录包含
+
+1. `Potato/Public` 所有的头文件。
+2. `Potato/Private` 所有的实现文件。
+3. `Potato/Project/Potato` VisualStudio2022的静态库工程文件，可以直接将其加入到解决方案列表下的项目中。
+4. `Potato/Project/UnitTesting` VisualStudio2022的单元测试的解决方案文件。
+
+## 依赖非标准的第三方库
+
+无
+
+## 使用方式
+
+将`Potato/Public`和`Potato/Private`包含到程序中即可。
+
+## PotatoTMP 
 
 模板元编程库（namespace Potato::TMP）
 
-其包含如下功能：
+* IsOneOf 
 
-1. IsOneOf 用来判断某个类型是否在后续的类型集中。
-2. IsNotOneOf IsOneOf的否。
-3. IsRepeat 类型中是否有重复的类型。
-4. ItSelf 占位符，自身无功能，一般用于一些特化。
-5. Instant 对`template<typeanme ...> class`样式的模板类型的延迟构造。
-6. TypeTuple `std::tuple`类似物，但本身不占用储存空间，实例化后也无任何逻辑。
-7. Replace 对`template<typeanme ...> class`样式的模板类型的类型替换，比如将`T1<A, B, C>`替换成`T2<A, B, C>`。
-8. Exist 存在判断，可以用来检测某个函数或者变量是否存在，SFINAE。
-9. IsFunctionObjectRole 判断某个Object是不是CallableObject（标准是，是否存在唯一一个operator()）。
-10. FunctionInfo 函数签名的萃取
-11. TempString 字符串常量类型，可用作模板参数。
+	用来判断某个类型是否在后续的类型集中。
 
-## 2. PotatoMisc
+	```cpp
+	static_assert(IsOneOf<A, A, B, C>::Value); // true
+	static_assert(IsOneOf<A, D, B, C>::Value); // false
+	```
 
-一些杂项，放置一些不便分类的功能类（namespace Potato::Misc）
+* IsNotOneOf 
 
-1. IndexSpan 类似于std::span，但IndexSpan只储存了两个std::size_t（可定制），用于表示连续内存中的一段，方便在复制构造时，不需要重新绑定原数据。
-2. AtomicRefCount 支持原子操作的引用计数器，主要用于智能指针。
-3. AlignedSize 用于计算对齐。
-4. namespace::SerilizerHelper 相关功能，用于执行读写序列化。将数据写入一段Buffer中，要求Buffer中的数据类型的对齐大于等于目标数据对齐。内部使用std::memocy实现，只支持StandaryLayout。
+	IsOneOf的否。
+* IsRepeat 
 
-## 3. PotatoStrEncode
+	类型中是否有重复的类型。
+
+	```cpp
+	static_assert(IsOneOf<A, A, B, C>::Value); // true
+	static_assert(IsOneOf<A, D, B, C>::Value); // false
+	```
+
+* Instant 
+	
+	延迟构造类型。
+
+	```CPP
+	template<typename ...A> class TT;
+	using T1 = Instant<TT, A>;
+	static_assert(std::is_same_v<T1::template Append<B>, TT<A, B>>); // true
+	static_assert(std::is_same_v<T1::template Front<B>, TT<B, A>>);// true
+	```
+
+* Replace 
+
+	类型替换。
+	```cpp
+	template<typename ...A> class TT;
+	template<typename ...A> class TT2;
+	static_assert(std::is_same_v<Replace<TT<A, B>::template With<TT2>, TT2<A, B>>); // true
+	```
+* Exist
+	
+	存在判断，用来检测某个函数或者变量是否存在，SFINAE。
+	```cpp
+	template<typename Type, typename = std::void_t<decltype(&Type::Value1)>> struct ExistValue1Role {};
+
+	struct Sample1 { int32_t Value1; };
+
+	static_assert(Exist<Sample1, ExistValue1Role>::Value); // true
+	```
+
+* FunctionInfo 
+
+	函数类型签名的萃取。
+	```cpp
+	struct Sample1
+	{
+		int32_t Function(char32_t, ...) && noexcept;
+	};
+
+	using Info = FunctionInfo<decltype(&Sample1::Function)>;
+
+	static_assert(!Info::IsConst);// true
+	static_assert(Info::IsEllipsis);// true
+	static_assert(Info::IsMoveRef);// true
+	static_assert(Info::IsNoException);// true
+	static_assert(!Info::IsRef);// true
+	static_assert(!Info::IsVolatile);// true
+
+	template<typename ...A> class TT;
+
+	static_assert(std::is_same_v<Info::OwnerType, Sample1>); // true
+	static_assert(std::is_same_v<Info::ReturnType, int32_t>); // true
+	static_assert(std::is_same_v<Info::PackParameters<TT>, TT<char32_t>>); // true
+	static_assert(std::is_same_v<Info::PackReturnParameters<TT>, TT<int32_t, char32_t>>); // true
+	```
+* TempString 
+
+	字符串常量类型，可用作模板参数。
+
+	```cpp
+	static_assert(std::is_same_v<CST<u"1234">, CST<u"1234">>,
+	```
+
+## PotatoIntrusivePointer
+
+嵌入式智能指针。（namespace Potato）
+
+```cpp
+struct S{ void AddRef(); void SubRef(); }
+struct Type2Wrapper
+{
+	static void AddRef(S* Type) { Type->AddRef(); }
+	static void SubRef(S* Type) { Type->SubRef(); }
+};
+IntrusivePointer<S, Type2Wrapper> Ptr = new S{};
+```
+
+## PotatoStrEncode
 
 字符转换，用以处理char8_t，char16_t，char32_t和wchar_t之间的转化（namespace Potato::StrEncode）
 
-1. CoreEncoder 对于单个字符的转化
-2. StrCodeEncoder 对于字符串的转化
-3. DocumentReader / DocumenetReaderWrapper 纯字符串文档阅读器（目前只支持utf8和utf8 with bom两种文本编码格式）
-4. DocumentWriter 纯字符串文档写入器（目前支持写入utf8和utf8 with bom两种文本编码格式）
+* CharEncoder 
+	
+	对于单个字符的转化
+	```cpp
+	std::u8string_view Str;
+	EncodeInfo Info = StrEncode<char8_t, char16_t>::RequireSpaceOnce(Str);
+	std::u16string Str2;
+	Str2.resize(Info.RequireSpace);
+	StrEncode<char8_t, char16_t>::EncodeOnceUnSafe(Str, Str2);
+	```
 
-## 4. PotatoSLRX
+* StrEncoder 
+
+	对于字符串的转化
+	```cpp
+	std::u8string_view Str;
+	EncodeInfo I1 = StrEncoder<char8_t, char16_t>::RequireSpace(Str);
+	std::u16string Str2;
+	R1.resize(I1.TargetSpace);
+	StrEncoder<ST, TT>::EncodeUnSafe(Str, Str2);
+	```
+
+## PotatoSLRX
 
 基于LR(X)的语法分析器。（namespace Potato::SLRX）
 
-SLRX是一款“柔性”的语法分析器，对于用户给定的X（默认为3），可以自动识别LR(X)的语法，并生成对应的分析表。
+该分析器的使用步骤为：
+
+1. 创建分析表
+2. 序列化分析表（可选）
+3. 创建一个分析器
+4. 使用分析器分析终结符系列，等到AST的构建步骤。
+5. 根据构建步骤，直接生成AST或者直接生成目标语言。
+
+* 创建一个分析表
+
+	分析表主要由终结符，非终结符等一系列符号和一部分控制符构成。
+
+	终结符和非终结符为`SLRX::StandardT(uint32_t)`类型的变量，通过：
+
+	```cpp
+	Symbol::AsTerminal(static_cast<StandardT>(Value));
+	Symbol::AsNoTerminal(static_cast<StandardT>(Value));
+	```
+
+	来创建对应的终结符和非终结符。
+
+	一般建议通过枚举值来定义可读性高的符号类型，然后再强转成`Symbol`使用，如：
+
+	```cpp
+	enum class Noterminal : StandardT
+	{
+		Exp = 0,
+		Exp1 = 1,
+		Exp2 = 2,
+	};
+
+	constexpr Symbol operator*(Noterminal input) { return Symbol::AsNoTerminal(static_cast<StandardT>(input)); }
+
+	enum class Terminal : StandardT
+	{
+		Num = 0,
+		Add,
+		Sub,
+		Mul,
+		Dev,
+		LeftBracket,
+		RigheBracket
+	};
+
+	constexpr Symbol operator*(Terminal input) { return Symbol::AsTerminal(static_cast<StandardT>(input)); }
+	```
+
+	分析表主要包含四个部分
+		
+	1. StartSymbol 
+
+		开始符号，见`LR`的概念。
+			
+	2. Production 
+
+		产生式。一个产生式如下：
+
+		```cpp
+		ProductionBuilder Builder{NoTerminlSymbol, {Symbols...}, Mask, Predict};
+		```
+
+		* Noterminal 表示该产生式的左部。是一个非终结符。
+		* Symbols... 表示该产生式的右部。
+
+			产生式的右部可以是终结符，非终结符和跟随在非终结符后的标记值。标记值用来禁止产生式的规约路径，比如：
+
+			```cpp
+			std::vector<ProductionBuilder> Lists = {
+				{*Exp, { *Exp, *Exp, 2 }, 2},
+				{*Exp, {*Num}},
+			};
+			```
+
+			这里的`2`表示其前方的`*Exp`无法由标记为`2`的产生式规约产生。若无该标记，对于上述的产生式以及终结符序列{`*Num`, `*Num`, `*Num`}，有两种等效的规约路径：
+				
+			```
+			Num,Num,Num -(Exp:Num)-> Exp<Num>, Exp<Num>, Exp<Num> -(Exp:Exp Exp)-> Exp<Num> Exp<Exp, Exp> -(Exp:Exp Exp)-> Exp<Exp, Exp>
+
+			Num,Num,Num -(Exp:Num)-> Exp<Num>, Exp<Num>, Exp<Num> -(Exp:Exp Exp)-> Exp<Exp, Exp> Exp<Num> -(Exp:Exp Exp)-> Exp<Exp, Exp>
+			```
+
+			加了标记值后，该规约步骤会被禁止：
+
+			```
+			Exp<Num>, Exp<Num>, Exp<Num> -(Exp:Exp Exp)-> Exp<Num> Exp<Exp, Exp>
+			```
+
+			所以最终将只有一个规约路径。
+
+		* Mask 该产生式的标记值，用来在后续的语法制导中使用，默认为0。
+
+		* Predict 该产生是否需要生成前置标记符。
+
+			对于产生式`Exp:Num Num`和终结符序列{`*Num`, `*Num`}，将会产生如下的路径：{`Shift` `Shift` `Reduce<Exp>`}。
+
+			若标记生成前置标记符，则产生的路径如下：{`Predice<Exp>` `Shift` `Shift` `Reduce<Exp>`}。这里会影响后续的语法制导。
+
+			由于前置标记需要在产生Reduce行为后，在路劲的中间插入一个新步骤，所以会对性能有负面影响。
+
+	3. OpePriority
+
+		定义符号优先级。
+
+		其定义方式如：
+
+		```cpp
+		std::vector<OpePriority> OP = 
+		{
+			{{*Terminal::Mul}, Associativity::Left}, 
+			{{*Terminal::Add， *Terminal::Sub}, Associativity::Right},
+		}
+		```
+
+		这里表示`Mul`的优先级大于`Add`和`Sub`，并且为左结合，`Add`和`Sub`的优先级相等小于`Mul`，并且为右结合。
+
+	4. MaxForwardDetect
+
+		标记该产生式最多支持的`LR(x)`。由于判断一个语法是否有歧义是一个`NP`问题，但判断一个语法能否被`LR(x)`解析是一个`P`问题。所以这里可以设置最高的判断数量，超过该数量将会抛出异常。另，太高的数字会严重影响生成的性能。默认值为3。
+
+	对于一个解析四则运算的产生式，可以有下面的分析表：
+
+	```cpp
+	LRX Table(
+		*Noterminal::Exp,
+		{
+			{*Noterminal::Exp, {*Terminal::Num}, 1},
+			{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Add, *Noterminal::Exp}, 2},
+			{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Multi, *Noterminal::Exp}, 3, true},
+			{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Sub, *Noterminal::Exp}, 4},
+			{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Dev, *Noterminal::Exp}, 5},
+		},
+		{
+			{{*Terminal::Multi, *Terminal::Dev}},
+			{{*Terminal::Add, *Terminal::Sub}, Associativity::Left},
+		}
+	);
+	```
+
+	也可以进行序列化后直接使用：
+
+	```cpp
+	std::vector<StandardT> Buffer = TableWrapper::Create(Tab);
+	```
+
+	若创建失败，则会抛出以`Potato::SLRX::Exception::Interface`为基类的异常。
+
+* 使用分析表对终结符进行解析：
+
+	```cpp
+	
+	```
+
+
+
+<!-- SLRX是一款“柔性”的语法分析器，对于用户给定的X（默认为3），可以自动识别LR(X)的语法，并生成对应的分析表。
 
 在此基础上，通过特定的储存方式，使得表本身有着更小的体积。
 
@@ -115,13 +402,9 @@ SLRX是一款“柔性”的语法分析器，对于用户给定的X（默认为
 
 用以表达数学上的集合概念的库，施工中。
 
-## 10. PotatoIntrusivePointer
+-->
 
-嵌入式智能指针。（namespace Potato）
 
-一般用于类COM类型的指针的管理，例如一个类型实现有AddRef和SubRef两种函数，则IntrusivePointer可以直接管理。
-
-又或者是其他类型的函数，比如AddRef1和SubRef1，则可以通过替换IntrusivePointer的Wrapper类型来进行管理。
 
 
 

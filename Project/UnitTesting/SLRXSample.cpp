@@ -152,7 +152,7 @@ void TestTable(Symbol StartSymbol, std::vector<ProductionBuilder> Builder, std::
 		if (Re2 != TarStr)
 			throw UnpassedUnit{ Error };
 	}
-	catch (Exception::Interface const& I)
+	catch (Exception::Interface const&)
 	{
 		throw UnpassedUnit{ Error };
 	}

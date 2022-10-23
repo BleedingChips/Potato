@@ -56,6 +56,8 @@ namespace Potato::Ebnf
 		std::optional<RT> Element;
 		std::size_t LastOffset;
 		operator bool() const { return Element.has_value(); }
+		RT& operator*() { return *Element; }
+		RT const& operator*() const { return *Element; }
 	};
 
 	struct LexicalProcessor
@@ -82,7 +84,8 @@ namespace Potato::Ebnf
 
 		struct ReduceT {
 			std::size_t Mask;
-			std::size_t ProductionElementCount;
+			std::size_t ElementCount;
+			std::size_t UniqueReduceID;
 			bool IsNoNameReduce;
 		};
 
@@ -187,7 +190,7 @@ namespace Potato::Ebnf
 		std::vector<NTElement::DataT> Datas;
 	};
 
-	struct PasringStepProcessor
+	struct ParsingStepProcessor
 	{
 		struct Result
 		{
@@ -206,9 +209,9 @@ namespace Potato::Ebnf
 	};
 
 	template<typename Func>
-	std::optional<std::any> ProcessStep(std::span<ParsingStep const> Steps, Func&& F)
+	std::optional<std::any> ProcessParsingStep(std::span<ParsingStep const> Steps, Func&& F)
 	{
-		PasringStepProcessor Pro;
+		ParsingStepProcessor Pro;
 		for (auto Ite : Steps)
 		{
 			auto Re = Pro.Consume(Ite);
@@ -228,6 +231,12 @@ namespace Potato::Ebnf
 			}
 		}
 		return Pro.EndOfFile();
+	}
+
+	template<typename RT, typename Fun>
+	RT ProcessParsingStepWithOutputType(std::span<ParsingStep const> Input, Fun&& Func) requires(std::is_invocable_r_v<std::any, Fun, VariantElement>)
+	{
+		return std::any_cast<RT>(*ProcessParsingStep(Input, Func));
 	}
 }
 

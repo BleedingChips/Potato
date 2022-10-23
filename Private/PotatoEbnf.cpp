@@ -40,8 +40,7 @@ namespace Potato::Ebnf
 		Colon,
 		Semicolon,
 		Command,
-		Barrier,
-		ItSelf,
+		Barrier
 	};
 
 	constexpr Symbol operator*(T sym) { return Symbol::AsTerminal(static_cast<SLRX::StandardT>(sym)); };
@@ -80,7 +79,6 @@ namespace Potato::Ebnf
 				AddRegex(Creator, u8R"(\s+)", T::Empty);
 				AddRegex(Creator, u8R"(\$)", T::Start);
 				AddRegex(Creator, u8R"(\|)", T::Or);
-				AddRegex(Creator, u8R"(\&)", T::ItSelf);
 				AddRegex(Creator, u8R"(\[)", T::LM_Brace);
 				AddRegex(Creator, u8R"(\])", T::RM_Brace);
 				AddRegex(Creator, u8R"(\{)", T::LB_Brace);
@@ -203,10 +201,10 @@ namespace Potato::Ebnf
 				{*NT::Expression, {*T::NoTerminal}, 1},
 				{*NT::Expression, {*T::Rex}, 4},
 				{*NT::Expression, {*T::Number}, 5},
-				{*NT::Expression, {*T::ItSelf}, 50},
+				{*NT::Expression, {*T::Start}, 50},
 
 				{*NT::FunctionEnum, {*T::Colon, *T::LM_Brace, *T::Number, *T::RM_Brace}, 6},
-				{*NT::FunctionEnum, {*T::Colon, *T::LM_Brace, *T::Number, *T::RM_Brace, *T::ItSelf}, 6},
+				{*NT::FunctionEnum, {*T::Colon, *T::LM_Brace, *T::Number, *T::RM_Brace, *T::Start}, 6},
 				{*NT::FunctionEnum, {}, 7},
 
 				{*NT::ExpressionStatement, {*NT::ExpressionStatement, 31, *NT::Expression}, 8},
@@ -870,7 +868,7 @@ namespace Potato::Ebnf
 
 			SLRX::TableWrapper::SerilizeTo(Span, Ref.Syntax);
 
-			ES[3].Length = static_cast<StandardT>(Index);
+			ES[4].Length = static_cast<StandardT>(Index);
 		}
 
 		return Reader.GetIteSpacePositon();
@@ -1038,8 +1036,9 @@ namespace Potato::Ebnf
 			}
 			ParsingStep::ReduceT Reduce;
 			Reduce.Mask = In.Reduce.Mask;
-			Reduce.ProductionElementCount = In.Reduce.ElementCount;
+			Reduce.ElementCount = In.Reduce.ElementCount;
 			Reduce.IsNoNameReduce = !Sym.has_value();
+			Reduce.UniqueReduceID = In.Reduce.ProductionIndex;
 			Step.Data = Reduce;
 			return { Step , 0 };
 		}
@@ -1087,7 +1086,6 @@ namespace Potato::Ebnf
 
 	Result<std::vector<ParsingStep>> SyntaxProcessor::Process(SyntaxProcessor& Pro, std::span<LexicalElement const> Eles)
 	{
-
 		for (std::size_t I = 0; I < Eles.size(); ++I)
 		{
 			if (!Pro.Pro.Consume(Eles[I].Value, I))
@@ -1107,7 +1105,7 @@ namespace Potato::Ebnf
 		return { Temp, Eles.size() };
 	}
 
-	auto PasringStepProcessor::Consume(ParsingStep Input) ->std::optional<Result>
+	auto ParsingStepProcessor::Consume(ParsingStep Input) ->std::optional<Result>
 	{
 		if (Input.IsTerminal())
 		{
@@ -1124,7 +1122,7 @@ namespace Potato::Ebnf
 				return Result{ VariantElement{Ele}, {}};
 			}else{
 				TemporaryDatas.clear();
-				std::size_t AdressSize = Datas.size() - Reduce.ProductionElementCount;
+				std::size_t AdressSize = Datas.size() - Reduce.ElementCount;
 				TemporaryDatas.insert(TemporaryDatas.end(), 
 					std::move_iterator(Datas.begin() + AdressSize),
 					std::move_iterator(Datas.end())
@@ -1145,7 +1143,7 @@ namespace Potato::Ebnf
 					{
 					case Ebnf::SmallBrace:
 					{
-						if (Reduce.ProductionElementCount == 1)
+						if (Reduce.ElementCount == 1)
 						{
 							auto TempCondition = TemporaryDatas[0].TryConsume<Condition>();
 							if (TempCondition.has_value())
@@ -1230,7 +1228,7 @@ namespace Potato::Ebnf
 	}
 
 
-	std::optional<std::any> PasringStepProcessor::EndOfFile() 
+	std::optional<std::any> ParsingStepProcessor::EndOfFile() 
 	{
 		if (Datas.size() == 1)
 		{

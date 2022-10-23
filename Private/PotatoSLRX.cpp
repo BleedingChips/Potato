@@ -1396,10 +1396,6 @@ namespace Potato::SLRX
 				Reader.CrossTypeSetThrow<OutOfRange>(Property->ReduceTupleCount, Ite2.Tuples.size(), OutOfRange::TypeT::ReduceProperty, Ite2.Tuples.size());
 				Property->NeedPredict = (Ite2.Property.NeedPredict ? 1 : 0);
 				auto Span = *Reader.ReadObjectArray<ZipReduceTupleT>(Ite2.Tuples.size());
-				for (std::size_t I = 0; I < Span.size(); ++I)
-				{
-					Span[I].NeedPredict = (Ite2.Tuples[I].NeedPredict ? 1 : 0);
-				}
 				ReduceTupleRecord.push_back({Span, std::span(Ite2.Tuples)});
 			}
 
@@ -1426,6 +1422,7 @@ namespace Potato::SLRX
 				auto& Source = Ite.Tuples[I];
 				Reader.CrossTypeSetThrow<OutOfRange>(Target.LastState, NodeOffset[Source.LastState], OutOfRange::TypeT::RequireNodeOffset, NodeOffset[Source.LastState]);
 				Reader.CrossTypeSetThrow<OutOfRange>(Target.ToState, NodeOffset[Source.TargetState], OutOfRange::TypeT::RequireNodeOffset, NodeOffset[Source.TargetState]);
+				Target.NeedPredict = (Source.NeedPredict ? 1 : 0);
 			}
 		}
 
