@@ -5,6 +5,36 @@
 using namespace Potato::Ebnf;
 
 
+std::u8string HandleCondiction(Condition Tions)
+{
+	std::u8string Result;
+	switch (Tions.Type)
+	{
+	case Condition::TypeT::Or:
+		Result += u8"<|";
+		break;
+	case Condition::TypeT::Parentheses:
+		Result += u8"<{";
+		break;
+	case Condition::TypeT::SquareBrackets:
+		Result += u8"<[";
+		break;
+	}
+	for (auto& Ite : Tions.Datas)
+	{
+		auto Re = Ite.TryConsume<Condition>();
+		if (Re.has_value())
+		{
+			Result += HandleCondiction(std::move(*Re));
+		}
+		else {
+			Result += Ite.Consume<std::u8string>();
+		}
+	}
+	Result += u8">";
+	return Result;
+}
+
 struct StringMaker
 {
 	struct PredictEle
@@ -42,7 +72,12 @@ struct StringMaker
 			}
 			for (auto& Ite : Ele.Datas)
 			{
-				Tem += Ite.Consume<std::u8string>();
+				auto Re = Ite.TryConsume<Condition>();
+				if (Re.has_value())
+				{
+					Tem += HandleCondiction(std::move(std::move(*Re)));
+				}else
+					Tem += Ite.Consume<std::u8string>();
 			}
 			Tem += u8")";
 			return Tem;
@@ -169,7 +204,7 @@ $ := <Exp> ;
 	std::u8string_view Source = u8R"(1*< 2 + 3 > * 4)";
 
 
-	//Test(EbnfCode1, Source, u8R"((((1)*(<((2)+(3))>))*(4)))", "TestingEbnf : Case 1");
+	Test(EbnfCode1, Source, u8R"((((1)*(<((2)+(3))>))*(4)))", "TestingEbnf : Case 1");
 
 	std::u8string_view EbnfCode2 =
 		u8R"(
@@ -188,8 +223,27 @@ $ := <Exp> ;
 
 	std::u8string_view Source2 = u8R"(123 123 123 456)";
 
-	Test(EbnfCode2, Source2, u8R"(((((123)(123))(123))(456)))", "TestingEbnf : Case 1");
+	Test(EbnfCode2, Source2, u8R"(((((123)(123))(123))(456)))", "TestingEbnf : Case 2");
 
+	std::u8string_view EbnfCode3 =
+		u8R"(
+$ := '\s+'
+Num := '[1-9][0-9]*' : [1]
+
+%%%%
+
+$ := <Exp> ;
+
+<Exp> := Num | '+': [1];
+	:= <Exp> <Exp> $ : [2];
+
+%%%%
+)";
+
+	std::u8string_view Source3 = u8R"(123 + 123 123 456)";
+
+	Test(EbnfCode3, Source3, u8R"((((((<|123>)(<|+>))(<|123>))(<|123>))(<|456>)))", "TestingEbnf : Case 3");
+	
 	std::wcout << LR"(TestingEbnf Pass !)" << std::endl;
 
 }

@@ -22,9 +22,9 @@ int main()
 
 		TestingIntrusivePointer();
 	}
-	catch (std::exception const& E)
+	catch (UnpassedUnit const& U)
 	{
-		std::cout << E.what() << std::endl;
+		std::cout << U.what() << std::endl;
 		return -1;
 	}
 	std::cout << "All Passed" << std::endl;

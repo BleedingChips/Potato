@@ -45,7 +45,7 @@
 
 ## 使用方式
 
-将`Potato/Public`和`Potato/Private`包含到程序中即可。
+将`Potato/Public`和`Potato/Private`包含到程序中编译即可。
 
 ## PotatoTMP 
 
@@ -255,18 +255,22 @@ IntrusivePointer<S, Type2Wrapper> Ptr = new S{};
 			这里的`2`表示其前方的`*Exp`无法由标记为`2`的产生式规约产生。若无该标记，对于上述的产生式以及终结符序列{`*Num`, `*Num`, `*Num`}，有两种等效的规约路径：
 				
 			```
-			Num,Num,Num -(Exp:Num)-> Exp<Num>, Exp<Num>, Exp<Num> -(Exp:Exp Exp)-> Exp<Num> Exp<Exp, Exp> -(Exp:Exp Exp)-> Exp<Exp, Exp>
+			Num Num Num -[Exp:Num]-> Exp<Num> Exp<Num> Exp<Num> -[Exp:Exp Exp]-> Exp<Num> Exp<Exp, Exp> -[Exp:Exp Exp]-> Exp<Exp, Exp>
 
-			Num,Num,Num -(Exp:Num)-> Exp<Num>, Exp<Num>, Exp<Num> -(Exp:Exp Exp)-> Exp<Exp, Exp> Exp<Num> -(Exp:Exp Exp)-> Exp<Exp, Exp>
+			Num Num Num -[Exp:Num]-> Exp<Num> Exp<Num> Exp<Num> -[Exp:Exp Exp]-> Exp<Exp, Exp> Exp<Num> -[Exp:Exp Exp]-> Exp<Exp, Exp>
 			```
 
 			加了标记值后，该规约步骤会被禁止：
 
 			```
-			Exp<Num>, Exp<Num>, Exp<Num> -(Exp:Exp Exp)-> Exp<Num> Exp<Exp, Exp>
+			Exp<Num> Exp<Num> Exp<Num> -[Exp:Exp Exp]-> Exp<Num> Exp<Exp, Exp>
 			```
 
 			所以最终将只有一个规约路径。
+
+			```
+			Num Num Num -[Exp:Num]-> Exp<Num> Exp<Num> Exp<Num> -[Exp:Exp Exp]-> Exp<Exp, Exp> Exp<Num> -[Exp:Exp Exp]-> Exp<Exp, Exp>
+			```
 
 		* Mask 该产生式的标记值，用来在后续的语法制导中使用，默认为0。
 
@@ -293,6 +297,24 @@ IntrusivePointer<S, Type2Wrapper> Ptr = new S{};
 		```
 
 		这里表示`Mul`的优先级大于`Add`和`Sub`，并且为左结合，`Add`和`Sub`的优先级相等小于`Mul`，并且为右结合。
+
+		默认位左结合。
+
+		符号优先级只会处理固定格式的产生式，如：
+
+		```cpp
+		{E, {E, +, E}, 2},
+		{E, {E, *, E}, 3},
+		{E2, {E2, +, E2}, 4},
+		```
+		
+		将会自动更改成：
+
+		```cpp
+		{E, {E, +, E, 2}, 2},
+		{E, {E, 2, *, E, 2, 3}, 3},
+		{E2, {E2, +, E2, 4}, 4},
+		```
 
 	4. MaxForwardDetect
 
@@ -325,11 +347,215 @@ IntrusivePointer<S, Type2Wrapper> Ptr = new S{};
 
 	若创建失败，则会抛出以`Potato::SLRX::Exception::Interface`为基类的异常。
 
-* 使用分析表对终结符进行解析：
+* 使用分析表对终结符进行解析，的到解析路径：
 
 	```cpp
+	SymbolProcessor Pro(Tab); // 这里是引用，所以必须保持Table的实例的生命周期
+	std::span<Symbol const> Symbols;
+	std::size_t TokenIndex = 0;
+	std::vector<Symbols> SuggestSymbols;
+	for(auto Ite : Symbols)
+	{
+		if(!Pro.Consume(Ite, TokenIndex++, SuggestSymbols))
+			return false; // 不接受该Symbol，接受的Symbols见 SuggestSymbols。
+	}
+
+	if(!Pro.EndOfFile(TokenIndex++, SuggestSymbols))
+		return false; // 不接受该Symbol，接受的Symbols见 SuggestSymbols。
 	
+	std::span<ParsingStep const> = Pro.GetSteps();
 	```
+
+* 根据解析路径，生成AST树或直接生成结果。
+
+	```cpp
+	auto Func = [&](VariantElement Ele) -> std::any {
+		if (Ele.IsNoTerminal())
+		{
+			NTElement NE = Ele.AsNoTerminal();
+			switch (NE.Reduce.Mask)
+			{
+			case 1:
+				return NE[0].Consume();
+			case 2:
+				return NE[0].Consume<int32_t>() + NE[2].Consume<int32_t>();
+			case 3:
+				return NE[0].Consume<int32_t>() * NE[2].Consume<int32_t>();
+			case 4:
+				return NE[0].Consume<int32_t>() - NE[2].Consume<int32_t>();
+			case 5:
+				return NE[0].Consume<int32_t>() / NE[2].Consume<int32_t>();
+			default:
+				break;
+			}
+			return {};
+		}
+		else if(Ele.IsTerminal()) {
+			TElement TE = Ele.AsTerminal();
+			return Wtf[TE.Shift.TokenIndex].Value;
+		}
+		else if(Ele.IsPredict())
+		{
+			PredictElement PE = Ele.AsPredict();
+			return {};
+		}
+	};
+
+	auto Result = ProcessParsingStepWithOutputType<int32_t>(Pro.GetSteps(), Func);
+	```
+## PotatoReg
+
+为词法分析器特化的，基于DFA的，可单次同时匹配多条正则表达式的正则库。
+
+* 创建一个正则表达式：
+
+```cpp
+// false 表示这个字符串是个正则字符串，Accept 表示当该正则表达式匹配成功后所返回的标记值
+DFA Table(u8R"(([0-9]+))", false, Accept{ 2, 3 }); 
+
+// 序列化版本
+std::vector<Reg::StandardT> Table2 = TableWrapper::Create(Table); // 序列化后正则表格。
+
+
+```
+
+
+
+目前只支持下面几种元字符：
+
+1. `.` `-`
+2. `*` `*?`
+3. `+` `+?`
+4. `?` `??`
+5. `|` `()` `[]` `[^]` `(?:)`
+6. `{x,y}` `{X}`  `{X,}` `{,Y}` `{x,y}?` `{X}?`  `{X,}?` `{,Y}?`
+
+* 创建一个正则表达式：
+
+```cpp
+DFA Table(u8R"(([0-9]+))", false, Accept{ 2, 3 }); // false 表示这个字符串是个正则字符串，Accept 表示当该正则能匹配对应字符串时，返回的标记值。
+
+MulityRegCreater Crerator;
+Crerator.LowPriorityLink(u8R"(while)", false, {1, 0}); // 1
+Crerator.LowPriorityLink(u8R"(if)", false, {2, 0}); // 2
+Crerator.LowPriorityLink(u8R"([a-zA-Z]+)", false, {3, 0}); // 3
+DFA Table = Crerator.GenerateDFA(); // 同时处理多个正则表达式，先标记的优先级高。当多个正则均能同时匹配时，选取优先级最高的。
+
+std::vector<Reg::StandardT> Table2 = TableWrapper::Create(Table); // 序列化后正则表格。
+```
+
+由于一些优化，类似于`(.*)*`这种正则表达式，会抛出异常，其特征为：
+
+>对于一个非元字符，在预查找下一个需要的非元字符时，只能经过有限次的不消耗非元字符的查找。
+
+* 对字符串进行检测：
+
+	* 整串匹配
+
+		```cpp
+		std::u8string_view Source = u8"(1234567)";
+		MatchResult<MatchProcessor::Result> Re = Match(Table, Source); // 整串匹配
+		if(Re)
+		{
+			Re->AcceptData; // 
+			std::u8string_view Cap 
+				= Re->GetCaptureWrapper().GetTopSubCapture().GetCapture().Slice(Source); // 获取捕获组所捕获的东西。
+		}
+		```
+
+	* 头部匹配
+
+		```cpp
+		std::u8string_view Source = u8"(1234567abc)";
+		MatchResult<HeadMatchProcessor::Result> Re = HeadMatch(Table, Source); // 整串匹配
+		if(Re)
+		{
+			Re->AcceptData; // 应该为{2, 3}
+			std::u8string_view Cap 
+				= Re->GetCaptureWrapper().GetTopSubCapture().GetCapture().Slice(Source); // 获取捕获组所捕获的东西。
+			std::u8string_view Total = Re->MainCapture.Slice(Source); // 头部匹配的字符串
+		}
+
+		MatchResult<MatchProcessor::Result> Re = Match(Table, Source); // 整串匹配
+		```
+
+		> 这里的捕获组与普通的正则有所不同。在普通的正则表达式中，若有正则表达式`(abc)+`，那么该表达式只存在捕获组一个捕获，并且只会捕获最后一个`abc`。但在这里会产生匹配次数个捕获组。
+
+该实现支持将多正则表达式合并到一个表中，并同时对其进行匹配操作。
+
+* 创建多个正则表达式
+
+```cpp
+MulityRegCreater Crerator;
+Crerator.LowPriorityLink(u8R"(while)", false, {1, 0}); // 1
+Crerator.LowPriorityLink(u8R"(if)", false, {2, 0}); // 2
+Crerator.LowPriorityLink(u8R"([a-zA-Z]+)", false, {3, 0}); // 3，优先级较低，与
+DFA Table = Crerator.GenerateDFA();
+```
+
+* 同时对字符串进行检测：
+
+```cpp
+std::u8string_view Source = u8"(while)";
+MatchResult<MatchProcessor::Result> Re = Match(Table, Source); // 整串匹配
+if(Re)
+{
+	Re->AcceptData; // 应该为{1, 0}
+}
+
+std::u8string_view Source2 = u8"(if)";
+MatchResult<MatchProcessor::Result> Re = Match(Table, Source); // 整串匹配
+if(Re)
+{
+	Re->AcceptData; // 应该为{1, 0}
+}
+```
+
+
+
+
+
+
+
+
+支持将多个正则合并到一个正则上，并同时进行匹配，并返回匹配后的正则ID。
+
+在匹配时，支持以下三种操作：
+
+* March 需要字符串全段满足正则才匹配成功。
+* HeadMarch(Greedy = false) 只要正则能成功匹配字符串的头部立马返回成功。若有多个正则，则返回最短的匹配项。
+* HeadMarch(Greedy = true) 只要正则能成功匹配字符串的头部立马返回成功。若有多个正则，则返回最长的匹配项。
+
+由于性能原因，并不支持Search功能。若要使用，可以使用配合`HeadMarch`用`.*?(xxx)`来进行匹配。
+
+* 创建一个正则表达式
+
+	```cpp
+	DFA Tab1(u8R"(abcdf)");
+
+	std::vector<Reg::StanderT> Buffer = TableWrapper::Create(Tab1); // 序列化后的表格，也可直接用
+	```
+
+	或者创建多个正则表达式:
+
+	```cpp
+	MulityRegCreater Crerator;
+	Crerator.LowPriorityLink(u8R"(\+)");
+	Crerator.LowPriorityLink(u8R"(\s)");
+	Crerator.LowPriorityLink(u8R"([0-9]+)");
+	Crerator.LowPriorityLink(u8R"(while)";
+	Crerator.LowPriorityLink(u8R"([a-zA-Z][a-z0-9A-Z]*)");
+	DFA Table = Crerator.GenerateDFA();
+	```
+
+* 使用正则表达式匹配：
+
+	```cpp
+	if(HeadMatch(DFA, u8"abcd"))
+	```
+
+
+
 
 
 

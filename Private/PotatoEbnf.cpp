@@ -12,9 +12,7 @@ namespace Potato::Ebnf
 	static constexpr SLRX::StandardT SmallBrace = 0;
 	static constexpr SLRX::StandardT MiddleBrace = 1;
 	static constexpr SLRX::StandardT BigBrace = 2;
-	static constexpr SLRX::StandardT OrLeft = 3;
-	static constexpr SLRX::StandardT OrRight = 4;
-	static constexpr SLRX::StandardT MinMask = 5;
+	static constexpr SLRX::StandardT OrMaskBase = 3;
 
 	using SLRX::Symbol;
 
@@ -154,14 +152,14 @@ namespace Potato::Ebnf
 					auto SpanIndex = Wrapper.GetTopSubCapture().GetCapture();
 					Output.Datas.push_back({ *Enum,
 						StrIte.substr(SpanIndex.Begin(), SpanIndex.Count()),
-						Offset
+						{Offset, SpanIndex.Count()}
 						});
 				}
 					break;
 				case T::Barrier:
 					Output.Datas.push_back({ *Enum,
-							{},
-							Offset
+							{u8"%%%%"},
+							{Offset, Re->MainCapture.Count()}
 						});
 					break;
 				default:
@@ -398,6 +396,8 @@ namespace Potato::Ebnf
 					throw Exception::UnacceptableEbnf{ UnacceptableEbnf::TypeT::WrongEbnfSyntax, Str, InputSpan.empty() ? InputSpan.rbegin()->StrIndex.Begin() : SpanSize };
 				}
 
+				SLRX::StandardT OrMaskIte = Ebnf::OrMaskBase;
+
 				SLRX::ProcessParsingStep(Pro.GetSteps(), [&](SLRX::VariantElement Ele) -> std::any {
 					if (Ele.IsNoTerminal())
 					{
@@ -491,43 +491,59 @@ namespace Potato::Ebnf
 							auto Last1 = Ref[0].Consume<std::vector<SLRX::ProductionBuilderElement>>();
 							auto Last2 = Ref[2].Consume<std::vector<SLRX::ProductionBuilderElement>>();
 							std::reverse(Last2.begin(), Last2.end());
-							std::vector<std::vector<SLRX::ProductionBuilderElement>> Temp;
-							Temp.push_back(std::move(Last1));
-							Temp.push_back(std::move(Last2));
+							OrMaskIte = Ebnf::OrMaskBase;
+
+							Symbol OrSymbol = Symbol::AsNoTerminal(TempNoTerminalCount--);
+
+							Builders.push_back({
+									OrSymbol,
+									std::move(Last1),
+									OrMaskIte++
+								});
+
+							Builders.push_back({
+									OrSymbol,
+									std::move(Last2),
+									OrMaskIte++
+								});
+
+							std::vector<SLRX::ProductionBuilderElement> Temp;
+							Temp.push_back(OrSymbol);
 							return std::move(Temp);
 						}
 						case 30:
 						{
-							auto Last1 = Ref[0].Consume<std::vector<std::vector<SLRX::ProductionBuilderElement>>>();
+							auto Last1 = Ref[0].Consume<std::vector<SLRX::ProductionBuilderElement>>();
 							auto Last2 = Ref[2].Consume<std::vector<SLRX::ProductionBuilderElement>>();
 							std::reverse(Last2.begin(), Last2.end());
-							Last1.push_back(std::move(Last2));
+							assert(Last1.size() == 0);
+							assert(Last1[0].ProductionValue.IsNoTerminal());
+							Builders.push_back({
+									Last1[0].ProductionValue,
+									std::move(Last2),
+									OrMaskIte++
+								});
 							return std::move(Last1);
 						}
+						/*
 						case 31:
 						{
 							auto Last = Ref[0].Consume<std::vector<std::vector<SLRX::ProductionBuilderElement>>>();
-							while (Last.size() >= 2)
+							auto Sym = SLRX::Symbol::AsNoTerminal(TempNoTerminalCount--);
+							std::size_t Mask = Ebnf::OrMaskBase;
+							for (auto& Ite : Last)
 							{
-								auto L1 = std::move(*Last.rbegin());
-								Last.pop_back();
-								auto L2 = std::move(*Last.rbegin());
-								Last.pop_back();
-								auto CurSymbol = SLRX::Symbol::AsNoTerminal(TempNoTerminalCount--);
 								Builders.push_back({
-									CurSymbol,
-									std::move(L1),
-									Ebnf::OrLeft
+										Sym,
+										std::move(Ite),
+										Mask++
 									});
-								Builders.push_back({
-									CurSymbol,
-									std::move(L2),
-									Ebnf::OrRight
-									});
-								Last.push_back({ CurSymbol });
 							}
-							return std::move(Last[0]);
+							std::vector<SLRX::ProductionBuilderElement> Re;
+							Re.push_back(Sym);
+							return std::move(Re);
 						}
+						*/
 						case 18:
 							return Ref[0].Consume();
 						case 19:
@@ -1026,12 +1042,9 @@ namespace Potato::Ebnf
 				case MiddleBrace:
 					Step.Symbol = u8"{...}";
 					break;
-				case OrLeft:
-				case OrRight:
+				default:
 					Step.Symbol = u8"...|...";
 					break;
-				default:
-					assert(false);
 				}
 			}
 			ParsingStep::ReduceT Reduce;
@@ -1182,41 +1195,14 @@ namespace Potato::Ebnf
 							return Result{ {}, {} };
 						}
 					}
-					case Ebnf::OrLeft:
-					{
-						std::vector<NTElement::DataT> TemBuffer;
-						TemBuffer.insert(TemBuffer.end(), std::move_iterator(TemporaryDatas.begin()), std::move_iterator(TemporaryDatas.end()));
-						Condition Con{ Condition::TypeT::Or, 0, std::move(TemBuffer) };
-						Push({ Input.Symbol, TokenIndex }, std::move(Con));
-						return Result{ {}, {} };
-					}
-					case Ebnf::OrRight:
-					{
-						if (TemporaryDatas.size() == 1)
-						{
-							auto Temp = TemporaryDatas[0].TryConsume<Condition>();
-							if (Temp.has_value())
-							{
-								if (Temp->Type == Condition::TypeT::Or)
-								{
-									Temp->AppendData += 1;
-									Push({ Input.Symbol, TokenIndex }, std::move(Temp));
-									return Result{ {}, {} };
-								}
-								else
-									TemporaryDatas[0].Data.Data = std::move(Temp);
-							}
-						}
-						std::vector<NTElement::DataT> TemBuffer;
-						TemBuffer.insert(TemBuffer.end(), std::move_iterator(TemporaryDatas.begin()), std::move_iterator(TemporaryDatas.end()));
-						Condition Con{ Condition::TypeT::Or, 1, std::move(TemBuffer) };
-						Push({ Input.Symbol, TokenIndex }, std::move(Con));
-						return Result{ {}, {} };
-					}
 					default:
-						assert(false);
-						return {};
-						break;
+					{
+						std::vector<NTElement::DataT> TemBuffer;
+						TemBuffer.insert(TemBuffer.end(), std::move_iterator(TemporaryDatas.begin()), std::move_iterator(TemporaryDatas.end()));
+						Condition Con{ Condition::TypeT::Or, Reduce.Mask - Ebnf::OrMaskBase, std::move(TemBuffer) };
+						Push({ Input.Symbol, TokenIndex }, std::move(Con));
+						return Result{ {}, {} };
+					}
 					}
 				}
 				else{
@@ -1268,8 +1254,7 @@ namespace Potato::Ebnf::Exception
 			{
 				if (Ite.Value.Value < NTMapping.size())
 				{
-					assert(Ite.Reduce.Mask >= MinMask);
-					Result.push_back({ NTMap{NTMapping[Ite.Value.Value], Ite.Reduce.ElementCount, Ite.Reduce.Mask - MinMask} });
+					Result.push_back({ NTMap{NTMapping[Ite.Value.Value], Ite.Reduce.ElementCount, Ite.Reduce.Mask} });
 				}
 				else {
 					static constexpr SLRX::StandardT SmallBrace = 0;
