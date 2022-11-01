@@ -407,67 +407,59 @@ IntrusivePointer<S, Type2Wrapper> Ptr = new S{};
 
 为词法分析器特化的，基于DFA的，可单次同时匹配多条正则表达式的正则库。
 
-* 创建一个正则表达式：
+* 创建正则表达式：
 
-```cpp
-// false 表示这个字符串是个正则字符串，Accept 表示当该正则表达式匹配成功后所返回的标记值
-DFA Table(u8R"(([0-9]+))", false, Accept{ 2, 3 }); 
+	```cpp
+	DFA Table(u8R"(([0-9]+))", false, Accept{ 2, 3 }); 
+	// 序列化版本
+	std::vector<Reg::StandardT> Table2 = TableWrapper::Create(Table); 
+	```
+	false 表示这个字符串是个正则字符串，Accept 表示当该正则表达式匹配成功后所返回的标记值。
 
-// 序列化版本
-std::vector<Reg::StandardT> Table2 = TableWrapper::Create(Table); // 序列化后正则表格。
+	支持创建多个正则表达式：
+
+	```cpp
+	MulityRegCreater Crerator;
+	Crerator.LowPriorityLink(u8R"(while)", false, {1, 0}); // 1
+	Crerator.LowPriorityLink(u8R"(if)", false, {2, 0}); // 2
+	Crerator.LowPriorityLink(u8R"([a-zA-Z]+)", false, {3, 0}); // 3
+	DFA Table = Crerator.GenerateDFA();
+	```
+	同时处理多个正则表达式，先创建的优先级高。当多个正则均能同时匹配时，选取优先级最高的。
 
 
-```
+	由于一些优化，类似于`(.*)*`这种正则表达式，会抛出异常，其特征为：
 
-
-
-目前只支持下面几种元字符：
-
-1. `.` `-`
-2. `*` `*?`
-3. `+` `+?`
-4. `?` `??`
-5. `|` `()` `[]` `[^]` `(?:)`
-6. `{x,y}` `{X}`  `{X,}` `{,Y}` `{x,y}?` `{X}?`  `{X,}?` `{,Y}?`
-
-* 创建一个正则表达式：
-
-```cpp
-DFA Table(u8R"(([0-9]+))", false, Accept{ 2, 3 }); // false 表示这个字符串是个正则字符串，Accept 表示当该正则能匹配对应字符串时，返回的标记值。
-
-MulityRegCreater Crerator;
-Crerator.LowPriorityLink(u8R"(while)", false, {1, 0}); // 1
-Crerator.LowPriorityLink(u8R"(if)", false, {2, 0}); // 2
-Crerator.LowPriorityLink(u8R"([a-zA-Z]+)", false, {3, 0}); // 3
-DFA Table = Crerator.GenerateDFA(); // 同时处理多个正则表达式，先标记的优先级高。当多个正则均能同时匹配时，选取优先级最高的。
-
-std::vector<Reg::StandardT> Table2 = TableWrapper::Create(Table); // 序列化后正则表格。
-```
-
-由于一些优化，类似于`(.*)*`这种正则表达式，会抛出异常，其特征为：
-
->对于一个非元字符，在预查找下一个需要的非元字符时，只能经过有限次的不消耗非元字符的查找。
+	>对于一个非元字符，在预查找下一个需要的非元字符时，只能经过有限次的不消耗非元字符的查找。
 
 * 对字符串进行检测：
 
+	目前提供的匹配方式只有整串匹配和头部匹配两种。
+
 	* 整串匹配
+  
+  		指字符串要与正则表达式完全匹配。若有多个正则表达式，则只需要匹配其中一种即可。
 
 		```cpp
 		std::u8string_view Source = u8"(1234567)";
 		MatchResult<MatchProcessor::Result> Re = Match(Table, Source); // 整串匹配
 		if(Re)
 		{
-			Re->AcceptData; // 
+			Re->AcceptData; // 用来标记匹配的是哪个字符串
 			std::u8string_view Cap 
 				= Re->GetCaptureWrapper().GetTopSubCapture().GetCapture().Slice(Source); // 获取捕获组所捕获的东西。
 		}
 		```
 
+		> 这里的捕获组与普通的正则有所不同。在普通的正则表达式中，若有正则表达式`(abc)+`，那么该表达式只存在捕获组一个捕获，并且只会捕获最后一个`abc`。但在这里会产生匹配次数个捕获组。
+
 	* 头部匹配
+
+		只需要字符串的前部能匹配一个或多个正则即可。这里有两种匹配方式，既贪婪（匹配最长）和非贪婪（匹配最短）两种。
 
 		```cpp
 		std::u8string_view Source = u8"(1234567abc)";
-		MatchResult<HeadMatchProcessor::Result> Re = HeadMatch(Table, Source); // 整串匹配
+		MatchResult<HeadMatchProcessor::Result> Re = HeadMatch(Table, Source, false); // 整串匹配, 非贪婪
 		if(Re)
 		{
 			Re->AcceptData; // 应该为{2, 3}
@@ -479,166 +471,85 @@ std::vector<Reg::StandardT> Table2 = TableWrapper::Create(Table); // 序列化�
 		MatchResult<MatchProcessor::Result> Re = Match(Table, Source); // 整串匹配
 		```
 
-		> 这里的捕获组与普通的正则有所不同。在普通的正则表达式中，若有正则表达式`(abc)+`，那么该表达式只存在捕获组一个捕获，并且只会捕获最后一个`abc`。但在这里会产生匹配次数个捕获组。
+	由于性能原因，并不支持查询操作，可以在正则前加入`.*?`配合头部匹配进行操作。
 
-该实现支持将多正则表达式合并到一个表中，并同时对其进行匹配操作。
+## PotatoEbnf
 
-* 创建多个正则表达式
+基于`PotatoSLRX`和`PotatoReg`的Ebnf库。
 
-```cpp
-MulityRegCreater Crerator;
-Crerator.LowPriorityLink(u8R"(while)", false, {1, 0}); // 1
-Crerator.LowPriorityLink(u8R"(if)", false, {2, 0}); // 2
-Crerator.LowPriorityLink(u8R"([a-zA-Z]+)", false, {3, 0}); // 3，优先级较低，与
-DFA Table = Crerator.GenerateDFA();
-```
-
-* 同时对字符串进行检测：
-
-```cpp
-std::u8string_view Source = u8"(while)";
-MatchResult<MatchProcessor::Result> Re = Match(Table, Source); // 整串匹配
-if(Re)
-{
-	Re->AcceptData; // 应该为{1, 0}
-}
-
-std::u8string_view Source2 = u8"(if)";
-MatchResult<MatchProcessor::Result> Re = Match(Table, Source); // 整串匹配
-if(Re)
-{
-	Re->AcceptData; // 应该为{1, 0}
-}
-```
-
-
-
-
-
-
-
-
-支持将多个正则合并到一个正则上，并同时进行匹配，并返回匹配后的正则ID。
-
-在匹配时，支持以下三种操作：
-
-* March 需要字符串全段满足正则才匹配成功。
-* HeadMarch(Greedy = false) 只要正则能成功匹配字符串的头部立马返回成功。若有多个正则，则返回最短的匹配项。
-* HeadMarch(Greedy = true) 只要正则能成功匹配字符串的头部立马返回成功。若有多个正则，则返回最长的匹配项。
-
-由于性能原因，并不支持Search功能。若要使用，可以使用配合`HeadMarch`用`.*?(xxx)`来进行匹配。
-
-* 创建一个正则表达式
+* 创建一个Ebnf
 
 	```cpp
-	DFA Tab1(u8R"(abcdf)");
+	std::u8string_view EbnfCode1 =
+		u8R"(
+	$ := '\s+'
+	Num := '[1-9][0-9]*' : [1]
 
-	std::vector<Reg::StanderT> Buffer = TableWrapper::Create(Tab1); // 序列化后的表格，也可直接用
+	%%%%
+
+	$ := <Exp> ;
+
+	<Exp> := Num : [1];
+		:= <Exp> '+' <Exp> : [2];
+		:= <Exp> '*' <Exp> : [3];
+		:= <Exp> '/' <Exp> : [4];
+		:= <Exp> '-' <Exp> : [5];
+		:= '<' <Exp> '>' : [6];
+
+	%%%%
+
+	+('*' '/') +('+' '-')
+	)";
+
+	EBNFX Tab = EBNFX::Create(Table);
+
+	auto TableBuffer = TableWrapper::Create(Tab); // 序列化版本
 	```
 
-	或者创建多个正则表达式:
+	一个Ebnf由三部分组成，其中以`%%%%`为分割符。
 
-	```cpp
-	MulityRegCreater Crerator;
-	Crerator.LowPriorityLink(u8R"(\+)");
-	Crerator.LowPriorityLink(u8R"(\s)");
-	Crerator.LowPriorityLink(u8R"([0-9]+)");
-	Crerator.LowPriorityLink(u8R"(while)";
-	Crerator.LowPriorityLink(u8R"([a-zA-Z][a-z0-9A-Z]*)");
-	DFA Table = Crerator.GenerateDFA();
-	```
+	1. 词法区
 
-* 使用正则表达式匹配：
+		其语法规则为：
 
-	```cpp
-	if(HeadMatch(DFA, u8"abcd"))
-	```
+		> `终结符` `=` `正则表达式` [`:` `标记值`] (可选)。
+		
+		> `$` `=` `正则表达式`
 
+		以`$`为终结符的词法讲会被作为分隔符，被标记为分割符的词语将不会进入到后续的语法分析中。
 
+	2. 语法区
 
+		其语法规则为
+		
+		> [`非终结符`] (可选) `:=` `终结符`/`非终结符`/`常量字符串`/`标记值`/`$` ... [`:` `标记值`] (可选) `;` 
 
+		其中`标记值`为一串数字，若跟在在一个非终结符后面，则表示防止该终结符由标记的产生式规约，若跟在产生式后，则表示标记该产生式。
 
+		若`$`跟在一个非终结符后面，则表示防止该终结符由自身产生规约。
 
-<!-- SLRX是一款“柔性”的语法分析器，对于用户给定的X（默认为3），可以自动识别LR(X)的语法，并生成对应的分析表。
+		当产生式左部为空时，则表示该产生式的左部为上一个产生式的左部。
 
-在此基础上，通过特定的储存方式，使得表本身有着更小的体积。
+		> `$` `:=` `非终结符`[`标记值`] (可选) `;`
 
-对于一些带有歧义的语法，也会在生成表格的时候，通过异常的方式抛出给用户，方便用户进行修改。
+		标记开始符号，标记值则表示当前最多支持`LR(X)`的文法。
 
-在性能上，当X为0时有着最小的体积与最高的效率。对于越大的X，其在生成表格和在处理语法时，性能越差。在最坏情况下，其性能复杂度为指数级。
+		在产生式的右部，还支持Ebnf语法，如：
+		
+		> `终结符`/`非终结符`/`常量字符串`/`标记值`/`$` ... `|` `终结符`/`非终结符`/`常量字符串`/`标记值`/`$` ...
 
-为了方便构造分析表，其提供了一些功能，使得用户可以自定义运算符优先级（类似+-*/），以及防止深度为1的Reduce路径。
+		> `[` `终结符`/`非终结符`/`常量字符串`/`标记值`/`$` ... `]`
 
-目前该分析器是单线程，不支持错误回退，并且是非异常安全的。
+		> `{` `终结符`/`非终结符`/`常量字符串`/`标记值`/`$` ... `}`
 
-一般流程:
+	3. 运算符优先级区
 
-1. 将终结符与非终结符转换成内部专用的Symbol。
-2. 使用Symbol，设置开始符，产生式，运算符优先级，构建分析表，并序列化成可读的Table。
-3. 使用Table，对目标的Symbol序列进行分析，产生Step序列，Step序列的信息足够产生一颗AST树。
-4. 对Step序列执行分析，产生目标语言。
+		该区可为空。
 
-该模块遇到错误会抛出异常，异常一般以`Potato::SLRX::Exception::Interface`为基类。
+		一般语法规则为：
 
-## 5. PotatoReg
+		> `+(` `常量字符串`/`终结符` ... `)`
 
-基于`char32_t`的正则表达式库，依赖于`PotatoDLr`。（namespace Potato::Reg）
+		> `(` `常量字符串`/`终结符` ... `)+`
 
-目前只支持以下几种元字符：
-
-1. `.` `-`
-2. `*` `*?`
-3. `+` `+?`
-4. `?` `??`
-5. `|` `()` `[]` `[^]` `(?:)`
-6. `{x,y}` `{X}`  `{X,}` `{,Y}` `{x,y}?` `{X}?`  `{X,}?` `{,Y}?`
-
-由于一些优化，类似于`(.*)*`这种正则表达式，会抛出异常，其特征为：
-
->对于一个非元字符，在预查找下一个需要的非元字符时，只能经过有限次的不消耗非元字符的查找。
-
-支持多个正则合并到一个正则上，合并的时候会有一次优化，会一同进行匹配。
-
-在匹配时，支持以下三种操作：
-
-1. Search 只需要字符串其中的一段满足正则既返回真。
-2. March 需要字符串全段满足正则才返回。
-3. FrontMarch 需要字符串的开头一段满足才返回。
-4. GreedyFrontMatch 同 FrontMarch ，但会尝试匹配最长的匹配项。
-
-一般的，GreedyFrontMatch 用在词法分析上。
-
-该模块遇到错误时会抛出异常，异常一般以`Potato::Reg::Exception::Interface`为基类。
-
-## 6. PotatoEbnf
-
-依赖于`PotatoSLRX`与`PotatoReg`的`Ebnf`范式。（namespace Potato::Ebnf）
-
-一般而言，除了支持从字符串构建语法分析表，并且支持`|` `()` `[]` `{}`等Ebnf范式的操作符，以及支持内置的一个词法分析器外，其余和 SLRX 无差别。
-
-## 7. PotatoPath
-
-文件路径相关库，施工中。
-
-## 8. PotatoIR
-
-编译器中间表示相关功能类，施工中。
-
-## 9. PotatoInterval
-
-用以表达数学上的集合概念的库，施工中。
-
--->
-
-
-
-
-
-
-
-
-
-
-
-
-
+		在同一`()`内的所有`常量字符串`/`终结符`为相同优先级，在前面的`()`的优先级大于后面的`()`，`+()`表示左结合，`)+`表示右结合。
