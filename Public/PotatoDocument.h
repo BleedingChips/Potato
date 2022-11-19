@@ -242,7 +242,8 @@ namespace Potato::Document
 		EncodeInfo Write(std::u16string_view Str);
 		EncodeInfo Write(std::u8string_view Str);
 		EncodeInfo Write(std::wstring_view Str);
-		~Writer(){ if(File.good()) File.flush(); }
+		~Writer(){ Flush(); }
+		void Flush() { if (File.good()) File.flush(); }
 	private:
 		std::ofstream File;
 		BomT BomType;

@@ -9,9 +9,9 @@ namespace Potato::Misc
 	struct IntrusivePtrDefaultWrapper
 	{
 		template<typename Type>
-		static void AddRef(Type* t) noexcept { t->AddRef(); }
+		void AddRef(Type* t) noexcept { t->AddRef(); }
 		template<typename Type>
-		static void SubRef(Type* t) noexcept { t->SubRef(); }
+		void SubRef(Type* t) noexcept { t->SubRef(); }
 
 		/*
 		//overwrite operator();
@@ -40,7 +40,7 @@ namespace Potato::Misc
 	};
 
 	template<typename Type, typename Wrapper = IntrusivePtrDefaultWrapper>
-	struct IntrusivePtr
+	struct IntrusivePtr : private Wrapper
 	{
 		static_assert(!std::is_reference_v<Type>, "IntrusivePtr : Type should not be reference Type");
 
