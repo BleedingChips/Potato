@@ -282,10 +282,10 @@ namespace Potato::Reg
 
 	struct Table
 	{
-		Table(std::u8string_view Str, bool IsRow, Accept AcceptData) : SerializeBuffer(TableWrapper::Create(Str, IsRow, AcceptData)) {}
-		Table(std::wstring_view Str, bool IsRow, Accept AcceptData) : SerializeBuffer(TableWrapper::Create(Str, IsRow, AcceptData)) {}
-		Table(std::u16string_view Str, bool IsRow, Accept AcceptData) : SerializeBuffer(TableWrapper::Create(Str, IsRow, AcceptData)) {}
-		Table(std::u32string_view Str, bool IsRow, Accept AcceptData) : SerializeBuffer(TableWrapper::Create(Str, IsRow, AcceptData)) {}
+		Table(std::u8string_view Str, bool IsRow = false, Accept AcceptData = {}) : SerializeBuffer(TableWrapper::Create(Str, IsRow, AcceptData)) {}
+		Table(std::wstring_view Str, bool IsRow = false, Accept AcceptData = {}) : SerializeBuffer(TableWrapper::Create(Str, IsRow, AcceptData)) {}
+		Table(std::u16string_view Str, bool IsRow = false, Accept AcceptData = {}) : SerializeBuffer(TableWrapper::Create(Str, IsRow, AcceptData)) {}
+		Table(std::u32string_view Str, bool IsRow = false, Accept AcceptData = {}) : SerializeBuffer(TableWrapper::Create(Str, IsRow, AcceptData)) {}
 		TableWrapper AsWrapper() const { return TableWrapper{ SerializeBuffer }; };
 	protected:
 		std::vector<StandardT> SerializeBuffer;

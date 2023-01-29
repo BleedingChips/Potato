@@ -1713,6 +1713,26 @@ namespace Potato::Reg
 								Ite3.OriginalFrom = std::get<1>(*FindIte2);
 						}
 					}
+
+					for (auto& Ite2 : Ite.KeepAcceptEdges)
+					{
+						for (auto& Ite3 : Ite2.Propertys)
+						{
+							auto FindIte = std::find_if(NoContentChangeNode.begin(), NoContentChangeNode.end(), [&](auto Value) {
+								return std::get<0>(Value) == Ite3.OriginalTo;
+								});
+
+							if (FindIte != NoContentChangeNode.end())
+								Ite3.OriginalTo = std::get<1>(*FindIte);
+
+							auto FindIte2 = std::find_if(NoContentChangeNode.begin(), NoContentChangeNode.end(), [&](auto Value) {
+								return std::get<0>(Value) == Ite3.OriginalFrom;
+								});
+
+							if (FindIte2 != NoContentChangeNode.end())
+								Ite3.OriginalFrom = std::get<1>(*FindIte2);
+						}
+					}
 				}
 			}
 
