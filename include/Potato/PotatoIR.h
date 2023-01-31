@@ -5,24 +5,45 @@
 #include "PotatoIntrusivePointer.h"
 namespace Potato::IR
 {
-	struct ClassLayout
+	struct Layout
 	{
 		std::size_t Align = 1;
 		std::size_t Size = 0;
+
 		template<typename Type>
-		static constexpr ClassLayout Get() { return {alignof(std::remove_cvref_t<Type>), sizeof(std::remove_cvref_t<Type>)}; }
+		static constexpr Layout Get() { return { alignof(std::remove_cvref_t<Type>), sizeof(std::remove_cvref_t<Type>) }; }
 	};
 
-	struct ClassLayoutAssemblerCpp
+	static constexpr std::size_t InsertLayoutCPP(Layout& Target, Layout const Inserted)
 	{
-		ClassLayoutAssemblerCpp() = default;
-		ClassLayoutAssemblerCpp(ClassLayoutAssemblerCpp const&) = default;
-		ClassLayoutAssemblerCpp& operator=(ClassLayoutAssemblerCpp const&) = default;
-		std::optional<std::size_t> InsertMember(ClassLayout MemberLayout);
-		ClassLayout GetFinalLayout() const;
-	private:
-		ClassLayout CurrentLayout;
-	};
+		if (Target.Align < Inserted.Align)
+			Target.Align = Inserted.Align;
+		if (Target.Size % Inserted.Align != 0)
+			Target.Size += Inserted.Align - (Target.Size % Inserted.Align);
+		std::size_t Offset = Target.Size;
+		Target.Size += Inserted.Size;
+		return Offset;
+	}
+
+	static constexpr bool FixLayoutCPP(Layout& Target)
+	{
+		auto ModedSize = (Target.Size % Target.Align);
+		if (ModedSize != 0)
+		{
+			Target.Size += Target.Align - ModedSize;
+			return true;
+		}
+		return false;
+	}
+
+	static constexpr Layout SumLayoutCPP(std::span<Layout> Layouts)
+	{
+		Layout Start;
+		for (auto Ite : Layouts)
+			InsertLayoutCPP(Start, Ite);
+		FixLayoutCPP(Start);
+		return Start;
+	}
 
 	struct SymbolTable
 	{

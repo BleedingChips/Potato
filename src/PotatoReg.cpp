@@ -460,14 +460,14 @@ namespace Potato::Reg
 			auto T1 = NT[0].Consume<char32_t>();
 			SeqIntervalT Ptr2({ T1, T1 + 1 });
 			auto T2 = NT[1].Consume<SeqIntervalT>();
-			return T2.AsWrapper().Union(Ptr2.AsWrapper());
+			return SeqIntervalT{T2.AsWrapper().Union(Ptr2.AsWrapper())};
 		}
 		case 62:
 		{
 			auto T1 = NT[1].Consume<char32_t>();
 			SeqIntervalT Ptr2({ T1, T1 + 1 });
 			auto T2 = NT[0].Consume<SeqIntervalT>();
-			return T2.AsWrapper().Union(Ptr2.AsWrapper());
+			return SeqIntervalT{T2.AsWrapper().Union(Ptr2.AsWrapper())};
 		}
 		case 63:
 		{

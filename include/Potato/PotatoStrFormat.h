@@ -17,7 +17,7 @@ namespace Potato::StrFormat
 	template<typename SourceType, typename UnicodeType>
 	struct Scanner
 	{
-		bool Scan(std::span<UnicodeType const> Par, SourceType& Input);
+		bool Scan(std::span<UnicodeType const> Par, SourceType& Input) = delete;
 	};
 
 	template<typename TargetType>
@@ -153,8 +153,8 @@ namespace Potato::StrFormat
 	template<typename SourceType, typename UnicodeType>
 	struct Formatter
 	{
-		static std::optional<std::size_t> Format(std::span<UnicodeType> Output, std::basic_string_view<UnicodeType> Parameter, SourceType const& Input);
-		static std::optional<std::size_t> FormatSize(std::basic_string_view<UnicodeType> Parameter, SourceType const& Input);
+		static std::optional<std::size_t> Format(std::span<UnicodeType> Output, std::basic_string_view<UnicodeType> Parameter, SourceType const& Input) = delete;
+		static std::optional<std::size_t> FormatSize(std::basic_string_view<UnicodeType> Parameter, SourceType const& Input) = delete;
 	};
 
 	namespace Implement
