@@ -515,6 +515,7 @@ namespace Potato::TMP
 				return false;
 		}
 		using Type = CharT;
+		static constexpr std::size_t Len = N;
 	};
 
 	template<std::size_t N>

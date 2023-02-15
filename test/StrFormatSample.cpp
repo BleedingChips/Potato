@@ -31,6 +31,12 @@ void TestingStrFormat()
 
 	constexpr auto K = FormatSize(u8"abcedc");
 
+	StaticFormatPattern<u8"abcd"> K2;
+
+	constexpr auto K6 = decltype(K2)::FormatSize();
+
+	auto P233 = StaticFormat<u8"aabcc">(1);
+
 	//auto P = Formatt<u8"abc">();
 	
 
