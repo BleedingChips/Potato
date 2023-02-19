@@ -1,4 +1,4 @@
-#include "Potato/PotatoIntrusivePointer.h"
+#include "Potato/PotatoSmartPtr.h"
 #include "Potato/PotatoMisc.h"
 #include "TestingTypes.h"
 
@@ -35,27 +35,61 @@ struct Type2
 struct Type2Wrapper
 {
 	static void AddRef(Type2* Type) { Type->AddRef2(); }
-	static void SubRef(Type2* Type) { if(Type->SubRef2()){ delete Type; } }
+	static void SubRef(Type2* Type) { if(Type->SubRef2()) { delete Type; } }
 };
 
-void TestingIntrusivePointer()
+struct DefaultRef
+{
+	std::size_t SRef = 0;
+	std::size_t WRef = 0;
+
+	void AddStrongRef() { SRef += 1; AddWeakRef(); }
+	bool SubStrongRef() { SRef -= 1; SubWeakRef(); return SRef == 0; }
+
+	void AddWeakRef() { WRef += 1; }
+	void SubWeakRef() { WRef -= 1; }
+};
+
+struct Type3
+{
+	int32_t C = 0;
+	void Release() {
+		delete this;
+	}
+};
+
+void TestingSmartPtr()
 {
 
 	GobalIndex = 10086;
 
-	IntrusivePtr<Type1> P1 = new Type1;
+	IntrusivePtr<Type1> P1 {new Type1};
+
+	//IntrusivePtr<Type1> P2{(Type1*)(nullptr)};
 
 	P1.Reset();
 
 	if(GobalIndex != 100)
 		throw UnpassedUnit("IntrusivePointer Not Pass! 1");
 
-	IntrusivePtr<Type2, Type2Wrapper> P2 = new Type2;
+	IntrusivePtr<Type2, Type2Wrapper> P2 { new Type2 };
 
 	P2.Reset();
 
 	if (GobalIndex != 200)
 		throw UnpassedUnit("IntrusivePointer Not Pass! 2");
+
+	DefaultRef K;
+
+	{
+		StrongPtr<Type3, DefaultRef> Ptr{new Type3, &K};
+
+		auto C = Ptr.Switch();
+
+		volatile int o = 0;
+	}
+
+	
 
 	std::cout<< "IntrusivePointer All Pass!" << std::endl;
 

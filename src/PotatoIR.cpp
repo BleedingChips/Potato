@@ -67,7 +67,7 @@ namespace Potato::IR
 		for (auto Ite = ActiveProperty.rbegin(); Ite != ActiveProperty.rend(); ++Ite)
 		{
 			if(Ite->Name == Name)
-				return Misc::ObserverPtr<Property>(&*Ite);
+				return Misc::ObserverPtr<Property>{&*Ite};
 		}
 		return {};
 	}

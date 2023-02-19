@@ -17,4 +17,4 @@ void TestingSLRX();
 void TestingStrFormat();
 void TestingReg();
 void TestingEbnf();
-void TestingIntrusivePointer();
+void TestingSmartPtr();

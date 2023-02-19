@@ -360,7 +360,7 @@ namespace Potato::StrFormat
 		while (!Str.empty())
 		{
 			auto [Type, Par, Last] = Implement::FindFomatterTopElement(Str);
-			auto Re = Implement::ApplyFormat<false>({}, Index, Type, Par, std::forward<OType>(OT)...);
+			auto Re = Implement::ApplyFormat<false>(OutputBuffer, Index, Type, Par, std::forward<OType>(OT)...);
 			if (Re.has_value())
 			{
 				Count += Re->Count;

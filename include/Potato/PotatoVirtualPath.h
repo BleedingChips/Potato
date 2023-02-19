@@ -5,7 +5,7 @@
 #include <deque>
 #include <string_view>
 #include "PotatoMisc.h"
-#include "PotatoIntrusivePointer.h"
+#include "PotatoSmartPtr.h"
 
 namespace Potato::VirtualPath
 {

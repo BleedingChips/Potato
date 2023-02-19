@@ -2,7 +2,7 @@
 #include <string_view>
 #include <optional>
 #include <vector>
-#include "PotatoIntrusivePointer.h"
+#include "PotatoSmartPtr.h"
 namespace Potato::IR
 {
 	struct Layout

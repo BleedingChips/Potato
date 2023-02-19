@@ -20,7 +20,7 @@ int main()
 
 		TestingEbnf();
 
-		TestingIntrusivePointer();
+		TestingSmartPtr();
 	}
 	catch (UnpassedUnit const& U)
 	{

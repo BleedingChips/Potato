@@ -1,0 +1,219 @@
+#pragma once
+
+
+#include "PotatoMisc.h"
+#include <type_traits>
+#include <compare>
+
+namespace Potato::Misc
+{
+
+	template<typename PtrT, typename WrapperT>
+	struct SmartPtr
+	{
+		static_assert(!std::is_reference_v<PtrT>, "SmartPtr : Type should not be reference Type");
+
+		constexpr SmartPtr() = default;
+		constexpr SmartPtr(PtrT* IPtr) : Ptr(IPtr) { if(Ptr != nullptr) WrapperT::AddRef(Ptr); }
+		constexpr SmartPtr(SmartPtr const& IPtr) : SmartPtr(IPtr.Ptr) { }
+		constexpr SmartPtr(SmartPtr&& IPtr) : Ptr(std::move(IPtr.Ptr)) { if(Ptr != nullptr) WrapperT::AddRef(Ptr); }
+
+		template<typename PtrT2, typename WrapperT2>
+		constexpr SmartPtr(SmartPtr<PtrT2, WrapperT2> const& IPtr)
+			requires(std::is_convertible_v<PtrT2, PtrT>&& std::is_convertible_v<WrapperT2, WrapperT>)
+		: SmartPtr(IPtr.Ptr) {};
+
+		constexpr SmartPtr& operator=(SmartPtr IPtr) { Reset(); Ptr = IPtr.Ptr; IPtr.Ptr = nullptr; return *this; };
+		constexpr std::strong_ordering operator<=>(SmartPtr const& IPtr) const { return Ptr <=> IPtr.Ptr; }
+
+		decltype(auto) GetPointer() { return Ptr; }
+		decltype(auto) GetPointer() const { return Ptr; }
+
+		constexpr ~SmartPtr() { Reset(); }
+
+		constexpr void Reset() { 
+			if (Ptr != nullptr)
+			{
+				WrapperT::SubRef(Ptr);
+				Ptr = nullptr;
+			}
+		}
+
+		constexpr operator bool() const { return Ptr != nullptr; }
+		constexpr decltype(auto) operator->() { return Ptr; }
+		constexpr decltype(auto) operator->() const { return Ptr; }
+		constexpr decltype(auto) operator*() { return *Ptr; }
+		constexpr decltype(auto) operator*() const { return *Ptr; }
+
+	protected:
+
+		PtrT* Ptr = nullptr;
+
+		template<typename PT, typename WT>
+		friend struct SmartPtr;
+	};
+
+
+	template<typename DriverT>
+	struct DefaultIntrusiveObjectInterface
+	{
+		void AddRef() { RefCount.AddRef(); }
+		void SubRef() { if(RefCount.SubRef()) static_cast<DriverT*>(this)->Release(); }
+	protected:
+		AtomicRefCount RefCount;
+	};
+
+	// intrustive_ptr ***********************************************************
+	struct IntrusivePtrDefaultWrapper
+	{
+		template<typename Type>
+		static void AddRef(Type* t) noexcept { t->AddRef(); }
+		template<typename Type>
+		static void AddRef(Type const* t) noexcept { if(t) t->AddRef(); }
+		template<typename Type>
+		static void SubRef(Type* t) noexcept { if(t) t->SubRef(); }
+		template<typename Type>
+		static void SubRef(Type const* t) noexcept { if(t) t->SubRef(); }
+	};
+
+	template<typename Type, typename Wrapper = IntrusivePtrDefaultWrapper>
+	using IntrusivePtr = SmartPtr<std::remove_reference_t<Type>, Wrapper>;
+
+	// observer_ptr ****************************************************************************
+
+	struct ObserverPtrDefaultWrapper
+	{
+		template<typename Type>
+		static void AddRef(Type *t) { }
+		template<typename Type>
+		static void SubRef(Type* t) { }
+	};
+
+	template<typename Type> 
+	using ObserverPtr = IntrusivePtr<std::remove_reference_t<Type>, ObserverPtrDefaultWrapper>;
+
+	
+	template<typename PtrT, typename ReferenceT, typename PtrWrapperT, typename WrapperT>
+	struct AppendReferenceSmartPtr
+	{
+		static_assert(!std::is_reference_v<PtrT>, "AppendReferenceSmartPtr : Type should not be reference Type");
+
+		constexpr AppendReferenceSmartPtr() = default;
+		constexpr AppendReferenceSmartPtr(PtrT* IPtr, ReferenceT* IRef) : Ptr(IPtr), RefPtr(IRef) { if (IRef != nullptr) WrapperT::AddRef(IRef); }
+		constexpr AppendReferenceSmartPtr(AppendReferenceSmartPtr const& IPtr) : AppendReferenceSmartPtr(IPtr.Ptr, IPtr.RefPtr) {}
+		constexpr AppendReferenceSmartPtr(AppendReferenceSmartPtr&& IPtr) : Ptr(IPtr), RefPtr(IPtr.RefPtr) { IPtr.Ptr = nullptr; IPtr.RefPtr = nullptr; }
+
+		template<typename PtrT2, typename ReferenceT2, typename PtrWrapperT2, typename WrapperT2>
+		constexpr AppendReferenceSmartPtr(AppendReferenceSmartPtr<PtrT2, ReferenceT2, PtrWrapperT2, WrapperT2> IPtr)
+			requires(
+				std::is_convertible_v<PtrT2, PtrT>&& std::is_convertible_v<ReferenceT2, ReferenceT>
+				&& std::is_convertible_v<PtrWrapperT2, PtrWrapperT> && std::is_convertible_v<WrapperT2, WrapperT>
+				)
+		: AppendReferenceSmartPtr(IPtr.Ptr, IPtr.RefPtr){};
+
+		constexpr AppendReferenceSmartPtr& operator=(AppendReferenceSmartPtr IPtr) { 
+			Reset();
+			Ptr = IPtr.Ptr;
+			RefPtr = IPtr.RefPtr;
+			IPtr.Ptr = nullptr;
+			IPtr.RefPtr = nullptr;
+			return *this; 
+		};
+
+		constexpr std::strong_ordering operator<=>(AppendReferenceSmartPtr const& IPtr) const {
+			auto Re = (Ptr <=> IPtr.Ptr);
+			return (Re == std::strong_ordering::equal) ? Re : RefPtr <=> IPtr.RefPtr;
+		}
+
+		decltype(auto) GetPointer() { return Ptr; }
+		decltype(auto) GetPointer() const { return Ptr; }
+
+		constexpr ~AppendReferenceSmartPtr() { Reset(); }
+
+		constexpr void Reset() {
+			if (RefPtr != nullptr)
+			{
+				if(WrapperT::SubRef(RefPtr) && Ptr != nullptr)
+					PtrWrapperT::Release(Ptr);
+				RefPtr = nullptr;
+				Ptr = nullptr;
+			}
+		}
+
+		constexpr operator bool() const { return Ptr != nullptr; }
+		constexpr decltype(auto) operator->() { return Ptr; }
+		constexpr decltype(auto) operator->() const { return Ptr; }
+		constexpr decltype(auto) operator*() { return *Ptr; }
+		constexpr decltype(auto) operator*() const { return *Ptr; }
+
+		auto Switch() const { return WrapperT::Switch(*this); };
+
+	protected:
+
+		PtrT* Ptr = nullptr;
+		ReferenceT* RefPtr = nullptr;
+
+		template<typename PtrT2, typename ReferenceT2, typename PtrWrapperT2, typename WrapperT2>
+		friend struct AppendReferenceSmartPtr;
+	};
+
+
+	struct WeakPtrDefaultWrapper;
+
+	struct DefaultPtrWrapper
+	{
+		template<typename PtrT>
+		static void Release(PtrT* Ptr) { Ptr->Release(); }
+	};
+
+	struct StrongPtrDefaultWrapper
+	{
+		template<typename ReferencePtrT>
+		static void AddRef(ReferencePtrT* t) { t->AddStrongRef(); }
+
+		template<typename ReferencePtrT>
+		static bool SubRef(ReferencePtrT* t) { return t->SubStrongRef(); }
+
+		operator WeakPtrDefaultWrapper();
+
+		template<typename PtrT, typename ReferenceT, typename PtrWrapperT>
+		static auto Switch(AppendReferenceSmartPtr<PtrT, ReferenceT, PtrWrapperT, StrongPtrDefaultWrapper> const& Ref)
+		{
+			return AppendReferenceSmartPtr<PtrT, ReferenceT, PtrWrapperT, WeakPtrDefaultWrapper>(Ref);
+		}
+	};
+
+	template<typename PtrT, typename ReferenceT, typename PtrWrapperT = DefaultPtrWrapper, typename WrapperT = StrongPtrDefaultWrapper>
+	using StrongPtr = AppendReferenceSmartPtr<
+		std::remove_reference_t<PtrT>,
+		std::remove_reference_t<ReferenceT>,
+		PtrWrapperT
+	,WrapperT>;
+
+	struct WeakPtrDefaultWrapper
+	{
+		template<typename ReferencePtrT>
+		static void AddRef(ReferencePtrT* t) { t->AddWeakRef(); }
+
+		template<typename ReferencePtrT>
+		static bool SubRef(ReferencePtrT* t) { t->SubWeakRef(); return false; }
+
+		operator StrongPtrDefaultWrapper() { return {}; }
+
+		template<typename PtrT, typename ReferenceT, typename PtrWrapperT>
+		static auto Switch(AppendReferenceSmartPtr<PtrT, ReferenceT, PtrWrapperT, WeakPtrDefaultWrapper> const& Ref)
+		{
+			return AppendReferenceSmartPtr<PtrT, ReferenceT, PtrWrapperT, StrongPtrDefaultWrapper>(Ref);
+		}
+		
+	};
+
+	inline StrongPtrDefaultWrapper::operator WeakPtrDefaultWrapper(){ return {}; }
+
+	template<typename PtrT, typename ReferenceT, typename PtrWrapperT = DefaultPtrWrapper, typename WrapperT = WeakPtrDefaultWrapper>
+	using WeakPtr = AppendReferenceSmartPtr<
+		std::remove_reference_t<PtrT>,
+		std::remove_reference_t<ReferenceT>,
+		PtrWrapperT, WrapperT>;
+
+}

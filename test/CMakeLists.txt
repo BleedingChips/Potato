@@ -4,7 +4,7 @@ add_executable(
 	PotatoUnitTest
 
 	EbnfSample.cpp
-	IntrusivePointerSample.cpp
+	"SmartPtrSample.cpp"
 	MiscSample.cpp
 	RegSample.cpp
 	SLRXSample.cpp
