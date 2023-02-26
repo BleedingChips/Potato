@@ -1,19 +1,24 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.25.1)
 
-add_executable(
-	PotatoUnitTest
+ENABLE_CPP_MODULE()
 
-	EbnfSample.cpp
-	"SmartPtrSample.cpp"
-	MiscSample.cpp
-	RegSample.cpp
-	SLRXSample.cpp
-	StrEncodeSample.cpp
-	StrFormatSample.cpp
-	TestingTypes.h
-	TMPSample.cpp
-	UnitTesting.cpp
-)
+add_executable(MiscUnitTest MiscTest.cpp)
+target_link_libraries(MiscUnitTest PUBLIC PotatoModule)
 
-target_compile_features(PotatoUnitTest PUBLIC cxx_std_23)
-target_link_libraries(PotatoUnitTest PUBLIC PotatoLib)
+add_executable(SmartPtrTest SmartPtrTest.cpp)
+target_link_libraries(SmartPtrTest PUBLIC PotatoModule)
+
+add_executable(SLRXTest SLRXTest.cpp)
+target_link_libraries(SLRXTest PUBLIC PotatoModule)
+
+add_executable(EncodeTest EncodeTest.cpp)
+target_link_libraries(EncodeTest PUBLIC PotatoModule)
+
+add_executable(RegTest RegTest.cpp)
+target_link_libraries(RegTest PUBLIC PotatoModule)
+
+add_executable(FormatTest FormatTest.cpp)
+target_link_libraries(FormatTest PUBLIC PotatoModule)
+
+add_executable(EbnfTest EbnfTest.cpp)
+target_link_libraries(EbnfTest PUBLIC PotatoModule)

@@ -1,13 +1,40 @@
-cmake_minimum_required(VERSION 3.20)
+
+cmake_minimum_required(VERSION 3.25.1)
 
 project(
-	PotatoUnitTest
-	DESCRIPTION "UnitTest For PotatoLib"
+	Potato
+	DESCRIPTION "Personal Library By BleedingChips"
 	VERSION 1.0
 	LANGUAGES C CXX
 )
 
-add_subdirectory("src")
+macro(ENABLE_CPP_MODULE)
+	set(CMAKE_CXX_STANDARD 23)
+	set(CMAKE_EXPERIMENTAL_CXX_MODULE_DYNDEP 1)
+endmacro()
+
+macro(ENABLE_CMAKE_CPP_MODULE)
+
+	if (MSVC)
+	  set(CMAKE_EXPERIMENTAL_CXX_SCANDEP_DEPFILE_FORMAT "msvc")
+	  set(CMAKE_EXPERIMENTAL_CXX_MODULE_MAP_FORMAT "msvc")
+	  set(CMAKE_EXPERIMENTAL_CXX_MODULE_MAP_FLAG "@<MODULE_MAP_FILE>")
+	endif ()
+
+	message(STATUS "Current CMake Version :" ${CMAKE_VERSION})
+
+	if(${CMAKE_VERSION} EQUAL 3.25.1)
+		set(CMAKE_EXPERIMENTAL_CXX_MODULE_CMAKE_API  "3c375311-a3c9-4396-a187-3227ef642046")
+	else()
+		message(FATAL_ERROR "Unsupport CMAKE Version")
+	endif()
+
+endmacro()
+
+ENABLE_CMAKE_CPP_MODULE()
+
+
+add_subdirectory("Potato")
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 	add_subdirectory("test")
