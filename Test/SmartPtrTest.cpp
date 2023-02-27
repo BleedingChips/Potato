@@ -20,6 +20,11 @@ struct Type1
 	}
 };
 
+struct Type23
+{
+	void Release(){ delete this;}
+};
+
 struct Type2
 {
 	mutable Potato::Misc::AtomicRefCount Ref;
@@ -82,6 +87,15 @@ int main()
 		StrongPtr<Type3, DefaultRef> Ptr{ new Type3, &K };
 
 		auto C = Ptr.Switch();
+	}
+
+	{
+
+		//static_assert(std::is_constructible_v<UniquePtrDefaultWrapper, UniquePtrDefaultWrapper const&>);
+
+		UniquePtr<Type23> Pxx{ new Type23{} };
+
+		static_assert(!std::is_constructible_v<UniquePtr<Type23>, UniquePtr<Type23> const&>);
 	}
 
 	return 0;

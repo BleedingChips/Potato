@@ -14,12 +14,12 @@ export namespace Potato::Misc
 
 		constexpr SmartPtr() = default;
 		constexpr SmartPtr(PtrT* IPtr) : Ptr(IPtr) { if(Ptr != nullptr) WrapperT::AddRef(Ptr); }
-		constexpr SmartPtr(SmartPtr const& IPtr) : SmartPtr(IPtr.Ptr) { }
-		constexpr SmartPtr(SmartPtr&& IPtr) : Ptr(std::move(IPtr.Ptr)) { if(Ptr != nullptr) WrapperT::AddRef(Ptr); }
+		constexpr SmartPtr(SmartPtr const& IPtr) requires(std::is_constructible_v<WrapperT, WrapperT const&>) : SmartPtr(IPtr.Ptr) { }
+		constexpr SmartPtr(SmartPtr&& IPtr) requires(std::is_constructible_v<WrapperT, WrapperT &&>) : Ptr(std::move(IPtr.Ptr)) { if(Ptr != nullptr) WrapperT::AddRef(Ptr); }
 
 		template<typename PtrT2, typename WrapperT2>
 		constexpr SmartPtr(SmartPtr<PtrT2, WrapperT2> const& IPtr)
-			requires(std::is_convertible_v<PtrT2, PtrT>&& std::is_convertible_v<WrapperT2, WrapperT>)
+			requires(std::is_convertible_v<PtrT2, PtrT> && std::is_constructible_v<WrapperT2, WrapperT const&>)
 		: SmartPtr(IPtr.Ptr) {};
 
 		constexpr SmartPtr& operator=(SmartPtr IPtr) { Reset(); Ptr = IPtr.Ptr; IPtr.Ptr = nullptr; return *this; };
@@ -73,6 +73,9 @@ export namespace Potato::Misc
 		static void SubRef(Type* t) noexcept { if(t) t->SubRef(); }
 		template<typename Type>
 		static void SubRef(Type const* t) noexcept { if(t) t->SubRef(); }
+		IntrusivePtrDefaultWrapper(IntrusivePtrDefaultWrapper const&) = default;
+		IntrusivePtrDefaultWrapper(IntrusivePtrDefaultWrapper &&) = default;
+		IntrusivePtrDefaultWrapper() = default;
 	};
 
 	template<typename Type, typename Wrapper = IntrusivePtrDefaultWrapper>
@@ -86,10 +89,27 @@ export namespace Potato::Misc
 		static void AddRef(Type *t) { }
 		template<typename Type>
 		static void SubRef(Type* t) { }
+		ObserverPtrDefaultWrapper(ObserverPtrDefaultWrapper const&) = default;
+		ObserverPtrDefaultWrapper(ObserverPtrDefaultWrapper&&) = default;
+		ObserverPtrDefaultWrapper() = default;
 	};
 
 	template<typename Type> 
-	using ObserverPtr = IntrusivePtr<std::remove_reference_t<Type>, ObserverPtrDefaultWrapper>;
+	using ObserverPtr = IntrusivePtr<Type, ObserverPtrDefaultWrapper>;
+
+	struct UniquePtrDefaultWrapper
+	{
+		template<typename Type>
+		static void AddRef(Type* t) { }
+		template<typename Type>
+		static void SubRef(Type* t) { t->Release(); }
+		UniquePtrDefaultWrapper(UniquePtrDefaultWrapper const&) = delete;
+		UniquePtrDefaultWrapper(UniquePtrDefaultWrapper&&) = default;
+		UniquePtrDefaultWrapper() = default;
+	};
+
+	template<typename Type>
+	using UniquePtr = IntrusivePtr<Type, UniquePtrDefaultWrapper>;
 
 	
 	template<typename PtrT, typename ReferenceT, typename PtrWrapperT, typename WrapperT>
@@ -173,7 +193,7 @@ export namespace Potato::Misc
 		template<typename ReferencePtrT>
 		static bool SubRef(ReferencePtrT* t) { return t->SubStrongRef(); }
 
-		operator WeakPtrDefaultWrapper();
+		StrongPtrDefaultWrapper(WeakPtrDefaultWrapper const&) {}
 
 		template<typename PtrT, typename ReferenceT, typename PtrWrapperT>
 		static auto Switch(AppendReferenceSmartPtr<PtrT, ReferenceT, PtrWrapperT, StrongPtrDefaultWrapper> const& Ref)
@@ -197,7 +217,7 @@ export namespace Potato::Misc
 		template<typename ReferencePtrT>
 		static bool SubRef(ReferencePtrT* t) { t->SubWeakRef(); return false; }
 
-		operator StrongPtrDefaultWrapper() { return {}; }
+		WeakPtrDefaultWrapper(StrongPtrDefaultWrapper const&) {}
 
 		template<typename PtrT, typename ReferenceT, typename PtrWrapperT>
 		static auto Switch(AppendReferenceSmartPtr<PtrT, ReferenceT, PtrWrapperT, WeakPtrDefaultWrapper> const& Ref)
@@ -207,7 +227,7 @@ export namespace Potato::Misc
 		
 	};
 
-	inline StrongPtrDefaultWrapper::operator WeakPtrDefaultWrapper(){ return {}; }
+	//inline StrongPtrDefaultWrapper::operator WeakPtrDefaultWrapper(){ return {}; }
 
 	template<typename PtrT, typename ReferenceT, typename PtrWrapperT = DefaultPtrWrapper, typename WrapperT = WeakPtrDefaultWrapper>
 	using WeakPtr = AppendReferenceSmartPtr<
