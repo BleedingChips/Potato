@@ -86,7 +86,9 @@ int main()
 	{
 		StrongPtr<Type3, DefaultRef> Ptr{ new Type3, &K };
 
-		auto C = Ptr.Switch();
+		auto IO2 = Ptr->C;
+
+		auto K = WeakPtr<Type3, DefaultRef>(Ptr);
 	}
 
 	{
