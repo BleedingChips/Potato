@@ -492,6 +492,18 @@ export namespace Potato::Format
 		return {};
 	}
 
+	template<typename CharT, typename SourceT>
+	std::optional<std::size_t> DirectFormatSize(std::basic_string_view<CharT> Par, SourceT&& S)
+	{
+		return Formatter<std::remove_cvref_t<SourceT>, CharT>::FormatSize(Par, std::forward<SourceT>(S));
+	}
+
+	template<typename CharT, typename SourceT>
+	std::optional<std::size_t> DirectFormatToUnSafe(std::span<CharT> Output, std::basic_string_view<CharT> Par, SourceT& S)
+	{
+		return Formatter<std::remove_cvref_t<SourceT>, CharT>::Format(Output, Par, std::forward<SourceT>(S));
+	}
+
 
 	template<typename CharT, typename SourceT>
 	auto DirectFormat(std::basic_string_view<CharT> Par, SourceT && S) -> std::optional<std::basic_string<CharT>> { 

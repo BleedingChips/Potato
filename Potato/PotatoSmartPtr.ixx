@@ -24,9 +24,9 @@ export namespace Potato::Misc
 		constexpr SmartPtr(SmartPtr const& IPtr) requires(std::is_constructible_v<WrapperT, WrapperT const&>) : SmartPtr(IPtr.Ptr) { }
 		constexpr SmartPtr(SmartPtr&& IPtr) requires(std::is_constructible_v<WrapperT, WrapperT &&>) : Ptr(std::move(IPtr.Ptr)) { if(Ptr != nullptr) WrapperT::AddRef(Ptr); }
 
-		template<typename PtrT2, typename WrapperT2>
-		constexpr SmartPtr(SmartPtr<PtrT2, WrapperT2> const& IPtr)
-			requires(std::is_convertible_v<PtrT, PtrT2> && std::is_constructible_v<WrapperT, WrapperT2 const&>)
+		template<typename WrapperT2>
+		constexpr SmartPtr(SmartPtr<PtrT, WrapperT2> const& IPtr)
+			requires(std::is_constructible_v<WrapperT, WrapperT2 const&>)
 		{
 			if (IPtr.GetPointer() != nullptr)
 			{
@@ -87,12 +87,9 @@ export namespace Potato::Misc
 			: AppendReferenceSmartPtr(IPtr.Ptr, IPtr.RefPtr) {}
 		constexpr AppendReferenceSmartPtr(AppendReferenceSmartPtr&& IPtr) : Ptr(IPtr), RefPtr(IPtr.RefPtr) { IPtr.Ptr = nullptr; IPtr.RefPtr = nullptr; }
 
-		template<typename PtrT2, typename ReferenceT2, typename PtrWrapperT2, typename WrapperT2>
-		constexpr AppendReferenceSmartPtr(AppendReferenceSmartPtr<PtrT2, ReferenceT2, PtrWrapperT2, WrapperT2> const& IPtr)
-			requires(
-			std::is_convertible_v<PtrT2, PtrT>&& std::is_convertible_v<ReferenceT2, ReferenceT>
-			&& std::is_constructible_v<PtrWrapperT, PtrWrapperT2 const&>&& std::is_constructible_v<WrapperT, WrapperT2 const&>
-			)
+		template<typename PtrWrapperT2, typename WrapperT2>
+		constexpr AppendReferenceSmartPtr(AppendReferenceSmartPtr<PtrT, ReferenceT, PtrWrapperT2, WrapperT2> const& IPtr)
+			requires(std::is_constructible_v<PtrWrapperT, PtrWrapperT2 const&>&& std::is_constructible_v<WrapperT, WrapperT2 const&>)
 		{
 			if (IPtr.RefPtr != nullptr)
 			{
