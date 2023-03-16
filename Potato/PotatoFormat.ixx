@@ -264,14 +264,14 @@ export namespace Potato::Format
 		}
 
 
-		template<bool GetSize, std::size_t CurIndex, typename CharT>
-		constexpr std::optional<std::size_t> FormatExe(std::span<CharT> Output, std::basic_string_view<CharT> Par, std::size_t RequireSize)
+		template<bool GetSize, std::size_t CurIndex, typename CharT, typename CharTT>
+		constexpr std::optional<std::size_t> FormatExe(std::span<CharT> Output, std::basic_string_view<CharT, CharTT> Par, std::size_t RequireSize)
 		{
 			return {};
 		}
 
-		template<bool GetSize, std::size_t CurIndex, typename CharT, typename CurType, typename ...OtherType>
-		constexpr std::optional<std::size_t> FormatExe(std::span<CharT> Output, std::basic_string_view<CharT> Par, std::size_t RequireSize, CurType&& CT, OtherType&& ...OT)
+		template<bool GetSize, std::size_t CurIndex, typename CharT, typename CharTT, typename CurType, typename ...OtherType>
+		constexpr std::optional<std::size_t> FormatExe(std::span<CharT> Output, std::basic_string_view<CharT, CharTT> Par, std::size_t RequireSize, CurType&& CT, OtherType&& ...OT)
 		{
 			if (RequireSize == CurIndex)
 			{
@@ -349,7 +349,7 @@ export namespace Potato::Format
 
 	template<typename CharT, typename ...OType>
 	constexpr std::optional<std::size_t> FormatToUnSafe(std::span<CharT> OutputBuffer, std::basic_string_view<CharT> Formatter, OType&& ...OT) {
-		std::basic_string_view Str = Formatter;
+		auto Str = Formatter;
 		std::size_t Count = 0;
 		std::size_t Index = 0;
 		while (!Str.empty())
