@@ -11,3 +11,4 @@ export import Potato.Format;
 export import Potato.EBNF;
 export import Potato.Reg;
 export import Potato.Document;
+export import Potato.Allocator;
