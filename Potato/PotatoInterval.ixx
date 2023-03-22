@@ -24,6 +24,7 @@ export namespace Potato::Misc
 				std::swap(start, end);
 		}
 		*/
+		Interval(Type P1) : Interval(P1, P1 + 1) {}
 		Interval(Type p1, Type p2) : start(std::move(p1)), end(std::move(p2)) { assert(start <= end); }
 		Interval() = default;
 		Interval(Interval const&) = default;

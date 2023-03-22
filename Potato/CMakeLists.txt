@@ -6,9 +6,9 @@ add_library(PotatoModule STATIC
 	"PotatoIR.cpp"
 	"PotatoReg.cpp"
 	"PotatoSLRX.cpp"
-	"PotatoFormat.cpp"
+	#"PotatoFormat.cpp"
 	"PotatoEncode.cpp"
-	"PotatoEBNF.cpp"
+	#"PotatoEBNF.cpp"
 	"PotatoDocument.cpp"
 )
 
@@ -16,7 +16,7 @@ target_sources(
 	PotatoModule PUBLIC
 	FILE_SET cxx_modules TYPE CXX_MODULES
 	FILES
-		"Potato.ixx"
+		#"Potato.ixx"
 		"PotatoMisc.ixx"
 		"PotatoSTD.ixx"
 		"PotatoTMP.ixx"
@@ -25,9 +25,9 @@ target_sources(
 		"PotatoIR.ixx"
 		"PotatoSLRX.ixx"
 		"PotatoReg.ixx"
-		"PotatoFormat.ixx"
+		#"PotatoFormat.ixx"
 		"PotatoEncode.ixx"
-		"PotatoEBNF.ixx"
+		#"PotatoEBNF.ixx"
 		"PotatoDocument.ixx"
 )
 

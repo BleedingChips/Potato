@@ -1,6 +1,7 @@
 ﻿import Potato.Reg;
 using namespace Potato::Reg;
 
+/*
 bool TestMatch(std::u8string_view Reg, bool Raw, std::u8string_view Str, Accept Acce, const char* const Error)
 {
 		DFA Tab1(Reg, Raw, Acce);
@@ -112,6 +113,7 @@ void TestGreddyHeadMatch(const char* const Error)
 }
 
 
+
 void TestingReg()
 {
 
@@ -144,9 +146,23 @@ void TestingReg()
 
 	std::wcout << LR"(TestingReg Pass !)" << std::endl;
 }
+*/
 
 int main()
 {
+
+	RegLexerT Lex;
+
+	std::u32string_view Par = U"ab\s\\d123-123[]";
+
+	for (auto Ite : Par)
+	{
+		Lex.Consume(Ite, 0);
+	}
+
+	Lex.EndOfFile();
+
+	/*
 	try {
 		TestingReg();
 	}
@@ -155,5 +171,6 @@ int main()
 		std::cout << Error << std::endl;
 		return -1;
 	}
+	*/
 	return 0;
 }

@@ -12,31 +12,235 @@ namespace Potato::Reg
 		static SeqIntervalT Temp{ IntervalT{ 1, MaxChar() } };
 		return Temp;
 	};
+
+	RegLexerT::RegLexerT(bool IsRaw) : 
+		CurrentState(IsRaw ? StateT::Raw : StateT::Normal) {}
+
+	bool RegLexerT::Consume(char32_t InputSymbol, std::size_t TokenIndex)
+	{
+		if (InputSymbol < MaxChar())
+		{
+			switch (CurrentState)
+			{
+			case StateT::Normal:
+			{
+				switch (InputSymbol)
+				{
+				case U'-':
+					StoragedSymbol.push_back({ ElementEnumT::Min, IntervalT{InputSymbol}, TokenIndex });
+					break;
+				case U'[':
+					StoragedSymbol.push_back({ ElementEnumT::BracketsLeft, IntervalT{InputSymbol}, TokenIndex });
+					break;
+				case U']':
+					StoragedSymbol.push_back({ ElementEnumT::BracketsRight, IntervalT{InputSymbol}, TokenIndex });
+					break;
+				case U'{':
+					StoragedSymbol.push_back({ ElementEnumT::CurlyBracketsLeft, IntervalT{InputSymbol}, TokenIndex });
+					break;
+				case U'}':
+					StoragedSymbol.push_back({ ElementEnumT::CurlyBracketsRight, IntervalT{InputSymbol}, TokenIndex });
+					break;
+				case U',':
+					StoragedSymbol.push_back({ ElementEnumT::Comma, IntervalT{InputSymbol}, TokenIndex });
+					break;
+				case U'(':
+					StoragedSymbol.push_back({ ElementEnumT::ParenthesesLeft, IntervalT{InputSymbol}, TokenIndex });
+					break;
+				case U')':
+					StoragedSymbol.push_back({ ElementEnumT::ParenthesesRight, IntervalT{InputSymbol}, TokenIndex });
+					break;
+				case U'*':
+					StoragedSymbol.push_back({ ElementEnumT::Mulity, IntervalT{InputSymbol}, TokenIndex });
+					break;
+				case U'?':
+					StoragedSymbol.push_back({ ElementEnumT::Question, IntervalT{InputSymbol}, TokenIndex });
+					break;
+				case U'.':
+					StoragedSymbol.push_back({ ElementEnumT::CharSet, MaxIntervalRange(), TokenIndex });
+					break;
+				case U'|':
+					StoragedSymbol.push_back({ ElementEnumT::Or, IntervalT{InputSymbol}, TokenIndex });
+					break;
+				case U'+':
+					StoragedSymbol.push_back({ ElementEnumT::Add, IntervalT{InputSymbol}, TokenIndex });
+					break;
+				case U'^':
+					StoragedSymbol.push_back({ ElementEnumT::Not, IntervalT{InputSymbol}, TokenIndex });
+					break;
+				case U':':
+					StoragedSymbol.push_back({ ElementEnumT::Colon, IntervalT{InputSymbol}, TokenIndex });
+					break;
+				case U'\\':
+					CurrentState = StateT::Transfer;
+					RecordSymbol = InputSymbol;
+					break;
+				default:
+					if (InputSymbol >= U'0' && InputSymbol <= U'9')
+						StoragedSymbol.push_back({ ElementEnumT::Num, IntervalT{InputSymbol}, TokenIndex });
+					else
+						StoragedSymbol.push_back({ ElementEnumT::SingleChar, IntervalT{InputSymbol}, TokenIndex });
+					break;
+				}
+				break;
+			}
+			case StateT::Transfer:
+			{
+				switch (InputSymbol)
+				{
+				case U'd':
+					StoragedSymbol.push_back({ ElementEnumT::CharSet, IntervalT{U'0', U'9' + 1}, TokenIndex });
+					CurrentState = StateT::Normal;
+					break;
+				case U'D':
+				{
+					SeqIntervalT Tem{ { {1, U'0'},{U'9' + 1, MaxChar()} } };
+					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(Tem), TokenIndex });
+					CurrentState = StateT::Normal;
+					break;
+				}
+				case U'f':
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, IntervalT{U'\f'}, TokenIndex });
+					CurrentState = StateT::Normal;
+					break;
+				case U'n':
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, IntervalT{U'\n'}, TokenIndex });
+					CurrentState = StateT::Normal;
+					break;
+				case U'r':
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, IntervalT{U'\r'}, TokenIndex });
+					CurrentState = StateT::Normal;
+					break;
+				case U't':
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, IntervalT{U'\t'}, TokenIndex });
+					CurrentState = StateT::Normal;
+					break;
+				case U'v':
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, IntervalT{U'\v'}, TokenIndex });
+					CurrentState = StateT::Normal;
+					break;
+				case U's':
+				{
+					SeqIntervalT tem({ IntervalT{ 1, 33 }, IntervalT{127, 128} });
+					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(tem), TokenIndex });
+					CurrentState = StateT::Normal;
+					break;
+				}
+				case U'S':
+				{
+					SeqIntervalT tem({ IntervalT{33, 127}, IntervalT{128, MaxChar()} });
+					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(tem), TokenIndex });
+					CurrentState = StateT::Normal;
+					break;
+				}
+				case U'w':
+				{
+					SeqIntervalT tem({ IntervalT{ U'A', U'Z' + 1 }, IntervalT{ U'_'}, IntervalT{ U'a', U'z' + 1 }});
+					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(tem), TokenIndex });
+					CurrentState = StateT::Normal;
+					break;
+				}
+				case U'W':
+				{
+					SeqIntervalT tem({ IntervalT{ U'A', U'Z' + 1 }, IntervalT{ U'_'}, IntervalT{ U'a', U'z' + 1 } });
+					SeqIntervalT total({ 1, MaxChar() });
+					StoragedSymbol.push_back({ ElementEnumT::CharSet, tem.Complementary(MaxIntervalRange()), TokenIndex });
+					CurrentState = StateT::Normal;
+					break;
+				}
+				case U'z':
+				{
+					SeqIntervalT tem(IntervalT{ 256, MaxChar() });
+					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(tem), TokenIndex });
+					CurrentState = StateT::Normal;
+					break;
+				}
+				case U'u':
+				{
+					CurrentState = StateT::Number;
+					NumberChar = 0;
+					Number = 0;
+					NumberIsBig = false;
+					break;
+				}
+				case U'U':
+				{
+					CurrentState = StateT::Number;
+					NumberChar = 0;
+					Number = 0;
+					NumberIsBig = true;
+					break;
+				}
+				default:
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, IntervalT{InputSymbol}, TokenIndex });
+					CurrentState = StateT::Normal;
+					break;
+				}
+				break;
+			}
+			case StateT::Number:
+			{
+				Number += 1;
+				if (InputSymbol >= U'0' && InputSymbol <= U'9')
+				{
+					NumberChar *= 16;
+					NumberChar += InputSymbol - U'0';
+				}
+				else if (InputSymbol >= U'a' && InputSymbol <= U'f')
+				{
+					NumberChar *= 16;
+					NumberChar += InputSymbol - U'a' + 10;
+				}
+				else if (InputSymbol >= U'A' && InputSymbol <= U'F')
+				{
+					NumberChar *= 16;
+					NumberChar += InputSymbol - U'A' + 10;
+				}
+				else {
+					return false;
+				}
+				if ((Number == 4 && !NumberIsBig) || (NumberIsBig && Number == 6))
+				{
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, IntervalT{NumberChar}, TokenIndex });
+					CurrentState = StateT::Normal;
+				}
+				break;
+			}
+			case StateT::Raw:
+				StoragedSymbol.push_back({ ElementEnumT::SingleChar, IntervalT{InputSymbol}, TokenIndex });
+				break;
+			default:
+				assert(false);
+			}
+			return true;
+		}
+		else {
+			return false;
+		}
+	}
+
+	bool RegLexerT::EndOfFile()
+	{
+		if (CurrentState == StateT::Normal || CurrentState == StateT::Raw)
+		{
+			CurrentState = StateT::Done;
+			return true;
+		}
+		else
+			return false;
+	}
+
 	
 	using namespace Exception;
 
-	using SLRX::Symbol;
 
-	enum class T : SLRX::StandardT
-	{
-		SingleChar = 0, // µ¥×Ö·û
-		CharSet, // ¶à×Ö·û
-		Min, // -
-		BracketsLeft, //[
-		BracketsRight, // ]
-		ParenthesesLeft, //(
-		ParenthesesRight, //)
-		CurlyBracketsLeft, //{
-		CurlyBracketsRight, //}
-		Num, // 0 - 1
-		Comma, // ,
-		Mulity, //*
-		Question, // ?
-		Or, // |
-		Add, // +
-		Not, // ^
-		Colon, // :
-	};
+
+	using T = RegLexerT::ElementEnumT;
+
+
+	
+	/*
+	using SLRX::Symbol;
 
 	constexpr Symbol operator*(T Input) { return Symbol::AsTerminal(static_cast<SLRX::StandardT>(Input)); };
 
@@ -70,15 +274,7 @@ namespace Potato::Reg
 		bool Consume(char32_t InputSymbol, std::size_t TokenIndex);
 		bool EndOfFile();
 
-		enum class State
-		{
-			Normal,
-			Transfer,
-			BigNumber,
-			Number,
-			Done,
-			Raw,
-		};
+		
 
 		RegLexer(bool IsRaw) : CurrentState(IsRaw ? State::Raw : State::Normal) {}
 
@@ -95,207 +291,7 @@ namespace Potato::Reg
 		std::vector<Element> StoragedSymbol;
 	};
 
-	bool RegLexer::Consume(char32_t InputSymbol, std::size_t TokenIndex)
-	{
-		if (InputSymbol < MaxChar())
-		{
-			switch (CurrentState)
-			{
-			case State::Normal:
-			{
-				switch (InputSymbol)
-				{
-				case U'-':
-					StoragedSymbol.push_back({T::Min,  InputSymbol, TokenIndex });
-					break;
-				case U'[':
-					StoragedSymbol.push_back({T::BracketsLeft, InputSymbol, TokenIndex });
-					break;
-				case U']':
-					StoragedSymbol.push_back({T::BracketsRight, InputSymbol, TokenIndex });
-					break;
-				case U'{':
-					StoragedSymbol.push_back({T::CurlyBracketsLeft, InputSymbol, TokenIndex });
-					break;
-				case U'}':
-					StoragedSymbol.push_back({T::CurlyBracketsRight, InputSymbol, TokenIndex });
-					break;
-				case U',':
-					StoragedSymbol.push_back({T::Comma, InputSymbol, TokenIndex });
-					break;
-				case U'(':
-					StoragedSymbol.push_back({T::ParenthesesLeft, InputSymbol, TokenIndex });
-					break;
-				case U')':
-					StoragedSymbol.push_back({T::ParenthesesRight, InputSymbol, TokenIndex });
-					break;
-				case U'*':
-					StoragedSymbol.push_back({T::Mulity, InputSymbol, TokenIndex });
-					break;
-				case U'?':
-					StoragedSymbol.push_back({T::Question, InputSymbol, TokenIndex });
-					break;
-				case U'.':
-					StoragedSymbol.push_back({T::CharSet, MaxIntervalRange(), TokenIndex });
-					break;
-				case U'|':
-					StoragedSymbol.push_back({T::Or, InputSymbol, TokenIndex });
-					break;
-				case U'+':
-					StoragedSymbol.push_back({T::Add, InputSymbol, TokenIndex });
-					break;
-				case U'^':
-					StoragedSymbol.push_back({T::Not, InputSymbol, TokenIndex });
-					break;
-				case U':':
-					StoragedSymbol.push_back({T::Colon, InputSymbol, TokenIndex });
-					break;
-				case U'\\':
-					CurrentState = State::Transfer;
-					RecordSymbol = InputSymbol;
-					break;
-				default:
-					if (InputSymbol >= U'0' && InputSymbol <= U'9')
-						StoragedSymbol.push_back({T::Num, InputSymbol, TokenIndex });
-					else
-						StoragedSymbol.push_back({T::SingleChar, InputSymbol, TokenIndex });
-					break;
-				}
-				break;
-			}
-			case State::Transfer:
-			{
-				switch (InputSymbol)
-				{
-				case U'd':
-					StoragedSymbol.push_back({T::CharSet, SeqIntervalT{ {U'0', U'9' + 1} }, TokenIndex });
-					CurrentState = State::Normal;
-					break;
-				case U'D':
-				{
-					SeqIntervalT Tem{ { {1, U'0'},{U'9' + 1, MaxChar()} } };
-					StoragedSymbol.push_back({T::CharSet, std::move(Tem), TokenIndex });
-					CurrentState = State::Normal;
-					break;
-				}
-				case U'f':
-					StoragedSymbol.push_back({T::SingleChar, U'\f', TokenIndex });
-					CurrentState = State::Normal;
-					break;
-				case U'n':
-					StoragedSymbol.push_back({T::SingleChar, U'\n', TokenIndex });
-					CurrentState = State::Normal;
-					break;
-				case U'r':
-					StoragedSymbol.push_back({T::SingleChar, U'\r', TokenIndex });
-					CurrentState = State::Normal;
-					break;
-				case U't':
-					StoragedSymbol.push_back({T::SingleChar, U'\t', TokenIndex });
-					CurrentState = State::Normal;
-					break;
-				case U'v':
-					StoragedSymbol.push_back({T::SingleChar, U'\v', TokenIndex });
-					CurrentState = State::Normal;
-					break;
-				case U's':
-				{
-					SeqIntervalT tem({ IntervalT{ 1, 33 }, IntervalT{127, 128} });
-					StoragedSymbol.push_back({T::CharSet, std::move(tem), TokenIndex });
-					CurrentState = State::Normal;
-					break;
-				}
-				case U'S':
-				{
-					SeqIntervalT tem({ IntervalT{33, 127}, IntervalT{128, MaxChar()} });
-					StoragedSymbol.push_back({T::CharSet, std::move(tem), TokenIndex });
-					CurrentState = State::Normal;
-					break;
-				}
-				case U'w':
-				{
-					SeqIntervalT tem({ IntervalT{ U'a', U'z' + 1 }, IntervalT{ U'A', U'Z' + 1 }, IntervalT{ U'_', U'_' + 1} });
-					StoragedSymbol.push_back({T::CharSet, std::move(tem), TokenIndex });
-					CurrentState = State::Normal;
-					break;
-				}
-				case U'W':
-				{
-					SeqIntervalT tem({ IntervalT{ U'a', U'z' + 1 }, IntervalT{ U'A', U'Z' + 1 }, IntervalT{ U'_', U'_' + 1} });
-					SeqIntervalT total({ 1, MaxChar() });
-					StoragedSymbol.push_back({T::CharSet, tem.Complementary(MaxIntervalRange()), TokenIndex });
-					CurrentState = State::Normal;
-					break;
-				}
-				case U'z':
-				{
-					SeqIntervalT tem(IntervalT{ 256, MaxChar() });
-					StoragedSymbol.push_back({T::CharSet, std::move(tem), TokenIndex });
-					CurrentState = State::Normal;
-					break;
-				}
-				case U'u':
-				{
-					CurrentState = State::Number;
-					NumberChar = 0;
-					Number = 0;
-					NumberIsBig = false;
-					break;
-				}
-				case U'U':
-				{
-					CurrentState = State::Number;
-					NumberChar = 0;
-					Number = 0;
-					NumberIsBig = true;
-					break;
-				}
-				default:
-					StoragedSymbol.push_back({T::SingleChar, InputSymbol, TokenIndex });
-					CurrentState = State::Normal;
-					break;
-				}
-				break;
-			}
-			case State::Number:
-			{
-				Number += 1;
-				if (InputSymbol >= U'0' && InputSymbol <= U'9')
-				{
-					NumberChar *= 16;
-					NumberChar += InputSymbol - U'0';
-				}
-				else if (InputSymbol >= U'a' && InputSymbol <= U'f')
-				{
-					NumberChar *= 16;
-					NumberChar += InputSymbol - U'a' + 10;
-				}
-				else if (InputSymbol >= U'A' && InputSymbol <= U'F')
-				{
-					NumberChar *= 16;
-					NumberChar += InputSymbol - U'A' + 10;
-				}
-				else {
-					return false;
-				}
-				if ((Number == 4 && !NumberIsBig) || (NumberIsBig && Number == 6))
-				{
-					StoragedSymbol.push_back({T::SingleChar, NumberChar, TokenIndex });
-					CurrentState = State::Normal;
-				}
-				break;
-			}
-			case State::Raw:
-				StoragedSymbol.push_back({ T::SingleChar, {InputSymbol}, TokenIndex });
-				break;
-			default:
-				assert(false);
-			}
-			return true;
-		}else {
-			return false;
-		}
-	}
+	
 
 	bool RegLexer::EndOfFile()
 	{
@@ -2811,6 +2807,7 @@ namespace Potato::Reg
 		}
 		return {};
 	}
+	*/
 
 	namespace Exception
 	{

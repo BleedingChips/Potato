@@ -1,19 +1,95 @@
+module;
+
 export module Potato.Reg;
 export import Potato.SLRX;
 export import Potato.Interval;
 
 export namespace Potato::Reg
 {
+	
+	using StandardT = std::uint32_t;
+
 	using IntervalT = Misc::Interval<char32_t>;
 	using SeqIntervalT = Misc::SequenceInterval<char32_t>;
 	using SeqIntervalWrapperT = Misc::SequenceIntervalWrapper<char32_t>;
 
-	using StandardT = std::uint32_t;
-
 	inline constexpr char32_t MaxChar() { return 0x110000; };
-
 	inline constexpr char32_t EndOfFile() { return 0; }
 
+	SeqIntervalT const& MaxIntercalRange();
+
+	struct RegLexerT
+	{
+		
+		enum class ElementEnumT : StandardT
+		{
+			SingleChar = 0, // µ¥×Ö·û
+			CharSet, // ¶à×Ö·û
+			Min, // -
+			BracketsLeft, //[
+			BracketsRight, // ]
+			ParenthesesLeft, //(
+			ParenthesesRight, //)
+			CurlyBracketsLeft, //{
+			CurlyBracketsRight, //}
+			Num, // 0 - 1
+			Comma, // ,
+			Mulity, //*
+			Question, // ?
+			Or, // |
+			Add, // +
+			Not, // ^
+			Colon, // :
+		};
+
+
+		struct ElementT
+		{
+			ElementEnumT Value;
+			SeqIntervalT Chars;
+			std::size_t TokenIndex;
+		};
+
+		std::span<ElementT const> GetSpan() const { return std::span(StoragedSymbol); }
+
+		bool Consume(char32_t InfoutSymbol, std::size_t TokenIndex);
+		bool EndOfFile();
+
+		RegLexerT(bool IsRaw = false);
+
+	protected:
+
+		enum class StateT
+		{
+			Normal,
+			Transfer,
+			BigNumber,
+			Number,
+			Done,
+			Raw,
+		};
+
+		StateT CurrentState;
+		std::size_t Number = 0;
+		char32_t NumberChar = 0;
+		bool NumberIsBig = false;
+		char32_t RecordSymbol = 0;
+		std::size_t RecordTokenIndex = 0;
+		std::size_t TokenIndexIte = 0;
+		std::vector<ElementT> StoragedSymbol;
+	};
+
+
+
+
+
+
+	
+
+	
+
+	
+	/*
 	struct Accept
 	{
 		StandardT Mask = 0;
@@ -571,6 +647,7 @@ export namespace Potato::Reg
 
 		std::optional<EpsilonNFA> ETable;
 	};
+	*/
 
 	namespace Exception
 	{
