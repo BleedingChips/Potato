@@ -95,6 +95,16 @@ export namespace Potato::Reg
 
 		NfaT(std::span<RegLexerT::ElementT const> InputSpan);
 
+		struct NodeSetT
+		{
+			std::size_t In;
+			std::size_t Out;
+		};
+
+		std::size_t AddNode(std::size_t Token, std::span<RegLexerT::ElementT const> Eles);
+
+		void AddConsume(NodeSetT Set, SeqIntervalT Chars);
+
 		enum class EdgePropertyT
 		{
 			CaptureBegin,
@@ -123,6 +133,8 @@ export namespace Potato::Reg
 		{
 			std::optional<StandardT> Accept;
 			std::vector<EdgeT> Edges;
+			std::size_t CurIndex;
+			std::size_t OffsetToken;
 		};
 
 		std::vector<NodeT> Nodes;

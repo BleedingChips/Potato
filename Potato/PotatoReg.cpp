@@ -388,6 +388,22 @@ namespace Potato::Reg
 			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, EIndex.Index };
 		}
 	}
+
+	std::size_t NfaT::AddNode(std::size_t BadOffset)
+	{
+		NodeT Node;
+		Node.CurIndex = Nodes.size();
+		Node.OffsetToken = BadOffset;
+		Nodes.push_back(std::move(Node));
+	}
+
+	void NfaT::AddConsume(NodeSetT Set, SeqIntervalT Chars)
+	{
+		EdgeT Edge;
+		Edge.ToNode = Set.Out;
+		Edge.CharSets = std::move(Chars);
+		Nodes[Set.In].Edges.push_back(std::move(Edge));
+	}
 	
 	NfaT::NfaT(std::span<RegLexerT::ElementT const> InputSpan)
 	{
@@ -465,7 +481,7 @@ namespace Potato::Reg
 					auto T1 = Output.NewNode(NT.TokenIndex.Begin());
 					auto T2 = Output.NewNode(NT.TokenIndex.Begin());
 					NodeSetT Set{ T1, T2 };
-					Output.AddComsumeEdge(T1, T2, NT[1].Consume<SeqIntervalT>());
+					AddConsume(T1, T2, NT[1].Consume<SeqIntervalT>());
 					return Set;
 				}
 				case 5:
@@ -474,7 +490,7 @@ namespace Potato::Reg
 					auto P = MaxIntervalRange().AsWrapper().Remove(Tar);
 					auto T1 = Output.NewNode(NT.TokenIndex.Begin());
 					auto T2 = Output.NewNode(NT.TokenIndex.Begin());
-					NodeSet Set{ T1, T2 };
+					NodeSetT Set{ T1, T2 };
 					Output.AddComsumeEdge(T1, T2, P);
 					return Set;
 				}
