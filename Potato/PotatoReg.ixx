@@ -80,7 +80,55 @@ export namespace Potato::Reg
 	};
 
 
+	struct NfaT
+	{
 
+		static NfaT Create(std::u32string_view Str, bool IsRaw = false);
+
+		
+		NfaT(std::u32string_view Str, bool IsRaw = false)
+			: NfaT(Create(Str, IsRaw)) {}
+		NfaT(NfaT const&) = default;
+		NfaT(NfaT&&) = default;
+
+	protected:
+
+		NfaT(std::span<RegLexerT::ElementT const> InputSpan);
+
+		enum class EdgePropertyT
+		{
+			CaptureBegin,
+			CaptureEnd,
+			ZeroCount,
+			AddCount,
+			DetectCount,
+		};
+
+		struct ProEdgeT
+		{
+			EdgePropertyT Property;
+			std::size_t Index = 0;
+			StandardT Par1 = 0;
+			StandardT Par2 = 0;
+		};
+
+		struct EdgeT
+		{
+			std::size_t ToNode;
+			SeqIntervalT CharSets;
+			std::optional<ProEdgeT> Edges;
+		};
+
+		struct NodeT
+		{
+			std::optional<StandardT> Accept;
+			std::vector<EdgeT> Edges;
+		};
+
+		std::vector<NodeT> Nodes;
+		std::size_t CaptureIndex = 0;
+		std::size_t CountIndex = 0;
+	};
 
 
 

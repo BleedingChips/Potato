@@ -151,16 +151,15 @@ void TestingReg()
 int main()
 {
 
-	RegLexerT Lex;
-
-	std::u32string_view Par = U"ab\s\\d123-123[]";
-
-	for (auto Ite : Par)
-	{
-		Lex.Consume(Ite, 0);
+	try {
+		NfaT N(U"abs\\d123-123[a]");
 	}
-
-	Lex.EndOfFile();
+	catch (Exception::UnaccaptableRegex const& Rex)
+	{
+		std::wstring_view Last = std::wstring_view{ Rex.TotalString }.substr(Rex.BadOffset);
+		volatile int i = 0;
+	}
+	
 
 	/*
 	try {

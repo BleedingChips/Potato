@@ -233,18 +233,13 @@ namespace Potato::Reg
 	
 	using namespace Exception;
 
-
+	using SLRX::Symbol;
 
 	using T = RegLexerT::ElementEnumT;
 
-
-	
-	/*
-	using SLRX::Symbol;
-
 	constexpr Symbol operator*(T Input) { return Symbol::AsTerminal(static_cast<SLRX::StandardT>(Input)); };
 
-	enum class NT : SLRX::StandardT
+	enum class NT : StandardT
 	{
 		AcceptableSingleChar,
 		CharListAcceptableSingleChar,
@@ -259,56 +254,12 @@ namespace Potato::Reg
 
 	constexpr Symbol operator*(NT Input) { return Symbol::AsNoTerminal(static_cast<SLRX::StandardT>(Input)); };
 
-	struct RegLexer
-	{
-
-		struct Element
-		{
-			T Value;
-			std::variant<SeqIntervalT, char32_t> Acceptable;
-			std::size_t TokenIndex;
-		};
-
-		std::span<Element const> GetSpan() const { return StoragedSymbol;};
-
-		bool Consume(char32_t InputSymbol, std::size_t TokenIndex);
-		bool EndOfFile();
-
-		
-
-		RegLexer(bool IsRaw) : CurrentState(IsRaw ? State::Raw : State::Normal) {}
-
-	protected:
-
-		State CurrentState;
-		std::size_t Number = 0;
-		char32_t NumberChar = 0;
-		bool NumberIsBig = false;
-		char32_t RecordSymbol;
-		std::size_t RecordTokenIndex = 0;
-		std::size_t TokenIndexIte = 0;
-
-		std::vector<Element> StoragedSymbol;
-	};
-
-	
-
-	bool RegLexer::EndOfFile()
-	{
-		if (CurrentState == State::Normal || CurrentState == State::Raw)
-		{
-			CurrentState = State::Done;
-			return true;
-		}	
-		else
-			return false;
-	}
 
 	const SLRX::TableWrapper RexSLRXWrapper()
 	{
-	#ifdef _DEBUG
+#ifdef _DEBUG
 		try {
-	#endif
+#endif
 			static SLRX::Table Table(
 				*NT::ExpressionStatement,
 				{
@@ -326,7 +277,7 @@ namespace Potato::Reg
 					{*NT::CharList, {*NT::CharListSingleChar, *T::Min, *NT::CharListSingleChar}, 42},
 					{*NT::CharList, {*T::CharSet}, 1},
 					{*NT::CharList, {*NT::CharList, *NT::CharList, SLRX::ItSelf{}}, 3},
-					
+
 					{*NT::FinalCharList, {*T::Min}, 60},
 					{*NT::FinalCharList, {*T::Min, *NT::CharList}, 61},
 					{*NT::FinalCharList, {*NT::CharList, *T::Min}, 62},
@@ -360,7 +311,7 @@ namespace Potato::Reg
 				}, {}
 			);
 			return Table.Wrapper;
-		#ifdef _DEBUG
+#ifdef _DEBUG
 		}
 		catch (SLRX::Exception::IllegalSLRXProduction const& Pro)
 		{
@@ -406,9 +357,285 @@ namespace Potato::Reg
 
 			throw;
 		}
-		#endif
+#endif
 
 	}
+
+	struct BadRegexRef
+	{
+		std::size_t Index;
+	};
+
+
+	NfaT NfaT::Create(std::u32string_view Str, bool IsRaw)
+	{
+		RegLexerT Lex(IsRaw);
+
+		std::size_t Index = 0;
+		for (auto& Ite : Str)
+		{
+			if (!Lex.Consume(Ite, Index))
+				throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, Index };
+			++Index;
+		}
+		if(!Lex.EndOfFile())
+			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, Index };
+		try {
+			return NfaT{ Lex.GetSpan() };
+		}
+		catch (BadRegexRef EIndex)
+		{
+			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, EIndex.Index };
+		}
+	}
+	
+	NfaT::NfaT(std::span<RegLexerT::ElementT const> InputSpan)
+	{
+		SLRX::SymbolProcessor SymPro(RexSLRXWrapper());
+		auto IteSpan = InputSpan;
+		while (!IteSpan.empty())
+		{
+			auto Top = *IteSpan.begin();
+			if (!SymPro.Consume(*Top.Value, InputSpan.size() - IteSpan.size()))
+				throw BadRegexRef{ InputSpan.size() - IteSpan.size() };
+			IteSpan = IteSpan.subspan(1);
+		}
+		if (!SymPro.EndOfFile())
+		{
+			throw BadRegexRef{ InputSpan.size() - IteSpan.size() };
+		}
+
+		auto Re = ProcessParsingStep(SymPro.GetSteps(), [&, this](SLRX::VariantElement Var) -> std::any
+		{
+			if (Var.IsTerminal())
+			{
+				auto Ele = Var.AsTerminal();
+				return InputSpan[Ele.Shift.TokenIndex].Chars;
+			}
+			else if (Var.IsNoTerminal())
+			{
+				auto NT = Var.AsNoTerminal();
+				switch (NT.Reduce.Mask)
+				{
+				case 40:
+					return NT[0].Consume();
+				case 60:
+				case 41:
+				{
+					return NT[0].Consume<SeqIntervalT>();
+				}
+				case 42:
+				{
+					auto Cur = NT[0].Consume<SeqIntervalT>();
+					auto Cur2 = NT[2].Consume<SeqIntervalT>();
+
+					IntervalT Inter{
+						std::min(Cur[0].start, Cur2[0].start),
+						std::max(Cur[0].end, Cur2[0].end)
+					};
+
+					return SeqIntervalT{Inter};
+				}
+				case 1:
+					return NT[0].Consume();
+				case 3:
+				{
+					auto T1 = NT[0].Consume<SeqIntervalT>();
+					auto T2 = NT[1].Consume<SeqIntervalT>();
+					return SeqIntervalT{ {SeqIntervalWrapperT{T1}.Union(T2)} };
+				}
+				case 61:
+				{
+					auto T1 = NT[0].Consume<SeqIntervalT>();
+					auto T2 = NT[1].Consume<SeqIntervalT>();
+					return SeqIntervalT{ SeqIntervalWrapperT{T2}.Union(T1) };
+				}
+				case 62:
+				{
+					auto T1 = NT[1].Consume<SeqIntervalT>();
+					auto T2 = NT[0].Consume<SeqIntervalT>();
+					return SeqIntervalT{ SeqIntervalWrapperT{T2}.Union(T1) };
+				}
+				case 63:
+				{
+					return NT[0].Consume();
+				}
+				case 4:
+				{
+					auto T1 = Output.NewNode(NT.TokenIndex.Begin());
+					auto T2 = Output.NewNode(NT.TokenIndex.Begin());
+					NodeSetT Set{ T1, T2 };
+					Output.AddComsumeEdge(T1, T2, NT[1].Consume<SeqIntervalT>());
+					return Set;
+				}
+				case 5:
+				{
+					auto Tar = NT[2].Consume<SeqIntervalT>();
+					auto P = MaxIntervalRange().AsWrapper().Remove(Tar);
+					auto T1 = Output.NewNode(NT.TokenIndex.Begin());
+					auto T2 = Output.NewNode(NT.TokenIndex.Begin());
+					NodeSet Set{ T1, T2 };
+					Output.AddComsumeEdge(T1, T2, P);
+					return Set;
+				}
+				case 6:
+				{
+					return NT[3].Consume();
+				}
+				case 7:
+				{
+					auto T1 = Output.NewNode(NT.TokenIndex.Begin());
+					auto T2 = Output.NewNode(NT.TokenIndex.Begin());
+					NodeSet Last = NT.Datas[1].Consume<NodeSet>();
+					NodeSet Set{ T1, T2 };
+					Output.AddCapture(Set, Last);
+					return Set;
+				}
+				case 8:
+				{
+					NodeSet Last1 = NT[0].Consume<NodeSet>();
+					NodeSet Last2 = NT[2].Consume<NodeSet>();
+					auto T1 = Output.NewNode(NT.TokenIndex.Begin());
+					auto T2 = Output.NewNode(NT.TokenIndex.Begin());
+					Output.AddComsumeEdge(T1, Last1.In, {});
+					Output.AddComsumeEdge(T1, Last2.In, {});
+					Output.AddComsumeEdge(Last1.Out, T2, {});
+					Output.AddComsumeEdge(Last2.Out, T2, {});
+					return NodeSet{ T1, T2 };
+				}
+				case 9:
+				{
+					auto T1 = Output.NewNode(NT.TokenIndex.Begin());
+					auto T2 = Output.NewNode(NT.TokenIndex.Begin());
+					auto Tar = NT[0].Consume<char32_t>();
+					NodeSet Set{ T1, T2 };
+					Output.AddComsumeEdge(T1, T2, { {Tar, Tar + 1} });
+					return Set;
+				}
+				case 50:
+				{
+					auto T1 = Output.NewNode(NT.TokenIndex.Begin());
+					auto T2 = Output.NewNode(NT.TokenIndex.Begin());
+					NodeSet Set{ T1, T2 };
+					Output.AddComsumeEdge(T1, T2, NT[0].Consume<SeqIntervalT>());
+					return Set;
+				}
+				case 10:
+				{
+					return NT[0].Consume();
+				}
+				case 11:
+				{
+					auto Last1 = NT[0].Consume<NodeSet>();
+					auto Last2 = NT[1].Consume<NodeSet>();
+					Output.AddComsumeEdge(Last1.Out, Last2.In, {});
+					return NodeSet{ Last1.In, Last2.Out };
+				}
+				case 12:
+				{
+					auto T1 = Output.NewNode(NT.TokenIndex.Begin());
+					auto T2 = Output.NewNode(NT.TokenIndex.Begin());
+					auto Last1 = NT[0].Consume<NodeSet>();
+					Output.AddComsumeEdge(T1, Last1.In, {});
+					Output.AddComsumeEdge(T1, T2, {});
+					Output.AddComsumeEdge(Last1.Out, Last1.In, {});
+					Output.AddComsumeEdge(Last1.Out, T2, {});
+					return NodeSet{ T1, T2 };
+				}
+				case 13:
+				{
+					auto T1 = Output.NewNode(NT.TokenIndex.Begin());
+					auto T2 = Output.NewNode(NT.TokenIndex.Begin());
+					auto Last1 = NT[0].Consume<NodeSet>();
+					Output.AddComsumeEdge(T1, Last1.In, {});
+					Output.AddComsumeEdge(Last1.Out, Last1.In, {});
+					Output.AddComsumeEdge(Last1.Out, T2, {});
+					return NodeSet{ T1, T2 };
+				}
+				case 14:
+				{
+					auto T1 = Output.NewNode(NT.TokenIndex.Begin());
+					auto T2 = Output.NewNode(NT.TokenIndex.Begin());
+					auto Last1 = NT[0].Consume<NodeSet>();
+					Output.AddComsumeEdge(T1, T2, {});
+					Output.AddComsumeEdge(T1, Last1.In, {});
+					Output.AddComsumeEdge(Last1.Out, T2, {});
+					Output.AddComsumeEdge(Last1.Out, Last1.In, {});
+					return NodeSet{ T1, T2 };
+				}
+				case 15:
+				{
+					auto T1 = Output.NewNode(NT.TokenIndex.Begin());
+					auto T2 = Output.NewNode(NT.TokenIndex.Begin());
+					auto Last1 = NT[0].Consume<NodeSet>();
+					Output.AddComsumeEdge(T1, Last1.In, {});
+					Output.AddComsumeEdge(Last1.Out, T2, {});
+					Output.AddComsumeEdge(Last1.Out, Last1.In, {});
+					return NodeSet{ T1, T2 };
+				}
+				case 16:
+				{
+					auto T1 = Output.NewNode(NT.TokenIndex.Begin());
+					auto T2 = Output.NewNode(NT.TokenIndex.Begin());
+					auto Last1 = NT[0].Consume<NodeSet>();
+					Output.AddComsumeEdge(T1, Last1.In, {});
+					Output.AddComsumeEdge(Last1.Out, T2, {});
+					Output.AddComsumeEdge(T1, T2, {});
+					return NodeSet{ T1, T2 };
+				}
+				case 17:
+				{
+					auto T1 = Output.NewNode(NT.TokenIndex.Begin());
+					auto T2 = Output.NewNode(NT.TokenIndex.Begin());
+					auto Last1 = NT[0].Consume<NodeSet>();
+					Output.AddComsumeEdge(T1, T2, {});
+					Output.AddComsumeEdge(T1, Last1.In, {});
+					Output.AddComsumeEdge(Last1.Out, T2, {});
+					return NodeSet{ T1, T2 };
+				}
+				case 18:
+				{
+					char32_t Te = NT[0].Consume<char32_t>();
+					std::size_t Count = Te - U'0';
+					return Count;
+				}
+				case 19:
+				{
+					auto Te = NT[0].Consume<std::size_t>();
+					Te *= 10;
+					auto Te2 = NT[1].Consume<char32_t>();
+					Te += Te2 - U'0';
+					return Te;
+				}
+				case 20: // {num}
+					return Output.AddCounter(NT.TokenIndex.Begin(), NT[0].Consume<NodeSet>(), NT[2].Consume<std::size_t>(), {}, {}, false);
+				case 25: // {,N}?
+					return Output.AddCounter(NT.TokenIndex.Begin(), NT[0].Consume<NodeSet>(), {}, {}, NT[3].Consume<std::size_t>(), false);
+				case 21: // {,N}
+					return Output.AddCounter(NT.TokenIndex.Begin(), NT[0].Consume<NodeSet>(), {}, {}, NT[3].Consume<std::size_t>(), true);
+				case 26: // {N,} ?
+					return Output.AddCounter(NT.TokenIndex.Begin(), NT[0].Consume<NodeSet>(), NT[2].Consume<std::size_t>(), {}, {}, false);
+				case 22: // {N,}
+					return Output.AddCounter(NT.TokenIndex.Begin(), NT[0].Consume<NodeSet>(), NT[2].Consume<std::size_t>(), {}, {}, true);
+				case 27: // {N, N} ?
+					return Output.AddCounter(NT.TokenIndex.Begin(), NT[0].Consume<NodeSet>(), {}, NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), false);
+				case 23: // {N, N}
+					return Output.AddCounter(NT.TokenIndex.Begin(), NT[0].Consume<NodeSet>(), {}, NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), true);
+				default:
+					assert(false);
+					return {};
+					break;
+				}
+			}
+		});
+
+		volatile int i = 0;
+	}
+
+
+	/*
+
+	
 
 	std::any RegNoTerminalFunction(Potato::SLRX::NTElement& NT, EpsilonNFA& Output)
 	{
