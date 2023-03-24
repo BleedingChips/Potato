@@ -156,7 +156,7 @@ int main()
 	}
 	catch (Exception::UnaccaptableRegex const& Rex)
 	{
-		std::wstring_view Last = std::wstring_view{ Rex.TotalString }.substr(Rex.BadOffset);
+		std::wstring_view Last = std::wstring_view{ Rex.TotalString }.substr(Rex.BadIndex.Begin(), Rex.BadIndex.End());
 		volatile int i = 0;
 	}
 	

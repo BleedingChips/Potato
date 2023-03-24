@@ -47,12 +47,12 @@ export namespace Potato::Reg
 		{
 			ElementEnumT Value;
 			SeqIntervalT Chars;
-			std::size_t TokenIndex;
+			Misc::IndexSpan<> Token;
 		};
 
 		std::span<ElementT const> GetSpan() const { return std::span(StoragedSymbol); }
 
-		bool Consume(char32_t InfoutSymbol, std::size_t TokenIndex);
+		bool Consume(char32_t InfoutSymbol, Misc::IndexSpan<> TokenIndex);
 		bool EndOfFile();
 
 		RegLexerT(bool IsRaw = false);
@@ -101,40 +101,41 @@ export namespace Potato::Reg
 			std::size_t Out;
 		};
 
-		std::size_t AddNode(std::size_t Token, std::span<RegLexerT::ElementT const> Eles);
+		std::size_t AddNode();
 
-		void AddConsume(NodeSetT Set, SeqIntervalT Chars);
+		void AddConsume(NodeSetT Set, SeqIntervalT Chars, Misc::IndexSpan<> TokenIndex, std::span<RegLexerT::ElementT const> Tokens);
 
 		enum class EdgePropertyT
 		{
+			None,
 			CaptureBegin,
 			CaptureEnd,
 			ZeroCount,
 			AddCount,
 			DetectCount,
+			Accept,
 		};
 
 		struct ProEdgeT
 		{
-			EdgePropertyT Property;
+			EdgePropertyT Type;
 			std::size_t Index = 0;
 			StandardT Par1 = 0;
-			StandardT Par2 = 0;
+			StandardT Par2 = 0
 		};
 
 		struct EdgeT
 		{
+			ProEdgeT Property;
 			std::size_t ToNode;
 			SeqIntervalT CharSets;
-			std::optional<ProEdgeT> Edges;
+			Misc::IndexSpan<> TokenIndex;
 		};
 
 		struct NodeT
 		{
-			std::optional<StandardT> Accept;
 			std::vector<EdgeT> Edges;
 			std::size_t CurIndex;
-			std::size_t OffsetToken;
 		};
 
 		std::vector<NodeT> Nodes;
@@ -729,11 +730,11 @@ export namespace Potato::Reg
 			};
 			TypeT Type;
 			std::wstring TotalString;
-			std::size_t BadOffset;
-			UnaccaptableRegex(TypeT Type, std::u8string_view Str, std::size_t BadOffset);
-			UnaccaptableRegex(TypeT Type, std::wstring_view Str, std::size_t BadOffset);
-			UnaccaptableRegex(TypeT Type, std::u16string_view Str, std::size_t BadOffset);
-			UnaccaptableRegex(TypeT Type, std::u32string_view Str, std::size_t BadOffset);
+			Misc::IndexSpan<> BadIndex;
+			UnaccaptableRegex(TypeT Type, std::u8string_view Str, Misc::IndexSpan<> BadIndex);
+			UnaccaptableRegex(TypeT Type, std::wstring_view Str, Misc::IndexSpan<> BadIndex);
+			UnaccaptableRegex(TypeT Type, std::u16string_view Str, Misc::IndexSpan<> BadIndex);
+			UnaccaptableRegex(TypeT Type, std::u32string_view Str, Misc::IndexSpan<> BadIndex);
 			UnaccaptableRegex() = default;
 			UnaccaptableRegex(UnaccaptableRegex const&) = default;
 			virtual char const* what() const override;

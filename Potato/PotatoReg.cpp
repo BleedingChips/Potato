@@ -374,27 +374,28 @@ namespace Potato::Reg
 		std::size_t Index = 0;
 		for (auto& Ite : Str)
 		{
-			if (!Lex.Consume(Ite, Index))
-				throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, Index };
+			if (!Lex.Consume(Ite, { Index, Index + 1 }))
+				throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {Index, Str.size() - Index} };
 			++Index;
 		}
 		if(!Lex.EndOfFile())
-			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, Index };
+			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {Index, Str.size() - Index} };
 		try {
 			return NfaT{ Lex.GetSpan() };
 		}
 		catch (BadRegexRef EIndex)
 		{
-			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, EIndex.Index };
+			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {EIndex.Index , Str.size() - EIndex.Index} };
 		}
 	}
 
-	std::size_t NfaT::AddNode(std::size_t BadOffset)
+	std::size_t NfaT::AddNode()
 	{
 		NodeT Node;
-		Node.CurIndex = Nodes.size();
-		Node.OffsetToken = BadOffset;
+		auto OldSize = Nodes.size();
+		Node.CurIndex = OldSize;
 		Nodes.push_back(std::move(Node));
+		return OldSize;
 	}
 
 	void NfaT::AddConsume(NodeSetT Set, SeqIntervalT Chars)
@@ -421,7 +422,9 @@ namespace Potato::Reg
 			throw BadRegexRef{ InputSpan.size() - IteSpan.size() };
 		}
 
-		auto Re = ProcessParsingStep(SymPro.GetSteps(), [&, this](SLRX::VariantElement Var) -> std::any
+		auto StepSpan = SymPro.GetSteps();
+
+		auto Re = ProcessParsingStep(StepSpan, [&, this](SLRX::VariantElement Var) -> std::any
 		{
 			if (Var.IsTerminal())
 			{
@@ -478,20 +481,20 @@ namespace Potato::Reg
 				}
 				case 4:
 				{
-					auto T1 = Output.NewNode(NT.TokenIndex.Begin());
-					auto T2 = Output.NewNode(NT.TokenIndex.Begin());
+					auto T1 = AddNode();
+					auto T2 = AddNode();
 					NodeSetT Set{ T1, T2 };
-					AddConsume(T1, T2, NT[1].Consume<SeqIntervalT>());
+					AddConsume(Set, NT[1].Consume<SeqIntervalT>(), NT.TokenIndex, StepSpan);
 					return Set;
 				}
 				case 5:
 				{
 					auto Tar = NT[2].Consume<SeqIntervalT>();
-					auto P = MaxIntervalRange().AsWrapper().Remove(Tar);
-					auto T1 = Output.NewNode(NT.TokenIndex.Begin());
-					auto T2 = Output.NewNode(NT.TokenIndex.Begin());
+					auto P = SeqIntervalWrapperT{ MaxIntervalRange() }.Remove(Tar);
+					auto T1 = AddNode();
+					auto T2 = AddNode();
 					NodeSetT Set{ T1, T2 };
-					Output.AddComsumeEdge(T1, T2, P);
+					Output.AddComsumeEdge(Set, P, NT.TokenIndex, StepSpan);
 					return Set;
 				}
 				case 6:
@@ -500,8 +503,8 @@ namespace Potato::Reg
 				}
 				case 7:
 				{
-					auto T1 = Output.NewNode(NT.TokenIndex.Begin());
-					auto T2 = Output.NewNode(NT.TokenIndex.Begin());
+					auto T1 = AddNode();
+					auto T2 = AddNode();
 					NodeSet Last = NT.Datas[1].Consume<NodeSet>();
 					NodeSet Set{ T1, T2 };
 					Output.AddCapture(Set, Last);
@@ -3059,27 +3062,27 @@ namespace Potato::Reg
 			return "PotatoRegException";
 		}
 
-		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u8string_view Str, std::size_t BadOffset)
-			: Type(Type), BadOffset(BadOffset)
+		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u8string_view Str, Misc::IndexSpan<> BadIndex)
+			: Type(Type), BadIndex(BadIndex)
 		{
 			TotalString.resize(Encode::StrEncoder<char8_t, wchar_t>::RequireSpace(Str).TargetSpace);
 			Encode::StrEncoder<char8_t, wchar_t>::EncodeUnSafe(Str, TotalString);
 		}
 
-		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::wstring_view Str, std::size_t BadOffset)
-			: Type(Type), TotalString(std::move(Str)), BadOffset(BadOffset)
+		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::wstring_view Str, Misc::IndexSpan<> BadIndex)
+			: Type(Type), TotalString(std::move(Str)), BadIndex(BadIndex)
 		{
 		}
 
-		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u16string_view Str, std::size_t BadOffset)
-			: Type(Type), BadOffset(BadOffset)
+		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u16string_view Str, Misc::IndexSpan<> BadIndex)
+			: Type(Type), BadIndex(BadIndex)
 		{
 			TotalString.resize(Encode::StrEncoder<char16_t, wchar_t>::RequireSpace(Str).TargetSpace);
 			Encode::StrEncoder<char16_t, wchar_t>::EncodeUnSafe(Str, TotalString);
 		}
 
-		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u32string_view Str, std::size_t BadOffset)
-			: Type(Type), BadOffset(BadOffset)
+		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u32string_view Str, Misc::IndexSpan<> BadIndex)
+			: Type(Type), BadIndex(BadIndex)
 		{
 			TotalString.resize(Encode::StrEncoder<char32_t, wchar_t>::RequireSpace(Str).TargetSpace);
 			Encode::StrEncoder<char32_t, wchar_t>::EncodeUnSafe(Str, TotalString);
