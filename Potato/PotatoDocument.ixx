@@ -113,7 +113,7 @@ export namespace Potato::Document
 
 		BomT GetBom() const { return Bom; }
 
-		explicit operator bool() const { return Available.Count() != 0; }
+		explicit operator bool() const { return Available.Size() != 0; }
 
 	private:
 
@@ -130,9 +130,9 @@ export namespace Potato::Document
 	template<typename UnicodeT, typename Function>
 	auto ReaderBuffer::Read(Function&& Func, std::size_t MaxCharacter)->ReadResult requires(std::is_invocable_r_v<std::optional<std::span<UnicodeT>>, Function, EncodeInfo>)
 	{
-		if (Available.Count() == 0)
+		if (Available.Size() == 0)
 			return { StateT::EmptyBuffer, 0, 0 };
-		std::span<std::byte> CurSpan = DocumentSpan.subspan(Available.Begin(), Available.Count());
+		std::span<std::byte> CurSpan = DocumentSpan.subspan(Available.Begin(), Available.Size());
 		switch (GetBom())
 		{
 		case BomT::NoBom:
@@ -143,7 +143,7 @@ export namespace Potato::Document
 			std::optional<std::span<UnicodeT>> OutputBuffer = Func(Info);
 			if (OutputBuffer.has_value())
 				Encode::StrEncoder<char8_t, UnicodeT>::EncodeUnSafe(Cur, *OutputBuffer, MaxCharacter);
-			Available = Available.Sub(Info.SourceSpace);
+			Available = Available.SubIndex(Info.SourceSpace);
 			TotalCharacter -= Info.CharacterCount;
 			return { StateT::Normal, Info.CharacterCount, Info.TargetSpace };
 			break;

@@ -10,7 +10,7 @@ export namespace Potato::Reg
 	using StandardT = std::uint32_t;
 
 	using IntervalT = Misc::Interval<char32_t>;
-	using SeqIntervalT = Misc::SequenceInterval<char32_t>;
+	using SeqIntervalT = std::vector<char32_t>;
 	using SeqIntervalWrapperT = Misc::SequenceIntervalWrapper<char32_t>;
 
 	inline constexpr char32_t MaxChar() { return 0x110000; };
@@ -103,7 +103,15 @@ export namespace Potato::Reg
 
 		std::size_t AddNode();
 
-		void AddConsume(NodeSetT Set, SeqIntervalT Chars, Misc::IndexSpan<> TokenIndex, std::span<RegLexerT::ElementT const> Tokens);
+		struct ContentT
+		{
+			Misc::IndexSpan<> TokenIndex;
+			std::span<RegLexerT::ElementT const> Tokens;
+		};
+
+		void AddConsume(NodeSetT Set, SeqIntervalT Chars, ContentT Content);
+		NodeSetT AddCapture(NodeSetT Inside, ContentT Content);
+		NodeSetT AddCounter(NodeSetT Inside, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool Greedy, ContentT Content);
 
 		enum class EdgePropertyT
 		{
@@ -121,7 +129,7 @@ export namespace Potato::Reg
 			EdgePropertyT Type;
 			std::size_t Index = 0;
 			StandardT Par1 = 0;
-			StandardT Par2 = 0
+			StandardT Par2 = 0;
 		};
 
 		struct EdgeT

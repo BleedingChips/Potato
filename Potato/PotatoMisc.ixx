@@ -12,23 +12,54 @@ export namespace Potato::Misc
 		auto operator()(RequireType const& i1, RequireType const& i2) const { return i1 <=> i2; }
 	};
 
-	template<typename StorageType = std::size_t>
+	template<typename Type = std::size_t>
 	struct IndexSpan
 	{
-		StorageType Offset = 0;
-		StorageType Length = 0;
-		template<typename ArrayType>
-		constexpr auto Slice(ArrayType&& Type) const ->std::span<std::remove_reference_t<decltype(*Type.data())>>
-		{
-			return std::span<std::remove_reference_t<decltype(*Type.begin())>>(Type.data() + Begin(), Length);
+		constexpr IndexSpan(Type Start, Type End) : StartPoint(Start), EndPoint(End) { assert(End >= Start); }
+		constexpr IndexSpan() : StartPoint(0), EndPoint(0) {   }
+		constexpr IndexSpan(IndexSpan const&) = default;
+		constexpr IndexSpan& operator=(IndexSpan const&) = default;
+
+		constexpr Type Begin() const { return StartPoint; }
+		constexpr Type End() const { return EndPoint; }
+		constexpr Type begin() const { return Begin(); }
+		constexpr Type end() const { return End(); }
+		constexpr Type Size() const { return End() - Begin(); }
+		constexpr IndexSpan Expand(IndexSpan const& IS) const {
+			return IndexSpan{
+				Begin() < IS.Begin() ? Begin() : IS.Begin(),
+				End() > IS.End() ? End() : IS.End()
+			};
 		};
-		constexpr StorageType Begin() const noexcept { return Offset; }
-		constexpr StorageType End() const noexcept { return Offset + Length; }
-		constexpr StorageType Count() const noexcept { return Length; };
-		constexpr bool IsInclude(StorageType Index) const noexcept { return Begin() <= Index && End() > Index; };
-		constexpr explicit operator bool() const noexcept { return Length != 0; }
-		constexpr IndexSpan Sub(StorageType InputOffset) const noexcept { assert(InputOffset <= Length);  return { Offset + InputOffset, Length - InputOffset }; }
-		constexpr IndexSpan Sub(StorageType InputOffset, StorageType Count) const noexcept { assert(InputOffset + Count <= Length);  return { Offset + InputOffset, Count }; }
+
+		constexpr bool IsInclude(Type Value) const { return Begin()<= Value && Value < End(); }
+
+		template<typename ArrayType>
+		constexpr auto Slice(std::span<ArrayType> Span) const ->std::span<ArrayType>
+		{
+			return Span.subspan(Begin(), Size());
+		};
+
+		template<typename CharT, typename CharTTarid>
+		constexpr auto Slice(std::basic_string_view<CharT, CharTTarid> Str) const ->std::basic_string_view<CharT, CharTTarid>
+		{
+			return Str.substr(Begin(), Size());
+		};
+
+		constexpr IndexSpan SubIndex(Type Offset, Type Size = std::numeric_limits<Type>:£ºmax()) const {
+			auto CurSize = Size();
+			assert(Offset < CurSize);
+			auto LastSize = CurSize - Offset;
+			return IndexSpan { 
+				StartPoint + Offset,
+				StartPoint + Offset + std::min(LastSize, Size)
+			};
+		}
+
+	protected:
+		
+		Type StartPoint;
+		Type EndPoint;
 	};
 
 	struct AtomicRefCount

@@ -454,7 +454,7 @@ namespace Potato::SLRX
 
 		for (std::size_t SearchIte = 0; SearchIte < PreNode.size(); ++SearchIte)
 		{
-			auto CurrentState = PreNode[SearchIte].Slice(Status);
+			auto CurrentState = PreNode[SearchIte].Slice(std::span(Status));
 			SearchPropertyTemporary.clear();
 			AccepatbelProductionIndexs.clear();
 			Mappings.clear();
