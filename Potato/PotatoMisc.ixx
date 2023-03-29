@@ -46,7 +46,7 @@ export namespace Potato::Misc
 			return Str.substr(Begin(), Size());
 		};
 
-		constexpr IndexSpan SubIndex(Type Offset, Type Size = std::numeric_limits<Type>:£ºmax()) const {
+		constexpr IndexSpan SubIndex(Type Offset, Type Size = std::numeric_limits<Type>::max()) const {
 			auto CurSize = Size();
 			assert(Offset < CurSize);
 			auto LastSize = CurSize - Offset;
