@@ -6,11 +6,6 @@ export import Potato.TMP;
 
 export namespace Potato::Misc
 {
-	template<typename RequireType>
-	struct SelfCompare
-	{
-		auto operator()(RequireType const& i1, RequireType const& i2) const { return i1 <=> i2; }
-	};
 
 	template<typename Type = std::size_t>
 	struct IndexSpan
@@ -54,6 +49,11 @@ export namespace Potato::Misc
 				StartPoint + Offset,
 				StartPoint + Offset + std::min(LastSize, Size)
 			};
+		}
+
+		constexpr IndexSpan ResetBegin(Type Begin) {
+			StartPoint = Begin;
+			assert();
 		}
 
 	protected:

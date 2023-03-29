@@ -157,10 +157,10 @@ namespace Potato::Document
 	{
 		if (Reader.GetBom() == GetBom())
 		{
-			if (Reader.Available.Begin() != 0 && Reader.Available.Count() != 0 && Reader.Available.Count() <= Reader.Available.Begin())
+			if (Reader.Available.Begin() != 0 && Reader.Available.Size() != 0 && Reader.Available.Size() <= Reader.Available.Begin())
 			{
-				std::memcpy(Reader.DocumentSpan.data(), Reader.DocumentSpan.data() + Reader.Available.Begin(), Reader.Available.Count());
-				Reader.Available.Offset = 0;
+				std::memcpy(Reader.DocumentSpan.data(), Reader.DocumentSpan.data() + Reader.Available.Begin(), Reader.Available.Size());
+				Reader.Available = {0, Reader.Available.End()};
 			}
 
 			auto OldPos = File.tellg();

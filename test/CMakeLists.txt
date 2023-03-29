@@ -5,6 +5,9 @@ ENABLE_CPP_MODULE()
 add_executable(MiscUnitTest MiscTest.cpp)
 target_link_libraries(MiscUnitTest PUBLIC PotatoModule)
 
+add_executable(IntervalTest IntervalTest.cpp)
+target_link_libraries(IntervalTest PUBLIC PotatoModule)
+
 add_executable(SmartPtrTest SmartPtrTest.cpp)
 target_link_libraries(SmartPtrTest PUBLIC PotatoModule)
 

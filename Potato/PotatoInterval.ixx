@@ -8,6 +8,111 @@ export import Potato.Misc;
 export namespace Potato::Misc
 {
 
+	template<typename Type> 
+	struct DefaultIntervalWrapperT
+	{
+		constexpr static Type AddOnce(Type T) { return T + 1; }
+		constexpr static std::strong_ordering Order(Type T1, Type T2) { return T1 <=> T2; }
+	};
+
+	template<typename Type, typename Wrapper = DefaultIntervalWrapperT<Type>>
+	struct IntervalElementT
+	{
+		constexpr IntervalElementT(Type Single) : Start(Start), End(Wrapper::AddOnce(End)) {}
+		constexpr IntervalElementT(Type Start, Type End) : Start(Start), End(End) { assert(*this); }
+
+		constexpr IntervalElementT(IntervalElementT const&) = default;
+		constexpr IntervalElementT& operator=(IntervalElementT const&) = default;
+		constexpr bool IsInclude(Type Input) const { return std::is_gteq(Wrapper::Order(Input, Start)) && std::is_lt(Wrapper::Order(Input, End)); }
+		constexpr operator bool() const { return std::is_lt(Wrapper::Order(Start, End)); }
+
+		Type Start;
+		Type End;
+
+		using StorageT = Type;
+		using WrapperT = Wrapper;
+	};
+
+	template<typename Type, typename Wrapper, typename Allocator>
+	struct IntervalT;
+
+	template<typename Type, typename Wrapper>
+	struct IntervalWrapperT
+	{
+
+		using ElementT = IntervalElementT<Type, Wrapper>;
+
+		template<typename AllocatorT>
+		static auto Ordering(std::initializer_list<ElementT> const& List, AllocatorT Allocator)
+			-> IntervalT<Type, Wrapper, AllocatorT>;
+
+		// Need Ordered in Span
+		template<typename AllocatorT>
+		static auto Add(std::span<ElementT const> T1, std::span<ElementT const> T2, AllocatorT Allocator)
+			-> IntervalT<Type, Wrapper, AllocatorT>;
+
+		// Need Ordered in Span
+		template<typename AllocatorT>
+		static auto Sub(std::span<ElementT const> T1, std::span<ElementT const> T2, AllocatorT Allocator)
+			-> IntervalT<Type, Wrapper, AllocatorT>;
+		
+		// Need Ordered in Span
+		template<typename AllocatorT>
+		static auto And(std::span<ElementT const> T1, std::span<ElementT const> T2, AllocatorT Allocator)
+			-> IntervalT<Type, Wrapper, AllocatorT>;
+
+		// Need Ordered in Span
+		static bool IsInclude(std::span<ElementT const> T1, ElementT::Type Input)
+		{
+			if (!T1.empty())
+			{
+				for (auto& Ite : T1)
+				{
+					if(Ite.IsInclude(Input))
+						return true;
+				}
+			}
+			return false;
+		}
+	};
+
+	template<typename Type, typename Wrapper = DefaultIntervalWrapperT<Type>, typename AllocatorT = std::allocator<IntervalElementT<Type, Wrapper>>>
+	struct IntervalT
+	{
+		using ElementT = IntervalElementT<Type, Wrapper>;
+		using WrapperT = IntervalWrapperT<Type, Wrapper>;
+		
+		struct NoDetectT {};
+
+		IntervalT(AllocatorT Allocator = {}) : Elements(Allocator) {}
+		IntervalT(Type Single, AllocatorT Allocator = {}) : Elements({ElementT{Single}}, std::move(Allocator)) {};
+		IntervalT(ElementT SingleElementT, AllocatorT Allocator = {}) : Elements({ SingleElementT }, std::move(Allocator)) {}
+		IntervalT(IntervalT const&) = default;
+		IntervalT(IntervalT &&) = default;
+		IntervalT(std::initializer_list<ElementT> const& List, AllocatorT Allocator = {}) : IntervalT(WrapperT::Ordering(List, std::move(Allocator))) {}
+
+		bool IsInclude(Type Input) const { return WrapperT::IsInclude(std::span(Elements), Input); }
+
+		template<typename OAllocatorT>
+		IntervalT operator+(IntervalT<Type, Wrapper, OAllocatorT> const& T1) const { return WrapperT::Add(std::span(Elements), std::span(T1.Elements), AllocatorT{}); }
+		template<typename OAllocatorT>
+		IntervalT operator-(IntervalT<Type, Wrapper, OAllocatorT> const& T1) const { return WrapperT::Sub(std::span(Elements), std::span(T1.Elements), AllocatorT{}); }
+		template<typename OAllocatorT>
+		IntervalT operator&(IntervalT<Type, Wrapper, OAllocatorT> const& T1) const { return WrapperT::And(std::span(Elements), std::span(T1.Elements), AllocatorT{}); }
+
+	protected:
+
+		std::vector<ElementT, AllocatorT> Elements;
+
+		template<typename Type, typename Wrapper>
+		friend struct IntervalWrapperT;
+
+		template<typename Type, typename Wrapper, typename AllocatorT>
+
+		friend struct IntervalT;
+	};
+
+	/*
 	struct NoDetectT {};
 
 	template<typename Type, typename Compare = SelfCompare<Type>>
@@ -18,12 +123,6 @@ export namespace Potato::Misc
 
 		Type start;
 		Type end;
-		/*
-		Interval(Type p1, Type p2) : start(std::move(p1)), end(std::move(p2)) {
-			if ((Compare{}(start, end)) >= 0)
-				std::swap(start, end);
-		}
-		*/
 		Interval(Type P1) : Interval(P1, P1 + 1) {}
 		Interval(Type p1, Type p2) : start(std::move(p1)), end(std::move(p2)) { assert(start <= end); }
 		Interval() = default;
@@ -437,4 +536,5 @@ export namespace Potato::Misc
 			return SequenceInterval{ AsWrapper().Complementary(input), NoDetectT {} };
 		}
 	};
+	*/
 }
