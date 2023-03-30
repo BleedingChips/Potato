@@ -18,7 +18,7 @@ export namespace Potato::Misc
 	template<typename Type, typename Wrapper = DefaultIntervalWrapperT<Type>>
 	struct IntervalElementT
 	{
-		constexpr IntervalElementT(Type Single) : Start(Start), End(Wrapper::AddOnce(End)) {}
+		constexpr IntervalElementT(Type Single) : Start(Single), End(Wrapper::AddOnce(Single)) {}
 		constexpr IntervalElementT(Type Start, Type End) : Start(Start), End(End) { assert(*this); }
 
 		constexpr IntervalElementT(IntervalElementT const&) = default;
@@ -41,6 +41,8 @@ export namespace Potato::Misc
 	{
 
 		using ElementT = IntervalElementT<Type, Wrapper>;
+
+		static std::strong_ordering Order(Type T1, Type T2) { return Wrapper::Order(T1, T2); }
 
 		template<typename AllocatorT>
 		static auto Ordering(std::initializer_list<ElementT> const& List, AllocatorT Allocator)
@@ -74,6 +76,11 @@ export namespace Potato::Misc
 			}
 			return false;
 		}
+
+	protected:
+
+		template<typename AllocatorT>
+		static bool AddOne(IntervalT<Type, Wrapper, AllocatorT>& Output, ElementT Input);
 	};
 
 	template<typename Type, typename Wrapper = DefaultIntervalWrapperT<Type>, typename AllocatorT = std::allocator<IntervalElementT<Type, Wrapper>>>
@@ -111,6 +118,54 @@ export namespace Potato::Misc
 
 		friend struct IntervalT;
 	};
+
+	template<typename Type, typename Wrapper>
+	template<typename AllocatorT>
+	static auto IntervalWrapperT<Type, Wrapper>::Ordering(std::initializer_list<ElementT> const& List, AllocatorT Allocator)
+		-> IntervalT<Type, Wrapper, AllocatorT>
+	{
+		IntervalT<Type, Wrapper, AllocatorT> Result(Allocator);
+		for (auto Ite : List)
+		{
+			AddExe(Result, Ite);
+		}
+		return Result;
+	}
+
+	template<typename Type, typename Wrapper>
+	template<typename AllocatorT>
+	static bool IntervalWrapperT<Type, Wrapper>::AddOne(IntervalT<Type, Wrapper, AllocatorT>& Output, ElementT Input)
+	{
+		if (Input)
+		{
+			auto LeftIte = std::find_if(Result.begin(), Result.end(), [=](ElementT Ele) { return std::is_lteq(Order(Ite.Start, Ele.Start)); });
+			if (LeftIte == Result.end())
+			{
+				Result.push_back(Ite);
+			}
+			else {
+				auto RigIte = std::find_if(Result.begin(), Result.end(), [=](ElementT Ele) { return std::is_lteq(Order(Ite.End, Ele.End)); });
+				if (RigIte == LeftIte)
+				{
+
+				}
+				else if (RigIte > LeftIte)
+				{
+
+				}else if()
+				assert(RigIte >= LeftIte);
+				if (LeftIte == RigIte)
+				{
+					LeftIte->Start = Ite.Start;
+				}
+				else {
+
+				}
+			}
+			return true;
+		}
+		return false;
+	}
 
 	/*
 	struct NoDetectT {};

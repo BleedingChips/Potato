@@ -42,8 +42,8 @@ export namespace Potato::Misc
 		};
 
 		constexpr IndexSpan SubIndex(Type Offset, Type Size = std::numeric_limits<Type>::max()) const {
-			auto CurSize = Size();
-			assert(Offset < CurSize);
+			auto CurSize = this->Size();
+			assert(Offset <= CurSize);
 			auto LastSize = CurSize - Offset;
 			return IndexSpan { 
 				StartPoint + Offset,
@@ -51,10 +51,9 @@ export namespace Potato::Misc
 			};
 		}
 
-		constexpr IndexSpan ResetBegin(Type Begin) {
-			StartPoint = Begin;
-			assert();
-		}
+		constexpr IndexSpan ForwardBegin(Type Offset) { StartPoint += Offset; return *this; }
+		constexpr IndexSpan BackwardEnd(Type Offset) { StartPoint += Offset; return *this; }
+		constexpr IndexSpan Normalize(Type Length) { EndPoint = StartPoint + Length; return *this; };
 
 	protected:
 		
