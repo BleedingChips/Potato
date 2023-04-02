@@ -9,14 +9,10 @@ export namespace Potato::Reg
 	
 	using StandardT = std::uint32_t;
 
-	using IntervalT = Misc::Interval<char32_t>;
-	using SeqIntervalT = std::vector<char32_t>;
-	using SeqIntervalWrapperT = Misc::SequenceIntervalWrapper<char32_t>;
+	using IntervalT = Misc::IntervalT<char32_t>;
 
 	inline constexpr char32_t MaxChar() { return 0x110000; };
 	inline constexpr char32_t EndOfFile() { return 0; }
-
-	SeqIntervalT const& MaxIntercalRange();
 
 	struct RegLexerT
 	{
@@ -46,7 +42,7 @@ export namespace Potato::Reg
 		struct ElementT
 		{
 			ElementEnumT Value;
-			SeqIntervalT Chars;
+			IntervalT Chars;
 			Misc::IndexSpan<> Token;
 		};
 
@@ -83,17 +79,17 @@ export namespace Potato::Reg
 	struct NfaT
 	{
 
-		static NfaT Create(std::u32string_view Str, bool IsRaw = false);
+		static NfaT Create(std::u32string_view Str, bool IsRaw = false, StandardT Mask = 0);
 
 		
-		NfaT(std::u32string_view Str, bool IsRaw = false)
-			: NfaT(Create(Str, IsRaw)) {}
+		NfaT(std::u32string_view Str, bool IsRaw = false, StandardT Mask = 0)
+			: NfaT(Create(Str, IsRaw, Mask)) {}
 		NfaT(NfaT const&) = default;
 		NfaT(NfaT&&) = default;
 
 	protected:
 
-		NfaT(std::span<RegLexerT::ElementT const> InputSpan);
+		NfaT(std::span<RegLexerT::ElementT const> InputSpan, StandardT Mask = 0);
 
 		struct NodeSetT
 		{
@@ -109,7 +105,7 @@ export namespace Potato::Reg
 			std::span<RegLexerT::ElementT const> Tokens;
 		};
 
-		void AddConsume(NodeSetT Set, SeqIntervalT Chars, ContentT Content);
+		void AddConsume(NodeSetT Set, IntervalT Chars, ContentT Content);
 		NodeSetT AddCapture(NodeSetT Inside, ContentT Content);
 		NodeSetT AddCounter(NodeSetT Inside, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool Greedy, ContentT Content);
 
@@ -126,7 +122,7 @@ export namespace Potato::Reg
 
 		struct ProEdgeT
 		{
-			EdgePropertyT Type;
+			EdgePropertyT Type = EdgePropertyT::None;
 			std::size_t Index = 0;
 			StandardT Par1 = 0;
 			StandardT Par2 = 0;
@@ -136,7 +132,7 @@ export namespace Potato::Reg
 		{
 			ProEdgeT Property;
 			std::size_t ToNode;
-			SeqIntervalT CharSets;
+			IntervalT CharSets;
 			Misc::IndexSpan<> TokenIndex;
 		};
 

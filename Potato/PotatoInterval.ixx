@@ -25,6 +25,12 @@ export namespace Potato::Misc
 		constexpr IntervalElementT& operator=(IntervalElementT const&) = default;
 		constexpr bool IsInclude(Type Input) const { return std::is_gteq(Wrapper::Order(Input, Start)) && std::is_lt(Wrapper::Order(Input, End)); }
 		constexpr operator bool() const { return std::is_lt(Wrapper::Order(Start, End)); }
+		constexpr IntervalElementT Expand(IntervalElementT Input) const{
+			return {
+				(std::is_lt(Wrapper::Order(Start, Input.Start)) ? Start : Input.Start),
+				(std::is_gt(Wrapper::Order(End, Input.End)) ? End : Input.End)
+			};
+		};
 
 		Type Start;
 		Type End;
@@ -64,7 +70,7 @@ export namespace Potato::Misc
 			-> IntervalT<Type, Wrapper, AllocatorT>;
 
 		// Need Ordered in Span
-		static bool IsInclude(std::span<ElementT const> T1, ElementT::Type Input)
+		static bool IsInclude(std::span<ElementT const> T1, Type Input)
 		{
 			if (!T1.empty())
 			{
@@ -79,8 +85,16 @@ export namespace Potato::Misc
 
 	protected:
 
+		struct LocateResult
+		{
+			std::size_t Index;
+			bool InFront;
+		};
+
+		static std::tuple<LocateResult, LocateResult> Locate(std::span<ElementT const> Source, ElementT Value);
+
 		template<typename AllocatorT>
-		static bool AddOne(IntervalT<Type, Wrapper, AllocatorT>& Output, ElementT Input);
+		static bool AddOne(std::vector<ElementT, AllocatorT>&, ElementT Input);
 	};
 
 	template<typename Type, typename Wrapper = DefaultIntervalWrapperT<Type>, typename AllocatorT = std::allocator<IntervalElementT<Type, Wrapper>>>
@@ -97,6 +111,8 @@ export namespace Potato::Misc
 		IntervalT(IntervalT const&) = default;
 		IntervalT(IntervalT &&) = default;
 		IntervalT(std::initializer_list<ElementT> const& List, AllocatorT Allocator = {}) : IntervalT(WrapperT::Ordering(List, std::move(Allocator))) {}
+		ElementT& operator[](std::size_t Index) { return Elements[Index]; }
+		ElementT const& operator[](std::size_t Index) const { return Elements[Index]; }
 
 		bool IsInclude(Type Input) const { return WrapperT::IsInclude(std::span(Elements), Input); }
 
@@ -106,6 +122,9 @@ export namespace Potato::Misc
 		IntervalT operator-(IntervalT<Type, Wrapper, OAllocatorT> const& T1) const { return WrapperT::Sub(std::span(Elements), std::span(T1.Elements), AllocatorT{}); }
 		template<typename OAllocatorT>
 		IntervalT operator&(IntervalT<Type, Wrapper, OAllocatorT> const& T1) const { return WrapperT::And(std::span(Elements), std::span(T1.Elements), AllocatorT{}); }
+	
+		IntervalT& operator=(IntervalT const&) = default;
+		IntervalT& operator=(IntervalT&&) = default;
 
 	protected:
 
@@ -121,51 +140,237 @@ export namespace Potato::Misc
 
 	template<typename Type, typename Wrapper>
 	template<typename AllocatorT>
-	static auto IntervalWrapperT<Type, Wrapper>::Ordering(std::initializer_list<ElementT> const& List, AllocatorT Allocator)
+	auto IntervalWrapperT<Type, Wrapper>::Ordering(std::initializer_list<ElementT> const& List, AllocatorT Allocator)
 		-> IntervalT<Type, Wrapper, AllocatorT>
 	{
 		IntervalT<Type, Wrapper, AllocatorT> Result(Allocator);
 		for (auto Ite : List)
 		{
-			AddExe(Result, Ite);
+			AddOne(Result.Elements, Ite);
+		}
+		return Result;
+	}
+
+	template<typename Type, typename Wrapper>
+	auto IntervalWrapperT<Type, Wrapper>::Locate(std::span<ElementT const> Source, ElementT Value) -> std::tuple<LocateResult, LocateResult>
+	{
+		bool F1Front = true;
+		auto Find = std::find_if(Source.begin(), Source.end(), [&](ElementT const& Ele){
+			if (std::is_lt(Order(Value.Start, Ele.Start)))
+			{
+				return true;
+			}
+			else if (std::is_lteq(Order(Value.Start, Ele.End)))
+			{
+				F1Front = false;
+				return true;
+			}else
+				return false;
+		});
+
+		bool F2Front = true;
+		auto Find2 = std::find_if(Find, Source.end(), [&](ElementT const& Ele) {
+			if (std::is_lt(Order(Value.End, Ele.Start)))
+			{
+				return true;
+			}
+			else if (std::is_lteq(Order(Value.End, Ele.End)))
+			{
+				F2Front = false;
+				return true;
+			}
+			else
+				return false;
+		});
+		return {
+			{Find != Source.end() ? Find - Source.begin() : Source.size(), F1Front},
+			{Find2 != Source.end() ? Find2 - Source.begin() : Source.size(), F2Front},
+		};
+	}
+
+	template<typename Type, typename Wrapper>
+	template<typename AllocatorT>
+	static bool IntervalWrapperT<Type, Wrapper>::AddOne(std::vector<ElementT, AllocatorT>& Output, ElementT Input)
+	{
+		if (Input)
+		{
+			auto [B, E] = IntervalWrapperT::Locate(std::span(Output), Input);
+			if (E.Index == 0)
+			{
+				if (E.InFront)
+				{
+					Output.insert(Output.begin(), Input);
+					return true;
+				}
+				else if(B.InFront)
+					Output[0].Start = Input.Start;
+				return false;
+			}
+			else if (B.Index == Output.size())
+			{
+				Output.push_back(Input);
+				return true;
+			}
+			else if (B.Index == E.Index)
+			{
+				if (B.InFront && E.InFront)
+				{
+					Output.insert(Output.begin() + B.Index, Input);
+					return true;
+				}
+				else {
+					if (B.InFront)
+					{
+						auto Ite = Output.begin() + B.Index;
+						Ite->Start = Input.Start;
+					}
+					return false;
+				}
+			}
+			else {
+				auto BIte = Output.begin() + B.Index;
+				if(B.InFront)
+					BIte->Start = Input.Start;
+				if(E.InFront)
+					BIte->End = Input.End;
+				else
+					BIte->End = Output[E.Index].End;
+				if(!E.InFront && E.Index < Output.size())
+					Output.erase(BIte + 1, Output.begin() + E.Index + 1);
+				else
+					Output.erase(BIte + 1, Output.begin() + E.Index);
+				return false;
+			}
+		}
+		return false;
+	}
+
+	template<typename Type, typename Wrapper>
+	template<typename AllocatorT>
+	static auto IntervalWrapperT<Type, Wrapper>::Add(std::span<ElementT const> T1, std::span<ElementT const> T2, AllocatorT Allocator)
+		-> IntervalT<Type, Wrapper, AllocatorT>
+	{
+		IntervalT<Type, Wrapper, AllocatorT> Result(Allocator);
+		for (auto Ite : T1)
+		{
+			AddOne(Result.Elements, Ite);
+		}
+		for(auto Ite : T2)
+		{
+			AddOne(Result.Elements, Ite);
 		}
 		return Result;
 	}
 
 	template<typename Type, typename Wrapper>
 	template<typename AllocatorT>
-	static bool IntervalWrapperT<Type, Wrapper>::AddOne(IntervalT<Type, Wrapper, AllocatorT>& Output, ElementT Input)
+	static auto IntervalWrapperT<Type, Wrapper>::Sub(std::span<ElementT const> T1, std::span<ElementT const> T2, AllocatorT Allocator)
+		-> IntervalT<Type, Wrapper, AllocatorT>
 	{
-		if (Input)
+		IntervalT<Type, Wrapper, AllocatorT> Result(Allocator);
+
+		while (!T1.empty())
 		{
-			auto LeftIte = std::find_if(Result.begin(), Result.end(), [=](ElementT Ele) { return std::is_lteq(Order(Ite.Start, Ele.Start)); });
-			if (LeftIte == Result.end())
+			auto Cur = T1[0];
+			T1 = T1.subspan(1);
+			bool NeedAdd = true;
+			while (!T2.empty())
 			{
-				Result.push_back(Ite);
+				auto Cur2 = T2[0];
+				auto [B, E] = Locate({&Cur, 1}, Cur2);
+				if (E.Index == 0)
+				{
+					if (E.InFront)
+					{
+						T2 = T2.subspan(1);
+						continue;
+					}
+					else if (!B.InFront)
+					{
+						if (!std::is_eq(Order(Cur.Start, Cur2.Start)))
+							Result.Elements.push_back({ Cur.Start, Cur2.Start });
+					}
+					if (std::is_eq(Order(Cur.End, Cur2.End)))
+					{
+						T2 = T2.subspan(1);
+						NeedAdd = false;
+						break;
+					}
+					else {
+						Cur = { Cur2.End, Cur.End };
+						T2 = T2.subspan(1);
+					}
+				}
+				else if (E.Index == 1)
+				{
+					if(B.Index == 1)
+						break;
+					else if (!B.InFront && !std::is_eq(Order(Cur.Start, Cur2.Start)))
+					{
+						Result.Elements.push_back({Cur.Start, Cur2.Start});
+					}
+					NeedAdd = false;
+					break;
+				}
 			}
-			else {
-				auto RigIte = std::find_if(Result.begin(), Result.end(), [=](ElementT Ele) { return std::is_lteq(Order(Ite.End, Ele.End)); });
-				if (RigIte == LeftIte)
-				{
-
-				}
-				else if (RigIte > LeftIte)
-				{
-
-				}else if()
-				assert(RigIte >= LeftIte);
-				if (LeftIte == RigIte)
-				{
-					LeftIte->Start = Ite.Start;
-				}
-				else {
-
-				}
+			if (NeedAdd)
+			{
+				Result.Elements.push_back(Cur);
 			}
-			return true;
 		}
-		return false;
+		return Result;
 	}
+
+	template<typename Type, typename Wrapper>
+	template<typename AllocatorT>
+	static auto IntervalWrapperT<Type, Wrapper>::And(std::span<ElementT const> T1, std::span<ElementT const> T2, AllocatorT Allocator)
+		-> IntervalT<Type, Wrapper, AllocatorT>
+	{
+		IntervalT<Type, Wrapper, AllocatorT> Result(Allocator);
+
+		while (!T1.empty())
+		{
+			auto Cur = T1[0];
+			T1 = T1.subspan(1);
+			while (!T2.empty())
+			{
+				auto Cur2 = T2[0];
+				auto [B, E] = Locate({ &Cur, 1 }, Cur2);
+				if (E.Index == 0)
+				{
+					if (!E.InFront)
+					{
+						if (!B.InFront)
+						{
+							Result.Elements.push_back(Cur2);
+						}
+						else {
+							Result.Elements.push_back({ Cur.Start, Cur2.End });
+						}
+					}
+					T2 = T2.subspan(1);
+					continue;
+				}
+				else if (E.Index == 1)
+				{
+					if (B.Index != 1)
+					{
+						if (B.InFront)
+						{
+							Result.Elements.push_back(Cur);
+						}
+						else
+						{
+							Result.Elements.push_back({ Cur2.Start, Cur.End });
+						}
+					}
+					break;
+				}
+			}
+		}
+		return Result;
+	}
+
 
 	/*
 	struct NoDetectT {};

@@ -23,7 +23,7 @@ namespace Potato::SLRX
 			TElement Ele{ Input };
 			return Result{
 				VariantElement{Ele}, 
-				NTElement::MetaData{Input.Value, {Input.Shift.TokenIndex, 1}}
+				NTElement::MetaData{Input.Value, {Input.Shift.TokenIndex, Input.Shift.TokenIndex + 1}}
 			};
 		}
 		else if (Input.IsPredictNoTerminal())
@@ -46,10 +46,11 @@ namespace Potato::SLRX
 				if (!TemporaryDataBuffer.empty())
 				{
 					auto Start = TemporaryDataBuffer.begin()->Mate.TokenIndex.Begin();
-					TokenIndex = { Start, TemporaryDataBuffer.rbegin()->Mate.TokenIndex.End() - Start };
+					TokenIndex = { Start, TemporaryDataBuffer.rbegin()->Mate.TokenIndex.End() };
 				}
 				else {
-					TokenIndex = { DataBuffer.empty() ? 0 : DataBuffer.rbegin()->Mate.TokenIndex.End(), 0 };
+					auto I = DataBuffer.empty() ? 0 : DataBuffer.rbegin()->Mate.TokenIndex.End();
+					TokenIndex = { I, I };
 				}
 				NTElement ele{ Input, TokenIndex, std::span(TemporaryDataBuffer) };
 				return Result{VariantElement{ ele }, NTElement::MetaData{ Input.Value, TokenIndex } };
@@ -430,7 +431,7 @@ namespace Potato::SLRX
 
 		Status.push_back(Infos.GetStartupSearchElements());
 		Infos.ExpandSearchElements(Status);
-		PreNode.push_back({ Status.size(), 1 });
+		PreNode.push_back({ Status.size(), Status.size() + 1 });
 		PreNode.push_back({ 0, Status.size() });
 		Status.push_back(Infos.GetEndSearchElements());
 
@@ -478,12 +479,12 @@ namespace Potato::SLRX
 						if (FindIte != Mappings.end())
 							FindIte->Status.push_back(CurrentState[Index]);
 						else {
-							ShiftMapping sm{ *CurSearch.ShiftSymbol, {CurrentState[Index]}, {AccepatbelProductionIndexs.size(), 0}, false };
+							ShiftMapping sm{ *CurSearch.ShiftSymbol, {CurrentState[Index]}, {AccepatbelProductionIndexs.size(), AccepatbelProductionIndexs.size()}, false };
 							Mappings.push_back(std::move(sm));
 						}
 					}
 					else {
-						ShiftMapping Cur{ *CurSearch.ShiftSymbol, {CurrentState[Index]}, {AccepatbelProductionIndexs.size(), CurSearch.AcceptableProductionIndex.size() }, false };
+						ShiftMapping Cur{ *CurSearch.ShiftSymbol, {CurrentState[Index]}, {AccepatbelProductionIndexs.size(), AccepatbelProductionIndexs.size() + CurSearch.AcceptableProductionIndex.size() }, false };
 						AccepatbelProductionIndexs.insert(AccepatbelProductionIndexs.end(), CurSearch.AcceptableProductionIndex.begin(), CurSearch.AcceptableProductionIndex.end());
 						for (std::size_t Index2 = 0; Index2 < Mappings.size(); ++Index2)
 						{

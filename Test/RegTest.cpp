@@ -153,6 +153,7 @@ int main()
 
 	try {
 		NfaT N(U"abs\\d123-123[a]");
+		volatile int i = 0;
 	}
 	catch (Exception::UnaccaptableRegex const& Rex)
 	{

@@ -7,9 +7,9 @@ import Potato.Encode;
 
 namespace Potato::Reg
 {
-	
-	SeqIntervalT const& MaxIntervalRange() { 
-		static SeqIntervalT Temp{ IntervalT{ 1, MaxChar() } };
+
+	IntervalT const& MaxInterval() {
+		static IntervalT Temp{{ 1, MaxChar() }};
 		return Temp;
 	};
 
@@ -27,49 +27,49 @@ namespace Potato::Reg
 				switch (InputSymbol)
 				{
 				case U'-':
-					StoragedSymbol.push_back({ ElementEnumT::Min, {IntervalT{InputSymbol}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::Min, InputSymbol, TokenIndex });
 					break;
 				case U'[':
-					StoragedSymbol.push_back({ ElementEnumT::BracketsLeft, {IntervalT{InputSymbol}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::BracketsLeft, InputSymbol, TokenIndex });
 					break;
 				case U']':
-					StoragedSymbol.push_back({ ElementEnumT::BracketsRight, {IntervalT{InputSymbol}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::BracketsRight, InputSymbol, TokenIndex });
 					break;
 				case U'{':
-					StoragedSymbol.push_back({ ElementEnumT::CurlyBracketsLeft, {IntervalT{InputSymbol}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::CurlyBracketsLeft, InputSymbol, TokenIndex });
 					break;
 				case U'}':
-					StoragedSymbol.push_back({ ElementEnumT::CurlyBracketsRight, {IntervalT{InputSymbol}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::CurlyBracketsRight, InputSymbol, TokenIndex });
 					break;
 				case U',':
-					StoragedSymbol.push_back({ ElementEnumT::Comma, {IntervalT{InputSymbol}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::Comma, InputSymbol, TokenIndex });
 					break;
 				case U'(':
-					StoragedSymbol.push_back({ ElementEnumT::ParenthesesLeft, {IntervalT{InputSymbol}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::ParenthesesLeft, InputSymbol, TokenIndex });
 					break;
 				case U')':
-					StoragedSymbol.push_back({ ElementEnumT::ParenthesesRight, {IntervalT{InputSymbol}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::ParenthesesRight, InputSymbol, TokenIndex });
 					break;
 				case U'*':
-					StoragedSymbol.push_back({ ElementEnumT::Mulity, {IntervalT{InputSymbol}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::Mulity, InputSymbol, TokenIndex });
 					break;
 				case U'?':
-					StoragedSymbol.push_back({ ElementEnumT::Question, {IntervalT{InputSymbol}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::Question, InputSymbol, TokenIndex });
 					break;
 				case U'.':
-					StoragedSymbol.push_back({ ElementEnumT::CharSet, MaxIntervalRange(), TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::CharSet, MaxInterval(), TokenIndex });
 					break;
 				case U'|':
-					StoragedSymbol.push_back({ ElementEnumT::Or, {IntervalT{InputSymbol}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::Or, InputSymbol, TokenIndex });
 					break;
 				case U'+':
-					StoragedSymbol.push_back({ ElementEnumT::Add, {IntervalT{InputSymbol}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::Add, InputSymbol, TokenIndex });
 					break;
 				case U'^':
-					StoragedSymbol.push_back({ ElementEnumT::Not, {IntervalT{InputSymbol}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::Not, InputSymbol, TokenIndex });
 					break;
 				case U':':
-					StoragedSymbol.push_back({ ElementEnumT::Colon, {IntervalT{InputSymbol}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::Colon, InputSymbol, TokenIndex });
 					break;
 				case U'\\':
 					CurrentState = StateT::Transfer;
@@ -77,9 +77,9 @@ namespace Potato::Reg
 					break;
 				default:
 					if (InputSymbol >= U'0' && InputSymbol <= U'9')
-						StoragedSymbol.push_back({ ElementEnumT::Num, {IntervalT{InputSymbol}}, TokenIndex });
+						StoragedSymbol.push_back({ ElementEnumT::Num, InputSymbol, TokenIndex });
 					else
-						StoragedSymbol.push_back({ ElementEnumT::SingleChar, {IntervalT{InputSymbol}}, TokenIndex });
+						StoragedSymbol.push_back({ ElementEnumT::SingleChar, InputSymbol, TokenIndex });
 					break;
 				}
 				break;
@@ -89,68 +89,67 @@ namespace Potato::Reg
 				switch (InputSymbol)
 				{
 				case U'd':
-					StoragedSymbol.push_back({ ElementEnumT::CharSet, {IntervalT{U'0', U'9' + 1}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::CharSet, {{U'0', U'9' + 1}}, TokenIndex });
 					CurrentState = StateT::Normal;
 					break;
 				case U'D':
 				{
-					SeqIntervalT Tem{ { IntervalT{1, U'0'},IntervalT{U'9' + 1, MaxChar()} } };
+					IntervalT Tem{ {{1, U'0'}, {U'9' + 1, MaxChar()} } };
 					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(Tem), TokenIndex });
 					CurrentState = StateT::Normal;
 					break;
 				}
 				case U'f':
-					StoragedSymbol.push_back({ ElementEnumT::SingleChar, {IntervalT{U'\f'}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, U'\f', TokenIndex });
 					CurrentState = StateT::Normal;
 					break;
 				case U'n':
-					StoragedSymbol.push_back({ ElementEnumT::SingleChar, {IntervalT{U'\n'}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, U'\n', TokenIndex });
 					CurrentState = StateT::Normal;
 					break;
 				case U'r':
-					StoragedSymbol.push_back({ ElementEnumT::SingleChar, {IntervalT{U'\r'}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, U'\r', TokenIndex });
 					CurrentState = StateT::Normal;
 					break;
 				case U't':
-					StoragedSymbol.push_back({ ElementEnumT::SingleChar, {IntervalT{U'\t'}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, U'\t', TokenIndex });
 					CurrentState = StateT::Normal;
 					break;
 				case U'v':
-					StoragedSymbol.push_back({ ElementEnumT::SingleChar, {IntervalT{U'\v'}}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, U'\v', TokenIndex });
 					CurrentState = StateT::Normal;
 					break;
 				case U's':
 				{
-					SeqIntervalT tem({ IntervalT{ 1, 33 }, IntervalT{127, 128} });
+					IntervalT tem({{ 1, 33 },{127, 128} });
 					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(tem), TokenIndex });
 					CurrentState = StateT::Normal;
 					break;
 				}
 				case U'S':
 				{
-					SeqIntervalT tem({ IntervalT{33, 127}, IntervalT{128, MaxChar()} });
+					IntervalT tem({{33, 127}, {128, MaxChar()} });
 					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(tem), TokenIndex });
 					CurrentState = StateT::Normal;
 					break;
 				}
 				case U'w':
 				{
-					SeqIntervalT tem({ IntervalT{ U'A', U'Z' + 1 }, IntervalT{ U'_'}, IntervalT{ U'a', U'z' + 1 }});
+					IntervalT tem({{ U'A', U'Z' + 1 },{ U'_'}, { U'a', U'z' + 1 }});
 					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(tem), TokenIndex });
 					CurrentState = StateT::Normal;
 					break;
 				}
 				case U'W':
 				{
-					SeqIntervalT tem({ IntervalT{ U'A', U'Z' + 1 }, IntervalT{ U'_'}, IntervalT{ U'a', U'z' + 1 } });
-					SeqIntervalT total({ 1, MaxChar() });
-					StoragedSymbol.push_back({ ElementEnumT::CharSet, tem.Complementary(MaxIntervalRange()), TokenIndex });
+					IntervalT tem({{ U'A', U'Z' + 1 },{ U'_'}, { U'a', U'z' + 1 } });
+					StoragedSymbol.push_back({ ElementEnumT::CharSet, MaxInterval() - tem, TokenIndex});
 					CurrentState = StateT::Normal;
 					break;
 				}
 				case U'z':
 				{
-					SeqIntervalT tem(IntervalT{ 256, MaxChar() });
+					IntervalT tem({{ 256, MaxChar() }});
 					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(tem), TokenIndex });
 					CurrentState = StateT::Normal;
 					break;
@@ -172,7 +171,7 @@ namespace Potato::Reg
 					break;
 				}
 				default:
-					StoragedSymbol.push_back({ ElementEnumT::SingleChar, IntervalT{InputSymbol}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, InputSymbol, TokenIndex });
 					CurrentState = StateT::Normal;
 					break;
 				}
@@ -201,13 +200,13 @@ namespace Potato::Reg
 				}
 				if ((Number == 4 && !NumberIsBig) || (NumberIsBig && Number == 6))
 				{
-					StoragedSymbol.push_back({ ElementEnumT::SingleChar, IntervalT{NumberChar}, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, NumberChar, TokenIndex });
 					CurrentState = StateT::Normal;
 				}
 				break;
 			}
 			case StateT::Raw:
-				StoragedSymbol.push_back({ ElementEnumT::SingleChar, IntervalT{InputSymbol}, TokenIndex });
+				StoragedSymbol.push_back({ ElementEnumT::SingleChar, InputSymbol, TokenIndex });
 				break;
 			default:
 				assert(false);
@@ -367,7 +366,7 @@ namespace Potato::Reg
 	};
 
 
-	NfaT NfaT::Create(std::u32string_view Str, bool IsRaw)
+	NfaT NfaT::Create(std::u32string_view Str, bool IsRaw, StandardT Mask)
 	{
 		RegLexerT Lex(IsRaw);
 
@@ -375,17 +374,17 @@ namespace Potato::Reg
 		for (auto& Ite : Str)
 		{
 			if (!Lex.Consume(Ite, { Index, Index + 1 }))
-				throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {Index, Str.size() - Index} };
+				throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {Index, Str.size()} };
 			++Index;
 		}
 		if(!Lex.EndOfFile())
-			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {Index, Str.size() - Index} };
+			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {Index, Str.size()} };
 		try {
-			return NfaT{ Lex.GetSpan() };
+			return NfaT{ Lex.GetSpan(), Mask };
 		}
 		catch (BadRegexRef EIndex)
 		{
-			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {EIndex.Index , Str.size() - EIndex.Index} };
+			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {EIndex.Index , Str.size()} };
 		}
 	}
 
@@ -406,12 +405,12 @@ namespace Potato::Reg
 			if(Result.End() == 0)
 				Result = Tokens[Index].Token;
 			else
-				Result = Result.Union(Tokens[Index].Token);
+				Result = Result.Expand(Tokens[Index].Token);
 		}
 		return Result;
 	}
 
-	void NfaT::AddConsume(NodeSetT Set, SeqIntervalT Chars, ContentT Content)
+	void NfaT::AddConsume(NodeSetT Set, IntervalT Chars, ContentT Content)
 	{
 		EdgeT Edge;
 		Edge.ToNode = Set.Out;
@@ -420,7 +419,7 @@ namespace Potato::Reg
 		Nodes[Set.In].Edges.push_back(std::move(Edge));
 	}
 	
-	NfaT::NfaT(std::span<RegLexerT::ElementT const> InputSpan)
+	NfaT::NfaT(std::span<RegLexerT::ElementT const> InputSpan, StandardT Mask)
 	{
 		SLRX::SymbolProcessor SymPro(RexSLRXWrapper());
 		auto IteSpan = InputSpan;
@@ -438,7 +437,9 @@ namespace Potato::Reg
 
 		auto StepSpan = SymPro.GetSteps();
 
-		auto Re = ProcessParsingStep(StepSpan, [&, this](SLRX::VariantElement Var) -> std::any
+		auto Top = AddNode();
+
+		auto Re = ProcessParsingStepWithOutputType<NodeSetT>(StepSpan, [&, this](SLRX::VariantElement Var) -> std::any
 		{
 			if (Var.IsTerminal())
 			{
@@ -458,38 +459,33 @@ namespace Potato::Reg
 				case 60:
 				case 41:
 				{
-					return NT[0].Consume<SeqIntervalT>();
+					return NT[0].Consume<IntervalT>();
 				}
 				case 42:
 				{
-					auto Cur = NT[0].Consume<SeqIntervalT>();
-					auto Cur2 = NT[2].Consume<SeqIntervalT>();
-
-					IntervalT Inter{
-						std::min(Cur[0].start, Cur2[0].start),
-						std::max(Cur[0].end, Cur2[0].end)
-					};
-					return SeqIntervalT{Inter};
+					auto Cur = NT[0].Consume<IntervalT>();
+					auto Cur2 = NT[2].Consume<IntervalT>();
+					return IntervalT{ Cur[0].Expand(Cur2[0])};
 				}
 				case 1:
 					return NT[0].Consume();
 				case 3:
 				{
-					auto T1 = NT[0].Consume<SeqIntervalT>();
-					auto T2 = NT[1].Consume<SeqIntervalT>();
-					return SeqIntervalT{ {SeqIntervalWrapperT{T1}.Union(T2)} };
+					auto T1 = NT[0].Consume<IntervalT>();
+					auto T2 = NT[1].Consume<IntervalT>();
+					return T1 + T2;
 				}
 				case 61:
 				{
-					auto T1 = NT[0].Consume<SeqIntervalT>();
-					auto T2 = NT[1].Consume<SeqIntervalT>();
-					return SeqIntervalT{ SeqIntervalWrapperT{T2}.Union(T1) };
+					auto T1 = NT[0].Consume<IntervalT>();
+					auto T2 = NT[1].Consume<IntervalT>();
+					return T1 + T2;
 				}
 				case 62:
 				{
-					auto T1 = NT[1].Consume<SeqIntervalT>();
-					auto T2 = NT[0].Consume<SeqIntervalT>();
-					return SeqIntervalT{ SeqIntervalWrapperT{T2}.Union(T1) };
+					auto T1 = NT[1].Consume<IntervalT>();
+					auto T2 = NT[0].Consume<IntervalT>();
+					return T1 + T2;
 				}
 				case 63:
 				{
@@ -500,13 +496,13 @@ namespace Potato::Reg
 					auto T1 = AddNode();
 					auto T2 = AddNode();
 					NodeSetT Set{ T1, T2 };
-					AddConsume(Set, NT[1].Consume<SeqIntervalT>(), Content);
+					AddConsume(Set, NT[1].Consume<IntervalT>(), Content);
 					return Set;
 				}
 				case 5:
 				{
-					auto Tar = NT[2].Consume<SeqIntervalT>();
-					auto P = SeqIntervalWrapperT{ MaxIntervalRange() }.Remove(Tar);
+					auto Tar = NT[2].Consume<IntervalT>();
+					auto P = MaxInterval() - Tar;
 					auto T1 = AddNode();
 					auto T2 = AddNode();
 					NodeSetT Set{ T1, T2 };
@@ -521,7 +517,6 @@ namespace Potato::Reg
 				{
 					NodeSetT Last = NT.Datas[1].Consume<NodeSetT>();
 					return AddCapture(Last, Content);
-					return Set;
 				}
 				case 8:
 				{
@@ -539,9 +534,9 @@ namespace Potato::Reg
 				{
 					auto T1 = AddNode();
 					auto T2 = AddNode();
-					auto Tar = NT[0].Consume<char32_t>();
+					auto Tar = NT[0].Consume<IntervalT>();
 					NodeSetT Set{ T1, T2 };
-					AddConsume({T1, T2},  { {Tar, Tar + 1} }, Content);
+					AddConsume({T1, T2}, std::move(Tar), Content);
 					return Set;
 				}
 				case 50:
@@ -549,7 +544,7 @@ namespace Potato::Reg
 					auto T1 = AddNode();
 					auto T2 = AddNode();
 					NodeSetT Set{ T1, T2 };
-					AddConsume(Set, NT[0].Consume<SeqIntervalT>(), Content);
+					AddConsume(Set, NT[0].Consume<IntervalT>(), Content);
 					return Set;
 				}
 				case 10:
@@ -628,7 +623,7 @@ namespace Potato::Reg
 				}
 				case 18:
 				{
-					char32_t Te = NT[0].Consume<SeqIntervalT>()[0].start;
+					char32_t Te = NT[0].Consume<IntervalT>()[0].Start;
 					std::size_t Count = Te - U'0';
 					return Count;
 				}
@@ -636,7 +631,7 @@ namespace Potato::Reg
 				{
 					auto Te = NT[0].Consume<std::size_t>();
 					Te *= 10;
-					auto Te2 = NT[0].Consume<SeqIntervalT>()[0].start;
+					auto Te2 = NT[0].Consume<IntervalT>()[0].Start;
 					Te += Te2 - U'0';
 					return Te;
 				}
@@ -662,9 +657,61 @@ namespace Potato::Reg
 			}
 		});
 
+		{
+			EdgeT Tem;
+			Tem.ToNode = Re.In;
+			Nodes[Top].Edges.push_back(Tem);
+		}
+
+		{
+			auto Last = AddNode();
+			EdgeT Tem;
+			Tem.Property.Type = EdgePropertyT::Accept;
+			Tem.Property.Par1 = Mask;
+			Tem.ToNode = Last;
+			Nodes[Re.Out].Edges.push_back(Tem);
+		}
+
+		
+
 		volatile int i = 0;
 	}
 
+	auto NfaT::AddCapture(NodeSetT Inside, ContentT Content) -> NodeSetT
+	{
+		auto T1 = AddNode();
+		auto T2 = AddNode();
+
+		std::size_t I = CaptureIndex++;
+
+		auto Tk = Translate(Content.TokenIndex, Content.Tokens);
+
+		EdgeT Ege;
+		Ege.Property.Type = EdgePropertyT::CaptureBegin;
+		Ege.Property.Index = I;
+		Ege.ToNode = Inside.In;
+		Ege.TokenIndex = Tk;
+
+		Nodes[T1].Edges.push_back(Ege);
+
+		EdgeT Ege2;
+		Ege2.Property.Type = EdgePropertyT::CaptureEnd;
+		Ege2.Property.Index = I;
+		Ege2.ToNode = T2;
+		Ege2.TokenIndex = Tk;
+
+		Nodes[Inside.Out].Edges.push_back(Ege2);
+
+		return {T1, T2};
+	}
+
+	auto NfaT::AddCounter(NodeSetT Inside, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool Greedy, ContentT Content) -> NodeSetT
+	{
+		auto Tk = Translate(Content.TokenIndex, Content.Tokens);
+
+
+		return Inside;
+	}
 
 	/*
 
