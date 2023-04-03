@@ -666,10 +666,9 @@ namespace Potato::Reg
 		{
 			auto Last = AddNode();
 			EdgeT Tem;
-			Tem.Property.Type = EdgePropertyT::Accept;
-			Tem.Property.Par1 = Mask;
+			Tem.Propertys.push_back({ EdgePropertyT::Accept, 0, Mask});
 			Tem.ToNode = Last;
-			Nodes[Re.Out].Edges.push_back(Tem);
+			Nodes[Re.Out].Edges.push_back(std::move(Tem));
 		}
 
 		
@@ -687,16 +686,19 @@ namespace Potato::Reg
 		auto Tk = Translate(Content.TokenIndex, Content.Tokens);
 
 		EdgeT Ege;
-		Ege.Property.Type = EdgePropertyT::CaptureBegin;
-		Ege.Property.Index = I;
+		Edge.Property.push_back(
+			{ EdgePropertyT::CaptureBegin, I, 0}
+		);
 		Ege.ToNode = Inside.In;
 		Ege.TokenIndex = Tk;
 
 		Nodes[T1].Edges.push_back(Ege);
 
 		EdgeT Ege2;
-		Ege2.Property.Type = EdgePropertyT::CaptureEnd;
-		Ege2.Property.Index = I;
+
+		Edge2.Property.push_back(
+			{ EdgePropertyT::CaptureEnd, I, 0 }
+		);
 		Ege2.ToNode = T2;
 		Ege2.TokenIndex = Tk;
 
@@ -708,15 +710,139 @@ namespace Potato::Reg
 	auto NfaT::AddCounter(NodeSetT Inside, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool Greedy, ContentT Content) -> NodeSetT
 	{
 		auto Tk = Translate(Content.TokenIndex, Content.Tokens);
+		assert(static_cast<bool>(Min) != static_cast<bool>(Max));
+		auto T1 = AddNode();
+		auto T2 = AddNode();
+		auto T3 = AddNode();
 
+		std::size_t I = CountIndex++;
 
-		return Inside;
+		auto Tk = Translate(Content.TokenIndex, Content.Tokens);
+
+		StandardT IMin = 0;
+
+		if (Min.has_value())
+		{
+			Misc::SerilizerHelper::CrossTypeSetThrow<RegexOutOfRange>(IMin, *Min, RegexOutOfRange::TypeT::Counter, Tk);
+		}
+
+		StandardT IMax;
+
+		if (Max.has_value())
+		{
+			Misc::SerilizerHelper::CrossTypeSetThrow<RegexOutOfRange>(IMax, *IMax, RegexOutOfRange::TypeT::Counter, Tk);
+		}
+
+		{
+			EdgeT Ege;
+			Ege.Propertys.push_back(
+				{ EdgePropertyT::ZeroCounter, I, 0 }
+			);
+			Ege.ToNode = T2;
+			Ege.TokenIndex = Tk;
+			Nodes[T1].Edges.push_back(std::move(Ege));
+		}
+
+		{
+			EdgeT Ege;
+			Ege.ToNode = T2;
+			Ege.TokenIndex = Tk;
+			Nodes[Inside.Out].Edges.push_back(std::move(Ege));
+		}
+
+		{
+			EdgeT Ege;
+			Ege.ToNode = Inside.In;
+			Ege.TokenIndex = Tk;
+			Ege.push_back(
+				{ EdgePropertyT::AddCount, I, 0 }
+			);
+
+			if (Max.has_value())
+			{
+				Ege.push_back(
+					{ EdgePropertyT::LessCount, I, IMax }
+				);
+			}
+
+			EdgeT Ege2;
+			Ege2.ToNode = T3;
+			Ege2.TokenIndex = Tk;
+
+			if (Min.has_value())
+			{
+				Ege2.push_back(
+					{ EdgePropertyT::BiggerCounter, I, IMin }
+				);
+			}
+
+			if (Max.has_value())
+			{
+				Ege2.push_back(
+					{ EdgePropertyT::LessCount, I, IMax }
+				);
+			}
+
+			if (Greedy)
+			{
+				Nodes[T2].Edges.push_back(std::move(Ege));
+				Nodes[T2].Edges.push_back(std::move(Ege2));
+			}
+			else {
+				Nodes[T2].Edges.push_back(std::move(Ege2));
+				Nodes[T2].Edges.push_back(std::move(Ege));
+			}
+		}
+
+		return {T1, T3};
+	}
+
+	void NfaT::Link(NfaT const& Input)
+	{
+		Nodes.reserve(Nodes.size() + Input.Nodes.size());
+		auto Last = Nodes.size();
+		Nodes.insert(Nodes.end(), Input.Nodes.begin(), Input.Nodes.end());
+		auto Span = std::span(Nodes).subspan(Last);
+		for (auto& Ite : Span)
+		{
+			Ite.CurIndex += Last;
+			for (auto& Ite2 : Ite.Edges)
+			{
+				for (auto& Ite3 : Ite2.Propertys)
+				{
+					switch (Ite3.Type)
+					{
+					case EdgePropertyT::CaptureBegin:
+					case EdgePropertyT::CaptureEnd:
+						Ite3.Index += CaptureIndex;
+						break;
+					case EdgePropertyT::ZeroCount:
+					case EdgePropertyT::AddCount:
+					case EdgePropertyT::LessCount:
+					case EdgePropertyT::BiggerCount:
+						Ite3.Index += CountIndex;
+					default:
+						break;
+					}
+				}
+			}
+		}
+		CaptureIndex += Input.CaptureIndex;
+		CounterIndex += Input.CounterIndex;
+	}
+
+	NormalizeNfaT::NormalizeNfaT(NfaT const& Ref)
+	{
+		std::map<std::set<std::size_t>, std::size_t> NodeMapping;
+		std::vector<std::set<std::size_t>> WaittingStart;
+		WaittingStart.push_back({0});
+		while (!WaittingStart.empty())
+		{
+
+		}
 	}
 
 	/*
-
-	
-
 	std::any RegNoTerminalFunction(Potato::SLRX::NTElement& NT, EpsilonNFA& Output)
 	{
 

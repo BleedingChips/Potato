@@ -86,6 +86,7 @@ export namespace Potato::Reg
 			: NfaT(Create(Str, IsRaw, Mask)) {}
 		NfaT(NfaT const&) = default;
 		NfaT(NfaT&&) = default;
+		void Link(NfaT const&);
 
 	protected:
 
@@ -116,7 +117,8 @@ export namespace Potato::Reg
 			CaptureEnd,
 			ZeroCount,
 			AddCount,
-			DetectCount,
+			LessCount,
+			BiggerCount,
 			Accept,
 		};
 
@@ -125,12 +127,11 @@ export namespace Potato::Reg
 			EdgePropertyT Type = EdgePropertyT::None;
 			std::size_t Index = 0;
 			StandardT Par1 = 0;
-			StandardT Par2 = 0;
 		};
 
 		struct EdgeT
 		{
-			ProEdgeT Property;
+			std::vector<ProEdgeT> Propertys;
 			std::size_t ToNode;
 			IntervalT CharSets;
 			Misc::IndexSpan<> TokenIndex;
@@ -145,9 +146,23 @@ export namespace Potato::Reg
 		std::vector<NodeT> Nodes;
 		std::size_t CaptureIndex = 0;
 		std::size_t CountIndex = 0;
+
+		friend struct TempNfaT;
 	};
 
+	struct NormalizeNfaT
+	{
+		NormalizeNfaT(NfaT const& Ref);
+		NormalizeNfaT(NormalizeNfaT const&) = default;
+		NormalizeNfaT(NormalizeNfaT&&) = default;
 
+	protected:
+
+		using EdgeT = NfaT::EdgeT;
+		using NodeT = NfaT::NodeT;
+
+		std::vector<NodeT> Nodes;
+	};
 
 	
 
@@ -764,9 +779,9 @@ export namespace Potato::Reg
 			};
 
 			TypeT Type;
-			std::size_t Value;
+			Misc::IndexSpan<> Index;
 
-			RegexOutOfRange(TypeT Type, std::size_t Value) : Type(Type), Value(Value) {}
+			RegexOutOfRange(TypeT Type, Misc::IndexSpan<> Index) : Type(Type), Index(Index) {}
 			RegexOutOfRange(RegexOutOfRange const&) = default;
 			virtual char const* what() const override;
 		};
