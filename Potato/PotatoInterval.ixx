@@ -113,6 +113,7 @@ export namespace Potato::Misc
 		IntervalT(std::initializer_list<ElementT> const& List, AllocatorT Allocator = {}) : IntervalT(WrapperT::Ordering(List, std::move(Allocator))) {}
 		ElementT& operator[](std::size_t Index) { return Elements[Index]; }
 		ElementT const& operator[](std::size_t Index) const { return Elements[Index]; }
+		std::size_t Size() const { return Elements.size(); }
 
 		bool IsInclude(Type Input) const { return WrapperT::IsInclude(std::span(Elements), Input); }
 

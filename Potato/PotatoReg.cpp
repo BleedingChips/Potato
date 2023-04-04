@@ -651,9 +651,9 @@ namespace Potato::Reg
 					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), false, Content);
 				default:
 					assert(false);
-					return {};
 					break;
 				}
+				return {};
 			}
 		});
 
@@ -686,7 +686,7 @@ namespace Potato::Reg
 		auto Tk = Translate(Content.TokenIndex, Content.Tokens);
 
 		EdgeT Ege;
-		Edge.Property.push_back(
+		Ege.Propertys.push_back(
 			{ EdgePropertyT::CaptureBegin, I, 0}
 		);
 		Ege.ToNode = Inside.In;
@@ -696,7 +696,7 @@ namespace Potato::Reg
 
 		EdgeT Ege2;
 
-		Edge2.Property.push_back(
+		Ege2.Propertys.push_back(
 			{ EdgePropertyT::CaptureEnd, I, 0 }
 		);
 		Ege2.ToNode = T2;
@@ -715,9 +715,7 @@ namespace Potato::Reg
 		auto T2 = AddNode();
 		auto T3 = AddNode();
 
-		std::size_t I = CountIndex++;
-
-		auto Tk = Translate(Content.TokenIndex, Content.Tokens);
+		std::size_t I = CounterIndex++;
 
 		StandardT IMin = 0;
 
@@ -726,11 +724,11 @@ namespace Potato::Reg
 			Misc::SerilizerHelper::CrossTypeSetThrow<RegexOutOfRange>(IMin, *Min, RegexOutOfRange::TypeT::Counter, Tk);
 		}
 
-		StandardT IMax;
+		StandardT IMax = 0;
 
 		if (Max.has_value())
 		{
-			Misc::SerilizerHelper::CrossTypeSetThrow<RegexOutOfRange>(IMax, *IMax, RegexOutOfRange::TypeT::Counter, Tk);
+			Misc::SerilizerHelper::CrossTypeSetThrow<RegexOutOfRange>(IMax, *Max, RegexOutOfRange::TypeT::Counter, Tk);
 		}
 
 		{
@@ -754,14 +752,14 @@ namespace Potato::Reg
 			EdgeT Ege;
 			Ege.ToNode = Inside.In;
 			Ege.TokenIndex = Tk;
-			Ege.push_back(
-				{ EdgePropertyT::AddCount, I, 0 }
+			Ege.Propertys.push_back(
+				{ EdgePropertyT::AddCounter, I, 0 }
 			);
 
 			if (Max.has_value())
 			{
-				Ege.push_back(
-					{ EdgePropertyT::LessCount, I, IMax }
+				Ege.Propertys.push_back(
+					{ EdgePropertyT::LessCounter, I, IMax }
 				);
 			}
 
@@ -771,15 +769,15 @@ namespace Potato::Reg
 
 			if (Min.has_value())
 			{
-				Ege2.push_back(
+				Ege2.Propertys.push_back(
 					{ EdgePropertyT::BiggerCounter, I, IMin }
 				);
 			}
 
 			if (Max.has_value())
 			{
-				Ege2.push_back(
-					{ EdgePropertyT::LessCount, I, IMax }
+				Ege2.Propertys.push_back(
+					{ EdgePropertyT::LessCounter, I, IMax }
 				);
 			}
 
@@ -816,11 +814,11 @@ namespace Potato::Reg
 					case EdgePropertyT::CaptureEnd:
 						Ite3.Index += CaptureIndex;
 						break;
-					case EdgePropertyT::ZeroCount:
-					case EdgePropertyT::AddCount:
-					case EdgePropertyT::LessCount:
-					case EdgePropertyT::BiggerCount:
-						Ite3.Index += CountIndex;
+					case EdgePropertyT::ZeroCounter:
+					case EdgePropertyT::AddCounter:
+					case EdgePropertyT::LessCounter:
+					case EdgePropertyT::BiggerCounter:
+						Ite3.Index += CounterIndex;
 					default:
 						break;
 					}
@@ -831,15 +829,69 @@ namespace Potato::Reg
 		CounterIndex += Input.CounterIndex;
 	}
 
-	NormalizeNfaT::NormalizeNfaT(NfaT const& Ref)
+	std::set<std::size_t> NoEpsilonNfaT::SearchExpand(std::set<std::size_t> const& Tar, NfaT const& Source)
+	{
+		std::set<std::size_t> Result;
+		std::vector<std::size_t> SearchingStack(Tar.begin(), Tar.end());
+		while (!SearchingStack.empty())
+		{
+			auto Top = *SearchingStack.rbegin();
+			SearchingStack.pop_back();
+			auto [Ite, IsInsert] = Result.insert(Top);
+			if (IsInsert)
+			{
+				auto& CurNode = Source.Nodes[Top];
+				for (auto& Ite2 : CurNode.Edges)
+				{
+					if (Ite2.CharSets.Size() == 0)
+					{
+						bool IsEpsilon = true;
+						for (auto Ite3 : Ite2.Propertys)
+						{
+							if (Ite3.Type == EdgePropertyT::Accept)
+							{
+								IsEpsilon = false;
+							}
+						}
+						if (IsEpsilon)
+						{
+							SearchingStack.push_back(Ite2.ToNode);
+						}
+					}
+				}
+			}
+		}
+		return Result;
+	}
+
+	NoEpsilonNfaT::NoEpsilonNfaT(NfaT const& Ref)
 	{
 		std::map<std::set<std::size_t>, std::size_t> NodeMapping;
-		std::vector<std::set<std::size_t>> WaittingStart;
-		WaittingStart.push_back({0});
+		NodeMapping.insert({ SearchExpand({0}, Ref), NodeMapping.size()});
+		std::vector<std::size_t> WaittingStart;
+		WaittingStart.push_back(0);
 		while (!WaittingStart.empty())
 		{
+			auto Top = *WaittingStart.rbegin();
+			WaittingStart.pop_back();
+			decltype(NodeMapping)::const_iterator Ite = NodeMapping.end();
+			for (auto CIte = NodeMapping.begin(); CIte != NodeMapping.end(); ++CIte)
+			{
+				if (CIte->second == Top)
+				{
+					Ite = CIte;
+					break;
+				}
+			}
+			assert(Ite != NodeMapping.end());
 
 		}
+		/*
+		while (!WaittingStart.empty())
+		{
+			
+		}
+		*/
 	}
 
 	/*

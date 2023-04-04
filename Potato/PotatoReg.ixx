@@ -115,10 +115,10 @@ export namespace Potato::Reg
 			None,
 			CaptureBegin,
 			CaptureEnd,
-			ZeroCount,
-			AddCount,
-			LessCount,
-			BiggerCount,
+			ZeroCounter,
+			AddCounter,
+			LessCounter,
+			BiggerCounter,
 			Accept,
 		};
 
@@ -145,23 +145,25 @@ export namespace Potato::Reg
 
 		std::vector<NodeT> Nodes;
 		std::size_t CaptureIndex = 0;
-		std::size_t CountIndex = 0;
+		std::size_t CounterIndex = 0;
 
-		friend struct TempNfaT;
+		friend struct NoEpsilonNfaT;
 	};
 
-	struct NormalizeNfaT
+	struct NoEpsilonNfaT
 	{
-		NormalizeNfaT(NfaT const& Ref);
-		NormalizeNfaT(NormalizeNfaT const&) = default;
-		NormalizeNfaT(NormalizeNfaT&&) = default;
+		NoEpsilonNfaT(NfaT const& Ref);
+		NoEpsilonNfaT(NoEpsilonNfaT const&) = default;
+		NoEpsilonNfaT(NoEpsilonNfaT&&) = default;
 
 	protected:
-
-		using EdgeT = NfaT::EdgeT;
+		using EdgePropertyT = NfaT::EdgePropertyT;
 		using NodeT = NfaT::NodeT;
 
 		std::vector<NodeT> Nodes;
+
+		static std::set<std::size_t> SearchExpand(std::set<std::size_t> const& Tar, NfaT const& Source);
+		static std::set<std::size_t>
 	};
 
 	
