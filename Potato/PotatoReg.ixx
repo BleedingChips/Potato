@@ -91,6 +91,7 @@ export namespace Potato::Reg
 	protected:
 
 		NfaT(std::span<RegLexerT::ElementT const> InputSpan, StandardT Mask = 0);
+		NfaT() = default;
 
 		struct NodeSetT
 		{
@@ -127,6 +128,9 @@ export namespace Potato::Reg
 			EdgePropertyT Type = EdgePropertyT::None;
 			std::size_t Index = 0;
 			StandardT Par1 = 0;
+			bool operator==(ProEdgeT const& T1) const {
+				return Type == T1.Type && Index == T1.Index && Par1 == T1.Par1;
+			}
 		};
 
 		struct EdgeT
@@ -135,6 +139,10 @@ export namespace Potato::Reg
 			std::size_t ToNode;
 			IntervalT CharSets;
 			Misc::IndexSpan<> TokenIndex;
+			bool IsNoConsumeEdge() const;
+			bool operator==(EdgeT const& T1) const {
+				return ToNode == T1.ToNode && Propertys == T1.Propertys && CharSets == T1.CharSets;
+			}
 		};
 
 		struct NodeT
@@ -150,20 +158,16 @@ export namespace Potato::Reg
 		friend struct NoEpsilonNfaT;
 	};
 
-	struct NoEpsilonNfaT
+	struct NoEpsilonNfaT : protected NfaT
 	{
 		NoEpsilonNfaT(NfaT const& Ref);
 		NoEpsilonNfaT(NoEpsilonNfaT const&) = default;
 		NoEpsilonNfaT(NoEpsilonNfaT&&) = default;
 
 	protected:
-		using EdgePropertyT = NfaT::EdgePropertyT;
-		using NodeT = NfaT::NodeT;
 
-		std::vector<NodeT> Nodes;
-
-		static std::set<std::size_t> SearchExpand(std::set<std::size_t> const& Tar, NfaT const& Source);
-		static std::set<std::size_t>
+		static std::set<std::size_t> SearchExpand(std::vector<std::size_t> const& Tar, NfaT const& Source);
+		static std::vector<std::vector<std::size_t>> SearchPath(std::set<std::size_t> const& Tar, NfaT const& Sourece);
 	};
 
 	

@@ -152,7 +152,7 @@ int main()
 {
 
 	try {
-		NfaT N(U"abs\\d123-123[a]");
+		NfaT N(U"a*");
 		NoEpsilonNfaT N2(N);
 		volatile int i = 0;
 	}

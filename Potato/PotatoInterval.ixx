@@ -32,6 +32,10 @@ export namespace Potato::Misc
 			};
 		};
 
+		constexpr bool operator==(IntervalElementT const& I1) const {
+			return std::is_eq(Wrapper::Order(Start, I1.Start)) && std::is_eq(Wrapper::Order(End, I1.End));
+		}
+
 		Type Start;
 		Type End;
 
@@ -126,6 +130,8 @@ export namespace Potato::Misc
 	
 		IntervalT& operator=(IntervalT const&) = default;
 		IntervalT& operator=(IntervalT&&) = default;
+
+		bool operator==(IntervalT const& T1) const { return Elements == T1.Elements; }
 
 	protected:
 
