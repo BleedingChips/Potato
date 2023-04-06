@@ -457,11 +457,22 @@ namespace Potato::Reg
 
 		auto Top = AddNode();
 
+		std::size_t CaptureCount = 0;
+		std::size_t CounterCount = 0;
+
 		auto Re = ProcessParsingStepWithOutputType<NodeSetT>(StepSpan, [&, this](SLRX::VariantElement Var) -> std::any
 		{
 			if (Var.IsTerminal())
 			{
 				auto Ele = Var.AsTerminal();
+				if (Ele.Value == *T::ParenthesesLeft)
+				{
+					return CaptureCount++;
+				}
+				else if (Ele.Value == *T::CurlyBracketsLeft)
+				{
+					return CounterCount++;
+				}
 				return InputSpan[Ele.Shift.TokenIndex].Chars;
 			}
 			else if (Var.IsNoTerminal())
@@ -533,8 +544,9 @@ namespace Potato::Reg
 				}
 				case 7:
 				{
+					auto InDex = NT.Datas[0].Consume<std::size_t>();
 					NodeSetT Last = NT.Datas[1].Consume<NodeSetT>();
-					return AddCapture(Last, Content);
+					return AddCapture(Last, Content, InDex);
 				}
 				case 8:
 				{
@@ -654,19 +666,19 @@ namespace Potato::Reg
 					return Te;
 				}
 				case 20: // {num}
-					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), {}, true, Content);
+					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), {}, true, Content, NT[0].Consume<std::size_t>());
 				case 25: // {,N}?
-					return AddCounter(NT[0].Consume<NodeSetT>(), {}, NT[3].Consume<std::size_t>(), false, Content);
+					return AddCounter(NT[0].Consume<NodeSetT>(), {}, NT[3].Consume<std::size_t>(), false, Content, NT[0].Consume<std::size_t>());
 				case 21: // {,N}
-					return AddCounter(NT[0].Consume<NodeSetT>(), {}, NT[3].Consume<std::size_t>(), true, Content);
+					return AddCounter(NT[0].Consume<NodeSetT>(), {}, NT[3].Consume<std::size_t>(), true, Content, NT[0].Consume<std::size_t>());
 				case 26: // {N,} ?
-					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), {}, false, Content);
+					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), {}, false, Content, NT[0].Consume<std::size_t>());
 				case 22: // {N,}
-					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), {}, true, Content);
+					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), {}, true, Content, NT[0].Consume<std::size_t>());
 				case 27: // {N, N} ?
-					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), false, Content);
+					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), false, Content, NT[0].Consume<std::size_t>());
 				case 23: // {N, N}
-					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), false, Content);
+					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), false, Content, NT[0].Consume<std::size_t>());
 				default:
 					assert(false);
 					break;
@@ -774,18 +786,16 @@ namespace Potato::Reg
 		}
 	}
 
-	auto NfaT::AddCapture(NodeSetT Inside, ContentT Content) -> NodeSetT
+	auto NfaT::AddCapture(NodeSetT Inside, ContentT Content, std::size_t CaptureIndex) -> NodeSetT
 	{
 		auto T1 = AddNode();
 		auto T2 = AddNode();
-
-		std::size_t I = CaptureIndex++;
 
 		auto Tk = Translate(Content.TokenIndex, Content.Tokens);
 
 		EdgeT Ege;
 		Ege.Propertys.push_back(
-			{ EdgePropertyT::CaptureBegin, I, MaskIndex, 0}
+			{ EdgePropertyT::CaptureBegin, CaptureIndex, MaskIndex, 0}
 		);
 		Ege.ToNode = Inside.In;
 		Ege.TokenIndex = Tk;
@@ -795,7 +805,7 @@ namespace Potato::Reg
 		EdgeT Ege2;
 
 		Ege2.Propertys.push_back(
-			{ EdgePropertyT::CaptureEnd, I, MaskIndex, 0 }
+			{ EdgePropertyT::CaptureEnd, CaptureIndex, MaskIndex, 0 }
 		);
 		Ege2.ToNode = T2;
 		Ege2.TokenIndex = Tk;
@@ -805,15 +815,13 @@ namespace Potato::Reg
 		return {T1, T2};
 	}
 
-	auto NfaT::AddCounter(NodeSetT Inside, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool Greedy, ContentT Content) -> NodeSetT
+	auto NfaT::AddCounter(NodeSetT Inside, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool Greedy, ContentT Content, std::size_t CounterIndex) -> NodeSetT
 	{
 		auto Tk = Translate(Content.TokenIndex, Content.Tokens);
 		assert(static_cast<bool>(Min) != static_cast<bool>(Max));
 		auto T1 = AddNode();
 		auto T2 = AddNode();
 		auto T3 = AddNode();
-
-		std::size_t I = CounterIndex++;
 
 		StandardT IMin = 0;
 
@@ -832,7 +840,7 @@ namespace Potato::Reg
 		{
 			EdgeT Ege;
 			Ege.Propertys.push_back(
-				{ EdgePropertyT::ZeroCounter, I, MaskIndex, 0 }
+				{ EdgePropertyT::ZeroCounter, CounterIndex, MaskIndex, 0 }
 			);
 			Ege.ToNode = T2;
 			Ege.TokenIndex = Tk;
@@ -851,13 +859,13 @@ namespace Potato::Reg
 			Ege.ToNode = Inside.In;
 			Ege.TokenIndex = Tk;
 			Ege.Propertys.push_back(
-				{ EdgePropertyT::AddCounter, I, MaskIndex, 0 }
+				{ EdgePropertyT::AddCounter, CounterIndex, MaskIndex, 0 }
 			);
 
 			if (Max.has_value())
 			{
 				Ege.Propertys.push_back(
-					{ EdgePropertyT::LessCounter, I, MaskIndex, IMax }
+					{ EdgePropertyT::LessCounter, CounterIndex, MaskIndex, IMax }
 				);
 			}
 
@@ -868,14 +876,14 @@ namespace Potato::Reg
 			if (Min.has_value())
 			{
 				Ege2.Propertys.push_back(
-					{ EdgePropertyT::BiggerCounter, I, MaskIndex, IMin }
+					{ EdgePropertyT::BiggerCounter, CounterIndex, MaskIndex, IMin }
 				);
 			}
 
 			if (Max.has_value())
 			{
 				Ege2.Propertys.push_back(
-					{ EdgePropertyT::LessCounter, I, MaskIndex, IMax }
+					{ EdgePropertyT::LessCounter, CounterIndex, MaskIndex, IMax }
 				);
 			}
 
@@ -920,8 +928,6 @@ namespace Potato::Reg
 				{0, 1}
 			}
 		);
-		CaptureIndex = 0;
-		CounterIndex = 0;
 		MaskIndex += Input.MaskIndex;
 	}
 
@@ -1045,42 +1051,39 @@ namespace Potato::Reg
 
 	DfaT::DfaT(NoEpsilonNfaT const& T1, bool Greedy)
 	{
-
-		struct EdgeIndexT
-		{
-			std::size_t Type;
-			std::size_t MaskIndex;
-			std::size_t Index;
-			std::strong_ordering operator <=> (EdgeIndexT const&) const = default;
-		};
-
-		std::map<EdgeIndexT, std::size_t> EdgeIndex;
-
-		std::map<std::set<std::size_t>, std::size_t> Mapping;
+		std::map<std::vector<std::size_t>, std::size_t> Mapping;
 
 		std::vector<decltype(Mapping)::const_iterator> SearchingStack;
 
+		struct TempEdgeT
 		{
-			auto [Ite, B] = Mapping.insert({ {0}, 0 });
+			std::vector<std::vector<NfaT::PropertyT>> Propertys;
+			IntervalT CharSet;
+			std::vector<std::size_t> ToNode;
+		};
+
+		struct TempNodeT
+		{
+			std::vector<TempEdgeT> TempEdge;
+		};
+
+		std::vector<TempNodeT> TempNode;
+
+		{
+			auto [Ite, B] = Mapping.insert({ {0}, TempNode.size()});
+			TempNode.push_back({});
 			SearchingStack.push_back(Ite);
 		}
-
-		struct TempEdge
-		{
-
-		};
-
-		struct TempEdge
-		{
-			IntervalT CharSet;
-			//std::vector<>
-		};
 		
+		std::vector<>
+
 		while (!SearchingStack.empty())
 		{
 			auto Top = *SearchingStack.rbegin();
 			SearchingStack.pop_back();
-			
+			for (auto& Ite : Top->first)
+			{
+			}
 		}
 
 	}

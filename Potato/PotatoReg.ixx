@@ -108,8 +108,8 @@ export namespace Potato::Reg
 		};
 
 		void AddConsume(NodeSetT Set, IntervalT Chars, ContentT Content);
-		NodeSetT AddCapture(NodeSetT Inside, ContentT Content);
-		NodeSetT AddCounter(NodeSetT Inside, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool Greedy, ContentT Content);
+		NodeSetT AddCapture(NodeSetT Inside, ContentT Content, std::size_t CaptureIndex);
+		NodeSetT AddCounter(NodeSetT Inside, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool Greedy, ContentT Content, std::size_t CaptureIndex);
 
 		enum class EdgePropertyT
 		{
@@ -153,8 +153,6 @@ export namespace Potato::Reg
 		};
 
 		std::vector<NodeT> Nodes;
-		std::size_t CaptureIndex = 0;
-		std::size_t CounterIndex = 0;
 		std::size_t MaskIndex = 0;
 
 		friend struct DfaT;
@@ -178,16 +176,22 @@ export namespace Potato::Reg
 	
 	protected:
 
-		enum class ActioE : std::uint8_t
+		enum class ActioE : uint8_t
 		{
-
+			CaptureRecord,
+			ZeroCounter,
+			AddCounter,
+			LessEqualCounter,
+			BiggerEqualCounter,
+			EndCounter,
+			CopyRecord,
 		};
 
 		struct PropertyT
 		{
 			ActioE Action;
 			std::size_t SoltIndex = 0;
-			std::size_t Par1 = 0;
+			StandardT Par1 = 0;
 		};
 
 		struct EdgeT

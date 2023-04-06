@@ -152,7 +152,7 @@ int main()
 {
 
 	try {
-		NfaT N(U"a*", false, 0);
+		NfaT N(U"((a*))", false, 0);
 		NfaT N2(U"a", false, 1);
 		N.Link(N2);
 		NoEpsilonNfaT N3(N);
