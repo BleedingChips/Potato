@@ -127,6 +127,7 @@ export namespace Potato::Reg
 		{
 			EdgePropertyT Type = EdgePropertyT::None;
 			std::size_t Index = 0;
+			std::size_t MaskIndex = 0;
 			StandardT Par1 = 0;
 			bool operator==(ProEdgeT const& T1) const {
 				return Type == T1.Type && Index == T1.Index && Par1 == T1.Par1;
@@ -154,7 +155,9 @@ export namespace Potato::Reg
 		std::vector<NodeT> Nodes;
 		std::size_t CaptureIndex = 0;
 		std::size_t CounterIndex = 0;
+		std::size_t MaskIndex = 0;
 
+		friend struct DfaT;
 		friend struct NoEpsilonNfaT;
 	};
 
@@ -166,8 +169,42 @@ export namespace Potato::Reg
 
 	protected:
 
-		static std::set<std::size_t> SearchExpand(std::vector<std::size_t> const& Tar, NfaT const& Source);
-		static std::vector<std::vector<std::size_t>> SearchPath(std::set<std::size_t> const& Tar, NfaT const& Sourece);
+		friend struct DfaT;
+	};
+
+	struct DfaT
+	{
+		DfaT(NoEpsilonNfaT const& T1, bool Greedy = false);
+	
+	protected:
+
+		enum class ActioE : std::uint8_t
+		{
+
+		};
+
+		struct PropertyT
+		{
+			ActioE Action;
+			std::size_t SoltIndex = 0;
+			std::size_t Par1 = 0;
+		};
+
+		struct EdgeT
+		{
+			std::vector<PropertyT> Propertys;
+			IntervalT CharSets;
+			std::vector<std::size_t> ToNode;
+		};
+
+		struct NodeT
+		{
+			std::vector<PropertyT> Accept;
+			bool AcceptIsFront = false;
+			std::vector<EdgeT> Edges;
+		};
+
+		std::vector<NodeT> Nodes;
 	};
 
 	

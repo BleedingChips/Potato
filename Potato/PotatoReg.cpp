@@ -785,7 +785,7 @@ namespace Potato::Reg
 
 		EdgeT Ege;
 		Ege.Propertys.push_back(
-			{ EdgePropertyT::CaptureBegin, I, 0}
+			{ EdgePropertyT::CaptureBegin, I, MaskIndex, 0}
 		);
 		Ege.ToNode = Inside.In;
 		Ege.TokenIndex = Tk;
@@ -795,7 +795,7 @@ namespace Potato::Reg
 		EdgeT Ege2;
 
 		Ege2.Propertys.push_back(
-			{ EdgePropertyT::CaptureEnd, I, 0 }
+			{ EdgePropertyT::CaptureEnd, I, MaskIndex, 0 }
 		);
 		Ege2.ToNode = T2;
 		Ege2.TokenIndex = Tk;
@@ -832,7 +832,7 @@ namespace Potato::Reg
 		{
 			EdgeT Ege;
 			Ege.Propertys.push_back(
-				{ EdgePropertyT::ZeroCounter, I, 0 }
+				{ EdgePropertyT::ZeroCounter, I, MaskIndex, 0 }
 			);
 			Ege.ToNode = T2;
 			Ege.TokenIndex = Tk;
@@ -851,13 +851,13 @@ namespace Potato::Reg
 			Ege.ToNode = Inside.In;
 			Ege.TokenIndex = Tk;
 			Ege.Propertys.push_back(
-				{ EdgePropertyT::AddCounter, I, 0 }
+				{ EdgePropertyT::AddCounter, I, MaskIndex, 0 }
 			);
 
 			if (Max.has_value())
 			{
 				Ege.Propertys.push_back(
-					{ EdgePropertyT::LessCounter, I, IMax }
+					{ EdgePropertyT::LessCounter, I, MaskIndex, IMax }
 				);
 			}
 
@@ -868,14 +868,14 @@ namespace Potato::Reg
 			if (Min.has_value())
 			{
 				Ege2.Propertys.push_back(
-					{ EdgePropertyT::BiggerCounter, I, IMin }
+					{ EdgePropertyT::BiggerCounter, I, MaskIndex, IMin }
 				);
 			}
 
 			if (Max.has_value())
 			{
 				Ege2.Propertys.push_back(
-					{ EdgePropertyT::LessCounter, I, IMax }
+					{ EdgePropertyT::LessCounter, I, MaskIndex, IMax }
 				);
 			}
 
@@ -895,6 +895,7 @@ namespace Potato::Reg
 
 	void NfaT::Link(NfaT const& Input)
 	{
+		++MaskIndex;
 		Nodes.reserve(Nodes.size() + Input.Nodes.size());
 		auto Last = Nodes.size();
 		Nodes.insert(Nodes.end(), Input.Nodes.begin(), Input.Nodes.end());
@@ -906,49 +907,22 @@ namespace Potato::Reg
 			{
 				for (auto& Ite3 : Ite2.Propertys)
 				{
-					switch (Ite3.Type)
-					{
-					case EdgePropertyT::CaptureBegin:
-					case EdgePropertyT::CaptureEnd:
-						Ite3.Index += CaptureIndex;
-						break;
-					case EdgePropertyT::ZeroCounter:
-					case EdgePropertyT::AddCounter:
-					case EdgePropertyT::LessCounter:
-					case EdgePropertyT::BiggerCounter:
-						Ite3.Index += CounterIndex;
-					default:
-						break;
-					}
+					Ite3.MaskIndex += MaskIndex;
 				}
+				Ite2.ToNode += Last;
 			}
 		}
-		CaptureIndex += Input.CaptureIndex;
-		CounterIndex += Input.CounterIndex;
-	}
-
-	std::set<std::size_t> NoEpsilonNfaT::SearchExpand(std::vector<std::size_t> const& Tar, NfaT const& Source)
-	{
-		std::set<std::size_t> Result;
-		std::vector<std::size_t> SearchingStack(Tar.begin(), Tar.end());
-		while (!SearchingStack.empty())
-		{
-			auto Top = *SearchingStack.rbegin();
-			SearchingStack.pop_back();
-			auto [Ite, IsInsert] = Result.insert(Top);
-			if (IsInsert)
+		Nodes[0].Edges.push_back(
 			{
-				auto& CurNode = Source.Nodes[Top];
-				for (auto& Ite2 : CurNode.Edges)
-				{
-					if (Ite2.IsNoConsumeEdge())
-					{
-						SearchingStack.push_back(Ite2.ToNode);
-					}
-				}
+				{},
+				Last,
+				{},
+				{0, 1}
 			}
-		}
-		return Result;
+		);
+		CaptureIndex = 0;
+		CounterIndex = 0;
+		MaskIndex += Input.MaskIndex;
 	}
 
 	NoEpsilonNfaT::NoEpsilonNfaT(NfaT const& Ref)
@@ -1067,16 +1041,48 @@ namespace Potato::Reg
 				}
 			}
 		}
+	}
 
+	DfaT::DfaT(NoEpsilonNfaT const& T1, bool Greedy)
+	{
 
-
-		volatile int o = 0;
-		/*
-		while (!WaittingStart.empty())
+		struct EdgeIndexT
 		{
+			std::size_t Type;
+			std::size_t MaskIndex;
+			std::size_t Index;
+			std::strong_ordering operator <=> (EdgeIndexT const&) const = default;
+		};
+
+		std::map<EdgeIndexT, std::size_t> EdgeIndex;
+
+		std::map<std::set<std::size_t>, std::size_t> Mapping;
+
+		std::vector<decltype(Mapping)::const_iterator> SearchingStack;
+
+		{
+			auto [Ite, B] = Mapping.insert({ {0}, 0 });
+			SearchingStack.push_back(Ite);
+		}
+
+		struct TempEdge
+		{
+
+		};
+
+		struct TempEdge
+		{
+			IntervalT CharSet;
+			//std::vector<>
+		};
+		
+		while (!SearchingStack.empty())
+		{
+			auto Top = *SearchingStack.rbegin();
+			SearchingStack.pop_back();
 			
 		}
-		*/
+
 	}
 
 	/*

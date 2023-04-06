@@ -152,8 +152,11 @@ int main()
 {
 
 	try {
-		NfaT N(U"a*");
-		NoEpsilonNfaT N2(N);
+		NfaT N(U"a*", false, 0);
+		NfaT N2(U"a", false, 1);
+		N.Link(N2);
+		NoEpsilonNfaT N3(N);
+		DfaT N4{N3, true};
 		volatile int i = 0;
 	}
 	catch (Exception::UnaccaptableRegex const& Rex)
