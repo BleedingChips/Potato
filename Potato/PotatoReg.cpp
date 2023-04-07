@@ -367,14 +367,45 @@ namespace Potato::Reg
 
 	bool NfaT::EdgeT::IsNoConsumeEdge() const
 	{
-		if (CharSets.Size() == 0)
+		return CharSets.size() == 0 && !HasAccept();
+	}
+
+	bool NfaT::EdgeT::HasCapture() const
+	{
+		for (auto& Ite : Propertys)
 		{
-			for (auto& Ite : Propertys)
+			if (Ite.Type == EdgePropertyT::CaptureBegin || Ite.Type == EdgePropertyT::CaptureEnd)
 			{
-				if (Ite.Type == EdgePropertyT::Accept)
-					return false;
+				return true;
 			}
-			return true;
+		}
+		return false;
+	}
+	bool NfaT::EdgeT::HasCounter() const
+	{
+		for (auto& Ite : Propertys)
+		{
+			if (
+				Ite.Type == EdgePropertyT::ZeroCounter
+				|| Ite.Type == EdgePropertyT::AddCounter
+				|| Ite.Type == EdgePropertyT::LessCounter
+				|| Ite.Type == EdgePropertyT::BiggerCounter
+			)
+			{
+				return true;
+			}
+		}
+		return false;
+
+	}
+	bool NfaT::EdgeT::HasAccept() const
+	{
+		for (auto& Ite : Propertys)
+		{
+			if (Ite.Type == EdgePropertyT::Accept)
+			{
+				return true;
+			}
 		}
 		return false;
 	}
@@ -1055,16 +1086,26 @@ namespace Potato::Reg
 
 		std::vector<decltype(Mapping)::const_iterator> SearchingStack;
 
+		struct TemPropertyT
+		{
+			std::vector<NfaT::PropertyT> Pros;
+			bool HasAccept;
+			bool HasCapture;
+			bool HasCounter;
+		};
+
 		struct TempEdgeT
 		{
-			std::vector<std::vector<NfaT::PropertyT>> Propertys;
 			IntervalT CharSet;
+			std::vector<TemPropertyT> Propertys;
 			std::vector<std::size_t> ToNode;
 		};
 
 		struct TempNodeT
 		{
 			std::vector<TempEdgeT> TempEdge;
+			std::vector<TempEdgeT> AcceptEdge;
+			bool IsFront = false;
 		};
 
 		std::vector<TempNodeT> TempNode;
@@ -1074,15 +1115,42 @@ namespace Potato::Reg
 			TempNode.push_back({});
 			SearchingStack.push_back(Ite);
 		}
-		
-		std::vector<>
+
+		std::vector<TempEdgeT> TempEdges;
+		std::optional<TempEdgeT> AcceptEdges;
+		bool IsFront;
 
 		while (!SearchingStack.empty())
 		{
+			TempEdges.clear();
+			AcceptEdges.reset();
 			auto Top = *SearchingStack.rbegin();
 			SearchingStack.pop_back();
 			for (auto& Ite : Top->first)
 			{
+				for (auto& Ite2 : Ite.Edges)
+				{
+					if (Ite2.HasAccpet())
+					{
+						if (AcceptEdges.has_value())
+						{
+							if (Greedy)
+								continue;
+							else
+								break;
+						}
+						TemPropertyT NewPropertys
+						{
+							Ite2.CharSets,
+							Ite2.Propertys,
+							{Ite2.ToNode}
+						};
+						AcceptEdges = NewPropertys;
+					}
+					
+					
+
+				}
 			}
 		}
 

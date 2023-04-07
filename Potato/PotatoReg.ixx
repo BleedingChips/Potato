@@ -141,6 +141,9 @@ export namespace Potato::Reg
 			IntervalT CharSets;
 			Misc::IndexSpan<> TokenIndex;
 			bool IsNoConsumeEdge() const;
+			bool HasCapture() const;
+			bool HasCounter() const;
+			bool HasAccept() const;
 			bool operator==(EdgeT const& T1) const {
 				return ToNode == T1.ToNode && Propertys == T1.Propertys && CharSets == T1.CharSets;
 			}
