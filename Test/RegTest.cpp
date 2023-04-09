@@ -156,7 +156,7 @@ int main()
 		NfaT N2(U"a", false, 1);
 		N.Link(N2);
 		NoEpsilonNfaT N3(N);
-		DfaT N4{N3, true};
+		DfaT N4{N3, DfaT::FormatE::March};
 		volatile int i = 0;
 	}
 	catch (Exception::UnaccaptableRegex const& Rex)

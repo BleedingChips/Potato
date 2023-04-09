@@ -367,7 +367,7 @@ namespace Potato::Reg
 
 	bool NfaT::EdgeT::IsNoConsumeEdge() const
 	{
-		return CharSets.size() == 0 && !HasAccept();
+		return CharSets.Size() == 0 && !HasAccept();
 	}
 
 	bool NfaT::EdgeT::HasCapture() const
@@ -826,7 +826,7 @@ namespace Potato::Reg
 
 		EdgeT Ege;
 		Ege.Propertys.push_back(
-			{ EdgePropertyT::CaptureBegin, CaptureIndex, MaskIndex, 0}
+			{ EdgePropertyT::CaptureBegin, CaptureIndex, 0}
 		);
 		Ege.ToNode = Inside.In;
 		Ege.TokenIndex = Tk;
@@ -836,7 +836,7 @@ namespace Potato::Reg
 		EdgeT Ege2;
 
 		Ege2.Propertys.push_back(
-			{ EdgePropertyT::CaptureEnd, CaptureIndex, MaskIndex, 0 }
+			{ EdgePropertyT::CaptureEnd, CaptureIndex, 0 }
 		);
 		Ege2.ToNode = T2;
 		Ege2.TokenIndex = Tk;
@@ -871,7 +871,7 @@ namespace Potato::Reg
 		{
 			EdgeT Ege;
 			Ege.Propertys.push_back(
-				{ EdgePropertyT::ZeroCounter, CounterIndex, MaskIndex, 0 }
+				{ EdgePropertyT::ZeroCounter, CounterIndex, 0 }
 			);
 			Ege.ToNode = T2;
 			Ege.TokenIndex = Tk;
@@ -890,13 +890,13 @@ namespace Potato::Reg
 			Ege.ToNode = Inside.In;
 			Ege.TokenIndex = Tk;
 			Ege.Propertys.push_back(
-				{ EdgePropertyT::AddCounter, CounterIndex, MaskIndex, 0 }
+				{ EdgePropertyT::AddCounter, CounterIndex, 0 }
 			);
 
 			if (Max.has_value())
 			{
 				Ege.Propertys.push_back(
-					{ EdgePropertyT::LessCounter, CounterIndex, MaskIndex, IMax }
+					{ EdgePropertyT::LessCounter, CounterIndex, IMax }
 				);
 			}
 
@@ -907,14 +907,14 @@ namespace Potato::Reg
 			if (Min.has_value())
 			{
 				Ege2.Propertys.push_back(
-					{ EdgePropertyT::BiggerCounter, CounterIndex, MaskIndex, IMin }
+					{ EdgePropertyT::BiggerCounter, CounterIndex, IMin }
 				);
 			}
 
 			if (Max.has_value())
 			{
 				Ege2.Propertys.push_back(
-					{ EdgePropertyT::LessCounter, CounterIndex, MaskIndex, IMax }
+					{ EdgePropertyT::LessCounter, CounterIndex, IMax }
 				);
 			}
 
@@ -934,7 +934,6 @@ namespace Potato::Reg
 
 	void NfaT::Link(NfaT const& Input)
 	{
-		++MaskIndex;
 		Nodes.reserve(Nodes.size() + Input.Nodes.size());
 		auto Last = Nodes.size();
 		Nodes.insert(Nodes.end(), Input.Nodes.begin(), Input.Nodes.end());
@@ -944,10 +943,7 @@ namespace Potato::Reg
 			Ite.CurIndex += Last;
 			for (auto& Ite2 : Ite.Edges)
 			{
-				for (auto& Ite3 : Ite2.Propertys)
-				{
-					Ite3.MaskIndex += MaskIndex;
-				}
+				Ite2.MaskIndex += MaskIndex;
 				Ite2.ToNode += Last;
 			}
 		}
@@ -975,7 +971,7 @@ namespace Potato::Reg
 		}
 
 		std::vector<std::size_t> StateStack;
-		std::vector<ProEdgeT> Pros;
+		std::vector<PropertyT> Pros;
 		
 		struct StackRecord
 		{
@@ -1037,7 +1033,8 @@ namespace Potato::Reg
 							Pros,
 							FinnalToNode,
 							std::move(Sets),
-							{0, 0}
+							{0, 0},
+							CurEdge.MaskIndex
 							}
 						);
 					}
@@ -1080,7 +1077,8 @@ namespace Potato::Reg
 		}
 	}
 
-	DfaT::DfaT(NoEpsilonNfaT const& T1, bool Greedy)
+	DfaT::DfaT(NoEpsilonNfaT const& T1, FormatE Format)
+		: Format(Format)
 	{
 		std::map<std::vector<std::size_t>, std::size_t> Mapping;
 
@@ -1089,24 +1087,25 @@ namespace Potato::Reg
 		struct TemPropertyT
 		{
 			std::vector<NfaT::PropertyT> Pros;
-			bool HasAccept;
-			bool HasCapture;
-			bool HasCounter;
+			std::size_t MaskIndex = 0;
+			bool HasAccept = false;
+			bool HasCapture = false;
+			bool HasCounter = false;
 		};
 
 		struct TempEdgeT
 		{
-			IntervalT CharSet;
-			std::vector<TemPropertyT> Propertys;
+			IntervalT CharSets;
 			std::vector<std::size_t> ToNode;
+			std::vector<TemPropertyT> Propertys;
 		};
 
 		struct TempNodeT
 		{
 			std::vector<TempEdgeT> TempEdge;
-			std::vector<TempEdgeT> AcceptEdge;
-			bool IsFront = false;
+			std::optional<TempEdgeT> AcceptEdge;
 		};
+		
 
 		std::vector<TempNodeT> TempNode;
 
@@ -1118,7 +1117,6 @@ namespace Potato::Reg
 
 		std::vector<TempEdgeT> TempEdges;
 		std::optional<TempEdgeT> AcceptEdges;
-		bool IsFront;
 
 		while (!SearchingStack.empty())
 		{
@@ -1126,34 +1124,174 @@ namespace Potato::Reg
 			AcceptEdges.reset();
 			auto Top = *SearchingStack.rbegin();
 			SearchingStack.pop_back();
-			for (auto& Ite : Top->first)
+			for (auto Ite : Top->first)
 			{
-				for (auto& Ite2 : Ite.Edges)
+				auto& EdgeRef = T1.Nodes[Ite].Edges;
+				for (auto& Ite2 : EdgeRef)
 				{
-					if (Ite2.HasAccpet())
+					if (AcceptEdges.has_value())
 					{
-						if (AcceptEdges.has_value())
+						if (
+							(Format == FormatE::GreedyHeadMarch && Ite2.MaskIndex == AcceptEdges->Propertys[0].MaskIndex)
+							|| (Format == FormatE::HeadMarch)
+							)
 						{
-							if (Greedy)
-								continue;
-							else
+							break;
+						}
+
+						if(Ite2.HasAccept())
+							continue;
+					}
+
+					TempEdgeT Temp{
+						Ite2.CharSets,
+						{Ite2.ToNode},
+						{TemPropertyT{Ite2.Propertys, Ite2.MaskIndex, false, false, false}}
+					};
+
+					std::map<std::size_t, std::size_t> CaptureCount;
+					std::map<std::size_t, std::size_t> CounterCount;
+
+					for (auto& Ite3 : Ite2.Propertys)
+					{
+						switch (Ite3.Type)
+						{
+						case NfaT::EdgePropertyT::CaptureBegin:
+						case NfaT::EdgePropertyT::CaptureEnd:
+							Temp.Propertys[0].HasCapture = true;
+							break;
+						case NfaT::EdgePropertyT::ZeroCounter:
+						case NfaT::EdgePropertyT::AddCounter:
+						case NfaT::EdgePropertyT::LessCounter:
+						case NfaT::EdgePropertyT::BiggerCounter:
+							Temp.Propertys[0].HasCounter = true;
+							break;
+						case NfaT::EdgePropertyT::Accept:
+							Temp.Propertys[0].HasAccept = true;
+							break;
+						default:
+							break;
+						}
+					}
+
+					if (Temp.Propertys[0].HasAccept)
+					{
+						AcceptEdges = std::move(Temp);
+						continue;
+					}
+
+					for (std::size_t I = 0; I < TempEdges.size(); ++I)
+					{
+						auto& Ite3 = TempEdges[I];
+						auto Middle = (Temp.CharSets & Ite3.CharSets);
+						if (Middle.Size() != 0)
+						{
+							TempEdgeT NewEdge;
+							NewEdge.ToNode.insert(NewEdge.ToNode.end(), Ite3.ToNode.begin(), Ite3.ToNode.end());
+							NewEdge.ToNode.insert(NewEdge.ToNode.end(), Temp.ToNode.begin(), Temp.ToNode.end());
+							NewEdge.Propertys.insert(NewEdge.Propertys.end(), Ite3.Propertys.begin(), Ite3.Propertys.end());
+							NewEdge.Propertys.insert(NewEdge.Propertys.end(), Temp.Propertys.begin(), Temp.Propertys.end());
+							Temp.CharSets = Temp.CharSets - Middle;
+							Ite3.CharSets = Ite3.CharSets - Middle;
+							NewEdge.CharSets = std::move(Middle);
+							TempEdges.push_back(std::move(NewEdge));
+							if(Temp.CharSets.Size() == 0)
 								break;
 						}
-						TemPropertyT NewPropertys
-						{
-							Ite2.CharSets,
-							Ite2.Propertys,
-							{Ite2.ToNode}
-						};
-						AcceptEdges = NewPropertys;
 					}
-					
-					
 
+					if(!Temp.CharSets.Size() == 0)
+						TempEdges.push_back(std::move(Temp));
+
+					TempEdges.erase(
+						std::remove_if(TempEdges.begin(), TempEdges.end(), [](TempEdgeT const& T){ return T.CharSets.Size() == 0;}),
+						TempEdges.end()
+					);
 				}
 			}
-		}
 
+			for (auto& Ite : TempEdges)
+			{
+				std::size_t CounterSize = 0;
+
+				auto CacheToNode = std::move(Ite.ToNode);
+
+				for (auto& Ite2 : Ite.Propertys)
+				{
+					if(Ite2.HasCounter)
+						++CounterSize;
+				}
+
+				if (CounterSize == 0)
+				{
+					auto [MapIte, Bool] = Mapping.insert({ std::move(CacheToNode), TempNode.size() });
+					if (Bool)
+					{
+						TempNode.push_back({});
+						SearchingStack.push_back(MapIte);
+					}
+					Ite.ToNode.clear();
+					Ite.ToNode.push_back(MapIte->second);
+				}
+				else {
+
+					std::vector<std::size_t> TotalToNode;
+
+					std::size_t TotalSize = std::pow(CounterSize, 2);
+
+					TotalToNode.reserve(TotalSize);
+
+					for (std::size_t I = 0; I < TotalSize; ++I)
+					{
+						std::size_t CounterStack1 = 1;
+						std::size_t CounterStack2 = 2;
+
+						TotalToNode.clear();
+
+						for (std::size_t I2 = 0; I2 < Ite.Propertys.size(); ++I2)
+						{
+							auto& Ite2 = Ite.Propertys[I2];
+							if (Ite2.HasCounter)
+							{
+								bool Re = ((I % CounterStack2) < CounterStack1);
+								CounterStack1 = CounterStack2;
+								CounterStack2 = CounterStack2 * 2;
+								if (!Re)
+									continue;
+							}
+
+							TotalToNode.push_back(CacheToNode[I2]);
+						}
+
+						if (TotalToNode.empty())
+						{
+							Ite.ToNode.push_back(std::numeric_limits<std::size_t>::max());
+						}
+						else {
+							auto [MapIte, Bool] = Mapping.insert({ TotalToNode, TempNode.size() });
+							if (Bool)
+							{
+								TempNode.push_back({});
+								SearchingStack.push_back(MapIte);
+							}
+							Ite.ToNode.push_back(MapIte->second);
+						}
+
+					}
+				}
+			}
+
+			if (AcceptEdges.has_value())
+			{
+				AcceptEdges->ToNode.clear();
+				TempNode[Top->second].AcceptEdge = std::move(AcceptEdges);
+			}
+
+			TempNode[Top->second].TempEdge = std::move(TempEdges);
+
+			volatile int  i = 0;
+		}
+		volatile int  i = 0;
 	}
 
 	/*

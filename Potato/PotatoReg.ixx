@@ -113,7 +113,6 @@ export namespace Potato::Reg
 
 		enum class EdgePropertyT
 		{
-			None,
 			CaptureBegin,
 			CaptureEnd,
 			ZeroCounter,
@@ -123,23 +122,22 @@ export namespace Potato::Reg
 			Accept,
 		};
 
-		struct ProEdgeT
+		struct PropertyT
 		{
-			EdgePropertyT Type = EdgePropertyT::None;
+			EdgePropertyT Type = EdgePropertyT::Accept;
 			std::size_t Index = 0;
-			std::size_t MaskIndex = 0;
 			StandardT Par1 = 0;
-			bool operator==(ProEdgeT const& T1) const {
-				return Type == T1.Type && Index == T1.Index && Par1 == T1.Par1;
-			}
+			bool operator==(PropertyT const& T1) const { return Type == T1.Type && Index == T1.Index && Par1 == T1.Par1; }
 		};
 
 		struct EdgeT
 		{
-			std::vector<ProEdgeT> Propertys;
+			std::vector<PropertyT> Propertys;
 			std::size_t ToNode;
 			IntervalT CharSets;
 			Misc::IndexSpan<> TokenIndex;
+			std::size_t MaskIndex = 0;
+			bool IsEpsilonEdge() const { return CharSets.Size() == 0 && Propertys.empty(); }
 			bool IsNoConsumeEdge() const;
 			bool HasCapture() const;
 			bool HasCounter() const;
@@ -156,7 +154,7 @@ export namespace Potato::Reg
 		};
 
 		std::vector<NodeT> Nodes;
-		std::size_t MaskIndex = 0;
+		std::size_t MaskIndex = 1;
 
 		friend struct DfaT;
 		friend struct NoEpsilonNfaT;
@@ -175,7 +173,15 @@ export namespace Potato::Reg
 
 	struct DfaT
 	{
-		DfaT(NoEpsilonNfaT const& T1, bool Greedy = false);
+
+		enum class FormatE
+		{
+			March,
+			HeadMarch,
+			GreedyHeadMarch,
+		};
+
+		DfaT(NoEpsilonNfaT const& T1, FormatE Format = FormatE::March);
 	
 	protected:
 
@@ -211,7 +217,9 @@ export namespace Potato::Reg
 			std::vector<EdgeT> Edges;
 		};
 
+		FormatE Format;
 		std::vector<NodeT> Nodes;
+		
 	};
 
 	
