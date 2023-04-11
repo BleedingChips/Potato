@@ -506,8 +506,10 @@ namespace Potato::Reg
 				}
 				return InputSpan[Ele.Shift.TokenIndex].Chars;
 			}
-			else if (Var.IsNoTerminal())
+			else
 			{
+
+				assert(Var.IsNoTerminal());
 				auto NT = Var.AsNoTerminal();
 
 				ContentT Content{NT.TokenIndex, InputSpan };
@@ -707,9 +709,9 @@ namespace Potato::Reg
 				case 22: // {N,}
 					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), {}, true, Content, NT[0].Consume<std::size_t>());
 				case 27: // {N, N} ?
-					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), false, Content, NT[0].Consume<std::size_t>());
+					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), false, Content, NT[1].Consume<std::size_t>());
 				case 23: // {N, N}
-					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), false, Content, NT[0].Consume<std::size_t>());
+					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), false, Content, NT[1].Consume<std::size_t>());
 				default:
 					assert(false);
 					break;
@@ -849,7 +851,7 @@ namespace Potato::Reg
 	auto NfaT::AddCounter(NodeSetT Inside, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool Greedy, ContentT Content, std::size_t CounterIndex) -> NodeSetT
 	{
 		auto Tk = Translate(Content.TokenIndex, Content.Tokens);
-		assert(static_cast<bool>(Min) != static_cast<bool>(Max));
+		assert(static_cast<bool>(Min) || static_cast<bool>(Max));
 		auto T1 = AddNode();
 		auto T2 = AddNode();
 		auto T3 = AddNode();
@@ -1086,8 +1088,11 @@ namespace Potato::Reg
 
 		struct TemPropertyT
 		{
-			std::vector<NfaT::PropertyT> Pros;
-			std::size_t MaskIndex = 0;
+			std::size_t FromNode;
+			std::size_t ToNode;
+			std::size_t EdgeCount;
+			std::size_t MaskIndex;
+
 			bool HasAccept = false;
 			bool HasCapture = false;
 			bool HasCounter = false;
@@ -1127,8 +1132,9 @@ namespace Potato::Reg
 			for (auto Ite : Top->first)
 			{
 				auto& EdgeRef = T1.Nodes[Ite].Edges;
-				for (auto& Ite2 : EdgeRef)
+				for (std::size_t EdgeIndex = 0; EdgeIndex < EdgeRef.size(); ++EdgeIndex)
 				{
+					auto& Ite2 = EdgeRef[EdgeIndex];
 					if (AcceptEdges.has_value())
 					{
 						if (
@@ -1143,14 +1149,17 @@ namespace Potato::Reg
 							continue;
 					}
 
-					TempEdgeT Temp{
-						Ite2.CharSets,
-						{Ite2.ToNode},
-						{TemPropertyT{Ite2.Propertys, Ite2.MaskIndex, false, false, false}}
+					TemPropertyT Property
+					{
+						Ite,
+						Ite2.ToNode,
+						EdgeIndex,
+						Ite2.MaskIndex,
+						false,
+						false,
+						false
 					};
 
-					std::map<std::size_t, std::size_t> CaptureCount;
-					std::map<std::size_t, std::size_t> CounterCount;
 
 					for (auto& Ite3 : Ite2.Propertys)
 					{
@@ -1158,23 +1167,29 @@ namespace Potato::Reg
 						{
 						case NfaT::EdgePropertyT::CaptureBegin:
 						case NfaT::EdgePropertyT::CaptureEnd:
-							Temp.Propertys[0].HasCapture = true;
+							Property.HasCapture = true;
 							break;
 						case NfaT::EdgePropertyT::ZeroCounter:
 						case NfaT::EdgePropertyT::AddCounter:
 						case NfaT::EdgePropertyT::LessCounter:
 						case NfaT::EdgePropertyT::BiggerCounter:
-							Temp.Propertys[0].HasCounter = true;
+							Property.HasCounter = true;
 							break;
 						case NfaT::EdgePropertyT::Accept:
-							Temp.Propertys[0].HasAccept = true;
+							Property.HasAccept = true;
 							break;
 						default:
 							break;
 						}
 					}
 
-					if (Temp.Propertys[0].HasAccept)
+					TempEdgeT Temp{
+						Ite2.CharSets,
+						{},
+						{Property}
+					};
+
+					if (Property.HasAccept)
 					{
 						AcceptEdges = std::move(Temp);
 						continue;
@@ -1210,21 +1225,25 @@ namespace Potato::Reg
 				}
 			}
 
+			std::vector<std::size_t> OldNode;
+
 			for (auto& Ite : TempEdges)
 			{
-				std::size_t CounterSize = 0;
 
-				auto CacheToNode = std::move(Ite.ToNode);
+				std::size_t CounterCount = 0;
 
 				for (auto& Ite2 : Ite.Propertys)
 				{
-					if(Ite2.HasCounter)
-						++CounterSize;
+					if (Ite2.HasCounter)
+						++CounterCount;
 				}
-
-				if (CounterSize == 0)
+				
+				if (CounterCount == 0)
 				{
-					auto [MapIte, Bool] = Mapping.insert({ std::move(CacheToNode), TempNode.size() });
+					OldNode.clear();
+					for (auto& Ite2 : Ite.Propertys)
+						OldNode.push_back(Ite2.ToNode);
+					auto [MapIte, Bool] = Mapping.insert({ OldNode, TempNode.size() });
 					if (Bool)
 					{
 						TempNode.push_back({});
@@ -1235,22 +1254,17 @@ namespace Potato::Reg
 				}
 				else {
 
-					std::vector<std::size_t> TotalToNode;
-
-					std::size_t TotalSize = std::pow(CounterSize, 2);
-
-					TotalToNode.reserve(TotalSize);
+					std::size_t TotalSize = std::pow(CounterCount, 2);
 
 					for (std::size_t I = 0; I < TotalSize; ++I)
 					{
 						std::size_t CounterStack1 = 1;
 						std::size_t CounterStack2 = 2;
 
-						TotalToNode.clear();
+						OldNode.clear();
 
-						for (std::size_t I2 = 0; I2 < Ite.Propertys.size(); ++I2)
+						for (auto& Ite2 : Ite.Propertys)
 						{
-							auto& Ite2 = Ite.Propertys[I2];
 							if (Ite2.HasCounter)
 							{
 								bool Re = ((I % CounterStack2) < CounterStack1);
@@ -1259,16 +1273,15 @@ namespace Potato::Reg
 								if (!Re)
 									continue;
 							}
-
-							TotalToNode.push_back(CacheToNode[I2]);
+							OldNode.push_back(Ite2.ToNode);
 						}
 
-						if (TotalToNode.empty())
+						if (OldNode.empty())
 						{
 							Ite.ToNode.push_back(std::numeric_limits<std::size_t>::max());
 						}
 						else {
-							auto [MapIte, Bool] = Mapping.insert({ TotalToNode, TempNode.size() });
+							auto [MapIte, Bool] = Mapping.insert({ OldNode, TempNode.size() });
 							if (Bool)
 							{
 								TempNode.push_back({});
@@ -1287,7 +1300,7 @@ namespace Potato::Reg
 				TempNode[Top->second].AcceptEdge = std::move(AcceptEdges);
 			}
 
-			TempNode[Top->second].TempEdge = std::move(TempEdges);
+			TempNode[Top->second].TempEdge = TempEdges;
 
 			volatile int  i = 0;
 		}
