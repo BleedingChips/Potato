@@ -1018,27 +1018,70 @@ namespace Potato::Reg
 						});
 					}
 					else {
-						std::size_t FinnalToNode = 0;
-						auto [MIte, B] = NodeMapping.insert({CurEdge.ToNode, FinnalToNode});
-						auto Sets = CurEdge.CharSets;
-						if(B)
+
+						bool Accept = true;
+
+						for (std::size_t I = 0; I < Pros.size() && Accept; ++I)
 						{
-							FinnalToNode = AddNode();
-							MIte->second = FinnalToNode;
-							//if(Sets.Size() != 0)
-							SearchingStack.push_back(MIte);
-						}else{
-							FinnalToNode = MIte->second;
+							auto Cur = Pros[I];
+							if (Cur.Type == EdgePropertyT::ZeroCounter)
+							{
+								std::size_t Counter = 0;
+								for (std::size_t I2 = I + 1; I2 < Pros.size() && Accept; ++I2)
+								{
+									auto Cur2 = Pros[I2];
+									if (Cur2.Index == Cur.Index)
+									{
+										switch (Cur2.Type)
+										{
+										case EdgePropertyT::AddCounter:
+											Counter += 1;
+											break;
+										case EdgePropertyT::LessCounter:
+											if (Counter > Cur2.Par1)
+											{
+												Accept = false;
+											}
+											break;
+										case EdgePropertyT::BiggerCounter:
+											if (Counter < Cur2.Par1)
+											{
+												Accept = false;
+											}
+											break;
+										default:
+											break;
+										}
+									}
+								}
+							}
 						}
 
-						Nodes[Top->second].Edges.push_back({
-							Pros,
-							FinnalToNode,
-							std::move(Sets),
-							{0, 0},
-							CurEdge.MaskIndex
+						if (Accept)
+						{
+							std::size_t FinnalToNode = 0;
+							auto [MIte, B] = NodeMapping.insert({ CurEdge.ToNode, FinnalToNode });
+							auto Sets = CurEdge.CharSets;
+							if (B)
+							{
+								FinnalToNode = AddNode();
+								MIte->second = FinnalToNode;
+								//if(Sets.Size() != 0)
+								SearchingStack.push_back(MIte);
 							}
-						);
+							else {
+								FinnalToNode = MIte->second;
+							}
+
+							Nodes[Top->second].Edges.push_back({
+								Pros,
+								FinnalToNode,
+								std::move(Sets),
+								{0, 0},
+								CurEdge.MaskIndex
+								}
+							);
+						}
 					}
 				}
 			}
@@ -1122,6 +1165,7 @@ namespace Potato::Reg
 
 		std::vector<TempEdgeT> TempEdges;
 		std::optional<TempEdgeT> AcceptEdges;
+		std::vector<TempEdgeT> FailAccept;
 
 		while (!SearchingStack.empty())
 		{
@@ -1132,28 +1176,20 @@ namespace Potato::Reg
 			for (auto Ite : Top->first)
 			{
 				auto& EdgeRef = T1.Nodes[Ite].Edges;
-				for (std::size_t EdgeIndex = 0; EdgeIndex < EdgeRef.size(); ++EdgeIndex)
+				std::size_t EdgeIndex = 0;
+				for (auto& Ite2 : EdgeRef)
 				{
-					auto& Ite2 = EdgeRef[EdgeIndex];
+
 					if (AcceptEdges.has_value())
 					{
-						if (
-							(Format == FormatE::GreedyHeadMarch && Ite2.MaskIndex == AcceptEdges->Propertys[0].MaskIndex)
-							|| (Format == FormatE::HeadMarch)
-							)
-						{
-							break;
-						}
-
-						if(Ite2.HasAccept())
-							continue;
+						if()
 					}
 
 					TemPropertyT Property
 					{
 						Ite,
 						Ite2.ToNode,
-						EdgeIndex,
+						EdgeIndex++,
 						Ite2.MaskIndex,
 						false,
 						false,
@@ -1191,7 +1227,14 @@ namespace Potato::Reg
 
 					if (Property.HasAccept)
 					{
+						if(AcceptEdges.has_value())
+							continue;
+
 						AcceptEdges = std::move(Temp);
+
+						if(Format == FormatE::HeadMarch && !Property.HasCounter)
+							break;
+
 						continue;
 					}
 
