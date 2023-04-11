@@ -1054,6 +1054,15 @@ namespace Potato::Reg
 										}
 									}
 								}
+								if (Accept)
+								{
+									Pros.erase(
+										std::remove_if(Pros.begin() + I, Pros.end(), [](PropertyT const& Pro){
+											return Pro.Type == EdgePropertyT::LessCounter || Pro.Type == EdgePropertyT::BiggerCounter;
+										}),
+										Pros.end()
+									);
+								}
 							}
 						}
 
@@ -1182,7 +1191,7 @@ namespace Potato::Reg
 
 					if (AcceptEdges.has_value())
 					{
-						if()
+						//if()
 					}
 
 					TemPropertyT Property
