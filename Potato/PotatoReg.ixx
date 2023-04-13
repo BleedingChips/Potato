@@ -119,12 +119,11 @@ export namespace Potato::Reg
 			AddCounter,
 			LessCounter,
 			BiggerCounter,
-			Accept,
 		};
 
 		struct PropertyT
 		{
-			EdgePropertyT Type = EdgePropertyT::Accept;
+			EdgePropertyT Type = EdgePropertyT::CaptureBegin;
 			std::size_t Index = 0;
 			StandardT Par1 = 0;
 			bool operator==(PropertyT const& T1) const { return Type == T1.Type && Index == T1.Index && Par1 == T1.Par1; }
@@ -137,13 +136,20 @@ export namespace Potato::Reg
 			IntervalT CharSets;
 			Misc::IndexSpan<> TokenIndex;
 			std::size_t MaskIndex = 0;
-			bool IsEpsilonEdge() const { return CharSets.Size() == 0 && Propertys.empty(); }
-			bool IsNoConsumeEdge() const;
+			bool IsEpsilonEdge() const { return CharSets.Size() == 0; }
 			bool HasCapture() const;
 			bool HasCounter() const;
-			bool HasAccept() const;
 			bool operator==(EdgeT const& T1) const {
 				return ToNode == T1.ToNode && Propertys == T1.Propertys && CharSets == T1.CharSets;
+			}
+		};
+
+		struct AcceptT
+		{
+			StandardT Mask;
+			std::size_t MaskIndex;
+			bool operator==(AcceptT const& T1) const {
+				return Mask == T1.Mask && MaskIndex == T1.MaskIndex;
 			}
 		};
 
@@ -151,6 +157,7 @@ export namespace Potato::Reg
 		{
 			std::vector<EdgeT> Edges;
 			std::size_t CurIndex;
+			std::optional<AcceptT> Accept;
 		};
 
 		std::vector<NodeT> Nodes;

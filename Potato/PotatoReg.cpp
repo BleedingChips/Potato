@@ -365,11 +365,6 @@ namespace Potato::Reg
 		std::size_t Index;
 	};
 
-	bool NfaT::EdgeT::IsNoConsumeEdge() const
-	{
-		return CharSets.Size() == 0 && !HasAccept();
-	}
-
 	bool NfaT::EdgeT::HasCapture() const
 	{
 		for (auto& Ite : Propertys)
@@ -397,17 +392,6 @@ namespace Potato::Reg
 		}
 		return false;
 
-	}
-	bool NfaT::EdgeT::HasAccept() const
-	{
-		for (auto& Ite : Propertys)
-		{
-			if (Ite.Type == EdgePropertyT::Accept)
-			{
-				return true;
-			}
-		}
-		return false;
 	}
 
 
@@ -694,7 +678,7 @@ namespace Potato::Reg
 				{
 					auto Te = NT[0].Consume<std::size_t>();
 					Te *= 10;
-					auto Te2 = NT[0].Consume<IntervalT>()[0].Start;
+					auto Te2 = NT[1].Consume<IntervalT>()[0].Start;
 					Te += Te2 - U'0';
 					return Te;
 				}
@@ -728,10 +712,8 @@ namespace Potato::Reg
 
 		{
 			auto Last = AddNode();
-			EdgeT Tem;
-			Tem.Propertys.push_back({ EdgePropertyT::Accept, 0, Mask});
-			Tem.ToNode = Last;
-			Nodes[Re.Out].Edges.push_back(std::move(Tem));
+			AddConsume({Re.Out, Last}, EndOfFile(), {});
+			Nodes[Last].Accept = AcceptT{Mask, 0};
 		}
 
 		std::set<std::size_t> Exist;
@@ -785,7 +767,7 @@ namespace Potato::Reg
 
 					auto& Edge = Cur.Edges[TopRecord.EdgeCount];
 
-					if (Edge.IsNoConsumeEdge())
+					if (Edge.IsEpsilonEdge())
 					{
 						auto FindIte = std::find_if(SearchPath.begin(), SearchPath.end(), [&](PathT P){
 							return Edge.ToNode == P.State;
@@ -1009,7 +991,7 @@ namespace Potato::Reg
 					auto& CurEdge = CurNode.Edges[TopRecord.EdgeSize];
 					StateStack.push_back(CurEdge.ToNode);
 					Pros.insert(Pros.end(), CurEdge.Propertys.begin(), CurEdge.Propertys.end());
-					if (CurEdge.IsNoConsumeEdge())
+					if (CurEdge.IsEpsilonEdge())
 					{
 						RecordStack.push_back({
 							StateStack.size(),
@@ -1074,6 +1056,15 @@ namespace Potato::Reg
 							if (B)
 							{
 								FinnalToNode = AddNode();
+
+								{
+									auto& RefToNode = Ref.Nodes[CurEdge.ToNode];
+									if (RefToNode.Accept.has_value())
+									{
+										Nodes[FinnalToNode].Accept = RefToNode.Accept;
+									}
+								}
+
 								MIte->second = FinnalToNode;
 								//if(Sets.Size() != 0)
 								SearchingStack.push_back(MIte);
@@ -1134,6 +1125,7 @@ namespace Potato::Reg
 	DfaT::DfaT(NoEpsilonNfaT const& T1, FormatE Format)
 		: Format(Format)
 	{
+
 		std::map<std::vector<std::size_t>, std::size_t> Mapping;
 
 		std::vector<decltype(Mapping)::const_iterator> SearchingStack;
@@ -1145,7 +1137,7 @@ namespace Potato::Reg
 			std::size_t EdgeCount;
 			std::size_t MaskIndex;
 
-			bool HasAccept = false;
+			bool ToNodeHasAccept = false;
 			bool HasCapture = false;
 			bool HasCounter = false;
 		};
@@ -1173,26 +1165,26 @@ namespace Potato::Reg
 		}
 
 		std::vector<TempEdgeT> TempEdges;
-		std::optional<TempEdgeT> AcceptEdges;
-		std::vector<TempEdgeT> FailAccept;
+		std::set<std::size_t> RemoveMaskIndex;
 
 		while (!SearchingStack.empty())
 		{
 			TempEdges.clear();
+			RemoveMaskIndex.clear();
 			AcceptEdges.reset();
 			auto Top = *SearchingStack.rbegin();
 			SearchingStack.pop_back();
+
+			bool HasTrulyAccept = false;
+
 			for (auto Ite : Top->first)
 			{
+
 				auto& EdgeRef = T1.Nodes[Ite].Edges;
 				std::size_t EdgeIndex = 0;
+
 				for (auto& Ite2 : EdgeRef)
 				{
-
-					if (AcceptEdges.has_value())
-					{
-						//if()
-					}
 
 					TemPropertyT Property
 					{
@@ -1200,11 +1192,10 @@ namespace Potato::Reg
 						Ite2.ToNode,
 						EdgeIndex++,
 						Ite2.MaskIndex,
-						false,
+						T1.Nodes[Ite2.ToNode].Accept.has_value(),
 						false,
 						false
 					};
-
 
 					for (auto& Ite3 : Ite2.Propertys)
 					{
@@ -1219,9 +1210,6 @@ namespace Potato::Reg
 						case NfaT::EdgePropertyT::LessCounter:
 						case NfaT::EdgePropertyT::BiggerCounter:
 							Property.HasCounter = true;
-							break;
-						case NfaT::EdgePropertyT::Accept:
-							Property.HasAccept = true;
 							break;
 						default:
 							break;
@@ -1356,6 +1344,7 @@ namespace Potato::Reg
 
 			volatile int  i = 0;
 		}
+		*/
 		volatile int  i = 0;
 	}
 
