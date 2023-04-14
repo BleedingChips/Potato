@@ -158,6 +158,9 @@ export namespace Potato::Reg
 			std::vector<EdgeT> Edges;
 			std::size_t CurIndex;
 			std::optional<AcceptT> Accept;
+			bool operator==(NodeT const& I1) const {
+				return Accept == I1.Accept && Edges == I1.Edges;
+			}
 		};
 
 		std::vector<NodeT> Nodes;
@@ -191,6 +194,21 @@ export namespace Potato::Reg
 		DfaT(NoEpsilonNfaT const& T1, FormatE Format = FormatE::March);
 	
 	protected:
+
+		struct WithCounterToNodeIndexAllocator
+		{
+			WithCounterToNodeIndexAllocator(FormatE Format) : Format(Format) {}
+
+			std::size_t TotalCount() const { return std::max(NodeCount, 1); }
+			void Clear() { Ite.Index = 0; NodeCount = 0; RemoveMaskIndex.clear(); }
+
+			std::size_t AllocateIndex(bool ToAcceptNode, std::size_t MaskIndex, bool Pass);
+
+			const FormatE Format;
+			std::size_t IteIndex = 0;
+			std::size_t NodeCount = 0;
+			std::vector<std::size_t> RemoveMaskIndex;
+		};
 
 		enum class ActioE : uint8_t
 		{

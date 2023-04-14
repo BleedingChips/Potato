@@ -153,8 +153,8 @@ int main()
 
 	try {
 		NfaT N(U"a{2,3}", false, 0);
-		//NfaT N2(U"a", false, 1);
-		//N.Link(N2);
+		NfaT N2(U"a{5,16}", false, 1);
+		N.Link(N2);
 		NoEpsilonNfaT N3(N);
 		DfaT N4{N3, DfaT::FormatE::March};
 		volatile int i = 0;
