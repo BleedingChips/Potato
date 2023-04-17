@@ -1124,14 +1124,14 @@ namespace Potato::Reg
 		}
 	}
 
-	std::size_t DfaT::WithCounterToNodeIndexAllocator::AllocateIndex(bool ToAcceptNode, std::size_t MaskIndex, bool Pass)
+	std::size_t DfaT::DivergenceNodeT::AllocateIndex(bool ToAcceptNode, std::size_t MaskIndex, bool Pass)
 	{
-		switch (Format)
-		{
-		case FormatE::March:
-
-			break;
-		}
+		std::size_t DCount = std::pow(2, DivergenceCount);
+		if (!Pass)
+			CurIndex += DCount;
+		++DivergenceCount;
+		TotalNodeCount += DCount;
+		return CurIndex;
 	}
 
 	DfaT::DfaT(NoEpsilonNfaT const& T1, FormatE Format)
@@ -1319,17 +1319,20 @@ namespace Potato::Reg
 
 			std::vector<std::size_t> OldNode;
 
+
 			for (auto& Ite : TempEdges)
 			{
 
-				std::size_t CounterCount = 0;
+				DivergenceNodeT NodeAllocator;
+				OldNode.clear();
+				OldNode.resize(NodeAllocator.TotalCount());
 
 				for (auto& Ite2 : Ite.Propertys)
 				{
-					if (Ite2.HasCounter)
-						++CounterCount;
+					
 				}
-				
+
+
 				if (CounterCount == 0)
 				{
 					OldNode.clear();

@@ -195,18 +195,27 @@ export namespace Potato::Reg
 	
 	protected:
 
-		struct WithCounterToNodeIndexAllocator
+		struct DivergenceNodeT
 		{
-			WithCounterToNodeIndexAllocator(FormatE Format) : Format(Format) {}
+			DivergenceNodeT(FormatE Format) : Format(Format) {}
 
-			std::size_t TotalCount() const { return std::max(NodeCount, 1); }
-			void Clear() { Ite.Index = 0; NodeCount = 0; RemoveMaskIndex.clear(); }
+			std::size_t GetTotalNodeCount() const { return TotalNodeCount; }
+			void Clear() { CurIndex = 0; Redefine = false; DivergenceCount = 0; TotalNodeCount = 1; RemoveMaskIndex.clear(); }
 
-			std::size_t AllocateIndex(bool ToAcceptNode, std::size_t MaskIndex, bool Pass);
+			void AllocateIndex(bool ToAcceptNode, std::size_t MaskIndex, bool Pass);
+
+			std::optional<std::size_t> GetCurrentNodeIndex() const { 
+				if (!Redefine)
+					return CurIndex;
+				else
+					return {};
+			}
 
 			const FormatE Format;
-			std::size_t IteIndex = 0;
-			std::size_t NodeCount = 0;
+			std::size_t CurIndex = 0;
+			bool Redefine = false;
+			std::size_t DivergenceCount = 0;
+			std::size_t TotalNodeCount = 1;
 			std::vector<std::size_t> RemoveMaskIndex;
 		};
 
