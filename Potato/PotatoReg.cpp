@@ -1124,8 +1124,36 @@ namespace Potato::Reg
 		}
 	}
 
-	std::size_t DfaT::DivergenceNodeT::AllocateIndex(bool ToAcceptNode, std::size_t MaskIndex, bool Pass)
+	void DfaT::DivergenceNodeT::Clear() 
+	{ 
+		CurIndex = 0; 
+		Redefine = false;
+		DivergenceCount = 0; 
+		TotalNodeCount = 1; 
+		RemoveMaskIndex.clear(); 
+	}
+
+	bool DfaT::DivergenceNodeT::InsertCondition(bool HasCounter, bool ToAcceptNode, bool Pass, std::size_t MaskIndex)
 	{
+		switch (Format)
+		{
+		case FormatE::March:
+			if (ToAcceptNode && Pass)
+				HasAccept = true;
+			if(!HasCounter)
+				return true;
+			else
+			if (ToAcceptNode)
+			{
+				if(HasCounter)
+			}
+			break;
+		case FormatE::HeadMarch:
+			break;
+		case FormatE::GreedyHeadMarch:
+			break;
+		}
+		return false;
 		std::size_t DCount = std::pow(2, DivergenceCount);
 		if (!Pass)
 			CurIndex += DCount;

@@ -200,9 +200,9 @@ export namespace Potato::Reg
 			DivergenceNodeT(FormatE Format) : Format(Format) {}
 
 			std::size_t GetTotalNodeCount() const { return TotalNodeCount; }
-			void Clear() { CurIndex = 0; Redefine = false; DivergenceCount = 0; TotalNodeCount = 1; RemoveMaskIndex.clear(); }
+			void Clear();
 
-			void AllocateIndex(bool ToAcceptNode, std::size_t MaskIndex, bool Pass);
+			bool InsertCondition(bool HasCounter, bool ToAcceptNode, bool Pass, std::size_t MaskIndex);
 
 			std::optional<std::size_t> GetCurrentNodeIndex() const { 
 				if (!Redefine)
@@ -213,9 +213,9 @@ export namespace Potato::Reg
 
 			const FormatE Format;
 			std::size_t CurIndex = 0;
-			bool Redefine = false;
 			std::size_t DivergenceCount = 0;
 			std::size_t TotalNodeCount = 1;
+			bool HasAccept = false;
 			std::vector<std::size_t> RemoveMaskIndex;
 		};
 
