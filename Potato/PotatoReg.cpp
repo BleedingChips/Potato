@@ -1124,6 +1124,7 @@ namespace Potato::Reg
 		}
 	}
 
+	/*
 	void DfaT::DivergenceNodeT::Clear() 
 	{ 
 		CurIndex = 0; 
@@ -1138,6 +1139,12 @@ namespace Potato::Reg
 		switch (Format)
 		{
 		case FormatE::March:
+		case FormatE::HeadMarch:
+			
+
+
+
+
 			if (ToAcceptNode && Pass)
 				HasAccept = true;
 			if(!HasCounter)
@@ -1161,6 +1168,7 @@ namespace Potato::Reg
 		TotalNodeCount += DCount;
 		return CurIndex;
 	}
+	*/
 
 	DfaT::DfaT(NoEpsilonNfaT const& T1, FormatE Format)
 		: Format(Format)
@@ -1169,30 +1177,6 @@ namespace Potato::Reg
 		std::map<std::vector<std::size_t>, std::size_t> Mapping;
 
 		std::vector<decltype(Mapping)::const_iterator> SearchingStack;
-
-		struct TemPropertyT
-		{
-			std::size_t FromNode;
-			std::size_t ToNode;
-			std::size_t EdgeCount;
-			std::size_t MaskIndex;
-
-			bool ToNodeHasAccept = false;
-			bool HasCapture = false;
-			bool HasCounter = false;
-		};
-
-		struct TempEdgeT
-		{
-			IntervalT CharSets;
-			std::vector<std::size_t> ToNode;
-			std::vector<TemPropertyT> Propertys;
-		};
-
-		struct TempNodeT
-		{
-			std::vector<TempEdgeT> TempEdge;
-		};
 
 		std::vector<TempNodeT> TempNode;
 
@@ -1203,7 +1187,6 @@ namespace Potato::Reg
 		}
 
 		std::vector<TempEdgeT> TempEdges;
-		std::set<std::size_t> RemoveMaskIndex;
 
 		while (!SearchingStack.empty())
 		{
@@ -1211,8 +1194,6 @@ namespace Potato::Reg
 			RemoveMaskIndex.clear();
 			auto Top = *SearchingStack.rbegin();
 			SearchingStack.pop_back();
-
-			bool HasTrulyAccept = false;
 
 			for (auto Ite : Top->first)
 			{
@@ -1228,9 +1209,6 @@ namespace Potato::Reg
 
 					auto EdgeIndexIte = EdgeIndex++;
 
-					if (Format == FormatE::GreedyHeadMarch && RemoveMaskIndex.find(Ite2.MaskIndex) != RemoveMaskIndex.end())
-						continue;
-
 					TemPropertyT Property
 					{
 						Ite,
@@ -1238,10 +1216,7 @@ namespace Potato::Reg
 						EdgeIndexIte,
 						Ite2.MaskIndex,
 						T1.Nodes[Ite2.ToNode].Accept.has_value(),
-						false,
-						false
 					};
-
 
 					for (auto& Ite3 : Ite2.Propertys)
 					{
@@ -1262,18 +1237,17 @@ namespace Potato::Reg
 						}
 					}
 
-					if (HasTrulyAccept)
+					if (
+						(Format == FormatE::HeadMarch || Format == FormatE::GreedyHeadMarch)
+						&& Property.ToNodeHasAccept
+					)
 					{
-						if (Property.ToNodeHasAccept)
+						for (auto& Ite3 : TempEdges)
 						{
-							if(Format == FormatE::March)
-								continue;
-							if (Format == FormatE::GreedyHeadMarch && !Property.HasCounter)
+							if (Ite3.CharSets.Size() != 1 || Ite3.CharSets[0].Start != EndOfFile())
 							{
-								RemoveMaskIndex.insert(Ite2.MaskIndex);
-								continue;
+								Ite3.Propertys.push_back(Property);
 							}
-								
 						}
 					}
 
@@ -1282,82 +1256,124 @@ namespace Potato::Reg
 						{},
 						{Property}
 					};
-
-					if (Property.ToNodeHasAccept)
+					
+					for (std::size_t I = 0; I < TempEdges.size(); ++I)
 					{
-						bool Insert = false;
-						if (Format == FormatE::HeadMarch || Format == FormatE::GreedyHeadMarch)
+						auto& Ite3 = TempEdges[I];
+						auto Middle = (Temp.CharSets & Ite3.CharSets);
+						if (Middle.Size() != 0)
 						{
-							for (auto& Ite3 : TempEdges)
-							{
-								if (Ite3.CharSets.Size() != 1 || Ite3.CharSets[0].Start != EndOfFile())
-								{
-									Ite3.Propertys.push_back(Property);
-								}
-								if (!Insert && Ite3.CharSets.Size() == 1 && Ite3.CharSets[0].Start == EndOfFile())
-									Insert = true;
-							}
-						}
-
-						if (!Insert)
-						{
-							TempEdges.push_back(std::move(Temp));
-						}
-
-						if (!Property.HasCounter)
-						{
-							HasTrulyAccept = true;
-							if (Format == FormatE::HeadMarch)
+							TempEdgeT NewEdge;
+							NewEdge.ToNode.insert(NewEdge.ToNode.end(), Ite3.ToNode.begin(), Ite3.ToNode.end());
+							NewEdge.ToNode.insert(NewEdge.ToNode.end(), Temp.ToNode.begin(), Temp.ToNode.end());
+							NewEdge.Propertys.insert(NewEdge.Propertys.end(), Ite3.Propertys.begin(), Ite3.Propertys.end());
+							NewEdge.Propertys.insert(NewEdge.Propertys.end(), Temp.Propertys.begin(), Temp.Propertys.end());
+							Temp.CharSets = Temp.CharSets - Middle;
+							Ite3.CharSets = Ite3.CharSets - Middle;
+							NewEdge.CharSets = std::move(Middle);
+							TempEdges.push_back(std::move(NewEdge));
+							if (Temp.CharSets.Size() == 0)
 								break;
-							if(Format == FormatE::GreedyHeadMarch)
-								RemoveMaskIndex.insert(Ite2.MaskIndex);
-						}	
-					}
-					else {
-						for (std::size_t I = 0; I < TempEdges.size(); ++I)
-						{
-							auto& Ite3 = TempEdges[I];
-							auto Middle = (Temp.CharSets & Ite3.CharSets);
-							if (Middle.Size() != 0)
-							{
-								TempEdgeT NewEdge;
-								NewEdge.ToNode.insert(NewEdge.ToNode.end(), Ite3.ToNode.begin(), Ite3.ToNode.end());
-								NewEdge.ToNode.insert(NewEdge.ToNode.end(), Temp.ToNode.begin(), Temp.ToNode.end());
-								NewEdge.Propertys.insert(NewEdge.Propertys.end(), Ite3.Propertys.begin(), Ite3.Propertys.end());
-								NewEdge.Propertys.insert(NewEdge.Propertys.end(), Temp.Propertys.begin(), Temp.Propertys.end());
-								Temp.CharSets = Temp.CharSets - Middle;
-								Ite3.CharSets = Ite3.CharSets - Middle;
-								NewEdge.CharSets = std::move(Middle);
-								TempEdges.push_back(std::move(NewEdge));
-								if (Temp.CharSets.Size() == 0)
-									break;
-							}
 						}
-
-						if (!Temp.CharSets.Size() == 0)
-							TempEdges.push_back(std::move(Temp));
-
-						TempEdges.erase(
-							std::remove_if(TempEdges.begin(), TempEdges.end(), [](TempEdgeT const& T) { return T.CharSets.Size() == 0; }),
-							TempEdges.end()
-						);
 					}
+
+					if (!Temp.CharSets.Size() == 0)
+						TempEdges.push_back(std::move(Temp));
+
+					TempEdges.erase(
+						std::remove_if(TempEdges.begin(), TempEdges.end(), [](TempEdgeT const& T) { return T.CharSets.Size() == 0; }),
+						TempEdges.end()
+					);
 				}
 			}
 
 			std::vector<std::size_t> OldNode;
 
+			for (auto& Ite : TempEdges)
+			{
+				switch (Format)
+				{
+				case Format == FormatE::March:
+				{
+					for (std::size_t I = 0; I < Ite.Propertys.size(); ++I)
+					{
+						auto& Ite2 = Ite.Propertys[I];
+						
+						if (Ite2.HasCounter)
+						{
+							if(Ite2.ToNodeHasAccept)
+								Ite2.PassAction = DetectActionE::ReferenceToNode;
+							else
+								Ite2.PassAction = DetectActionE::ContinueDetect;
+
+							Ite2.UnpassAction = DetectActionE::ContinueDetect;
+
+							for (std::size_t I2 = 0; I2 < I; ++I2)
+							{
+								auto& Ite3 = Ite.Propertys[I2];
+								if (
+									Ite3.PassAction == DetectActionE::ContinueDetect
+									&& Ite3.PassIndex == 0
+									)
+								{
+									if (Ite3.MaskIndex != Ite2.MaskIndex)
+										Ite3.PassIndex = I;
+								}
+								else if (
+									Ite3.UnpassAction == DetectActionE::ContinueDetect
+									&& Ite3.UnpassIndex == 0
+								)
+								{
+									Ite3.UnPassIndex = I;
+								}
+							}
+						}
+						else {
+							Ite2.PassAction = DetectActionE::AlwaysTrue;
+							Ite2.UnpassAction = DetectActionE::AlwaysTrue;
+							if(Ite2.ToNodeHasAccept)
+								break;
+						}
+					}
+					break;
+				}
+				case Format == FormatE::HeadMarch:
+				{
+					assert(false);
+					break;
+				}
+				case Format == FormatE::GreedyHeadMarch:
+				{
+					assert(false);
+					break;
+				}
+				default:
+					break;
+				}
+				assert(!Ite.Propertys.empty());
+				auto& Last = Ite.Propertys.end();
+
+				Ite.Propertys.erase(
+					std::remove_if()
+				);
+			}
+
+
+			
+
+
+
 
 			for (auto& Ite : TempEdges)
 			{
-
-				DivergenceNodeT NodeAllocator;
-				OldNode.clear();
-				OldNode.resize(NodeAllocator.TotalCount());
+				bool HasAccept = 0;
+				
+				
 
 				for (auto& Ite2 : Ite.Propertys)
 				{
-					
+					if(Ite2)
+					++TempEdge;
 				}
 
 

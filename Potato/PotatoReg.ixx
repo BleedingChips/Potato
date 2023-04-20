@@ -195,29 +195,44 @@ export namespace Potato::Reg
 	
 	protected:
 
-		struct DivergenceNodeT
+
+		enum class DetectActionE
 		{
-			DivergenceNodeT(FormatE Format) : Format(Format) {}
-
-			std::size_t GetTotalNodeCount() const { return TotalNodeCount; }
-			void Clear();
-
-			bool InsertCondition(bool HasCounter, bool ToAcceptNode, bool Pass, std::size_t MaskIndex);
-
-			std::optional<std::size_t> GetCurrentNodeIndex() const { 
-				if (!Redefine)
-					return CurIndex;
-				else
-					return {};
-			}
-
-			const FormatE Format;
-			std::size_t CurIndex = 0;
-			std::size_t DivergenceCount = 0;
-			std::size_t TotalNodeCount = 1;
-			bool HasAccept = false;
-			std::vector<std::size_t> RemoveMaskIndex;
+			Remove,
+			AlwaysTrue,
+			ContinueDetect,
+			ReferenceToNode,
 		};
+
+		struct TemPropertyT
+		{
+			std::size_t FromNode;
+			std::size_t ToNode;
+			std::size_t EdgeCount;
+			std::size_t MaskIndex;
+
+			bool ToNodeHasAccept = false;
+			bool HasCapture = false;
+			bool HasCounter = false;
+
+			DetectActionE PassAction = DetectActionE::Remove;
+			std::size_t PassIndex = 0;
+			DetectActionE UnpassAction = DetectActionE::Remove;
+			std::size_t UnpassIndex = 0;
+		};
+
+		struct TempEdgeT
+		{
+			IntervalT CharSets;
+			std::vector<std::size_t> ToNode;
+			std::vector<TemPropertyT> Propertys;
+		};
+
+		struct TempNodeT
+		{
+			std::vector<TempEdgeT> TempEdge;
+		};
+
 
 		enum class ActioE : uint8_t
 		{
