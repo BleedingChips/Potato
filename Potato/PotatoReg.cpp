@@ -1287,7 +1287,15 @@ namespace Potato::Reg
 				}
 			}
 
-			std::vector<std::size_t> OldNode;
+			std::vector<std::size_t> ToNode;
+
+			struct UnpassTuple
+			{
+				std::size_t EdgeIndex = 0;
+				std::size_t ToNodeSize = 0;
+			};
+
+			std::vector<UnpassTuple> Unpass;
 
 			for (auto& Ite : TempEdges)
 			{
@@ -1302,17 +1310,17 @@ namespace Potato::Reg
 						if (Ite2.HasCounter)
 						{
 							if(Ite2.ToNodeHasAccept)
-								Ite2.PassAction = DetectActionE::ReferenceToNode;
+								Ite2.PassAction = DetectActionE::Break;
 							else
-								Ite2.PassAction = DetectActionE::ContinueDetect;
+								Ite2.PassAction = DetectActionE::SkipTo;
 
-							Ite2.UnpassAction = DetectActionE::ContinueDetect;
+							Ite2.UnpassAction = DetectActionE::SkipTo;
 
 							for (std::size_t I2 = 0; I2 < I; ++I2)
 							{
 								auto& Ite3 = Ite.Propertys[I2];
 								if (
-									Ite3.PassAction == DetectActionE::ContinueDetect
+									Ite3.PassAction == DetectActionE::SkipTo
 									&& Ite3.PassIndex == 0
 									)
 								{
@@ -1320,7 +1328,7 @@ namespace Potato::Reg
 										Ite3.PassIndex = I;
 								}
 								else if (
-									Ite3.UnpassAction == DetectActionE::ContinueDetect
+									Ite3.UnpassAction == DetectActionE::SkipTo
 									&& Ite3.UnpassIndex == 0
 								)
 								{
@@ -1328,13 +1336,25 @@ namespace Potato::Reg
 								}
 							}
 						}
-						else {
-							Ite2.PassAction = DetectActionE::AlwaysTrue;
-							Ite2.UnpassAction = DetectActionE::AlwaysTrue;
-							if(Ite2.ToNodeHasAccept)
-								break;
+						else if(Ite2.ToNodeHasAccept)
+						{
+							break;
 						}
 					}
+
+					Ite.Propertys.erase(
+						Ite.Propertys.begin() + I,
+						Ite.Propertys.end()
+					);
+
+					for (auto& Ite2 : Ite.Propertys)
+					{
+						if (Ite2.PassAction == DetectActionE::SkipTo && Ite2.PassIndex == 0)
+							Ite2.PassAction = DetectActionE::ContinueToEnd;
+						if (Ite2.UnpassAction == DetectActionE::SkipTo && Ite2.UnpassIndex == 0)
+							Ite2.PassAction = DetectActionE::ContinueToEnd;
+					}
+
 					break;
 				}
 				case Format == FormatE::HeadMarch:
@@ -1351,11 +1371,26 @@ namespace Potato::Reg
 					break;
 				}
 				assert(!Ite.Propertys.empty());
-				auto& Last = Ite.Propertys.end();
+				ToNode.clear();
 
-				Ite.Propertys.erase(
-					std::remove_if()
-				);
+				std::size_t TotalNodeCount = 1;
+
+				for (auto& Ite2 : Ite.Propertys)
+				{
+					if (
+						Ite2.PassAction == DetectActionE::Break
+						|| Ite2.PassAction == DetectActionE::ContinueToEnd
+						)
+					{
+						TotalNodeCount *= 2;
+					}
+				}
+
+				std::size_t EdgeIndex = 0;
+
+
+
+
 			}
 
 

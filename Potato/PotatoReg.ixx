@@ -198,10 +198,10 @@ export namespace Potato::Reg
 
 		enum class DetectActionE
 		{
-			Remove,
 			AlwaysTrue,
-			ContinueDetect,
-			ReferenceToNode,
+			SkipTo,
+			Break,
+			ContinueToEnd,
 		};
 
 		struct TemPropertyT
@@ -215,9 +215,9 @@ export namespace Potato::Reg
 			bool HasCapture = false;
 			bool HasCounter = false;
 
-			DetectActionE PassAction = DetectActionE::Remove;
+			DetectActionE PassAction = DetectActionE::AlwaysTrue;
 			std::size_t PassIndex = 0;
-			DetectActionE UnpassAction = DetectActionE::Remove;
+			DetectActionE UnpassAction = DetectActionE::AlwaysTrue;
 			std::size_t UnpassIndex = 0;
 		};
 
