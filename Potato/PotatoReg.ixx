@@ -219,6 +219,9 @@ export namespace Potato::Reg
 			std::size_t PassIndex = 0;
 			DetectActionE UnpassAction = DetectActionE::AlwaysTrue;
 			std::size_t UnpassIndex = 0;
+
+			std::size_t UnpassOffset = 0;
+			std::size_t TotalNodeCount = 0;
 		};
 
 		struct TempEdgeT
@@ -231,6 +234,8 @@ export namespace Potato::Reg
 		struct TempNodeT
 		{
 			std::vector<TempEdgeT> TempEdge;
+			std::vector<std::size_t> OriginalToNode;
+			std::optional<NfaT::AcceptT> Accept;
 		};
 
 

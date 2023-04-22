@@ -1181,8 +1181,21 @@ namespace Potato::Reg
 		std::vector<TempNodeT> TempNode;
 
 		{
-			auto [Ite, B] = Mapping.insert({ {0}, TempNode.size()});
-			TempNode.push_back({});
+			std::vector<std::size_t> StartupNode = {0};
+			auto [Ite, B] = Mapping.insert({ StartupNode, TempNode.size() });
+
+			TempNodeT Startup;
+
+			for (auto Ite : StartupNode)
+			{
+				Startup.Accept = T1.Nodes[Ite].Accept;
+				if (Startup.Accept.has_value())
+					break;
+			}
+
+			Startup.OriginalToNode = std::move(StartupNode);
+			
+			TempNode.push_back(std::move(Startup));
 			SearchingStack.push_back(Ite);
 		}
 
@@ -1191,16 +1204,11 @@ namespace Potato::Reg
 		while (!SearchingStack.empty())
 		{
 			TempEdges.clear();
-			RemoveMaskIndex.clear();
 			auto Top = *SearchingStack.rbegin();
 			SearchingStack.pop_back();
 
 			for (auto Ite : Top->first)
 			{
-
-				if (HasTrulyAccept && Format == FormatE::HeadMarch)
-					break;
-
 				auto& EdgeRef = T1.Nodes[Ite].Edges;
 				std::size_t EdgeIndex = 0;
 
@@ -1287,23 +1295,14 @@ namespace Potato::Reg
 				}
 			}
 
-			std::vector<std::size_t> ToNode;
-
-			struct UnpassTuple
-			{
-				std::size_t EdgeIndex = 0;
-				std::size_t ToNodeSize = 0;
-			};
-
-			std::vector<UnpassTuple> Unpass;
-
 			for (auto& Ite : TempEdges)
 			{
 				switch (Format)
 				{
-				case Format == FormatE::March:
+				case FormatE::March:
 				{
-					for (std::size_t I = 0; I < Ite.Propertys.size(); ++I)
+					std::size_t I = 0;
+					for (; I < Ite.Propertys.size(); ++I)
 					{
 						auto& Ite2 = Ite.Propertys[I];
 						
@@ -1327,12 +1326,12 @@ namespace Potato::Reg
 									if (Ite3.MaskIndex != Ite2.MaskIndex)
 										Ite3.PassIndex = I;
 								}
-								else if (
+								if (
 									Ite3.UnpassAction == DetectActionE::SkipTo
 									&& Ite3.UnpassIndex == 0
 								)
 								{
-									Ite3.UnPassIndex = I;
+									Ite3.UnpassIndex = I;
 								}
 							}
 						}
@@ -1352,17 +1351,17 @@ namespace Potato::Reg
 						if (Ite2.PassAction == DetectActionE::SkipTo && Ite2.PassIndex == 0)
 							Ite2.PassAction = DetectActionE::ContinueToEnd;
 						if (Ite2.UnpassAction == DetectActionE::SkipTo && Ite2.UnpassIndex == 0)
-							Ite2.PassAction = DetectActionE::ContinueToEnd;
+							Ite2.UnpassAction = DetectActionE::ContinueToEnd;
 					}
 
 					break;
 				}
-				case Format == FormatE::HeadMarch:
+				case FormatE::HeadMarch:
 				{
 					assert(false);
 					break;
 				}
-				case Format == FormatE::GreedyHeadMarch:
+				case FormatE::GreedyHeadMarch:
 				{
 					assert(false);
 					break;
@@ -1370,109 +1369,169 @@ namespace Potato::Reg
 				default:
 					break;
 				}
+
 				assert(!Ite.Propertys.empty());
-				ToNode.clear();
 
-				std::size_t TotalNodeCount = 1;
+				std::size_t TotalCount = 1;
 
-				for (auto& Ite2 : Ite.Propertys)
+				for (std::size_t Index = Ite.Propertys.size(); Index > 0; --Index)
 				{
+					auto& Ref = Ite.Propertys[Index - 1];
 					if (
-						Ite2.PassAction == DetectActionE::Break
-						|| Ite2.PassAction == DetectActionE::ContinueToEnd
+						Ref.PassAction == DetectActionE::Break ||
+						Ref.PassAction == DetectActionE::ContinueToEnd
 						)
 					{
-						TotalNodeCount *= 2;
+						Ref.UnpassOffset = 1;
+					}
+					else if (Ref.PassAction == DetectActionE::SkipTo)
+					{
+						Ref.UnpassOffset = Ite.Propertys[Ref.PassIndex].TotalNodeCount;
+					}
+
+					if (
+						Ref.UnpassAction == DetectActionE::Break ||
+						Ref.UnpassAction == DetectActionE::ContinueToEnd
+						)
+					{
+						Ref.TotalNodeCount = 1 + Ref.UnpassOffset;
+						TotalCount = Ref.TotalNodeCount;
+					}
+					else if (Ref.UnpassAction == DetectActionE::SkipTo)
+					{
+						Ref.TotalNodeCount = Ite.Propertys[Ref.UnpassIndex].TotalNodeCount + Ref.UnpassOffset;
+						TotalCount = Ref.TotalNodeCount;
 					}
 				}
 
-				std::size_t EdgeIndex = 0;
+				Ite.ToNode.resize(TotalCount);
 
+				std::vector<std::size_t> TempToNodeCache;
 
-
-
-			}
-
-
-			
-
-
-
-
-			for (auto& Ite : TempEdges)
-			{
-				bool HasAccept = 0;
-				
-				
-
-				for (auto& Ite2 : Ite.Propertys)
+				struct UnpassTuple
 				{
-					if(Ite2)
-					++TempEdge;
-				}
+					std::size_t EdgeIndex = 0;
+					std::size_t TempToNodeSize = 0;
+					std::size_t CurNode = 0;
+				};
 
+				std::vector<UnpassTuple> SearchPass;
 
-				if (CounterCount == 0)
+				std::size_t CurNode = 0;
+				std::optional<std::size_t> SkipToNode;
+
+				for (std::size_t EdgeIte = 0; EdgeIte <= Ite.Propertys.size();)
 				{
-					OldNode.clear();
-					for (auto& Ite2 : Ite.Propertys)
-						OldNode.push_back(Ite2.ToNode);
-					auto [MapIte, Bool] = Mapping.insert({ OldNode, TempNode.size() });
-					if (Bool)
+					
+					if (EdgeIte == Ite.Propertys.size())
 					{
-						TempNode.push_back({});
-						SearchingStack.push_back(MapIte);
-					}
-					Ite.ToNode.clear();
-					Ite.ToNode.push_back(MapIte->second);
-				}
-				else {
-
-					std::size_t TotalSize = std::pow(CounterCount, 2);
-
-					for (std::size_t I = 0; I < TotalSize; ++I)
-					{
-						std::size_t CounterStack1 = 1;
-						std::size_t CounterStack2 = 2;
-
-						OldNode.clear();
-
-						for (auto& Ite2 : Ite.Propertys)
+						assert(Ite.ToNode[CurNode] == 0);
+						if (TempToNodeCache.empty())
 						{
-							if (Ite2.HasCounter)
-							{
-								bool Re = ((I % CounterStack2) < CounterStack1);
-								CounterStack1 = CounterStack2;
-								CounterStack2 = CounterStack2 * 2;
-								if (!Re)
-									continue;
-							}
-							OldNode.push_back(Ite2.ToNode);
-						}
-
-						if (OldNode.empty())
-						{
-							Ite.ToNode.push_back(std::numeric_limits<std::size_t>::max());
+							Ite.ToNode[CurNode] = std::numeric_limits<std::size_t>::max();
 						}
 						else {
-							auto [MapIte, Bool] = Mapping.insert({ OldNode, TempNode.size() });
+							auto [MapIte, Bool] = Mapping.insert({ TempToNodeCache, TempNode.size() });
 							if (Bool)
 							{
-								TempNode.push_back({});
+								TempNodeT TemNode;
+								for (auto Ite3 : TempToNodeCache)
+								{
+									TemNode.Accept = T1.Nodes[Ite3].Accept;
+									if (TemNode.Accept.has_value())
+										break;
+								}
+								TemNode.OriginalToNode = std::move(TempToNodeCache);
+								TempNode.push_back(std::move(TemNode));
 								SearchingStack.push_back(MapIte);
 							}
-							Ite.ToNode.push_back(MapIte->second);
+							Ite.ToNode[CurNode] = MapIte->second;
+						}
+						SkipToNode.reset();
+						if(SearchPass.empty())
+							break;
+						else {
+							auto Top = *SearchPass.rbegin();
+							SearchPass.pop_back();
+							EdgeIte = Top.EdgeIndex;
+							TempToNodeCache.resize(Top.TempToNodeSize);
+							auto& UnpassEdge = Ite.Propertys[EdgeIte];
+							CurNode = Top.CurNode + UnpassEdge.UnpassOffset;
+							switch (UnpassEdge.UnpassAction)
+							{
+							case DetectActionE::SkipTo:
+								SkipToNode = UnpassEdge.UnpassIndex;
+								++EdgeIte;
+								break;
+							case DetectActionE::Break:
+								EdgeIte = Ite.Propertys.size();
+								break;
+							case DetectActionE::ContinueToEnd:
+								SkipToNode = Ite.Propertys.size();
+								++EdgeIte;
+								break;
+							default:
+								assert(false);
+								break;
+							}
+							continue;
+						}
+					}
+
+					auto& Cur = Ite.Propertys[EdgeIte];
+					if (Cur.PassAction == DetectActionE::AlwaysTrue)
+					{
+						TempToNodeCache.push_back(Cur.ToNode);
+						++EdgeIte;
+					}
+					else {
+						
+						if (SkipToNode.has_value())
+						{
+							if(EdgeIte == *SkipToNode)
+								SkipToNode.reset();
+							else {
+								++EdgeIte;
+								continue;
+							}
+								
 						}
 
+						SearchPass.push_back({ EdgeIte, TempToNodeCache.size(), CurNode });
+						TempToNodeCache.push_back(Cur.ToNode);
+						if (Cur.PassAction == DetectActionE::Break)
+						{
+							EdgeIte = Ite.Propertys.size();
+						}else if (Cur.PassAction == DetectActionE::ContinueToEnd)
+						{
+							SkipToNode = Ite.Propertys.size();
+							++EdgeIte;
+						}
+						else {
+							SkipToNode = Cur.PassIndex;
+							++EdgeIte;
+						}
 					}
 				}
+
+				while (!Ite.ToNode.empty())
+				{
+					if(*Ite.ToNode.rbegin() == std::numeric_limits<std::size_t>::max())
+						Ite.ToNode.pop_back();
+					else
+						break;
+				}
+				assert(!Ite.ToNode.empty());
 			}
 
 			TempNode[Top->second].TempEdge = TempEdges;
-
-			volatile int  i = 0;
 		}
+
+		Nodes.reserve(TempNode.size());
+
 		volatile int  i = 0;
+
+		//for(auto& )
 	}
 
 	/*
