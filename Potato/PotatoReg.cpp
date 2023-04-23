@@ -1527,6 +1527,130 @@ namespace Potato::Reg
 			TempNode[Top->second].TempEdge = TempEdges;
 		}
 
+		struct ActionMappingnNodeT
+		{
+			std::map<ActionIndexT, std::size_t> Indexs;
+			bool HasAccept = false;
+		};
+
+		std::vector<ActionMappingnNodeT> SubIndexNodes;
+
+		SubIndexNodes.resize(T1.Nodes.size());
+
+		for (std::size_t I = 0; I < T1.Nodes.size(); ++I)
+			SubIndexNodes[I].HasAccept = T1.Nodes[I].Accept.has_value();
+
+		for (auto& Ite : TempNode)
+		{
+			for (auto& Ite2 : Ite.TempEdge)
+			{
+				for (auto& Ite3 : Ite2.Propertys)
+				{
+
+					if (!Ite3.HasCapture && !Ite3.HasCounter)
+						continue;
+
+					auto& F = T1.Nodes[Ite3.FromNode];
+					for (auto& Ite4 : F.Edges)
+					{
+						for (auto& Ite5 : Ite4.Propertys)
+						{
+							ActionIndexWithSubIndexT Index;
+							switch (Ite5.Type)
+							{
+							case NfaT::EdgePropertyT::CaptureBegin:
+								SubIndexNodes[Ite4.ToNode].Indexs.insert(
+									{
+										ActionIndexT{
+											ActionIndexT::CategoryE::CaptureBegin,
+											Ite5.Index,
+											Ite4.MaskIndex,
+										}
+										, 0
+									}
+								);
+								break;
+							case NfaT::EdgePropertyT::CaptureEnd:
+								SubIndexNodes[Ite4.ToNode].Indexs.insert(
+									{ 
+										ActionIndexT{
+											ActionIndexT::CategoryE::CaptureEnd,
+											Ite5.Index,
+											Ite4.MaskIndex,
+										}
+										, 0 
+									}
+								);
+								break;
+							default:
+								SubIndexNodes[Ite4.ToNode].Indexs.insert(
+									{
+										ActionIndexT{
+											ActionIndexT::CategoryE::Counter,
+											Ite5.Index,
+											Ite4.MaskIndex,
+										}
+										, 0
+									}
+								);
+								break;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		bool Change = true;
+
+		while (Change)
+		{
+			Change = false;
+
+			for (auto& Ite : TempNode)
+			{
+				for (std::size_t I = 0; I < Ite.OriginalToNode.size(); ++I)
+				{
+					auto& Cur = SubIndexNodes[Ite.OriginalToNode[I]];
+					for (std::size_t I2 = I + 1; I2 < Ite.OriginalToNode.size(); ++I2)
+					{
+						auto& Cur2 = SubIndexNodes[Ite.OriginalToNode[I2]];
+						for (auto& Ite2 : Cur.Indexs)
+						{
+							auto Find = Cur2.Indexs.find(Ite2.first);
+							if (Find != Cur2.Indexs.end() && Ite2.second == Find->second)
+							{
+								assert(!(Cur.HasAccept && Cur2.HasAccept));
+								if (Cur2.HasAccept)
+									Ite2.second += 1;
+								else
+									Find->second += 1;
+									Change = true;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		std::vector<ActionIndexWithSubIndexT> ActionIndexAllocator;
+
+		for (auto& Ite : SubIndexNodes)
+		{
+			for (auto& Ite2 : Ite.Indexs)
+			{
+				ActionIndexWithSubIndexT Cur{ Ite2.first, Ite2.second };
+				auto Find = std::find(ActionIndexAllocator.begin(), ActionIndexAllocator.end(), Cur);
+				if (Find == ActionIndexAllocator.end())
+					ActionIndexAllocator.push_back(Cur);
+			}
+		}
+
+		std::sort(
+			ActionIndexAllocator.begin(),
+			ActionIndexAllocator.end()
+		);
+
 		Nodes.reserve(TempNode.size());
 
 		volatile int  i = 0;

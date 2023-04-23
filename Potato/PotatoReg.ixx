@@ -238,6 +238,67 @@ export namespace Potato::Reg
 			std::optional<NfaT::AcceptT> Accept;
 		};
 
+		struct ActionIndexT
+		{
+			enum class CategoryE
+			{
+				CaptureBegin,
+				CaptureEnd,
+				Counter,
+			};
+
+			CategoryE Category = CategoryE::Counter;
+			std::size_t Index = 0;
+			std::size_t MaskIndex = 0;
+
+			bool operator==(ActionIndexT const& T1) const = default;
+			bool operator<(ActionIndexT const& T1) const {
+				if (Category == T1.Category)
+				{
+					if (MaskIndex < T1.MaskIndex)
+						return true;
+					else if (MaskIndex == T1.MaskIndex)
+					{
+						if (Index < T1.Index)
+							return true;
+					}
+					return false;
+				}
+				else if (Category == CategoryE::Counter)
+					return false;
+				else if (T1.Category == CategoryE::Counter)
+					return true;
+				else {
+					if (MaskIndex < T1.MaskIndex)
+						return true;
+					else if (MaskIndex == T1.MaskIndex)
+					{
+						if (Index < T1.Index)
+							return true;
+						else if (Index == T1.Index)
+							return static_cast<std::size_t>(Category) < static_cast<std::size_t>(T1.Category);
+					}
+					return false;
+				}
+			}
+		};
+
+		struct ActionIndexWithSubIndexT
+		{
+			ActionIndexT Original;
+			std::size_t SubIndex = 0;
+
+			bool operator==(ActionIndexWithSubIndexT const& T1) const {
+				return Original == T1.Original && SubIndex == T1.SubIndex;
+			}
+			bool operator<(ActionIndexWithSubIndexT const& T1) const {
+				if (Original < T1.Original)
+					return true;
+				else if (Original == T1.Original)
+					return SubIndex < T1.SubIndex;
+			}
+		};
+
 
 		enum class ActioE : uint8_t
 		{
