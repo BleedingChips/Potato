@@ -115,7 +115,7 @@ export namespace Potato::Reg
 		{
 			CaptureBegin,
 			CaptureEnd,
-			ZeroCounter,
+			OneCounter,
 			AddCounter,
 			LessCounter,
 			BiggerCounter,
