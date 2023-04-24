@@ -292,10 +292,11 @@ export namespace Potato::Reg
 				return Original == T1.Original && SubIndex == T1.SubIndex;
 			}
 			bool operator<(ActionIndexWithSubIndexT const& T1) const {
-				if (Original < T1.Original)
+				if(SubIndex < T1.SubIndex)
 					return true;
-				else if (Original == T1.Original)
-					return SubIndex < T1.SubIndex;
+				else if (SubIndex == T1.SubIndex)
+					return Original < T1.Original;
+				return false;
 			}
 		};
 

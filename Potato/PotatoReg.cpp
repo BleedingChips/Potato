@@ -695,7 +695,7 @@ namespace Potato::Reg
 				case 27: // {N, N} ?
 					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), false, Content, NT[1].Consume<std::size_t>());
 				case 23: // {N, N}
-					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), false, Content, NT[1].Consume<std::size_t>());
+					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), true, Content, NT[1].Consume<std::size_t>());
 				default:
 					assert(false);
 					break;
@@ -869,7 +869,7 @@ namespace Potato::Reg
 				Ref.Edges.push_back(std::move(Ege2));
 			}
 
-			if (!Greedy)
+			if (IMin == 0 && !Greedy)
 				std::swap(Ref.Edges[0], Ref.Edges[1]);
 		}
 
@@ -1317,8 +1317,8 @@ namespace Potato::Reg
 						if (Middle.Size() != 0)
 						{
 							TempEdgeT NewEdge;
-							NewEdge.ToNode.insert(NewEdge.ToNode.end(), Ite3.ToNode.begin(), Ite3.ToNode.end());
-							NewEdge.ToNode.insert(NewEdge.ToNode.end(), Temp.ToNode.begin(), Temp.ToNode.end());
+							//NewEdge.ToNode.insert(NewEdge.ToNode.end(), Ite3.ToNode.begin(), Ite3.ToNode.end());
+							//NewEdge.ToNode.insert(NewEdge.ToNode.end(), Temp.ToNode.begin(), Temp.ToNode.end());
 							NewEdge.Propertys.insert(NewEdge.Propertys.end(), Ite3.Propertys.begin(), Ite3.Propertys.end());
 							NewEdge.Propertys.insert(NewEdge.Propertys.end(), Temp.Propertys.begin(), Temp.Propertys.end());
 							Temp.CharSets = Temp.CharSets - Middle;
@@ -1344,6 +1344,7 @@ namespace Potato::Reg
 			{
 				switch (Format)
 				{
+				case FormatE::HeadMarch:
 				case FormatE::March:
 				{
 					std::size_t I = 0;
@@ -1400,11 +1401,6 @@ namespace Potato::Reg
 							Ite2.UnpassAction = DetectActionE::ContinueToEnd;
 					}
 
-					break;
-				}
-				case FormatE::HeadMarch:
-				{
-					assert(false);
 					break;
 				}
 				case FormatE::GreedyHeadMarch:
@@ -1487,7 +1483,7 @@ namespace Potato::Reg
 									if (TemNode.Accept.has_value())
 										break;
 								}
-								TemNode.OriginalToNode = std::move(TempToNodeCache);
+								TemNode.OriginalToNode = TempToNodeCache;
 								TempNode.push_back(std::move(TemNode));
 								SearchingStack.push_back(MapIte);
 							}
