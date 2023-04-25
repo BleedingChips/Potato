@@ -286,7 +286,7 @@ export namespace Potato::Reg
 		struct ActionIndexWithSubIndexT
 		{
 			ActionIndexT Original;
-			std::size_t SubIndex = 0;
+			StandardT SubIndex = 0;
 
 			bool operator==(ActionIndexWithSubIndexT const& T1) const {
 				return Original == T1.Original && SubIndex == T1.SubIndex;
@@ -315,22 +315,27 @@ export namespace Potato::Reg
 		struct PropertyT
 		{
 			ActioE Action;
-			std::size_t SoltIndex = 0;
 			StandardT Par1 = 0;
+			StandardT Par2 = 0;
 		};
 
 		struct EdgeT
 		{
-			std::vector<PropertyT> Propertys;
 			IntervalT CharSets;
 			std::vector<std::size_t> ToNode;
+			std::vector<PropertyT> Propertys;
+		};
+
+		struct AcceptT
+		{
+			StandardT Mask;
+			Misc::IndexSpan<StandardT> CaptureIndex;
 		};
 
 		struct NodeT
 		{
-			std::vector<PropertyT> Accept;
-			bool AcceptIsFront = false;
 			std::vector<EdgeT> Edges;
+			std::optional<AcceptT> Accept;
 		};
 
 		FormatE Format;

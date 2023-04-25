@@ -1697,6 +1697,62 @@ namespace Potato::Reg
 
 		Nodes.reserve(TempNode.size());
 
+		for (auto& Ite : TempNode)
+		{
+			NodeT TempNode;
+			if (Ite.Accept.has_value())
+			{
+				std::optional<std::size_t> Begin;
+				for (std::size_t I = 0; I < ActionIndexAllocator.size(); ++I)
+				{
+					auto Cur = ActionIndexAllocator[I];
+					if (Cur.SubIndex == 0
+						&& (
+								Cur.Original.Category == ActionIndexT::CategoryE::CaptureBegin
+							|| Cur.Original.Category == ActionIndexT::CategoryE::CaptureEnd
+							)
+						&& Cur.Original.MaskIndex == Ite.Accept->MaskIndex
+						)
+					{
+						if (!Begin.has_value())
+							Begin = I;
+					}
+					else if (Begin.has_value())
+					{
+						TempNode.Accept = AcceptT{ Ite.Accept->Mask, {static_cast<StandardT>(*Begin), static_cast<StandardT>(I)} };
+						break;
+					}
+				}
+				if (!TempNode.Accept.has_value())
+				{
+					if (Begin.has_value())
+					{
+						TempNode.Accept = AcceptT{ Ite.Accept->Mask, {static_cast<StandardT>(*Begin),  static_cast<StandardT>(ActionIndexAllocator.size())} };
+					}
+					else {
+						TempNode.Accept = AcceptT{ Ite.Accept->Mask, {0, 0} };
+					}
+				}
+			}
+
+			for (auto& Ite2 : Ite.TempEdge)
+			{
+				EdgeT NewEdgwT{ Ite2.CharSets, Ite2.ToNode, {}};
+				for (auto& Ite3 : Ite2.Propertys)
+				{
+					if (Ite3.HasCounter)
+					{
+						auto& FromNode = T1.Node[Ite3.FromNode];
+						auto& FromNodeSunIndex = SubIndexNodes[Ite3.FromNode];
+						auto& ToNodeSunIndex = SubIndexNodes[Ite3.ToNode];
+
+					}
+				}
+			}
+
+			Nodes.push_back(std::move(TempNode));
+		}
+
 		volatile int  i = 0;
 
 		//for(auto& )
