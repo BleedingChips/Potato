@@ -303,13 +303,10 @@ export namespace Potato::Reg
 
 		enum class ActioE : uint8_t
 		{
-			CaptureRecord,
-			ZeroCounter,
-			AddCounter,
-			LessEqualCounter,
-			BiggerEqualCounter,
-			EndCounter,
-			CopyRecord,
+			CopyValue,
+			RecordLocation,
+			Test,
+			EndTest
 		};
 
 		struct PropertyT

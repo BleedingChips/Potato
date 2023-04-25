@@ -1169,52 +1169,6 @@ namespace Potato::Reg
 		}
 	}
 
-	/*
-	void DfaT::DivergenceNodeT::Clear() 
-	{ 
-		CurIndex = 0; 
-		Redefine = false;
-		DivergenceCount = 0; 
-		TotalNodeCount = 1; 
-		RemoveMaskIndex.clear(); 
-	}
-
-	bool DfaT::DivergenceNodeT::InsertCondition(bool HasCounter, bool ToAcceptNode, bool Pass, std::size_t MaskIndex)
-	{
-		switch (Format)
-		{
-		case FormatE::March:
-		case FormatE::HeadMarch:
-			
-
-
-
-
-			if (ToAcceptNode && Pass)
-				HasAccept = true;
-			if(!HasCounter)
-				return true;
-			else
-			if (ToAcceptNode)
-			{
-				if(HasCounter)
-			}
-			break;
-		case FormatE::HeadMarch:
-			break;
-		case FormatE::GreedyHeadMarch:
-			break;
-		}
-		return false;
-		std::size_t DCount = std::pow(2, DivergenceCount);
-		if (!Pass)
-			CurIndex += DCount;
-		++DivergenceCount;
-		TotalNodeCount += DCount;
-		return CurIndex;
-	}
-	*/
-
 	DfaT::DfaT(NoEpsilonNfaT const& T1, FormatE Format)
 		: Format(Format)
 	{
@@ -1683,7 +1637,7 @@ namespace Potato::Reg
 		{
 			for (auto& Ite2 : Ite.Indexs)
 			{
-				ActionIndexWithSubIndexT Cur{ Ite2.first, Ite2.second };
+				ActionIndexWithSubIndexT Cur{ Ite2.first, static_cast<StandardT>(Ite2.second) };
 				auto Find = std::find(ActionIndexAllocator.begin(), ActionIndexAllocator.end(), Cur);
 				if (Find == ActionIndexAllocator.end())
 					ActionIndexAllocator.push_back(Cur);
@@ -1694,6 +1648,16 @@ namespace Potato::Reg
 			ActionIndexAllocator.begin(),
 			ActionIndexAllocator.end()
 		);
+
+		auto FindIndexSolt = [&](ActionIndexT Original, std::size_t SubIndex) -> StandardT {
+			ActionIndexWithSubIndexT TempSubIndex{
+				Original,
+				static_cast<StandardT>(SubIndex)
+			};
+			auto FIte = std::find(ActionIndexAllocator.begin(), ActionIndexAllocator.end(), TempSubIndex);
+			assert(FIte != ActionIndexAllocator.end());
+			return static_cast<StandardT>(std::distance(ActionIndexAllocator.begin(), FIte));
+		};
 
 		Nodes.reserve(TempNode.size());
 
@@ -1740,14 +1704,69 @@ namespace Potato::Reg
 				EdgeT NewEdgwT{ Ite2.CharSets, Ite2.ToNode, {}};
 				for (auto& Ite3 : Ite2.Propertys)
 				{
+					auto& FromNodeSunIndex = SubIndexNodes[Ite3.FromNode].Indexs;
+					auto& ToNodeSunIndex = SubIndexNodes[Ite3.ToNode].Indexs;
 					if (Ite3.HasCounter)
 					{
-						auto& FromNode = T1.Node[Ite3.FromNode];
-						auto& FromNodeSunIndex = SubIndexNodes[Ite3.FromNode];
-						auto& ToNodeSunIndex = SubIndexNodes[Ite3.ToNode];
-
+						for (auto& Ite4 : FromNodeSunIndex)
+						{
+							if (Ite4.first.Category == ActionIndexT::CategoryE::Counter)
+							{
+								auto Find = ToNodeSunIndex.find(Ite4.first);
+								if (Find != ToNodeSunIndex.end() && Find->second != Ite4.second)
+								{
+									PropertyT CurProperty{
+										ActioE::CopyValue,
+										FindIndexSolt(Ite4.first, Ite4.second),
+										FindIndexSolt(Find->first, Find->second)
+									};
+									NewEdgwT.Propertys.push_back(CurProperty);
+								}
+							}
+						}
+					}
+					else {
+						auto& OriginalEdge = T1.Nodes[Ite3.FromNode].Edges[Ite3.EdgeCount];
+						for (auto Ite4 : OriginalEdge.Propertys)
+						{
+							ActionIndexT Index;
+							switch (Ite4.Type)
+							{
+							case NfaT::EdgePropertyT::CaptureBegin:
+								Index.Category = ActionIndexT::CategoryE::CaptureBegin;
+								break;
+							case NfaT::EdgePropertyT::CaptureEnd:
+								Index.Category = ActionIndexT::CategoryE::CaptureBegin;
+								break;
+							default:
+								assert(false);
+								break;
+							}
+							Index.Index = Ite4.Index;
+							Index.MaskIndex = OriginalEdge.MaskIndex;
+							auto F1 = FromNodeSunIndex.find(Index);
+							assert(F1 != FromNodeSunIndex.end());
+							auto F2 = ToNodeSunIndex.find(Index);
+							assert(F2 != ToNodeSunIndex.end());
+							if (F1->second != F2->second)
+							{
+								PropertyT CurProperty{
+									ActioE::CopyValue,
+									FindIndexSolt(F1->first, F1->second),
+									FindIndexSolt(F2->first, F2->second)
+								};
+								NewEdgwT.Propertys.push_back(CurProperty);
+							}
+							PropertyT CurProperty{
+								ActioE::RecordLocation,
+								0, 0
+							};
+							NewEdgwT.Propertys.push_back(CurProperty);
+						}
 					}
 				}
+
+				TempNode.Edges.push_back(std::move(NewEdgwT));
 			}
 
 			Nodes.push_back(std::move(TempNode));
