@@ -15,6 +15,21 @@ export namespace Potato::Misc
 		constexpr static std::strong_ordering Order(Type T1, Type T2) { return T1 <=> T2; }
 	};
 
+	enum class OrderingE
+	{
+		Left = 0,
+		LeftEqual = 1,
+		Middile = 2,
+		RightEqual = 3,
+		Right = 4,
+	};
+
+	struct OrderResultT
+	{
+		OrderingE StartOrder;
+		OrderingE EndOrder;
+	};
+
 	template<typename Type, typename Wrapper = DefaultIntervalWrapperT<Type>>
 	struct IntervalElementT
 	{
@@ -366,7 +381,7 @@ export namespace Potato::Misc
 						{
 							Result.Elements.push_back(Cur);
 						}
-						else
+						else if(!std::is_eq(Wrapper::Order(Cur2.Start, Cur.End)))
 						{
 							Result.Elements.push_back({ Cur2.Start, Cur.End });
 						}

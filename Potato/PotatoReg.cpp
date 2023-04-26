@@ -369,7 +369,7 @@ namespace Potato::Reg
 	{
 		for (auto& Ite : Propertys)
 		{
-			if (Ite.Type == EdgePropertyT::CaptureBegin || Ite.Type == EdgePropertyT::CaptureEnd)
+			if (Ite.Type == EdgePropertyE::CaptureBegin || Ite.Type == EdgePropertyE::CaptureEnd)
 			{
 				return true;
 			}
@@ -381,10 +381,10 @@ namespace Potato::Reg
 		for (auto& Ite : Propertys)
 		{
 			if (
-				Ite.Type == EdgePropertyT::OneCounter
-				|| Ite.Type == EdgePropertyT::AddCounter
-				|| Ite.Type == EdgePropertyT::LessCounter
-				|| Ite.Type == EdgePropertyT::BiggerCounter
+				Ite.Type == EdgePropertyE::OneCounter
+				|| Ite.Type == EdgePropertyE::AddCounter
+				|| Ite.Type == EdgePropertyE::LessCounter
+				|| Ite.Type == EdgePropertyE::BiggerCounter
 			)
 			{
 				return true;
@@ -810,7 +810,7 @@ namespace Potato::Reg
 
 		EdgeT Ege;
 		Ege.Propertys.push_back(
-			{ EdgePropertyT::CaptureBegin, CaptureIndex, 0}
+			{ EdgePropertyE::CaptureBegin, CaptureIndex, 0}
 		);
 		Ege.ToNode = Inside.In;
 		Ege.TokenIndex = Tk;
@@ -820,7 +820,7 @@ namespace Potato::Reg
 		EdgeT Ege2;
 
 		Ege2.Propertys.push_back(
-			{ EdgePropertyT::CaptureEnd, CaptureIndex, 0 }
+			{ EdgePropertyE::CaptureEnd, CaptureIndex, 0 }
 		);
 		Ege2.ToNode = T2;
 		Ege2.TokenIndex = Tk;
@@ -855,7 +855,7 @@ namespace Potato::Reg
 			auto& Ref = Nodes[T1];
 			EdgeT Ege;
 			Ege.Propertys.push_back(
-				{ EdgePropertyT::OneCounter, CounterIndex, 0 }
+				{ EdgePropertyE::OneCounter, CounterIndex, 0 }
 			);
 			Ege.ToNode = Inside.In;
 			Ege.TokenIndex = Tk;
@@ -878,12 +878,12 @@ namespace Potato::Reg
 			Ege.ToNode = Inside.In;
 			Ege.TokenIndex = Tk;
 			Ege.Propertys.push_back(
-				{ EdgePropertyT::AddCounter, CounterIndex, 0 }
+				{ EdgePropertyE::AddCounter, CounterIndex, 0 }
 			);
 			if (IMax != 0)
 			{
 				Ege.Propertys.push_back(
-					{ EdgePropertyT::LessCounter, CounterIndex, IMax }
+					{ EdgePropertyE::LessCounter, CounterIndex, IMax }
 				);
 			}
 			EdgeT Ege2;
@@ -892,14 +892,14 @@ namespace Potato::Reg
 			if (IMin != 0)
 			{
 				Ege2.Propertys.push_back(
-					{ EdgePropertyT::BiggerCounter, CounterIndex, IMin }
+					{ EdgePropertyE::BiggerCounter, CounterIndex, IMin }
 				);
 			}
 			
 			if (IMax != 0)
 			{
 				Ege2.Propertys.push_back(
-					{ EdgePropertyT::LessCounter, CounterIndex, IMax }
+					{ EdgePropertyE::LessCounter, CounterIndex, IMax }
 				);
 			}
 
@@ -1040,7 +1040,7 @@ namespace Potato::Reg
 						for (std::size_t I = 0; I < Pros.size() && Accept; ++I)
 						{
 							auto Cur = Pros[I];
-							if (Cur.Type == EdgePropertyT::ZeroCounter)
+							if (Cur.Type == EdgePropertyE::ZeroCounter)
 							{
 								std::size_t Counter = 0;
 								for (std::size_t I2 = I + 1; I2 < Pros.size() && Accept; ++I2)
@@ -1050,16 +1050,16 @@ namespace Potato::Reg
 									{
 										switch (Cur2.Type)
 										{
-										case EdgePropertyT::AddCounter:
+										case EdgePropertyE::AddCounter:
 											Counter += 1;
 											break;
-										case EdgePropertyT::LessCounter:
+										case EdgePropertyE::LessCounter:
 											if (Counter > Cur2.Par1)
 											{
 												Accept = false;
 											}
 											break;
-										case EdgePropertyT::BiggerCounter:
+										case EdgePropertyE::BiggerCounter:
 											if (Counter < Cur2.Par1)
 											{
 												Accept = false;
@@ -1109,10 +1109,10 @@ namespace Potato::Reg
 								TempPros.erase(
 									std::remove_if(TempPros.begin(), TempPros.end(), [&](PropertyT P) {
 										return (
-											P.Type == EdgePropertyT::ZeroCounter
-											|| P.Type == EdgePropertyT::AddCounter
-											|| P.Type == EdgePropertyT::LessCounter
-											|| P.Type == EdgePropertyT::BiggerCounter
+											P.Type == EdgePropertyE::ZeroCounter
+											|| P.Type == EdgePropertyE::AddCounter
+											|| P.Type == EdgePropertyE::LessCounter
+											|| P.Type == EdgePropertyE::BiggerCounter
 											) && std::find(AcceptIndex.begin(), AcceptIndex.end(), P.Index) != AcceptIndex.end();
 										}),
 									TempPros.end()
@@ -1229,14 +1229,14 @@ namespace Potato::Reg
 					{
 						switch (Ite3.Type)
 						{
-						case NfaT::EdgePropertyT::CaptureBegin:
-						case NfaT::EdgePropertyT::CaptureEnd:
+						case NfaT::EdgePropertyE::CaptureBegin:
+						case NfaT::EdgePropertyE::CaptureEnd:
 							Property.HasCapture = true;
 							break;
-						case NfaT::EdgePropertyT::OneCounter:
-						case NfaT::EdgePropertyT::AddCounter:
-						case NfaT::EdgePropertyT::LessCounter:
-						case NfaT::EdgePropertyT::BiggerCounter:
+						case NfaT::EdgePropertyE::OneCounter:
+						case NfaT::EdgePropertyE::AddCounter:
+						case NfaT::EdgePropertyE::LessCounter:
+						case NfaT::EdgePropertyE::BiggerCounter:
 							Property.HasCounter = true;
 							break;
 						default:
@@ -1271,8 +1271,6 @@ namespace Potato::Reg
 						if (Middle.Size() != 0)
 						{
 							TempEdgeT NewEdge;
-							//NewEdge.ToNode.insert(NewEdge.ToNode.end(), Ite3.ToNode.begin(), Ite3.ToNode.end());
-							//NewEdge.ToNode.insert(NewEdge.ToNode.end(), Temp.ToNode.begin(), Temp.ToNode.end());
 							NewEdge.Propertys.insert(NewEdge.Propertys.end(), Ite3.Propertys.begin(), Ite3.Propertys.end());
 							NewEdge.Propertys.insert(NewEdge.Propertys.end(), Temp.Propertys.begin(), Temp.Propertys.end());
 							Temp.CharSets = Temp.CharSets - Middle;
@@ -1531,105 +1529,159 @@ namespace Potato::Reg
 
 		std::vector<ActionMappingnNodeT> SubIndexNodes;
 
-		SubIndexNodes.resize(T1.Nodes.size());
-
-		for (std::size_t I = 0; I < T1.Nodes.size(); ++I)
-			SubIndexNodes[I].HasAccept = T1.Nodes[I].Accept.has_value();
-
-		for (auto& Ite : TempNode)
 		{
-			for (auto& Ite2 : Ite.TempEdge)
+
+			SubIndexNodes.resize(T1.Nodes.size());
+
+			struct EdgeKeyT
 			{
-				for (auto& Ite3 : Ite2.Propertys)
-				{
+				std::size_t From;
+				std::size_t To;
+				std::size_t EdgeCount;
+				std::strong_ordering operator<=>(EdgeKeyT const&) const = default;
+			};
 
-					if (!Ite3.HasCapture && !Ite3.HasCounter)
-						continue;
+			std::set<EdgeKeyT> UsedEdgeKey;
 
-					auto& F = T1.Nodes[Ite3.FromNode];
-					for (auto& Ite4 : F.Edges)
-					{
-						for (auto& Ite5 : Ite4.Propertys)
-						{
-							ActionIndexWithSubIndexT Index;
-							switch (Ite5.Type)
-							{
-							case NfaT::EdgePropertyT::CaptureBegin:
-								SubIndexNodes[Ite4.ToNode].Indexs.insert(
-									{
-										ActionIndexT{
-											ActionIndexT::CategoryE::CaptureBegin,
-											Ite5.Index,
-											Ite4.MaskIndex,
-										}
-										, 0
-									}
-								);
-								break;
-							case NfaT::EdgePropertyT::CaptureEnd:
-								SubIndexNodes[Ite4.ToNode].Indexs.insert(
-									{ 
-										ActionIndexT{
-											ActionIndexT::CategoryE::CaptureEnd,
-											Ite5.Index,
-											Ite4.MaskIndex,
-										}
-										, 0 
-									}
-								);
-								break;
-							default:
-								SubIndexNodes[Ite4.ToNode].Indexs.insert(
-									{
-										ActionIndexT{
-											ActionIndexT::CategoryE::Counter,
-											Ite5.Index,
-											Ite4.MaskIndex,
-										}
-										, 0
-									}
-								);
-								break;
-							}
-						}
-					}
-				}
-			}
-		}
+			struct SearchTupleT
+			{
+				std::size_t StartNode;
+				ActionIndexT Index;
 
-		bool Change = true;
+				bool operator==(SearchTupleT const& In) const = default;
+			};
 
-		while (Change)
-		{
-			Change = false;
+			std::vector<SearchTupleT> ExpandStack;
 
 			for (auto& Ite : TempNode)
 			{
-				if (Ite.OriginalToNode.size() <= 1)
-					continue;
-				for (std::size_t I = 0; I < Ite.OriginalToNode.size(); ++I)
+				for (auto& Ite2 : Ite.TempEdge)
 				{
-					auto& Cur = SubIndexNodes[Ite.OriginalToNode[I]];
-					for (std::size_t I2 = I + 1; I2 < Ite.OriginalToNode.size(); ++I2)
+					for (auto& Ite3 : Ite2.Propertys)
 					{
-						auto& Cur2 = SubIndexNodes[Ite.OriginalToNode[I2]];
-						for (auto& Ite2 : Cur.Indexs)
+
+						EdgeKeyT CueKey{
+							Ite3.FromNode,
+							Ite3.ToNode,
+							Ite3.EdgeCount
+						};
+
+						auto [I, Success] = UsedEdgeKey.insert(CueKey);
+
+						if (Success)
 						{
-							auto Find = Cur2.Indexs.find(Ite2.first);
-							if (Find != Cur2.Indexs.end() && Ite2.second == Find->second)
+
+							auto& Ref = SubIndexNodes[Ite3.ToNode];
+
+							Ref.HasAccept = T1.Nodes[Ite3.ToNode].Accept.has_value();
+
+							if (!Ite3.HasCapture && !Ite3.HasCounter)
+								continue;
+							
+							auto& CuEdge = T1.Nodes[Ite3.FromNode].Edges[Ite3.EdgeCount];
+							
+							for (auto& Ite4 : CuEdge.Propertys)
 							{
-								assert(!(Cur.HasAccept && Cur2.HasAccept));
-								if (Cur2.HasAccept)
-									Ite2.second += 1;
-								else
-									Find->second += 1;
-									Change = true;
+								ActionIndexT CurIndex;
+								CurIndex.Index = Ite4.Index;
+								CurIndex.MaskIndex = CuEdge.MaskIndex;
+								bool NeedSearch = false;
+								switch (Ite4.Type)
+								{
+								case NfaT::EdgePropertyE::CaptureBegin:
+									NeedSearch = true;
+								case NfaT::EdgePropertyE::CaptureEnd:
+									CurIndex.Category = ActionIndexT::CategoryE::Capture;
+									break;
+								case NfaT::EdgePropertyE::OneCounter:
+								case NfaT::EdgePropertyE::AddCounter:
+									NeedSearch = true;
+								case NfaT::EdgePropertyE::LessCounter:
+								case NfaT::EdgePropertyE::BiggerCounter:
+									CurIndex.Category = ActionIndexT::CategoryE::Counter;
+									break;
+								default:
+									assert(false);
+									break;
+								}
+
+								Ref.Indexs.insert({ CurIndex, 0 });
+								if (NeedSearch)
+								{
+									ExpandStack.push_back({ Ite3.ToNode , CurIndex});
+								}
 							}
 						}
 					}
 				}
 			}
+
+			while (!ExpandStack.empty())
+			{
+				auto Top = *ExpandStack.rbegin();
+				ExpandStack.pop_back();
+
+				auto& OldNode = T1.Nodes[Top.StartNode];
+
+				for (std::size_t I = 0; I < OldNode.Edges.size(); ++I)
+				{
+					auto& CurEdge = OldNode.Edges[I];
+					EdgeKeyT Key{
+						Top.StartNode,
+						CurEdge.ToNode,
+						I
+					};
+					if (UsedEdgeKey.find(Key) != UsedEdgeKey.end())
+					{
+						auto& TarNode = SubIndexNodes[CurEdge.ToNode];
+						auto [II, B] = TarNode.Indexs.insert({Top.Index, 0});
+						if (B)
+						{
+							ExpandStack.push_back({CurEdge.ToNode, Top.Index });
+						}
+					}
+				}
+			}
+
+			bool Change = true;
+
+			while (Change)
+			{
+				Change = false;
+
+				for (auto& Ite : TempNode)
+				{
+					if (Ite.OriginalToNode.size() <= 1)
+						continue;
+					for (std::size_t I = 0; I < Ite.OriginalToNode.size(); ++I)
+					{
+						auto& Cur = SubIndexNodes[Ite.OriginalToNode[I]];
+						for (std::size_t I2 = I + 1; I2 < Ite.OriginalToNode.size(); ++I2)
+						{
+							auto& Cur2 = SubIndexNodes[Ite.OriginalToNode[I2]];
+							for (auto& Ite2 : Cur.Indexs)
+							{
+								auto Find = Cur2.Indexs.find(Ite2.first);
+								if (Find != Cur2.Indexs.end() && Ite2.second == Find->second)
+								{
+									assert(!(Cur.HasAccept && Cur2.HasAccept));
+									if (Cur2.HasAccept)
+										Ite2.second += 1;
+									else
+										Find->second += 1;
+									Change = true;
+								}
+							}
+						}
+					}
+				}
+			}
+		
 		}
+
+		
+		/*
+		
 
 		std::vector<ActionIndexWithSubIndexT> ActionIndexAllocator;
 
@@ -1732,10 +1784,10 @@ namespace Potato::Reg
 							ActionIndexT Index;
 							switch (Ite4.Type)
 							{
-							case NfaT::EdgePropertyT::CaptureBegin:
+							case NfaT::EdgePropertyE::CaptureBegin:
 								Index.Category = ActionIndexT::CategoryE::CaptureBegin;
 								break;
-							case NfaT::EdgePropertyT::CaptureEnd:
+							case NfaT::EdgePropertyE::CaptureEnd:
 								Index.Category = ActionIndexT::CategoryE::CaptureBegin;
 								break;
 							default:
@@ -1771,6 +1823,7 @@ namespace Potato::Reg
 
 			Nodes.push_back(std::move(TempNode));
 		}
+		*/
 
 		volatile int  i = 0;
 

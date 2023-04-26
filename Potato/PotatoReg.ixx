@@ -111,7 +111,7 @@ export namespace Potato::Reg
 		NodeSetT AddCapture(NodeSetT Inside, ContentT Content, std::size_t CaptureIndex);
 		NodeSetT AddCounter(NodeSetT Inside, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool Greedy, ContentT Content, std::size_t CaptureIndex);
 
-		enum class EdgePropertyT
+		enum class EdgePropertyE
 		{
 			CaptureBegin,
 			CaptureEnd,
@@ -123,7 +123,7 @@ export namespace Potato::Reg
 
 		struct PropertyT
 		{
-			EdgePropertyT Type = EdgePropertyT::CaptureBegin;
+			EdgePropertyE Type = EdgePropertyE::CaptureBegin;
 			std::size_t Index = 0;
 			StandardT Par1 = 0;
 			bool operator==(PropertyT const& T1) const { return Type == T1.Type && Index == T1.Index && Par1 == T1.Par1; }
@@ -242,8 +242,7 @@ export namespace Potato::Reg
 		{
 			enum class CategoryE
 			{
-				CaptureBegin,
-				CaptureEnd,
+				Capture,
 				Counter,
 			};
 
@@ -253,49 +252,55 @@ export namespace Potato::Reg
 
 			bool operator==(ActionIndexT const& T1) const = default;
 			bool operator<(ActionIndexT const& T1) const {
-				if (Category == T1.Category)
+				if (Category != T1.Category)
 				{
-					if (MaskIndex < T1.MaskIndex)
+					if (Category == CategoryE::Counter)
+						return false;
+					else if (T1.Category == CategoryE::Counter)
 						return true;
-					else if (MaskIndex == T1.MaskIndex)
-					{
-						if (Index < T1.Index)
-							return true;
-					}
-					return false;
 				}
-				else if (Category == CategoryE::Counter)
-					return false;
-				else if (T1.Category == CategoryE::Counter)
+				
+				if (MaskIndex < T1.MaskIndex)
 					return true;
-				else {
-					if (MaskIndex < T1.MaskIndex)
+				else if (MaskIndex == T1.MaskIndex)
+				{
+					if (Index < T1.Index)
 						return true;
-					else if (MaskIndex == T1.MaskIndex)
-					{
-						if (Index < T1.Index)
-							return true;
-						else if (Index == T1.Index)
-							return static_cast<std::size_t>(Category) < static_cast<std::size_t>(T1.Category);
-					}
-					return false;
+					else if (Index == T1.Index)
+						return static_cast<std::size_t>(Category) < static_cast<std::size_t>(T1.Category);
 				}
+				return false;
 			}
 		};
 
 		struct ActionIndexWithSubIndexT
 		{
 			ActionIndexT Original;
-			StandardT SubIndex = 0;
+			std::size_t SubIndex = 0;
 
-			bool operator==(ActionIndexWithSubIndexT const& T1) const {
-				return Original == T1.Original && SubIndex == T1.SubIndex;
-			}
+			bool operator==(ActionIndexWithSubIndexT const& T1) const = default;
 			bool operator<(ActionIndexWithSubIndexT const& T1) const {
-				if(SubIndex < T1.SubIndex)
+				if (Original.Category != T1.Original.Category)
+				{
+					if (Original.Category == ActionIndexT::CategoryE::Counter)
+						return false;
+					else if (T1.Original.Category == ActionIndexT::CategoryE::Counter)
+						return true;
+				}
+				if (SubIndex < T1.SubIndex)
 					return true;
 				else if (SubIndex == T1.SubIndex)
-					return Original < T1.Original;
+				{
+					if (Original.MaskIndex < T1.Original.MaskIndex)
+						return true;
+					else if (Original.MaskIndex == T1.Original.MaskIndex)
+					{
+						if (Original.Index < T1.Original.Index)
+							return true;
+						else if (Original.Index == T1.Original.Index)
+							return static_cast<std::size_t>(Original.Category) < static_cast<std::size_t>(T1.Original.Category);
+					}
+				}
 				return false;
 			}
 		};
