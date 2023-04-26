@@ -1679,11 +1679,38 @@ namespace Potato::Reg
 		
 		}
 
+		std::vector<ActionIndexWithSubIndexT> ActionIndexAllocator;
+
+		{
+			for (auto& Ite : SubIndexNodes)
+			{
+				for (auto& Ite2 : Ite.Indexs)
+				{
+					ActionIndexWithSubIndexT Index{
+						Ite2.first,
+						Ite2.second
+					};
+
+					auto F = std::find(
+						ActionIndexAllocator.begin(),
+						ActionIndexAllocator.end(),
+						Index
+					);
+
+					if (F == ActionIndexAllocator.end())
+						ActionIndexAllocator.push_back(Index);
+				}
+			}
+
+			std::sort(ActionIndexAllocator.begin(), ActionIndexAllocator.end());
+		}
+
+		volatile int i233 = 0;
 		
 		/*
 		
 
-		std::vector<ActionIndexWithSubIndexT> ActionIndexAllocator;
+		
 
 		for (auto& Ite : SubIndexNodes)
 		{
