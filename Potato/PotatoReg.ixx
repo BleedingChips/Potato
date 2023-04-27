@@ -125,7 +125,7 @@ export namespace Potato::Reg
 		{
 			EdgePropertyE Type = EdgePropertyE::CaptureBegin;
 			std::size_t Index = 0;
-			StandardT Par1 = 0;
+			StandardT Par = 0;
 			bool operator==(PropertyT const& T1) const { return Type == T1.Type && Index == T1.Index && Par1 == T1.Par1; }
 		};
 
@@ -195,25 +195,43 @@ export namespace Potato::Reg
 	
 	protected:
 
+		struct NfaEdgeKeyT
+		{
+			std::size_t From;
+			std::size_t EdgeIndex;
+			std::size_t To;
+			std::strong_ordering operator<=>(NfaEdgeKeyT const&) = default;
+		};
+
+		struct NfaEdgeCounterRangeT
+		{
+			std::size_t Index;
+			StandardT Min;
+			StandardT Max;
+		};
+
+		struct NfaEdgePropertyT
+		{
+			std::size_t ToNode;
+			bool ToAccept = false;
+			bool HasCounter = false;
+			bool HasCapture = false;
+			std::vector<NfaEdgeCounterRangeT> Ranges;
+		};
 
 		enum class DetectActionE
 		{
 			AlwaysTrue,
 			SkipTo,
+			ReceiveTo,
 			Break,
 			ContinueToEnd,
 		};
+		
 
 		struct TemPropertyT
 		{
-			std::size_t FromNode;
-			std::size_t ToNode;
-			std::size_t EdgeCount;
-			std::size_t MaskIndex;
-
-			bool ToNodeHasAccept = false;
-			bool HasCapture = false;
-			bool HasCounter = false;
+			NfaEdgeKeyT EdgeKey;
 
 			DetectActionE PassAction = DetectActionE::AlwaysTrue;
 			std::size_t PassIndex = 0;

@@ -877,15 +877,15 @@ namespace Potato::Reg
 			EdgeT Ege;
 			Ege.ToNode = Inside.In;
 			Ege.TokenIndex = Tk;
-			Ege.Propertys.push_back(
-				{ EdgePropertyE::AddCounter, CounterIndex, 0 }
-			);
 			if (IMax != 0)
 			{
 				Ege.Propertys.push_back(
-					{ EdgePropertyE::LessCounter, CounterIndex, IMax }
+					{ EdgePropertyE::LessCounter, CounterIndex, IMax - 1 }
 				);
 			}
+			Ege.Propertys.push_back(
+				{ EdgePropertyE::AddCounter, CounterIndex, 0 }
+			);
 			EdgeT Ege2;
 			Ege2.ToNode = T2;
 			Ege2.TokenIndex = Tk;
@@ -1173,6 +1173,71 @@ namespace Potato::Reg
 		: Format(Format)
 	{
 
+		std::map<NfaEdgeKeyT, NfaEdgePropertyT> EdgeMapping;
+
+		{
+			for (std::size_t From = 0; From < T1.Nodes.size(); ++From)
+			{
+				auto& CurNode = T1.Nodes[From];
+				for (std::size_t EdgeIndex = 0; EdgeIndex < CurNode.Edges.size(); ++EdgeIndex)
+				{
+					auto& CrEdge = CurNode.Edges[EdgeIndex];
+					auto Key = NfaEdgeKeyT{From, EdgeIndex};
+					NfaEdgePropertyT Property;
+					Property.ToNode = CrEdge.ToNode;
+					Property.ToAccept = T1.Nodes[CrEdge.ToNode].Accept.has_value();
+					for (auto& Ite : CrEdge.Propertys)
+					{
+						switch (Ite3.Type)
+						{
+						case NfaT::EdgePropertyE::CaptureBegin:
+						case NfaT::EdgePropertyE::CaptureEnd:
+							Property.HasCapture = true;
+							break;
+						case NfaT::EdgePropertyE::OneCounter:
+						case NfaT::EdgePropertyE::AddCounter:
+							Property.HasCounter = true;
+							break;
+						case NfaT::EdgePropertyE::LessCounter:
+						{
+							if (Property.Ranges.empty() || Property.Ranges.rbegin()->Index != Ite3.Index)
+							{
+								Property.Ranges.push_back(
+									Ite3.Index,
+									0,
+									Ite3.Par
+								);
+							}
+							else {
+								Property.Ranges.rbegin()->Max = Ite3.Par;
+							}
+							Property.HasCounter = true;
+							break;
+						}
+						case NfaT::EdgePropertyE::BiggerCounter:
+						{
+							if (Property.Ranges.empty() || Property.Ranges.rbegin()->Index != Ite3.Index)
+							{
+								Property.Ranges.push_back(
+									Ite3.Index,
+									Ite3.Par,
+									std::numeric_limits<StandardT>::max()
+								);
+							}
+							else {
+								Property.Ranges.rbegin()->Min = Ite3.Par;
+							}
+							Property.HasCounter = true;
+						}
+						break;
+						default:
+							break;
+						}
+					}
+				}
+			}
+		}
+
 		std::map<std::vector<std::size_t>, std::size_t> Mapping;
 
 		std::vector<decltype(Mapping)::const_iterator> SearchingStack;
@@ -1216,37 +1281,15 @@ namespace Potato::Reg
 
 					auto EdgeIndexIte = EdgeIndex++;
 
-					TemPropertyT Property
-					{
-						Ite,
-						Ite2.ToNode,
-						EdgeIndexIte,
-						Ite2.MaskIndex,
-						T1.Nodes[Ite2.ToNode].Accept.has_value(),
-					};
+					NfaEdgeKeyT Key = {Ite, EdgeIndexIte };
 
-					for (auto& Ite3 : Ite2.Propertys)
-					{
-						switch (Ite3.Type)
-						{
-						case NfaT::EdgePropertyE::CaptureBegin:
-						case NfaT::EdgePropertyE::CaptureEnd:
-							Property.HasCapture = true;
-							break;
-						case NfaT::EdgePropertyE::OneCounter:
-						case NfaT::EdgePropertyE::AddCounter:
-						case NfaT::EdgePropertyE::LessCounter:
-						case NfaT::EdgePropertyE::BiggerCounter:
-							Property.HasCounter = true;
-							break;
-						default:
-							break;
-						}
-					}
+					TemPropertyT Property { Key };
+
+					auto KeyProperty = *EdgeMapping.find(Key);
 
 					if (
 						(Format == FormatE::HeadMarch || Format == FormatE::GreedyHeadMarch)
-						&& Property.ToNodeHasAccept
+						&& KeyProperty.ToAccept
 					)
 					{
 						for (auto& Ite3 : TempEdges)
@@ -1300,36 +1343,50 @@ namespace Potato::Reg
 				case FormatE::March:
 				{
 					std::size_t I = 0;
+					std::size_t CounterIte = 0;
 					for (; I < Ite.Propertys.size(); ++I)
 					{
 						auto& Ite2 = Ite.Propertys[I];
+
+						auto& EdgePro = EdgeMapping.find(Ite2.Key)->second;
 						
 						if (Ite2.HasCounter)
 						{
-							if(Ite2.ToNodeHasAccept)
-								Ite2.PassAction = DetectActionE::Break;
-							else
-								Ite2.PassAction = DetectActionE::SkipTo;
-
-							Ite2.UnpassAction = DetectActionE::SkipTo;
-
-							for (std::size_t I2 = 0; I2 < I; ++I2)
+							if (!EdgePro.Ranges.empty())
 							{
-								auto& Ite3 = Ite.Propertys[I2];
-								if (
-									Ite3.PassAction == DetectActionE::SkipTo
-									&& Ite3.PassIndex == 0
-									)
+								auto CI = CounterIte++;
+
+								if (Ite2.ToNodeHasAccept)
+									Ite2.PassAction = DetectActionE::Break;
+								else
+									Ite2.PassAction = DetectActionE::SkipTo;
+
+								Ite2.UnpassAction = DetectActionE::SkipTo;
+
+								for (std::size_t I2 = 0; I2 < I; ++I2)
 								{
-									if (Ite3.MaskIndex != Ite2.MaskIndex)
-										Ite3.PassIndex = I;
-								}
-								if (
-									Ite3.UnpassAction == DetectActionE::SkipTo
-									&& Ite3.UnpassIndex == 0
-								)
-								{
-									Ite3.UnpassIndex = I;
+									auto& Ite3 = Ite.Propertys[I2];
+									auto FindedIte = EdgeMapping.end();
+									if (
+										Ite3.PassAction == DetectActionE::SkipTo
+										&& Ite3.PassIndex == 0
+										)
+									{
+										if (FindIte == EdgeMapping.end())
+											FindIte = EdgeMapping.find(Ite3.Key);
+										if (FindIte->MaskIndex != EdgePro.MaskIndex)
+											Ite3.PassIndex = I;
+										else {
+
+										}
+									}
+									if (
+										Ite3.UnpassAction == DetectActionE::SkipTo
+										&& Ite3.UnpassIndex == 0
+										)
+									{
+										Ite3.UnpassIndex = I;
+									}
 								}
 							}
 						}
