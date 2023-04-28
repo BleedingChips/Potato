@@ -93,6 +93,7 @@ export namespace Potato::Reg
 		NfaT(std::span<RegLexerT::ElementT const> InputSpan, StandardT Mask = 0);
 		NfaT() = default;
 
+		
 		struct NodeSetT
 		{
 			std::size_t In;
@@ -163,22 +164,43 @@ export namespace Potato::Reg
 			}
 		};
 
+		static Misc::IndexSpan<> CollectTokenIndexFromNodePath(std::span<NodeT const> NodeView, Misc::IndexSpan<> Default, std::span<std::size_t const> NodeStateView);
+
 		std::vector<NodeT> Nodes;
 		std::size_t MaskIndex = 1;
 
 		friend struct DfaT;
-		friend struct NoEpsilonNfaT;
 	};
 
-	struct NoEpsilonNfaT : protected NfaT
+	struct NfaEdgeKeyT
 	{
-		NoEpsilonNfaT(NfaT const& Ref);
-		NoEpsilonNfaT(NoEpsilonNfaT const&) = default;
-		NoEpsilonNfaT(NoEpsilonNfaT&&) = default;
+		std::size_t From;
+		std::size_t EdgeIndex;
+		std::strong_ordering operator<=>(NfaEdgeKeyT const&) const = default;
+	};
 
-	protected:
+	struct NfaEdgePropertyT
+	{
+		std::size_t ToNode;
+		std::size_t MaskIndex;
+		bool ToAccept = false;
+		bool HasCounter = false;
+		bool HasCapture = false;
 
-		friend struct DfaT;
+		struct RangeT
+		{
+			std::size_t Index;
+			StandardT Min;
+			StandardT Max;
+		};
+
+		std::vector<RangeT> Ranges;
+	};
+
+	struct NfaActionKeyT
+	{
+		std::size_t Index;
+		std::size_t MaskIndex;
 	};
 
 	struct DfaT
@@ -191,40 +213,9 @@ export namespace Potato::Reg
 			GreedyHeadMarch,
 		};
 
-		DfaT(NoEpsilonNfaT const& T1, FormatE Format = FormatE::March);
+		DfaT(NfaT const& T1, FormatE Format = FormatE::March);
 	
 	protected:
-
-		struct NfaEdgeKeyT
-		{
-			std::size_t From;
-			std::size_t EdgeIndex;
-			std::strong_ordering operator<=>(NfaEdgeKeyT const&) const = default;
-		};
-
-		struct NfaActionKeyT
-		{
-			std::size_t Index;
-			std::size_t MaskIndex;
-		};
-
-		struct NfaEdgeCounterRangeT
-		{
-			std::size_t Index;
-			StandardT Min;
-			StandardT Max;
-		};
-
-		struct NfaEdgePropertyT
-		{
-			std::size_t ToNode;
-			std::size_t MaskIndex;
-			bool ToAccept = false;
-			bool HasCounter = false;
-			bool HasCapture = false;
-			std::vector<NfaEdgeCounterRangeT> Ranges;
-			
-		};
 
 		enum class DetectActionE
 		{
@@ -237,7 +228,7 @@ export namespace Potato::Reg
 
 		struct TemPropertyT
 		{
-			NfaEdgeKeyT EdgeKey;
+			std::map<NfaEdgeKeyT, NfaEdgePropertyT>::const_iterator Key;
 
 			DetectActionE PassAction = DetectActionE::AlwaysTrue;
 			std::size_t PassIndex = 0;
@@ -942,7 +933,7 @@ export namespace Potato::Reg
 			virtual char const* what() const override;
 		};
 
-		struct UnaccaptableRegex : public Interface
+		struct UnaccaptableRegexTokenIndex : public Interface
 		{
 			enum class TypeT
 			{
@@ -952,9 +943,21 @@ export namespace Potato::Reg
 				RawRegexInNotNormalState,
 				BadRegex,
 			};
+
 			TypeT Type;
-			std::wstring TotalString;
 			Misc::IndexSpan<> BadIndex;
+
+			UnaccaptableRegexTokenIndex(UnaccaptableRegexTokenIndex const&) = default;
+			UnaccaptableRegexTokenIndex(TypeT Type, Misc::IndexSpan<> TokenIndex) :
+				Type(Type), BadIndex(TokenIndex) {}
+			virtual char const* what() const override;
+		};
+
+		struct UnaccaptableRegex : protected UnaccaptableRegexTokenIndex
+		{
+			using TypeT = UnaccaptableRegexTokenIndex::TypeT;
+			std::wstring TotalString;
+			std::wstring_view GetErrorRegex() const { return BadIndex.Slice(std::wstring_view(TotalString)); }
 			UnaccaptableRegex(TypeT Type, std::u8string_view Str, Misc::IndexSpan<> BadIndex);
 			UnaccaptableRegex(TypeT Type, std::wstring_view Str, Misc::IndexSpan<> BadIndex);
 			UnaccaptableRegex(TypeT Type, std::u16string_view Str, Misc::IndexSpan<> BadIndex);

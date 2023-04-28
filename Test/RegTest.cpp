@@ -152,16 +152,15 @@ int main()
 {
 
 	try {
-		NfaT N(U"((?:a{1,3}a{1,3}){1,3})a", false, 0);
-		//NfaT N2(U"(a{5,16})", false, 1);
-		//N.Link(N2);
-		NoEpsilonNfaT N3(N);
-		DfaT N4{N3, DfaT::FormatE::HeadMarch};
+		NfaT N(U"((?:a{1,3}a){1,3})", false, 0);
+		NfaT N2(U"(a{5,16})", false, 1);
+		N.Link(N2);
+		DfaT N4{N, DfaT::FormatE::HeadMarch};
 		volatile int i = 0;
 	}
 	catch (Exception::UnaccaptableRegex const& Rex)
 	{
-		std::wstring_view Last = std::wstring_view{ Rex.TotalString }.substr(Rex.BadIndex.Begin(), Rex.BadIndex.End());
+		std::wstring_view Last = Rex.GetErrorRegex();
 		volatile int i = 0;
 	}
 	

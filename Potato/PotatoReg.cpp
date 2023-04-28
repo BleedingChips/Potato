@@ -415,9 +415,9 @@ namespace Potato::Reg
 		{
 			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {EIndex.Index , Str.size()} };
 		}
-		catch (Misc::IndexSpan<> EIndex)
+		catch (UnaccaptableRegexTokenIndex const& EIndex)
 		{
-			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, EIndex };
+			throw Exception::UnaccaptableRegex{ EIndex.Type, Str, EIndex.BadIndex };
 		}
 	}
 
@@ -450,6 +450,27 @@ namespace Potato::Reg
 		Edge.CharSets = std::move(Chars);
 		Edge.TokenIndex = Translate(Content.TokenIndex, Content.Tokens);
 		Nodes[Set.In].Edges.push_back(std::move(Edge));
+	}
+
+	Misc::IndexSpan<> NfaT::CollectTokenIndexFromNodePath(std::span<NodeT const> NodeView, Misc::IndexSpan<> Default, std::span<std::size_t const> NodeStateView)
+	{
+		for (auto Ite1 = NodeStateView.begin(); Ite1 != NodeStateView.end(); ++Ite1)
+		{
+			auto Next = Ite1 + 1;
+			if (Next != NodeStateView.end())
+			{
+				auto& Edges = NodeView[*Ite1].Edges;
+				for (auto& Ite : Edges)
+				{
+					if (Ite.ToNode == *Next)
+					{
+						Default = Default.Expand(Ite.TokenIndex);
+						break;
+					}
+				}
+			}
+		}
+		return Default;
 	}
 	
 	NfaT::NfaT(std::span<RegLexerT::ElementT const> InputSpan, StandardT Mask)
@@ -716,85 +737,175 @@ namespace Potato::Reg
 			Nodes[Last].Accept = AcceptT{Mask, 0};
 		}
 
-		std::set<std::size_t> Exist;
-		std::vector<std::size_t> SearchStack;
+		auto TargetNode = std::move(Nodes);
+		Nodes.clear();
 
-		struct PathT
 		{
-			std::size_t State;
-			std::size_t EdgeCount;
-		};
+			std::map<std::size_t, std::size_t> NodeMapping;
 
-		std::vector<PathT> SearchPath;
-		
-		struct RecordT
-		{
-			std::size_t StateCount;
-			std::size_t EdgeCount;
-		};
+			std::vector<decltype(NodeMapping)::const_iterator> SearchingStack;
 
-		std::vector<RecordT> Recorded;
-
-		SearchStack.push_back(0);
-
-		while (!SearchStack.empty())
-		{
-			auto Top = *SearchStack.rbegin();
-			SearchStack.pop_back();
-			auto [I, B] = Exist.insert(Top);
-			if(!B)
-				continue;
-			SearchPath.clear();
-			SearchPath.push_back({Top, 0});
-			Recorded.clear();
-			Recorded.push_back({1, 0});
-
-			while (!Recorded.empty())
 			{
-				auto TopRecord = *Recorded.rbegin();
-				Recorded.pop_back();
-				SearchPath.resize(TopRecord.StateCount);
-				SearchPath.rbegin()->EdgeCount = TopRecord.EdgeCount;
-				auto& Cur = Nodes[SearchPath.rbegin()->State];
+				auto CT = AddNode();
+				auto [Ite, B] = NodeMapping.insert({ 0, CT });
+				SearchingStack.push_back(Ite);
+			}
 
-				if (TopRecord.EdgeCount < Cur.Edges.size())
+			std::vector<std::size_t> StateStack;
+			std::vector<PropertyT> Pros;
+
+			struct StackRecord
+			{
+				std::size_t StateSize;
+				std::size_t PropertySize;
+				std::size_t EdgeSize;
+				std::optional<Misc::IndexSpan<>> TokenIndex;
+			};
+
+			std::vector<StackRecord> RecordStack;
+			
+
+			while (!SearchingStack.empty())
+			{
+				auto Top = *SearchingStack.rbegin();
+				SearchingStack.pop_back();
+				
+				StateStack.clear();
+				Pros.clear();
+				RecordStack.clear();
+				StateStack.push_back(Top->first);
+				std::optional<Misc::IndexSpan<>> LastRecordTokenIndex;
+				RecordStack.push_back({ 1, 0, 0, LastRecordTokenIndex });
+				
+				while (!RecordStack.empty())
 				{
+					auto TopRecord = *RecordStack.rbegin();
+					RecordStack.pop_back();
+					StateStack.resize(TopRecord.StateSize);
+					Pros.resize(TopRecord.PropertySize);
+					LastRecordTokenIndex = TopRecord.TokenIndex;
+					auto& CurNode = TargetNode[*StateStack.rbegin()];
+					if (TopRecord.EdgeSize < CurNode.Edges.size())
 					{
-						auto Temp = TopRecord;
-						++Temp.EdgeCount;
-						Recorded.push_back(Temp);
-					}
 
-					auto& Edge = Cur.Edges[TopRecord.EdgeCount];
-
-					if (Edge.IsEpsilonEdge())
-					{
-						auto FindIte = std::find_if(SearchPath.begin(), SearchPath.end(), [&](PathT P){
-							return Edge.ToNode == P.State;
-						});
-						if (FindIte == SearchPath.end())
+						auto& CurEdge = CurNode.Edges[TopRecord.EdgeSize];
+						RecordStack.push_back({ TopRecord.StateSize, TopRecord.PropertySize, TopRecord.EdgeSize + 1, LastRecordTokenIndex });
+						
+						if (LastRecordTokenIndex.has_value())
 						{
-							SearchPath.push_back({Edge.ToNode, 0});
-							Recorded.push_back({ SearchPath.size(), 0 });
+							LastRecordTokenIndex = LastRecordTokenIndex->Expand(CurEdge.TokenIndex);
 						}
 						else {
-							SearchPath.erase(SearchPath.begin(), FindIte);
-
-							Potato::Misc::IndexSpan<> TokenIndex = 
-								Nodes[Edge.ToNode].Edges[TopRecord.EdgeCount].TokenIndex;
-
-							for (std::size_t I = 0; I < SearchPath.size(); ++I)
+							LastRecordTokenIndex = CurEdge.TokenIndex;
+						}
+						
+						Pros.insert(Pros.end(), CurEdge.Propertys.begin(), CurEdge.Propertys.end());
+						if (CurEdge.IsEpsilonEdge())
+						{
+							auto SameStateStackIte = std::find(StateStack.begin(), StateStack.end(), CurEdge.ToNode);
+							if (SameStateStackIte != StateStack.end())
 							{
-								auto C = SearchPath[I];
-								auto& CurN = Nodes[C.State];
-								TokenIndex = TokenIndex.Expand(CurN.Edges[C.EdgeCount].TokenIndex);
+								StateStack.push_back(CurEdge.ToNode);
+								auto ErrorTokenIndex = CollectTokenIndexFromNodePath(
+									std::span(TargetNode),
+									CurEdge.TokenIndex,
+									std::span(StateStack).subspan(std::distance(StateStack.begin(), SameStateStackIte))
+								);
+								throw UnaccaptableRegexTokenIndex{
+									UnaccaptableRegexTokenIndex::TypeT::BadRegex,
+									ErrorTokenIndex };
+							}
+							StateStack.push_back(CurEdge.ToNode);
+
+							RecordStack.push_back({
+								StateStack.size(),
+								Pros.size(),
+								0,
+								LastRecordTokenIndex
+								});
+						}
+						else {
+							StateStack.push_back(CurEdge.ToNode);
+							std::size_t FinnalToNode = 0;
+							auto [MIte, B] = NodeMapping.insert({ CurEdge.ToNode, FinnalToNode });
+							auto Sets = CurEdge.CharSets;
+							if (B)
+							{
+								FinnalToNode = AddNode();
+
+								{
+									auto& RefToNode = TargetNode[CurEdge.ToNode];
+									if (RefToNode.Accept.has_value())
+									{
+										Nodes[FinnalToNode].Accept = RefToNode.Accept;
+									}
+								}
+
+								MIte->second = FinnalToNode;
+								//if(Sets.Size() != 0)
+								SearchingStack.push_back(MIte);
+							}
+							else {
+								FinnalToNode = MIte->second;
 							}
 
-							throw TokenIndex;
+							auto& CurEdges = Nodes[Top->second].Edges;
+
+							for (auto& Ite : CurEdges)
+							{
+								if (Ite.ToNode == FinnalToNode)
+								{
+									throw 
+										UnaccaptableRegexTokenIndex{
+											UnaccaptableRegexTokenIndex::TypeT::BadRegex,
+											CurEdge.TokenIndex 
+									};
+								}
+							}
+
+							Nodes[Top->second].Edges.push_back({
+									Pros,
+									FinnalToNode,
+									std::move(Sets),
+									(LastRecordTokenIndex.has_value() ? *LastRecordTokenIndex : Misc::IndexSpan<>{0, 0}),
+									CurEdge.MaskIndex
+								}
+							);
 						}
 					}
-					else {
-						SearchStack.push_back(Edge.ToNode);
+				}
+			}
+
+			bool Change = true;
+			while (Change)
+			{
+				Change = false;
+				for (std::size_t I1 = 0; I1 < Nodes.size(); ++I1)
+				{
+					for (std::size_t I2 = I1 + 1; I2 < Nodes.size(); )
+					{
+						auto& N1 = Nodes[I1];
+						auto& N2 = Nodes[I2];
+						if (N1 == N2)
+						{
+							for (auto& Ite3 : Nodes)
+							{
+								if (Ite3.CurIndex > N2.CurIndex)
+									--Ite3.CurIndex;
+								for (auto& Ite4 : Ite3.Edges)
+								{
+									if (Ite4.ToNode == N2.CurIndex)
+										Ite4.ToNode = N1.CurIndex;
+									else if (Ite4.ToNode > N2.CurIndex)
+										--Ite4.ToNode;
+								}
+							}
+							Nodes.erase(Nodes.begin() + I2);
+							Change = true;
+						}
+						else {
+							++I2;
+						}
 					}
 				}
 			}
@@ -920,164 +1031,41 @@ namespace Potato::Reg
 
 	void NfaT::Link(NfaT const& Input)
 	{
-		Nodes.reserve(Nodes.size() + Input.Nodes.size());
+		assert(Input.Nodes.size() >= 1);
+		Nodes.reserve(Nodes.size() + Input.Nodes.size() - 1);
 		auto Last = Nodes.size();
-		Nodes.insert(Nodes.end(), Input.Nodes.begin(), Input.Nodes.end());
+		Nodes.insert(Nodes.end(), Input.Nodes.begin() + 1, Input.Nodes.end());
 		auto Span = std::span(Nodes).subspan(Last);
+		auto IndexOffset = Last - 1;
 		for (auto& Ite : Span)
 		{
-			Ite.CurIndex += Last;
+			Ite.CurIndex += IndexOffset;
 			for (auto& Ite2 : Ite.Edges)
 			{
 				Ite2.MaskIndex += MaskIndex;
-				Ite2.ToNode += Last;
+				if(Ite2.ToNode != 0)
+					Ite2.ToNode += IndexOffset;
 			}
 			if (Ite.Accept.has_value())
 				Ite.Accept->MaskIndex += MaskIndex;
 		}
-		Nodes[0].Edges.push_back(
-			{
-				{},
-				Last,
-				{},
-				{0, 1}
-			}
-		);
+
+		auto& CTopNodeEdge = Nodes[0].Edges;
+		auto& TTopNodeEdge = Input.Nodes[0].Edges;
+
+		auto OldEdgeSize = CTopNodeEdge.size();
+		CTopNodeEdge.insert(CTopNodeEdge.end(), TTopNodeEdge.begin(), TTopNodeEdge.end());
+
+		for (auto Ite : std::span(CTopNodeEdge).subspan(OldEdgeSize))
+		{
+			if (Ite.ToNode != 0)
+				Ite.ToNode += IndexOffset;
+		}
+
 		MaskIndex += Input.MaskIndex;
 	}
 
-	NoEpsilonNfaT::NoEpsilonNfaT(NfaT const& Ref)
-	{
-		std::map<std::size_t, std::size_t> NodeMapping;
-		
-		std::vector<decltype(NodeMapping)::const_iterator> SearchingStack;
-
-		{
-			auto CT = AddNode();
-			auto [Ite, B] = NodeMapping.insert({0, CT});
-			SearchingStack.push_back(Ite);
-		}
-
-		std::vector<std::size_t> StateStack;
-		std::vector<PropertyT> Pros;
-		
-		struct StackRecord
-		{
-			std::size_t StateSize;
-			std::size_t PropertySize;
-			std::size_t EdgeSize;
-		};
-
-		std::vector<StackRecord> RecordStack;
-
-		while (!SearchingStack.empty())
-		{
-			auto Top = *SearchingStack.rbegin();
-			SearchingStack.pop_back();
-			
-			StateStack.clear();
-			Pros.clear();
-			RecordStack.clear();
-			StateStack.push_back(Top->first);
-			RecordStack.push_back({1, 0, 0});
-
-			while(!RecordStack.empty())
-			{
-				auto TopRecord = *RecordStack.rbegin();
-				RecordStack.pop_back();
-				StateStack.resize(TopRecord.StateSize);
-				Pros.resize(TopRecord.PropertySize);
-				auto& CurNode = Ref.Nodes[*StateStack.rbegin()];
-				if (TopRecord.EdgeSize < CurNode.Edges.size())
-				{
-					RecordStack.push_back({ TopRecord.StateSize, TopRecord.PropertySize, TopRecord.EdgeSize + 1 });
-
-					auto& CurEdge = CurNode.Edges[TopRecord.EdgeSize];
-					StateStack.push_back(CurEdge.ToNode);
-					Pros.insert(Pros.end(), CurEdge.Propertys.begin(), CurEdge.Propertys.end());
-					if (CurEdge.IsEpsilonEdge())
-					{
-						RecordStack.push_back({
-							StateStack.size(),
-							Pros.size(),
-							0
-						});
-					}
-					else {
-						std::size_t FinnalToNode = 0;
-						auto [MIte, B] = NodeMapping.insert({ CurEdge.ToNode, FinnalToNode });
-						auto Sets = CurEdge.CharSets;
-						if (B)
-						{
-							FinnalToNode = AddNode();
-
-							{
-								auto& RefToNode = Ref.Nodes[CurEdge.ToNode];
-								if (RefToNode.Accept.has_value())
-								{
-									Nodes[FinnalToNode].Accept = RefToNode.Accept;
-								}
-							}
-
-							MIte->second = FinnalToNode;
-							//if(Sets.Size() != 0)
-							SearchingStack.push_back(MIte);
-						}
-						else {
-							FinnalToNode = MIte->second;
-						}
-
-						//auto& CurEdges = Nodes[Top->second].Edges.push_back()
-
-						Nodes[Top->second].Edges.push_back({
-								Pros,
-								FinnalToNode,
-								std::move(Sets),
-								{0, 0},
-								CurEdge.MaskIndex
-							}
-						);
-					}
-				}
-			}
-		}
-
-		bool Change = true;
-		while (Change)
-		{
-			Change = false;
-			for (std::size_t I1 = 0; I1 < Nodes.size(); ++I1)
-			{
-				for (std::size_t I2 = I1 + 1; I2 < Nodes.size(); )
-				{	
-					auto& N1 = Nodes[I1];
-					auto& N2 = Nodes[I2];
-					if (N1 == N2)
-					{
-						for (auto& Ite3 : Nodes)
-						{
-							if (Ite3.CurIndex > N2.CurIndex)
-								--Ite3.CurIndex;
-							for (auto& Ite4 : Ite3.Edges)
-							{
-								if (Ite4.ToNode == N2.CurIndex)
-									Ite4.ToNode = N1.CurIndex;
-								else if(Ite4.ToNode > N2.CurIndex)
-									--Ite4.ToNode;
-							}
-						}
-						Nodes.erase(Nodes.begin() + I2);
-						Change = true;
-					}
-					else {
-						++I2;
-					}
-				}
-			}
-		}
-	}
-
-	DfaT::DfaT(NoEpsilonNfaT const& T1, FormatE Format)
+	DfaT::DfaT(NfaT const& T1, FormatE Format)
 		: Format(Format)
 	{
 
@@ -1192,15 +1180,15 @@ namespace Potato::Reg
 
 					auto EdgeIndexIte = EdgeIndex++;
 
-					NfaEdgeKeyT Key = {Ite, EdgeIndexIte };
+					
 
-					TemPropertyT Property { Key };
+					auto Key = EdgeMapping.find({ Ite, EdgeIndexIte });
 
-					auto& KeyProperty = EdgeMapping.find(Key)->second;
+					TemPropertyT Property{ Key };
 
 					if (
 						(Format == FormatE::HeadMarch || Format == FormatE::GreedyHeadMarch)
-						&& KeyProperty.ToAccept
+						&& Key->second.ToAccept
 					)
 					{
 						for (auto& Ite3 : TempEdges)
@@ -1260,7 +1248,7 @@ namespace Potato::Reg
 					{
 						auto& Ite2 = Ite.Propertys[I];
 
-						auto& EdgePro = EdgeMapping.find(Ite2.EdgeKey)->second;
+						auto& EdgePro = Ite2.Key->second;
 						
 						if (!EdgePro.Ranges.empty())
 						{
@@ -1277,7 +1265,7 @@ namespace Potato::Reg
 							for (std::size_t I2 = 0; I2 < I; ++I2)
 							{
 								auto& Ite3 = Ite.Propertys[I2];
-								auto& EdgePro2 = EdgeMapping.find(Ite3.EdgeKey)->second;
+								auto& EdgePro2 = Ite3.Key->second;
 								if (
 									Ite3.PassAction == DetectActionE::SkipTo
 									&& Ite3.PassIndex == 0
@@ -1292,7 +1280,7 @@ namespace Potato::Reg
 											auto F1 = std::find_if(
 												EdgePro2.Ranges.begin(),
 												EdgePro2.Ranges.end(),
-												[&](NfaEdgeCounterRangeT const& Reg){ return Reg.Index == Ite4.Index; }
+												[&](NfaEdgePropertyT::RangeT const& Reg){ return Reg.Index == Ite4.Index; }
 											);
 											if (
 												F1 == EdgePro2.Ranges.end()
@@ -1325,7 +1313,7 @@ namespace Potato::Reg
 											auto F1 = std::find_if(
 												EdgePro.Ranges.begin(),
 												EdgePro.Ranges.end(),
-												[&](NfaEdgeCounterRangeT const& Reg) { return Reg.Index == Ite4.Index; }
+												[&](NfaEdgePropertyT::RangeT const& Reg) { return Reg.Index == Ite4.Index; }
 											);
 											if (
 												F1 == EdgePro.Ranges.end()
@@ -1546,6 +1534,7 @@ namespace Potato::Reg
 				}
 				assert(!Ite.ToNode.empty());
 				*/
+
 			}
 
 			TempNode[Top->second].TempEdge = TempEdges;
@@ -1883,9 +1872,6 @@ namespace Potato::Reg
 			Nodes.push_back(std::move(TempNode));
 		}
 		*/
-
-		volatile int  i = 0;
-
 		//for(auto& )
 	}
 
@@ -4296,27 +4282,32 @@ namespace Potato::Reg
 			return "PotatoRegException";
 		}
 
+		char const* UnaccaptableRegexTokenIndex::what() const
+		{
+			return "PotatoRegException::UnaccaptableRegexTokenIndex";
+		}
+
 		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u8string_view Str, Misc::IndexSpan<> BadIndex)
-			: Type(Type), BadIndex(BadIndex)
+			: UnaccaptableRegexTokenIndex(Type, BadIndex)
 		{
 			TotalString.resize(Encode::StrEncoder<char8_t, wchar_t>::RequireSpace(Str).TargetSpace);
 			Encode::StrEncoder<char8_t, wchar_t>::EncodeUnSafe(Str, TotalString);
 		}
 
 		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::wstring_view Str, Misc::IndexSpan<> BadIndex)
-			: Type(Type), TotalString(std::move(Str)), BadIndex(BadIndex)
+			: UnaccaptableRegexTokenIndex(Type, BadIndex), TotalString(Str)
 		{
 		}
 
 		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u16string_view Str, Misc::IndexSpan<> BadIndex)
-			: Type(Type), BadIndex(BadIndex)
+			: UnaccaptableRegexTokenIndex(Type, BadIndex)
 		{
 			TotalString.resize(Encode::StrEncoder<char16_t, wchar_t>::RequireSpace(Str).TargetSpace);
 			Encode::StrEncoder<char16_t, wchar_t>::EncodeUnSafe(Str, TotalString);
 		}
 
 		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u32string_view Str, Misc::IndexSpan<> BadIndex)
-			: Type(Type), BadIndex(BadIndex)
+			: UnaccaptableRegexTokenIndex(Type, BadIndex)
 		{
 			TotalString.resize(Encode::StrEncoder<char32_t, wchar_t>::RequireSpace(Str).TargetSpace);
 			Encode::StrEncoder<char32_t, wchar_t>::EncodeUnSafe(Str, TotalString);
