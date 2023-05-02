@@ -7,7 +7,7 @@ export import Potato.Interval;
 export namespace Potato::Reg
 {
 	
-	using StandardT = std::uint32_t;
+	
 
 	using IntervalT = Misc::IntervalT<char32_t>;
 
@@ -17,7 +17,7 @@ export namespace Potato::Reg
 	struct RegLexerT
 	{
 		
-		enum class ElementEnumT : StandardT
+		enum class ElementEnumT : Potato::SLRX::StandardT
 		{
 			SingleChar = 0, // µ¥×Ö·û
 			CharSet, // ¶à×Ö·û
@@ -37,7 +37,6 @@ export namespace Potato::Reg
 			Not, // ^
 			Colon, // :
 		};
-
 
 		struct ElementT
 		{
@@ -79,10 +78,9 @@ export namespace Potato::Reg
 	struct NfaT
 	{
 
-		static NfaT Create(std::u32string_view Str, bool IsRaw = false, StandardT Mask = 0);
-
+		static NfaT Create(std::u32string_view Str, bool IsRaw = false, std::size_t Mask = 0);
 		
-		NfaT(std::u32string_view Str, bool IsRaw = false, StandardT Mask = 0)
+		NfaT(std::u32string_view Str, bool IsRaw = false, std::size_t Mask = 0)
 			: NfaT(Create(Str, IsRaw, Mask)) {}
 		NfaT(NfaT const&) = default;
 		NfaT(NfaT&&) = default;
@@ -90,7 +88,7 @@ export namespace Potato::Reg
 
 	protected:
 
-		NfaT(std::span<RegLexerT::ElementT const> InputSpan, StandardT Mask = 0);
+		NfaT(std::span<RegLexerT::ElementT const> InputSpan, std::size_t Mask = 0);
 		NfaT() = default;
 
 		
@@ -126,7 +124,7 @@ export namespace Potato::Reg
 		{
 			EdgePropertyE Type = EdgePropertyE::CaptureBegin;
 			std::size_t Index = 0;
-			StandardT Par = 0;
+			std::size_t Par = 0;
 			bool operator==(PropertyT const& T1) const { return Type == T1.Type && Index == T1.Index && Par == T1.Par; }
 		};
 
@@ -147,7 +145,7 @@ export namespace Potato::Reg
 
 		struct AcceptT
 		{
-			StandardT Mask;
+			std::size_t Mask;
 			std::size_t MaskIndex;
 			bool operator==(AcceptT const& T1) const {
 				return Mask == T1.Mask && MaskIndex == T1.MaskIndex;
@@ -190,8 +188,8 @@ export namespace Potato::Reg
 		struct RangeT
 		{
 			std::size_t Index;
-			StandardT Min;
-			StandardT Max;
+			std::size_t Min;
+			std::size_t Max;
 		};
 
 		std::vector<RangeT> Ranges;
@@ -201,6 +199,31 @@ export namespace Potato::Reg
 	{
 		std::size_t Index;
 		std::size_t MaskIndex;
+	};
+
+	struct MartixStateT
+	{
+		enum class StateE
+		{
+			UnSet,
+			True,
+			False
+		};
+		
+		std::vector<StateE> States;
+		std::size_t RowCount = 0;
+		std::size_t LineCount = 0;
+		
+		MartixStateT() {}
+		void ResetRowCount(std::size_t RowCount);
+		std::size_t GetLineCount() const { return LineCount; }
+		std::size_t GetRowCount() const { return RowCount; }
+		std::size_t CopyLine(std::size_t SourceLine);
+		bool RemoveAllFalseLine();
+		std::span<StateE const> ReadLine(std::size_t LineIndex) const;
+
+		StateE& Get(std::size_t RowIndex, std::size_t LineIndex);
+
 	};
 
 	struct DfaT
@@ -214,36 +237,44 @@ export namespace Potato::Reg
 		};
 
 		DfaT(NfaT const& T1, FormatE Format = FormatE::March);
+		std::size_t GetStartupNodeIndex() const { return 0; }
+		std::size_t GetCacheCounterCount() const { return CacheRecordCount; }
 	
 	protected:
 
-		enum class DetectActionE
+		
+		enum class ActionE
 		{
-			AlwaysTrue,
-			SkipTo,
-			CarryResultTo,
-			Break,
-			ContinueToEnd,
+			True,
+			False,
+			Ignore
 		};
 
-		struct TemPropertyT
+		struct ConstraintT
+		{
+			std::size_t Source;
+			ActionE PassAction;
+			ActionE UnpassAction;
+			std::strong_ordering operator<=>(ConstraintT const&) const = default;
+		};
+
+		struct TempToNodeT
+		{
+			std::vector<ActionE> Actions;
+			std::size_t ToNode;
+		};
+
+		struct TempPropertyT
 		{
 			std::map<NfaEdgeKeyT, NfaEdgePropertyT>::const_iterator Key;
-
-			DetectActionE PassAction = DetectActionE::AlwaysTrue;
-			std::size_t PassIndex = 0;
-			DetectActionE UnpassAction = DetectActionE::AlwaysTrue;
-			std::size_t UnpassIndex = 0;
-
-			std::size_t UnpassOffset = 0;
-			std::size_t TotalNodeCount = 0;
+			std::vector<ConstraintT> Constraints;
 		};
 
 		struct TempEdgeT
 		{
 			IntervalT CharSets;
-			std::vector<std::size_t> ToNode;
-			std::vector<TemPropertyT> Propertys;
+			std::vector<TempPropertyT> Propertys;
+			std::vector<TempToNodeT> ToNode;
 		};
 
 		struct TempNodeT
@@ -253,100 +284,53 @@ export namespace Potato::Reg
 			std::optional<NfaT::AcceptT> Accept;
 		};
 
-		struct ActionIndexT
-		{
-			enum class CategoryE
-			{
-				Capture,
-				Counter,
-			};
-
-			CategoryE Category = CategoryE::Counter;
-			std::size_t Index = 0;
-			std::size_t MaskIndex = 0;
-
-			bool operator==(ActionIndexT const& T1) const = default;
-			bool operator<(ActionIndexT const& T1) const {
-				if (Category != T1.Category)
-				{
-					if (Category == CategoryE::Counter)
-						return false;
-					else if (T1.Category == CategoryE::Counter)
-						return true;
-				}
-				
-				if (MaskIndex < T1.MaskIndex)
-					return true;
-				else if (MaskIndex == T1.MaskIndex)
-				{
-					if (Index < T1.Index)
-						return true;
-					else if (Index == T1.Index)
-						return static_cast<std::size_t>(Category) < static_cast<std::size_t>(T1.Category);
-				}
-				return false;
-			}
-		};
-
-		struct ActionIndexWithSubIndexT
-		{
-			ActionIndexT Original;
-			std::size_t SubIndex = 0;
-
-			bool operator==(ActionIndexWithSubIndexT const& T1) const = default;
-			bool operator<(ActionIndexWithSubIndexT const& T1) const {
-				if (Original.Category != T1.Original.Category)
-				{
-					if (Original.Category == ActionIndexT::CategoryE::Counter)
-						return false;
-					else if (T1.Original.Category == ActionIndexT::CategoryE::Counter)
-						return true;
-				}
-				if (SubIndex < T1.SubIndex)
-					return true;
-				else if (SubIndex == T1.SubIndex)
-				{
-					if (Original.MaskIndex < T1.Original.MaskIndex)
-						return true;
-					else if (Original.MaskIndex == T1.Original.MaskIndex)
-					{
-						if (Original.Index < T1.Original.Index)
-							return true;
-						else if (Original.Index == T1.Original.Index)
-							return static_cast<std::size_t>(Original.Category) < static_cast<std::size_t>(T1.Original.Category);
-					}
-				}
-				return false;
-			}
-		};
-
-
-		enum class ActioE : uint8_t
+		enum class PropertyActioE
 		{
 			CopyValue,
 			RecordLocation,
-			Test,
-			EndTest
+			NewContext,
+			ConstraintsTrueTrue,
+			ConstraintsFalseFalse,
+			ConstraintsFalseTrue,
+			ConstraintsTrueFalse,
+			OneCounter,
+			AddCounter,
+			LessCounter,
+			BiggerCounter,
 		};
 
 		struct PropertyT
 		{
-			ActioE Action;
-			StandardT Par1 = 0;
-			StandardT Par2 = 0;
+			PropertyActioE Action;
+			std::size_t Solt = 0;
+			std::size_t Par = 0;
+		};
+
+		struct ConditionT
+		{
+			enum CommandE
+			{
+				Next,
+				ToNode,
+				Fail,
+			};
+			CommandE PassCommand = CommandE::Fail;
+			CommandE UnpassCommand = CommandE::Fail;
+			std::size_t Pass = 0;
+			std::size_t Unpass = 0;
 		};
 
 		struct EdgeT
 		{
 			IntervalT CharSets;
-			std::vector<std::size_t> ToNode;
 			std::vector<PropertyT> Propertys;
+			std::vector<ConditionT> Conditions;
 		};
 
 		struct AcceptT
 		{
-			StandardT Mask;
-			Misc::IndexSpan<StandardT> CaptureIndex;
+			std::size_t Mask;
+			Misc::IndexSpan<> CaptureIndex;
 		};
 
 		struct NodeT
@@ -356,12 +340,48 @@ export namespace Potato::Reg
 		};
 
 		FormatE Format;
+		std::size_t CacheRecordCount;
 		std::vector<NodeT> Nodes;
 		
+		friend class RegProcessor;
+	};
+
+	struct ProcessorAcceptT
+	{
+		std::size_t Mask;
+		std::vector<Misc::IndexSpan<>> Capture;
+	};
+
+	struct RegProcessor
+	{
+		RegProcessor(DfaT& Table);
+		RegProcessor(RegProcessor const&) = default;
+
+		bool Consume(char32_t Token, std::size_t TokenIndex);
+		bool EndOfFile(std::size_t TokenIndex) { return Consume(Reg::EndOfFile(), TokenIndex); }
+		void Reset();
+		bool HasAccept() const { return Accept.has_value(); }
+		std::optional<ProcessorAcceptT> GetAccept() const;
+	
+	public:
+		
+		DfaT& Table;
+		std::size_t CurNodeIndex;
+
+		enum class DetectResultE
+		{
+			True,
+			False
+		};
+
+		std::vector<DetectResultE> TempResult;
+		std::vector<std::size_t> CacheIndex;
+		std::optional<DfaT::AcceptT> Accept;
 	};
 
 	
-
+	using StandardT = std::uint32_t;
+	using HalfStandardT = std::uint16_t;
 	
 
 	

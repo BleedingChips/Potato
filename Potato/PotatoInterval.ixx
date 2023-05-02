@@ -366,7 +366,7 @@ export namespace Potato::Misc
 						{
 							Result.Elements.push_back(Cur2);
 						}
-						else {
+						else if(!std::is_eq(Wrapper::Order(Cur.Start, Cur2.End))){
 							Result.Elements.push_back({ Cur.Start, Cur2.End });
 						}
 					}
