@@ -1835,7 +1835,8 @@ namespace Potato::Reg
 
 						for (auto& Ite3 : ToNode)
 						{
-							Ite3.Actions.erase(Ite3.Actions.begin() + I);
+							Ite3.Actions[I] = ActionE::Ignore;
+							//Ite3.Actions.erase(Ite3.Actions.begin() + I);
 						}
 
 						for(std::size_t I2 = I; I2 < Ite2.Propertys.size(); ++I2)
@@ -2009,6 +2010,14 @@ namespace Potato::Reg
 							});
 						}
 					}
+				}
+
+				for (auto& Ite3 : ToNode)
+				{
+					Ite3.Actions.erase(
+						std::remove_if(Ite3.Actions.begin(), Ite3.Actions.end(), [](ActionE I){ return I == ActionE::Ignore; }),
+						Ite3.Actions.end()
+					);
 				}
 
 				std::vector<ConditionT> Conditions;
