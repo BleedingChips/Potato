@@ -1176,26 +1176,12 @@ namespace Potato::Reg
 
 		bool operator==(ActionIndexWithSubIndexT const& T1) const = default;
 		bool operator<(ActionIndexWithSubIndexT const& T1) const {
-			if (Original.Category != T1.Original.Category)
-			{
-				if (Original.Category == ActionIndexT::CategoryE::Counter)
-					return false;
-				else if (T1.Original.Category == ActionIndexT::CategoryE::Counter)
-					return true;
-			}
-			if (SubIndex < T1.SubIndex)
+
+			if(SubIndex < T1.SubIndex)
 				return true;
 			else if (SubIndex == T1.SubIndex)
 			{
-				if (Original.MaskIndex < T1.Original.MaskIndex)
-					return true;
-				else if (Original.MaskIndex == T1.Original.MaskIndex)
-				{
-					if (Original.Index < T1.Original.Index)
-						return true;
-					else if (Original.Index == T1.Original.Index)
-						return static_cast<std::size_t>(Original.Category) < static_cast<std::size_t>(T1.Original.Category);
-				}
+				return Original < T1.Original;
 			}
 			return false;
 		}
@@ -1614,8 +1600,8 @@ namespace Potato::Reg
 
 			std::size_t SubIndex = 0;
 			auto F1 = ActionIndexNodes[NodeIndex].Indexs.find(Index);
-			if(F1 != ActionIndexNodes[NodeIndex].Indexs.end())
-				SubIndex = F1->second;
+			assert(F1 != ActionIndexNodes[NodeIndex].Indexs.end());
+			SubIndex = F1->second;
 			ActionIndexWithSubIndexT AIWSB {Index, SubIndex};
 			for (std::size_t I = 0; I < ActionIndexLocate.size(); ++I)
 			{
@@ -1632,6 +1618,14 @@ namespace Potato::Reg
 
 			std::set<NfaEdgeKeyT> UsedKeys;
 
+			struct SerarchStackT
+			{
+				ActionIndexT Index;
+				std::size_t NodeIndex;
+			};
+
+			std::vector<SerarchStackT> SearchStackT;
+
 			for (auto& Ite : TempNode)
 			{
 				for (auto& Ite2 : Ite.TempEdge)
@@ -1642,6 +1636,7 @@ namespace Potato::Reg
 						auto [I, B] = UsedKeys.insert(NfaEdgeKey);
 						if(B)
 						{
+							auto& FromNode = ActionIndexNodes[Ite3.Key->first.From];
 							auto& NfaEdgeProperty = Ite3.Key->second;
 							if (NfaEdgeProperty.ToAccept || NfaEdgeProperty.HasCounter || NfaEdgeProperty.HasCapture)
 							{
@@ -1656,27 +1651,58 @@ namespace Potato::Reg
 										switch (Ite4.Type)
 										{
 										case NfaT::EdgePropertyE::CaptureBegin:
-											Ref.Indexs.insert(
-												{ {ActionIndexT::CategoryE::CaptureBegin, Ite4.Index, Edge.MaskIndex}, 0 }
-											);
+										{
+											ActionIndexT Index{
+												ActionIndexT::CategoryE::CaptureBegin, Ite4.Index, Edge.MaskIndex
+											};
+											FromNode.Indexs.insert({Index, 0});
+											SearchStackT.push_back({Index, NfaEdgeProperty.ToNode });
 											break;
+										}
 										case NfaT::EdgePropertyE::CaptureEnd:
-											Ref.Indexs.insert(
-												{ {ActionIndexT::CategoryE::CaptureEnd, Ite4.Index, Edge.MaskIndex}, 0 }
-											);
+										{
+											ActionIndexT Index{
+												ActionIndexT::CategoryE::CaptureEnd, Ite4.Index, Edge.MaskIndex
+											};
+											FromNode.Indexs.insert({Index, 0});
+											SearchStackT.push_back({ Index, NfaEdgeProperty.ToNode });
 											break;
+										}
 										case NfaT::EdgePropertyE::OneCounter:
 										case NfaT::EdgePropertyE::AddCounter:
 										case NfaT::EdgePropertyE::LessCounter:
 										case NfaT::EdgePropertyE::BiggerCounter:
-											Ref.Indexs.insert(
-												{ {ActionIndexT::CategoryE::Counter, Ite4.Index, Edge.MaskIndex}, 0 }
-											);
+										{
+											ActionIndexT Index{
+												ActionIndexT::CategoryE::Counter, Ite4.Index, Edge.MaskIndex
+											};
+											FromNode.Indexs.insert({Index, 0});
+											Ref.Indexs.insert({Index, 0});
 											break;
+										}
 										}
 									}
 								}
 							}
+						}
+					}
+				}
+			}
+
+			while (!SearchStackT.empty())
+			{
+				auto Top = *SearchStackT.rbegin();
+				SearchStackT.pop_back();
+				auto& Ref = ActionIndexNodes[Top.NodeIndex];
+				auto [Ite, B] = Ref.Indexs.insert({Top.Index, 0});
+				if (B)
+				{
+					for (auto& Ite2 : UsedKeys)
+					{
+						if (Ite2.From == Top.NodeIndex)
+						{
+							auto& EdgeRef = T1.Nodes[Ite2.From].Edges[Ite2.EdgeIndex];
+							SearchStackT.push_back({ Top.Index, EdgeRef.ToNode });
 						}
 					}
 				}
@@ -1953,6 +1979,24 @@ namespace Potato::Reg
 						}
 					}
 
+					auto& FromSubIndex = ActionIndexNodes[Pro.Key->first.From].Indexs;
+					auto& ToSubIndex = ActionIndexNodes[Edge.ToNode].Indexs;
+
+					for (auto& Ite3 : FromSubIndex)
+					{
+						if (Ite3.first.Category == ActionIndexT::CategoryE::CaptureBegin || Ite3.first.Category == ActionIndexT::CategoryE::CaptureEnd)
+						{
+							auto F1 = ToSubIndex.find(Ite3.first);
+							if (F1 != ToSubIndex.end() && Ite3.second != F1->second)
+							{
+								NewEdge.Propertys.push_back({
+									PropertyActioE::CopyValue,
+									LocateActionIndex(Ite3.first, Pro.Key->first.From),
+									LocateActionIndex(Ite3.first, Edge.ToNode),
+								});
+							}
+						}
+					}
 
 					for (auto& Ite3 : HasCounter)
 					{
