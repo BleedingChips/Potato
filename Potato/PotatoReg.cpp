@@ -1294,6 +1294,8 @@ namespace Potato::Reg
 			auto Top = *SearchingStack.rbegin();
 			SearchingStack.pop_back();
 
+			std::vector<TempPropertyT> CacheAcceptProperty;
+
 			for (auto Ite : Top->first)
 			{
 				auto& EdgeRef = T1.Nodes[Ite].Edges;
@@ -1320,6 +1322,7 @@ namespace Potato::Reg
 								Ite3.Propertys.push_back(Property);
 							}
 						}
+						CacheAcceptProperty.push_back(Property);
 					}
 
 					TempEdgeT Temp{
@@ -1347,7 +1350,12 @@ namespace Potato::Reg
 					}
 
 					if (!Temp.CharSets.Size() == 0)
+					{
+						if (Temp.CharSets.Size() != 1 || Temp.CharSets[0].Start != EndOfFile())
+							Temp.Propertys.insert(Temp.Propertys.begin(), CacheAcceptProperty.begin(), CacheAcceptProperty.end());
 						TempEdges.push_back(std::move(Temp));
+					}
+						
 
 					TempEdges.erase(
 						std::remove_if(TempEdges.begin(), TempEdges.end(), [](TempEdgeT const& T) { return T.CharSets.Size() == 0; }),

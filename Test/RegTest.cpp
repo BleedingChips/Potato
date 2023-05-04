@@ -154,14 +154,14 @@ int main()
 
 	try {
 
-		NfaT N(U"a((?:a){0,3})a", false, 0);
+		NfaT N(U"a(a+?)a", false, 0);
 		NfaT N2(U"(a{0,16})(b{0,8})", false, 1);
 		N.Link(N2);
 		DfaT N4{ N, DfaT::FormatE::HeadMarch};
 
 		RegProcessor Pro(N4);
 
-		std::u32string_view Str = U"aaaaaabb";
+		std::u32string_view Str = U"aaac";
 
 		for (std::size_t I = 0; I < Str.size(); ++I)
 		{
