@@ -1883,6 +1883,64 @@ namespace Potato::Reg
 
 					std::set<CopyRecord> HasCounter;
 
+					std::set<std::size_t> OverwritedCapture;
+
+					if (Pro.Key->second.HasCapture)
+					{
+						for (auto Ite3 : Edge.Propertys)
+						{
+							switch (Ite3.Type)
+							{
+							case NfaT::EdgePropertyE::CaptureBegin:
+							{
+								ActionIndexT Index{
+									ActionIndexT::CategoryE::CaptureBegin,
+									Ite3.Index,
+									Edge.MaskIndex
+								};
+								OverwritedCapture.insert(LocateActionIndex(Index, Edge.ToNode));
+								break;
+							}
+							case NfaT::EdgePropertyE::CaptureEnd:
+							{
+								ActionIndexT Index{
+									ActionIndexT::CategoryE::CaptureEnd,
+									Ite3.Index,
+									Edge.MaskIndex
+								};
+								OverwritedCapture.insert(LocateActionIndex(Index, Edge.ToNode));
+								break;
+							}
+							default:
+								break;
+							}
+						}
+					}
+					
+
+					auto& FromSubIndex = ActionIndexNodes[Pro.Key->first.From].Indexs;
+					auto& ToSubIndex = ActionIndexNodes[Edge.ToNode].Indexs;
+
+					for (auto& Ite3 : FromSubIndex)
+					{
+						if (Ite3.first.Category == ActionIndexT::CategoryE::CaptureBegin || Ite3.first.Category == ActionIndexT::CategoryE::CaptureEnd)
+						{
+							auto F1 = ToSubIndex.find(Ite3.first);
+							if (F1 != ToSubIndex.end() && Ite3.second != F1->second)
+							{
+								auto Target = LocateActionIndex(Ite3.first, Edge.ToNode);
+								if (OverwritedCapture.find(Target) == OverwritedCapture.end())
+								{
+									NewEdge.Propertys.push_back({
+										PropertyActioE::CopyValue,
+										LocateActionIndex(Ite3.first, Pro.Key->first.From),
+										LocateActionIndex(Ite3.first, Edge.ToNode),
+									});
+								}
+							}
+						}
+					}
+
 					for (auto Ite3 : Edge.Propertys)
 					{
 						switch (Ite3.Type)
@@ -1977,25 +2035,6 @@ namespace Potato::Reg
 						default:
 							assert(false);
 							break;
-						}
-					}
-
-					auto& FromSubIndex = ActionIndexNodes[Pro.Key->first.From].Indexs;
-					auto& ToSubIndex = ActionIndexNodes[Edge.ToNode].Indexs;
-
-					for (auto& Ite3 : FromSubIndex)
-					{
-						if (Ite3.first.Category == ActionIndexT::CategoryE::CaptureBegin || Ite3.first.Category == ActionIndexT::CategoryE::CaptureEnd)
-						{
-							auto F1 = ToSubIndex.find(Ite3.first);
-							if (F1 != ToSubIndex.end() && Ite3.second != F1->second)
-							{
-								NewEdge.Propertys.push_back({
-									PropertyActioE::CopyValue,
-									LocateActionIndex(Ite3.first, Pro.Key->first.From),
-									LocateActionIndex(Ite3.first, Edge.ToNode),
-								});
-							}
 						}
 					}
 
