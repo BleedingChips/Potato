@@ -1187,7 +1187,17 @@ namespace Potato::Reg
 		}
 	};
 
-	DfaT::DfaT(NfaT const& T1, FormatE Format)
+	DfaT::DfaT(FormatE Format, std::u32string_view Str, bool IsRaw, std::size_t Mask)
+		try : DfaT(Format, NfaT{ Str, IsRaw, Mask })
+	{
+
+	}
+	catch (UnaccaptableRegexTokenIndex const& Error)
+	{
+		throw UnaccaptableRegex(Error.Type, Str, Error.BadIndex);
+	}
+
+	DfaT::DfaT(FormatE Format, NfaT const& T1)
 		: Format(Format)
 	{
 
@@ -1294,8 +1304,6 @@ namespace Potato::Reg
 			auto Top = *SearchingStack.rbegin();
 			SearchingStack.pop_back();
 
-			std::vector<TempPropertyT> CacheAcceptProperty;
-
 			for (auto Ite : Top->first)
 			{
 				auto& EdgeRef = T1.Nodes[Ite].Edges;
@@ -1310,23 +1318,21 @@ namespace Potato::Reg
 
 					TempPropertyT Property{Key, {}};
 
+					auto TempCharSets = Ite2.CharSets;
+
 					if (
 						(Format == FormatE::HeadMarch || Format == FormatE::GreedyHeadMarch)
 						&& Key->second.ToAccept
 					)
 					{
-						for (auto& Ite3 : TempEdges)
-						{
-							if (Ite3.CharSets.Size() != 1 || Ite3.CharSets[0].Start != EndOfFile())
-							{
-								Ite3.Propertys.push_back(Property);
-							}
-						}
-						CacheAcceptProperty.push_back(Property);
+						TempCharSets = IntervalT{
+							{1, MaxChar()},
+							{EndOfFile(), EndOfFile() + 1}
+						};
 					}
 
 					TempEdgeT Temp{
-						Ite2.CharSets,
+						std::move(TempCharSets),
 						{Property},
 						{},
 					};
@@ -1351,8 +1357,6 @@ namespace Potato::Reg
 
 					if (!Temp.CharSets.Size() == 0)
 					{
-						if (Temp.CharSets.Size() != 1 || Temp.CharSets[0].Start != EndOfFile())
-							Temp.Propertys.insert(Temp.Propertys.begin(), CacheAcceptProperty.begin(), CacheAcceptProperty.end());
 						TempEdges.push_back(std::move(Temp));
 					}
 						
@@ -1361,6 +1365,18 @@ namespace Potato::Reg
 						std::remove_if(TempEdges.begin(), TempEdges.end(), [](TempEdgeT const& T) { return T.CharSets.Size() == 0; }),
 						TempEdges.end()
 					);
+				}
+			}
+
+			for (std::size_t I = 0; I < TempEdges.size(); ++I)
+			{
+				auto& Cur = TempEdges[I];
+				for (std::size_t I2 = I + 1; I2 < TempEdges.size(); ++I2)
+				{
+					auto& Last = TempEdges[I2];
+					auto NewCharSets = (Cur.CharSets + Last.CharSets);
+					if (NewCharSets.Size() <= Last.CharSets.Size())
+						Last.CharSets = std::move(NewCharSets);
 				}
 			}
 			
@@ -1378,6 +1394,32 @@ namespace Potato::Reg
 						}
 					}
 				}
+				else if (Format == FormatE::GreedyHeadMarch)
+				{
+					bool HasAccept = false;
+					for (std::size_t I = 0; I < Ite.Propertys.size(); )
+					{
+						auto& EdgePro = Ite.Propertys[I].Key->second;
+						if (EdgePro.Ranges.empty() && EdgePro.ToAccept)
+						{
+							std::size_t TarMaskIndex = EdgePro.MaskIndex;
+
+							Ite.Propertys.erase(
+								std::remove_if(Ite.Propertys.begin() + I + 1, Ite.Propertys.end(), [=](TempPropertyT const& T) {
+									return T.Key->second.MaskIndex == TarMaskIndex;
+								}),
+								Ite.Propertys.end()
+							);
+
+							if (HasAccept)
+							{
+								Ite.Propertys.erase(Ite.Propertys.begin() + I);
+								continue;
+							}
+						}
+						++I;
+					}
+				}
 
 				assert(!Ite.Propertys.empty());
 
@@ -1390,69 +1432,61 @@ namespace Potato::Reg
 					for (std::size_t I2 = 0; I2 < I; ++I2)
 					{
 						auto& Tar = Ite.Propertys[I2].Key->second;
+						
+						bool SameTrue = false;
+						bool SameFalse = false;
 
-						if (Tar.Ranges.empty())
+						if (Tar.MaskIndex == EdgePro.MaskIndex)
 						{
-							if (Tar.ToAccept)
+							SameTrue = true;
+							for (auto& Ite2 : EdgePro.Ranges)
+							{
+								auto F1 = std::find_if(
+									Tar.Ranges.begin(),
+									Tar.Ranges.end(),
+									[&](NfaEdgePropertyT::RangeT const& Reg) { return Reg.Index == Ite2.Index; }
+								);
+								if (
+									F1 == Tar.Ranges.end()
+									|| F1->Min < Ite2.Min || F1->Max > Ite2.Max
+									)
+								{
+									SameTrue = false;
+									break;
+								}
+							}
+
+							SameFalse = true;
+							for (auto& Ite2 : Tar.Ranges)
+							{
+								auto F1 = std::find_if(
+									EdgePro.Ranges.begin(),
+									EdgePro.Ranges.end(),
+									[&](NfaEdgePropertyT::RangeT const& Reg) { return Reg.Index == Ite2.Index; }
+								);
+								if (
+									F1 == EdgePro.Ranges.end()
+									|| F1->Min > Ite2.Min || F1->Max < Ite2.Max
+									)
+								{
+									SameFalse = false;
+									break;
+								}
+							}
+						}
+
+						if (Tar.ToAccept)
+						{
+							if (Format == FormatE::March || Format == FormatE::HeadMarch)
 							{
 								RefProperty.Constraints.push_back({
 									I2,
 									ActionE::False,
-									ActionE::Ignore
+									SameFalse ? ActionE::False : ActionE::Ignore
 								});
 							}
-						}
-						else {
-							if (Tar.MaskIndex != EdgePro.MaskIndex)
-							{
-								if (Tar.ToAccept)
-								{
-									RefProperty.Constraints.push_back({
-										I2,
-										ActionE::False,
-										ActionE::Ignore
-									});
-								}
-							}
 							else {
-
-								bool SameTrue = true;
-								for (auto& Ite2 : EdgePro.Ranges)
-								{
-									auto F1 = std::find_if(
-										Tar.Ranges.begin(),
-										Tar.Ranges.end(),
-										[&](NfaEdgePropertyT::RangeT const& Reg) { return Reg.Index == Ite2.Index; }
-									);
-									if (
-										F1 == Tar.Ranges.end()
-										|| F1->Min < Ite2.Min || F1->Max > Ite2.Max
-										)
-									{
-										SameTrue = false;
-										break;
-									}
-								}
-
-								bool SameFalse = true;
-								for (auto& Ite2 : Tar.Ranges)
-								{
-									auto F1 = std::find_if(
-										EdgePro.Ranges.begin(),
-										EdgePro.Ranges.end(),
-										[&](NfaEdgePropertyT::RangeT const& Reg) { return Reg.Index == Ite2.Index; }
-									);
-									if (
-										F1 == EdgePro.Ranges.end()
-										|| F1->Min > Ite2.Min || F1->Max < Ite2.Max
-										)
-									{
-										SameFalse = false;
-										break;
-									}
-								}
-
-								if (Tar.ToAccept)
+								if (Tar.MaskIndex == EdgePro.MaskIndex)
 								{
 									RefProperty.Constraints.push_back({
 										I2,
@@ -1460,17 +1494,23 @@ namespace Potato::Reg
 										SameFalse ? ActionE::False : ActionE::Ignore
 									});
 								}
-								else {
-									
-									if (SameTrue || SameFalse)
-									{
-										RefProperty.Constraints.push_back({
-											I2,
-											SameTrue ? ActionE::True : ActionE::Ignore,
-											SameFalse ? ActionE::False : ActionE::Ignore
-										});
-									}
+								else if(SameTrue || SameFalse){
+									RefProperty.Constraints.push_back({
+										I2,
+										SameTrue ? ActionE::True : ActionE::Ignore,
+										SameFalse ? ActionE::False : ActionE::Ignore
+									});
 								}
+							}
+						}
+						else {
+							if (SameTrue || SameFalse)
+							{
+								RefProperty.Constraints.push_back({
+									I2,
+									SameTrue ? ActionE::True : ActionE::Ignore,
+									SameFalse ? ActionE::False : ActionE::Ignore
+								});
 							}
 						}
 					}
@@ -2088,7 +2128,7 @@ namespace Potato::Reg
 							else {
 								NewCondi.UnpassCommand = ConditionT::CommandE::Next;
 								NewCondi.Unpass = Conditions.size() + 1;
-								NextIndex = NewCondi.Pass;
+								NextIndex = NewCondi.Unpass;
 							}
 
 							Conditions.push_back(NewCondi);
@@ -2153,6 +2193,7 @@ namespace Potato::Reg
 		CacheIndex.resize(Table.GetCacheCounterCount(), 0);
 		auto& NodeRef = Table.Nodes[CurNodeIndex];
 		Accept = NodeRef.Accept;
+		CurMainCapture.reset();
 	}
 
 	auto RegProcessor::Consume(char32_t Token, std::size_t TokenIndex) -> bool
@@ -2271,6 +2312,13 @@ namespace Potato::Reg
 
 				CurNodeIndex = *ToNode;
 				Accept = Table.Nodes[CurNodeIndex].Accept;
+				if (!CurMainCapture.has_value())
+				{
+					CurMainCapture = {TokenIndex, TokenIndex};
+				}
+				else {
+					CurMainCapture = { CurMainCapture->Begin(), TokenIndex };
+				}
 				return true;
 			}
 		}
@@ -2287,10 +2335,24 @@ namespace Potato::Reg
 			{
 				NewAccept.Capture.push_back(Misc::IndexSpan<>(CacheIndex[I], CacheIndex[I + 1]));
 			}
+			if (CurMainCapture.has_value())
+				NewAccept.MainCapture = *CurMainCapture;
 			return NewAccept;
 		}
 		return {};
 	}
+
+	/*
+	static void SerilizeToExe(Misc::StructedSerilizerWriter<StandardT>& Writer, DfaT const& RefTable)
+	{
+		std::array<StandardT, 6> Array;
+
+
+	}
+	*/
+
+
+
 
 	namespace Exception
 	{

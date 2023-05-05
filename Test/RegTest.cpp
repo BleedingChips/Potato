@@ -149,54 +149,105 @@ void TestingReg()
 }
 */
 
+void Test(DfaT::FormatE Format, std::vector<std::u32string_view> Reg, std::u32string_view SourceStr, std::size_t TargetMask, std::u32string_view MainCapture, std::vector<std::u32string_view> RequireCapture, const char* Error);
+
+
 int main()
 {
 
-	try {
-
-		NfaT N(U"a(a+?)a", false, 0);
-		NfaT N2(U"(a{0,16})(b{0,8})", false, 1);
-		N.Link(N2);
-		DfaT N4{ N, DfaT::FormatE::HeadMarch};
-
-		RegProcessor Pro(N4);
-
-		std::u32string_view Str = U"aaac";
-
-		for (std::size_t I = 0; I < Str.size(); ++I)
+	Test(
+		DfaT::FormatE::HeadMarch,
 		{
-			auto Re = Pro.Consume(Str[I], I);
-			if (Pro.HasAccept())
-			{
-				auto Accept = Pro.GetAccept();
-				volatile int i = 0;
-			}
-		}
+			U"a(a+?)a",
+			U"(a{1,16})(b{0,8})"
+		},
+		U"aaaaa",
+		0,
+		U"aaa",
+		{
+			U"a"
+		},
+		"case1"
+	);
 
-		auto A2 = Pro.GetAccept();
+	Test(
+		DfaT::FormatE::GreedyHeadMarch,
+		{
+			U"a(a+?)a",
+			U"(a{1,16})(b{0,8})"
+		},
+		U"aaaaab",
+		1,
+		U"aaaaab",
+		{
+			U"aaaaa",
+			U"b"
+		},
+		"case2"
+	);
 
-		Pro.EndOfFile(Str.size());
 
-		auto Accept = Pro.GetAccept();
 
-		volatile int i = 0;
-	}
-	catch (Exception::UnaccaptableRegex const& Rex)
-	{
-		std::wstring_view Last = Rex.GetErrorRegex();
-		volatile int i = 0;
-	}
-	
-
-	/*
-	try {
-		TestingReg();
-	}
-	catch (char const* Error)
-	{
-		std::cout << Error << std::endl;
-		return -1;
-	}
-	*/
 	return 0;
 }
+
+
+void Test(DfaT::FormatE Format, std::vector<std::u32string_view> Reg, std::u32string_view SourceStr, std::size_t TargetMask, std::u32string_view MainCapture, std::vector<std::u32string_view> RequireCapture, const char* Error)
+{
+	if (!Reg.empty())
+	{
+		try {
+			NfaT NfaReg(Reg[0], false, 0);
+			for (std::size_t I = 1; I < Reg.size(); ++I)
+			{
+				NfaReg.Link(NfaT{ Reg[I], false, I });
+			}
+			DfaT RegTable(Format, NfaReg);
+			RegProcessor Pro(RegTable);
+			bool NeedEndOfFile = true;
+			for (std::size_t I = 0; I < SourceStr.size(); ++I)
+			{
+				auto Re = Pro.Consume(SourceStr[I], I);
+				if (!Re)
+				{
+					NeedEndOfFile = false;
+					break;
+				}
+			}
+			if (NeedEndOfFile)
+				Pro.EndOfFile(SourceStr.size());
+			auto Accep = Pro.GetAccept();
+			if (Accep.has_value())
+			{
+				if (Accep->Mask != TargetMask)
+				{
+					throw Error;
+				}
+				auto MainCaptureStr = Accep->MainCapture.Slice(SourceStr);
+				if (MainCaptureStr != MainCapture)
+				{
+					throw Error;
+				}
+				if (RequireCapture.size() != Accep->Capture.size())
+				{
+					throw Error;
+				}
+				for (std::size_t I = 0; I < RequireCapture.size(); ++I)
+				{
+					if (Accep->Capture[I].Slice(SourceStr) != RequireCapture[I])
+						throw Error;
+				}
+			}
+			else
+				throw Error;
+		}
+		catch (...)
+		{
+			throw Error;
+		}
+
+
+	}
+
+}
+
