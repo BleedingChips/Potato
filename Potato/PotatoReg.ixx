@@ -383,13 +383,43 @@ export namespace Potato::Reg
 		std::optional<Misc::IndexSpan<>> CurMainCapture;
 	};
 
-	
-	
-
 	struct DfaBinaryTable
 	{
 		using StandardT = std::uint32_t;
 		using HalfStandardT = std::uint16_t;
+
+		struct NodeT
+		{
+			HalfStandardT CharSetsCount;
+			HalfStandardT AcceptOffset;
+		};
+
+		struct CharSetPropertyT
+		{
+			HalfStandardT ChaeSetsCount;
+			HalfStandardT EdgeOffset;
+		};
+
+		struct CharSetPropertyT
+		{
+			HalfStandardT CommandCount;
+			HalfStandardT ConditionCount;
+		};
+
+		struct ConditionT
+		{
+			HalfStandardT PassAction;
+			HalfStandardT UnpassAction;
+			StandardT Pass;
+			StandardT Unpass;
+		};
+
+		struct AcceptT
+		{
+			StandardT Mask;
+			HalfStandardT CaptureIndexBegin;
+			HalfStandardT CaptureIndexEnd;
+		};
 		
 		static std::size_t PredicateSize(DfaT const& RefTable);
 		static std::size_t SerilizeTo(std::span<StandardT> Buffer);

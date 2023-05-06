@@ -2342,14 +2342,21 @@ namespace Potato::Reg
 		return {};
 	}
 
-	/*
-	static void SerilizeToExe(Misc::StructedSerilizerWriter<StandardT>& Writer, DfaT const& RefTable)
+
+	static void DfaBinaryTable::SerilizeToExe(Misc::StructedSerilizerWriter<StandardT>& Writer, DfaT const& RefTable)
 	{
 		std::array<StandardT, 6> Array;
 
+		Writer.WriteObjectArray(std::span(Array));
 
+		std::vector<StandardT> NodeIndexOffset;
+
+		for (auto& Ite : RefTable.Nodes)
+		{
+			NodeT NewNode;
+
+		}
 	}
-	*/
 
 
 
