@@ -133,6 +133,9 @@ export namespace Potato::Misc
 		ElementT& operator[](std::size_t Index) { return Elements[Index]; }
 		ElementT const& operator[](std::size_t Index) const { return Elements[Index]; }
 		std::size_t Size() const { return Elements.size(); }
+		auto begin() const { return Elements.begin(); }
+		auto end() const { return Elements.end(); }
+		auto GetSpan() const { return std::span(Elements); }
 
 		bool IsInclude(Type Input) const { return WrapperT::IsInclude(std::span(Elements), Input); }
 

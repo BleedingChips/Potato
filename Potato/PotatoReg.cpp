@@ -238,7 +238,7 @@ namespace Potato::Reg
 
 	constexpr Symbol operator*(T Input) { return Symbol::AsTerminal(static_cast<SLRX::StandardT>(Input)); };
 
-	enum class NT : StandardT
+	enum class NT : SLRX::StandardT
 	{
 		AcceptableSingleChar,
 		CharListAcceptableSingleChar,
@@ -1368,6 +1368,12 @@ namespace Potato::Reg
 				}
 			}
 
+			std::sort(
+				TempEdges.begin(),
+				TempEdges.end(),
+				[](TempEdgeT const& T1, TempEdgeT const& T2){ return T1.CharSets.Size() < T2.CharSets.Size(); }
+			);
+
 			for (std::size_t I = 0; I < TempEdges.size(); ++I)
 			{
 				auto& Cur = TempEdges[I];
@@ -2343,23 +2349,141 @@ namespace Potato::Reg
 	}
 
 
-	static void DfaBinaryTable::SerilizeToExe(Misc::StructedSerilizerWriter<StandardT>& Writer, DfaT const& RefTable)
+	void DfaBinaryTable::SerilizeToExe(Misc::StructedSerilizerWriter<StandardT>& Writer, DfaT const& RefTable)
 	{
+		using WriterT = Misc::StructedSerilizerWriter<StandardT>;
+		using namespace Potato::Reg::Exception;
+
 		std::array<StandardT, 6> Array;
 
 		Writer.WriteObjectArray(std::span(Array));
 
 		std::vector<StandardT> NodeIndexOffset;
 
+		struct BackwardReference
+		{
+			std::size_t Adress;
+			std::size_t RefCount;
+		};
+
+		std::vector<BackwardReference> EdgeReference;
+		std::vector<BackwardReference> ActionReference;
+		
 		for (auto& Ite : RefTable.Nodes)
 		{
+			EdgeReference.clear();
+
 			NodeT NewNode;
+
+			Misc::CrossTypeSetThrow<RegexOutOfRange>(NewNode.EdgeCount, Ite.Edges.size(), RegexOutOfRange::TypeT::EdgeCount, Ite.Edges.size());
+		
+			
+			auto NodeAdress = Writer.WriteObject(NewNode);
+			
+			{
+				StandardT StandardNodeOffset = 0;
+				Misc::CrossTypeSetThrow<RegexOutOfRange>(StandardNodeOffset, NodeAdress, RegexOutOfRange::TypeT::NodeOffset, NodeAdress);
+				if (Writer.IsWritting())
+				{
+					NodeIndexOffset.push_back(StandardNodeOffset);
+				}
+			}
+
+
+			for (std::size_t I = 0; I < Ite.Edges.size(); ++I)
+			{
+				auto& CurEdge = Ite.Edges[I];
+				CharSetPropertyT NewSetProperty;
+				Misc::CrossTypeSetThrow<RegexOutOfRange>(NewSetProperty.CharCount, CurEdge.CharSets.Size(), RegexOutOfRange::TypeT::CharCount, CurEdge.CharSets.Size());
+				auto CurEdgeOffset = Writer.WriteObject(NewSetProperty);
+				auto CharSetsSpan = CurEdge.CharSets.GetSpan();
+				if (Writer.IsWritting())
+				{
+					EdgeReference.push_back({ CurEdgeOffset, I });
+				}
+				Writer.WriteObjectArray(CharSetsSpan);
+			}
+
+			for (std::size_t I = 0; I < Ite.Edges.size(); ++I)
+			{
+				auto& CurEdge = Ite.Edges[I];
+				EdgeT NewEdge;
+				Misc::CrossTypeSetThrow<RegexOutOfRange>(NewEdge.PropertyCount, CurEdge.Propertys.size(), RegexOutOfRange::TypeT::PropertyCount, CurEdge.Propertys.size());
+				Misc::CrossTypeSetThrow<RegexOutOfRange>(NewEdge.ConditionCount, CurEdge.Conditions.size(), RegexOutOfRange::TypeT::ConditionCount, CurEdge.Conditions.size());
+				auto EdgeAdress = Writer.WriteObject(NewEdge);
+				auto Reader = Writer.GetReader();
+				if (Reader.has_value())
+				{
+					for (auto& Ite2 : EdgeReference)
+					{
+						if (Ite2.Adress == I)
+						{
+							Reader->SetPointer(Ite2.Adress);
+							auto Ref = Reader->ReadObject<CharSetPropertyT>();
+							Ref->EdgeOffset = EdgeAdress - NodeAdress;
+						}
+					}
+				}
+				for (auto& Ite2 : CurEdge.Propertys)
+				{
+					static_assert(sizeof(DfaT::PropertyActioE) <= sizeof(StandardT));
+					Writer.WriteObject(static_cast<StandardT>(Ite2.Action));
+					switch (Ite2.Action)
+					{
+					case DfaT::PropertyActioE::CopyValue:
+					{
+						StandardT Par1 = 0;
+						Misc::CrossTypeSetThrow<RegexOutOfRange>(Par1, Ite2.Solt, RegexOutOfRange::TypeT::Solt, Ite2.Solt);
+						Writer.WriteObject(Par1);
+						Misc::CrossTypeSetThrow<RegexOutOfRange>(Par1, Ite2.Par, RegexOutOfRange::TypeT::Solt, Ite2.Par);
+						Writer.WriteObject(Par1);
+						break;
+					}
+					case DfaT::PropertyActioE::NewContext:
+						break;
+					case DfaT::PropertyActioE::ConstraintsTrueTrue:
+					case DfaT::PropertyActioE::ConstraintsFalseFalse:
+					case DfaT::PropertyActioE::ConstraintsFalseTrue:
+					case DfaT::PropertyActioE::ConstraintsTrueFalse:
+					case DfaT::PropertyActioE::OneCounter:
+					case DfaT::PropertyActioE::AddCounter:
+					case DfaT::PropertyActioE::RecordLocation:
+					{
+						StandardT Par1 = 0;
+						Misc::CrossTypeSetThrow<RegexOutOfRange>(Par1, Ite2.Solt, RegexOutOfRange::TypeT::Solt, Ite2.Solt);
+						Writer.WriteObject(Par1);
+						break;
+					}
+					case DfaT::PropertyActioE::LessCounter:
+					case DfaT::PropertyActioE::BiggerCounter:
+					{
+						StandardT Solt = 0;
+						Misc::CrossTypeSetThrow<RegexOutOfRange>(Solt, Ite2.Solt, RegexOutOfRange::TypeT::Solt, Ite2.Solt);
+						Writer.WriteObject(Solt);
+						StandardT Par = 0;
+						Misc::CrossTypeSetThrow<RegexOutOfRange>(Par, Ite2.Par, RegexOutOfRange::TypeT::Counter, Ite2.Par);
+						Writer.WriteObject(Par);
+						break;
+					}
+					default:
+						assert(false);
+						break;
+					}
+				}
+
+				for (auto& Ite2 : CurEdge.Conditions)
+				{
+					static_cast<>
+					ConditionT NewConditionT;
+					NewConditionT.
+					Misc::CrossTypeSetThrow<RegexOutOfRange>(NewConditionT.PassCommand, Ite2.PassCommand, RegexOutOfRange::TypeT::Command, static_cast<std::size_t>(Ite2.PassCommand));
+					Writer.WriteObject(NewConditionT);
+				}
+			}
+
 
 		}
 	}
-
-
-
 
 	namespace Exception
 	{

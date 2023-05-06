@@ -346,6 +346,7 @@ export namespace Potato::Reg
 		std::vector<NodeT> Nodes;
 		
 		friend class RegProcessor;
+		friend class DfaBinaryTable;
 	};
 
 	struct ProcessorAcceptT
@@ -390,39 +391,59 @@ export namespace Potato::Reg
 
 		struct NodeT
 		{
-			HalfStandardT CharSetsCount;
-			HalfStandardT AcceptOffset;
+			HalfStandardT EdgeCount = 0;
+			HalfStandardT AcceptOffset = 0;
 		};
 
 		struct CharSetPropertyT
 		{
-			HalfStandardT ChaeSetsCount;
-			HalfStandardT EdgeOffset;
-		};
-
-		struct CharSetPropertyT
-		{
-			HalfStandardT CommandCount;
-			HalfStandardT ConditionCount;
+			HalfStandardT CharCount = 0;
+			HalfStandardT EdgeOffset = 0;
 		};
 
 		struct ConditionT
 		{
-			HalfStandardT PassAction;
-			HalfStandardT UnpassAction;
-			StandardT Pass;
-			StandardT Unpass;
+			HalfStandardT PassCommand = 0;
+			HalfStandardT UnpassCommand = 0;
+			StandardT Pass = 0;
+			StandardT Unpass = 0;
+		};
+
+		struct EdgeT
+		{
+			HalfStandardT PropertyCount;
+			HalfStandardT ConditionCount;
 		};
 
 		struct AcceptT
 		{
-			StandardT Mask;
-			HalfStandardT CaptureIndexBegin;
-			HalfStandardT CaptureIndexEnd;
+			StandardT Mask = 0;
+			HalfStandardT CaptureIndexBegin = 0;
+			HalfStandardT CaptureIndexEnd = 0;
 		};
 		
-		static std::size_t PredicateSize(DfaT const& RefTable);
-		static std::size_t SerilizeTo(std::span<StandardT> Buffer);
+		static std::size_t PredicateSize(DfaT const& RefTable)
+		{
+			Misc::StructedSerilizerWriter<StandardT> Writer;
+			SerilizeToExe(Writer, RefTable);
+			return Writer.GetWritedSize();
+		}
+		static std::size_t SerilizeTo(std::span<StandardT> Buffer, DfaT const& RefTable)
+		{
+			Misc::StructedSerilizerWriter<StandardT> Writer(Buffer);
+			SerilizeToExe(Writer, RefTable);
+			return Writer.GetWritedSize();
+		}
+		
+		template<typename AllocatorT = std::allocator<StandardT>>
+		static auto Create(DfaT const& RefTable, AllocatorT const& Acclcator= {}) -> std::vector<StandardT, AllocatorT>
+		{
+			std::vector<StandardT, AllocatorT> Buffer(Acclcator);
+			Buffer.resize(PredicateSize(RefTable));
+			SerilizeTo(std::span(Buffer), RefTable);
+			return Buffer;
+		}
+
 	private:
 		static void SerilizeToExe(Misc::StructedSerilizerWriter<StandardT>& Writer, DfaT const& RefTable);
 		std::span<StandardT> Wrapper;
@@ -474,6 +495,14 @@ export namespace Potato::Reg
 		{
 			enum class TypeT
 			{
+				EdgeCount,
+				NodeOffset,
+				CharCount,
+				PropertyCount,
+				ConditionCount,
+				Solt,
+				Counter,
+				/*
 				Counter,
 				NodeCount,
 				NodeOffset,
@@ -487,12 +516,13 @@ export namespace Potato::Reg
 				CounterCount,
 				EdgeLength,
 				ContentIndex,
+				*/
 			};
 
 			TypeT Type;
-			Misc::IndexSpan<> Index;
+			std::size_t BadIndex;
 
-			RegexOutOfRange(TypeT Type, Misc::IndexSpan<> Index) : Type(Type), Index(Index) {}
+			RegexOutOfRange(TypeT Type, std::size_t BadIndex) : Type(Type), BadIndex(BadIndex) {}
 			RegexOutOfRange(RegexOutOfRange const&) = default;
 			virtual char const* what() const override;
 		};

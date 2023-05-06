@@ -77,12 +77,26 @@ export namespace Potato::Misc
 	};
 
 	template<typename RequireAlignType>
-	constexpr std::size_t AlignedSize(std::size_t Input)
+	inline constexpr std::size_t AlignedSize(std::size_t Input)
 	{
 		auto A1 = Input / sizeof(RequireAlignType);
 		if (Input % sizeof(RequireAlignType) != 0)
 			++A1;
 		return A1;
+	}
+
+	template<typename SourceT, typename TargetT>
+	inline constexpr bool CrossTypeSet(SourceT& Source, TargetT const& Target) requires(std::is_convertible_v<TargetT, SourceT>)
+	{
+		Source = static_cast<SourceT>(Target);
+		return Source == Target;
+	}
+
+	template<typename ExceptableT, typename SourceT, typename TargetT, typename ...Par>
+	inline constexpr void CrossTypeSetThrow(SourceT& Source, TargetT const& Target, Par&& ...Pars) requires(std::is_convertible_v<TargetT, SourceT>&& std::is_constructible_v<ExceptableT, Par...>)
+	{
+		if (!CrossTypeSet(Source, Target))
+			throw ExceptableT{ std::forward<Par>(Pars)... };
 	}
 
 	template<typename StructT>
@@ -136,8 +150,11 @@ export namespace Potato::Misc
 		template<typename OtherT>
 		std::size_t WriteObject(OtherT const& Type);
 
+		template<typename OtherT, std::size_t Count>
+		std::size_t WriteObjectArray(std::span<OtherT, Count> Input) { return WriteObjectArray(Input.data(), Input.size()); }
+
 		template<typename OtherT>
-		std::size_t WriteObjectArray(std::span<OtherT const>);
+		std::size_t WriteObjectArray(OtherT* BufferAdress, std::size_t Count);
 
 		std::optional<StructedSerilizerReader<StructT>> GetReader() const {
 			if (IsWritting())
@@ -146,6 +163,8 @@ export namespace Potato::Misc
 			}
 			return {};
 		}
+
+		std::size_t GetWritedSize() const { return WritedSize; }
 
 		StructedSerilizerWriter() = default;
 		StructedSerilizerWriter(std::span<StructT> ProxyBuffer) :
@@ -165,7 +184,7 @@ export namespace Potato::Misc
 	std::size_t StructedSerilizerWriter<StructT>::WriteObject(OtherT const& Type)
 	{
 		auto OldWriteSize = WritedSize;
-		auto TargetObject = AlignedSize<StructT>::AlignObjectSize(sizeof(OtherT));
+		auto TargetObject = AlignedSize<StructT>(sizeof(OtherT));
 		if (OutputBuffer.has_value())
 		{
 			auto Tar = OutputBuffer->subspan(WritedSize);
@@ -177,21 +196,21 @@ export namespace Potato::Misc
 
 	template<typename StructT>
 	template<typename OtherT>
-	std::size_t StructedSerilizerWriter<StructT>::WriteObjectArray(std::span<OtherT const> InputSpan)
+	std::size_t StructedSerilizerWriter<StructT>::WriteObjectArray(OtherT* BufferAdress, std::size_t Count)
 	{
 		auto OldWriteSize = WritedSize;
-		auto TargetObject = AlignedSize<StructT>::AlignObjectSize(sizeof(OtherT) * InputSpan.size());
+		auto TargetObject = AlignedSize<StructT>(sizeof(OtherT) * Count);
 		if (OutputBuffer.has_value())
 		{
 			auto Tar = OutputBuffer->subspan(WritedSize);
 			auto Adress = reinterpret_cast<std::byte*>(Tar.data());
-			for (auto& Ite : InputSpan)
+			for (std::size_t I = 0; I < Count; ++I)
 			{
-				new (Adress) OtherT{ Ite };
+				new (Adress) OtherT{ BufferAdress[I]};
 				Adress += sizeof(OtherT);
 			}
-			WritedSize += TargetObject;
 		}
+		WritedSize += TargetObject;
 		return OldWriteSize;
 	}
 

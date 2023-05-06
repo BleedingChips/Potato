@@ -154,7 +154,7 @@ void Test(DfaT::FormatE Format, std::vector<std::u32string_view> Reg, std::u32st
 
 int main()
 {
-
+	/*
 	Test(
 		DfaT::FormatE::HeadMarch,
 		{
@@ -185,8 +185,11 @@ int main()
 		},
 		"case2"
 	);
+	*/
 
+	DfaT Bj(DfaT::FormatE::March, U"abcdefg");
 
+	auto Buffer = DfaBinaryTable::Create(Bj);
 
 	return 0;
 }
