@@ -502,6 +502,8 @@ export namespace Potato::Reg
 				ConditionCount,
 				Solt,
 				Counter,
+				CaptureIndex,
+				Mask,
 				/*
 				Counter,
 				NodeCount,

@@ -2367,7 +2367,7 @@ namespace Potato::Reg
 		};
 
 		std::vector<BackwardReference> EdgeReference;
-		std::vector<BackwardReference> ActionReference;
+		std::vector<BackwardReference> ConditionReference;
 		
 		for (auto& Ite : RefTable.Nodes)
 		{
@@ -2473,16 +2473,62 @@ namespace Potato::Reg
 
 				for (auto& Ite2 : CurEdge.Conditions)
 				{
-					static_cast<>
-					ConditionT NewConditionT;
-					NewConditionT.
-					Misc::CrossTypeSetThrow<RegexOutOfRange>(NewConditionT.PassCommand, Ite2.PassCommand, RegexOutOfRange::TypeT::Command, static_cast<std::size_t>(Ite2.PassCommand));
-					Writer.WriteObject(NewConditionT);
+					
+					ConditionT NewCondition;
+					NewCondition.PassCommand = static_cast<HalfStandardT>(Ite2.PassCommand);
+					NewCondition.UnpassCommand = static_cast<HalfStandardT>(Ite2.UnpassCommand);
+					auto ConditionAdress = Writer.WriteObject(NewCondition);
+
+					auto Reader = Writer.GetReader();
+
+					if (Reader.has_value())
+					{
+						Reader->SetPointer(ConditionAdress);
+						auto Last = Reader->ReadObject<ConditionT>();
+						if (Ite2.PassCommand == DfaT::ConditionT::CommandE::ToNode)
+						{
+							ConditionReference.push_back({ConditionAdress, Ite2.Pass});
+						}
+						else {
+							Misc::CrossTypeSetThrow<RegexOutOfRange>(Last->Pass, Ite2.Pass, RegexOutOfRange::TypeT::Solt, Ite2.Pass);
+						}
+						if (Ite2.UnpassCommand == DfaT::ConditionT::CommandE::ToNode)
+						{
+							ConditionReference.push_back({ ConditionAdress, Ite2.Unpass });
+						}
+						else {
+							Misc::CrossTypeSetThrow<RegexOutOfRange>(Last->Unpass, Ite2.Unpass, RegexOutOfRange::TypeT::Solt, Ite2.Unpass);
+						}
+					}
 				}
 			}
 
-
+			if (Ite.Accept.has_value())
+			{
+				AcceptT NewAccept;
+				Misc::CrossTypeSetThrow<RegexOutOfRange>(
+					NewAccept.Mask, Ite.Accept->Mask, RegexOutOfRange::TypeT::Mask, Ite.Accept->Mask
+				);
+				Misc::CrossTypeSetThrow<RegexOutOfRange>(
+					NewAccept.CaptureIndexBegin, Ite.Accept->CaptureIndex.Begin(), 
+					RegexOutOfRange::TypeT::CaptureIndex, Ite.Accept->CaptureIndex.Begin()
+				);
+				Misc::CrossTypeSetThrow<RegexOutOfRange>(
+					NewAccept.CaptureIndexEnd, Ite.Accept->CaptureIndex.End(),
+					RegexOutOfRange::TypeT::CaptureIndex, Ite.Accept->CaptureIndex.End()
+				);
+				auto Adress = Writer.WriteObject(NewAccept);
+				auto Reader = Writer.GetReader();
+				if (Reader.has_value())
+				{
+					Reader->SetPointer(NodeAdress);
+					auto N = Reader->ReadObject<NodeT>();
+					N->AcceptOffset = static_cast<StandardT>(Adress);
+				}
+			}
 		}
+
+
 	}
 
 	namespace Exception
