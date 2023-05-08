@@ -186,6 +186,8 @@ int main()
 		"case2"
 	);
 
+	std::cout << "TestingReg Pass !" << std::endl;
+
 	return 0;
 }
 
@@ -245,7 +247,7 @@ void Test(DfaT::FormatE Format, std::vector<std::u32string_view> Reg, std::u32st
 			auto Span = DfaBinaryTable::Create(RegTable);
 
 			{
-				DfaBinaryTableProcessor Pro(DfaBinaryTable{ Span });
+				DfaBinaryTableProcessor Pro{ DfaBinaryTable{Span}};
 				bool NeedEndOfFile = true;
 				for (std::size_t I = 0; I < SourceStr.size(); ++I)
 				{

@@ -254,12 +254,12 @@ namespace Potato::Reg
 	constexpr Symbol operator*(NT Input) { return Symbol::AsNoTerminal(static_cast<SLRX::StandardT>(Input)); };
 
 
-	const SLRX::TableWrapper RexSLRXWrapper()
+	const SLRX::LRXBinaryTableWrapper RexSLRXWrapper()
 	{
 #ifdef _DEBUG
 		try {
 #endif
-			static SLRX::Table Table(
+			static SLRX::LRXBinaryTable Table(
 				*NT::ExpressionStatement,
 				{
 
@@ -2225,6 +2225,7 @@ namespace Potato::Reg
 							CacheIndex[Ite2.Solt] = TokenIndex;
 							break;
 						case DfaT::PropertyActioE::NewContext:
+							
 							break;
 						case DfaT::PropertyActioE::ConstraintsTrueTrue:
 							if(TempResult[Ite2.Solt])
@@ -2263,12 +2264,12 @@ namespace Potato::Reg
 					}
 					if (Ite2.Action == DfaT::PropertyActioE::NewContext)
 					{
-						TempResult.push_back(DetectReuslt ? 0 : 1);
+						TempResult.push_back(DetectReuslt ? 1 : 0);
 						DetectReuslt = true;
 					}
 				}
 
-				TempResult.push_back(DetectReuslt ? 0 : 1);
+				TempResult.push_back(DetectReuslt ? 1 : 0);
 
 				std::size_t NextIte = 0;
 				std::optional<std::size_t> ToNode;
@@ -2415,7 +2416,7 @@ namespace Potato::Reg
 				{
 					for (auto& Ite2 : EdgeReference)
 					{
-						if (Ite2.Adress == I)
+						if (Ite2.RefCount == I)
 						{
 							Reader->SetPointer(Ite2.Adress);
 							auto Ref = Reader->ReadObject<CharSetPropertyT>();
@@ -2610,7 +2611,7 @@ namespace Potato::Reg
 						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
 						auto P2 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
 						if(DetectResult)
-							CacheIndex[P2] = CacheIndex[P2];
+							CacheIndex[P2] = CacheIndex[P1];
 						break;
 					}
 					case DfaT::PropertyActioE::RecordLocation:
@@ -2621,7 +2622,11 @@ namespace Potato::Reg
 						break;
 					}
 					case DfaT::PropertyActioE::NewContext:
+					{
+						TempResult.push_back(DetectResult ? 1 : 0);
+						DetectResult = true;
 						break;
+					}
 					case DfaT::PropertyActioE::ConstraintsTrueTrue:
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
@@ -2684,14 +2689,9 @@ namespace Potato::Reg
 						assert(false);
 						break;
 					}
-					if (Action == DfaT::PropertyActioE::NewContext)
-					{
-						TempResult.push_back(DetectResult ? 0 : 1);
-						DetectResult = true;
-					}
 				}
 
-				TempResult.push_back(DetectResult);
+				TempResult.push_back(DetectResult ? 1 : 0);
 				auto ConditionSpan = Reader.ReadObjectArray<DfaBinaryTable::ConditionT>(Edge->ConditionCount);
 				std::size_t LastCondition = 0;
 				for (auto Ite : TempResult)
@@ -2725,7 +2725,7 @@ namespace Potato::Reg
 							auto TAccept = Reader.ReadObject<DfaBinaryTable::AcceptT>();
 							Accept = *TAccept;
 						}
-						if (CurMainCapture.has_value())
+						if (!CurMainCapture.has_value())
 						{
 							CurMainCapture = { TokenIndex, TokenIndex };
 						}

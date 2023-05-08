@@ -386,7 +386,7 @@ export namespace Potato::Reg
 		using HalfStandardT = std::uint16_t;
 
 		std::size_t GetStartupNodeIndex() const { return reinterpret_cast<HeadT const*>(Wrapper.data())->StartupNodeIndex; }
-		std::size_t GetCacheCounterCount() const { return reinterpret_cast<HeadT const*>(Wrapper.data())->CacheSolt;; }
+		std::size_t GetCacheCounterCount() const { return reinterpret_cast<HeadT const*>(Wrapper.data())->CacheSolt; }
 
 
 		struct NodeT
@@ -411,16 +411,16 @@ export namespace Potato::Reg
 
 		struct EdgeT
 		{
-			HalfStandardT PropertyCount;
-			HalfStandardT ConditionCount;
+			HalfStandardT PropertyCount = 0;
+			HalfStandardT ConditionCount = 0;
 		};
 
 		struct HeadT
 		{
 			DfaT::FormatE Format;
-			StandardT StartupNodeIndex;
-			StandardT NodeCount;
-			StandardT CacheSolt;
+			StandardT StartupNodeIndex = 0;
+			StandardT NodeCount = 0;
+			StandardT CacheSolt = 0;
 		};
 
 		struct AcceptT
@@ -452,7 +452,7 @@ export namespace Potato::Reg
 			return Buffer;
 		}
 
-		DfaBinaryTable(std::span<StandardT> Buffer) : Wrapper() {};
+		DfaBinaryTable(std::span<StandardT> Buffer) : Wrapper(Buffer) {};
 
 	private:
 
@@ -464,7 +464,7 @@ export namespace Potato::Reg
 
 	struct DfaBinaryTableProcessor
 	{
-		DfaBinaryTableProcessor(DfaBinaryTable Table) : Table(Table) { Reset(); }
+		DfaBinaryTableProcessor(DfaBinaryTable Table);
 		bool Consume(char32_t Token, std::size_t TokenIndex);
 		bool EndOfFile(std::size_t TokenIndex) { return Consume(Reg::EndOfFile(), TokenIndex); }
 		void Reset();
