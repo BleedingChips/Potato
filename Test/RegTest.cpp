@@ -205,20 +205,7 @@ void Test(DfaT::FormatE Format, std::vector<std::u32string_view> Reg, std::u32st
 			DfaT RegTable(Format, NfaReg);
 
 			{
-				NfaProcessor Pro(RegTable);
-				bool NeedEndOfFile = true;
-				for (std::size_t I = 0; I < SourceStr.size(); ++I)
-				{
-					auto Re = Pro.Consume(SourceStr[I], I);
-					if (!Re)
-					{
-						NeedEndOfFile = false;
-						break;
-					}
-				}
-				if (NeedEndOfFile)
-					Pro.EndOfFile(SourceStr.size());
-				auto Accep = Pro.GetAccept();
+				auto Accep = Process(RegTable, SourceStr);
 				if (Accep.has_value())
 				{
 					if (Accep->Mask != TargetMask)
@@ -247,20 +234,7 @@ void Test(DfaT::FormatE Format, std::vector<std::u32string_view> Reg, std::u32st
 			auto Span = DfaBinaryTable::Create(RegTable);
 
 			{
-				DfaBinaryTableProcessor Pro{ DfaBinaryTable{Span}};
-				bool NeedEndOfFile = true;
-				for (std::size_t I = 0; I < SourceStr.size(); ++I)
-				{
-					auto Re = Pro.Consume(SourceStr[I], I);
-					if (!Re)
-					{
-						NeedEndOfFile = false;
-						break;
-					}
-				}
-				if (NeedEndOfFile)
-					Pro.EndOfFile(SourceStr.size());
-				auto Accep = Pro.GetAccept();
+				auto Accep = Process(RegTable, SourceStr);
 				if (Accep.has_value())
 				{
 					if (Accep->Mask != TargetMask)

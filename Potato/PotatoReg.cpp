@@ -3,7 +3,6 @@ module;
 #include <cassert>
 
 module Potato.Reg;
-import Potato.Encode;
 
 namespace Potato::Reg
 {
@@ -254,12 +253,12 @@ namespace Potato::Reg
 	constexpr Symbol operator*(NT Input) { return Symbol::AsNoTerminal(static_cast<SLRX::StandardT>(Input)); };
 
 
-	const SLRX::LRXBinaryTableWrapper RexSLRXWrapper()
+	const SLRX::TableWrapper RexSLRXWrapper()
 	{
 #ifdef _DEBUG
 		try {
 #endif
-			static SLRX::LRXBinaryTable Table(
+			static SLRX::Table Table(
 				*NT::ExpressionStatement,
 				{
 
@@ -2186,13 +2185,13 @@ namespace Potato::Reg
 		}
 	}
 
-	NfaProcessor::NfaProcessor(DfaT& Table)
+	DfaProcessor::DfaProcessor(DfaT const& Table)
 		: Table(Table), CurNodeIndex(Table.GetStartupNodeIndex())
 	{
 		CacheIndex.resize(Table.GetCacheCounterCount());
 	}
 
-	void NfaProcessor::Reset()
+	void DfaProcessor::Reset()
 	{
 		CurNodeIndex = Table.GetStartupNodeIndex();
 		CacheIndex.clear();
@@ -2202,7 +2201,7 @@ namespace Potato::Reg
 		CurMainCapture.reset();
 	}
 
-	auto NfaProcessor::Consume(char32_t Token, std::size_t TokenIndex) -> bool
+	auto DfaProcessor::Consume(char32_t Token, std::size_t TokenIndex) -> bool
 	{
 		auto& NodeRef = Table.Nodes[CurNodeIndex];
 		for (auto& Ite : NodeRef.Edges)
@@ -2332,7 +2331,7 @@ namespace Potato::Reg
 		return false;
 	}
 
-	std::optional<ProcessorAcceptT> NfaProcessor::GetAccept() const
+	std::optional<ProcessorAcceptT> DfaProcessor::GetAccept() const
 	{
 		if (Accept.has_value())
 		{

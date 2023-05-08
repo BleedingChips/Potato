@@ -3,11 +3,85 @@ module;
 export module Potato.Reg;
 export import Potato.SLRX;
 export import Potato.Interval;
+export import Potato.Encode;
 
 export namespace Potato::Reg
 {
-	
-	
+
+
+	namespace Exception
+	{
+		struct Interface : public std::exception
+		{
+			virtual ~Interface() = default;
+			virtual char const* what() const override;
+		};
+
+		struct UnaccaptableRegexTokenIndex : public Interface
+		{
+			enum class TypeT
+			{
+				OutOfCharRange,
+				UnSupportEof,
+				UnaccaptableNumber,
+				RawRegexInNotNormalState,
+				BadRegex,
+			};
+
+			TypeT Type;
+			Misc::IndexSpan<> BadIndex;
+
+			UnaccaptableRegexTokenIndex(UnaccaptableRegexTokenIndex const&) = default;
+			UnaccaptableRegexTokenIndex(TypeT Type, Misc::IndexSpan<> TokenIndex) :
+				Type(Type), BadIndex(TokenIndex) {}
+			virtual char const* what() const override;
+		};
+
+		struct UnaccaptableRegex : protected UnaccaptableRegexTokenIndex
+		{
+			using TypeT = UnaccaptableRegexTokenIndex::TypeT;
+			std::wstring TotalString;
+			std::wstring_view GetErrorRegex() const { return BadIndex.Slice(std::wstring_view(TotalString)); }
+			UnaccaptableRegex(TypeT Type, std::u8string_view Str, Misc::IndexSpan<> BadIndex);
+			UnaccaptableRegex(TypeT Type, std::wstring_view Str, Misc::IndexSpan<> BadIndex);
+			UnaccaptableRegex(TypeT Type, std::u16string_view Str, Misc::IndexSpan<> BadIndex);
+			UnaccaptableRegex(TypeT Type, std::u32string_view Str, Misc::IndexSpan<> BadIndex);
+			UnaccaptableRegex() = default;
+			UnaccaptableRegex(UnaccaptableRegex const&) = default;
+			virtual char const* what() const override;
+		};
+
+		struct RegexOutOfRange : public Interface
+		{
+			enum class TypeT
+			{
+				EdgeCount,
+				NodeOffset,
+				CharCount,
+				PropertyCount,
+				ConditionCount,
+				Solt,
+				Counter,
+				CaptureIndex,
+				Mask,
+			};
+
+			TypeT Type;
+			std::size_t BadIndex;
+
+			RegexOutOfRange(TypeT Type, std::size_t BadIndex) : Type(Type), BadIndex(BadIndex) {}
+			RegexOutOfRange(RegexOutOfRange const&) = default;
+			virtual char const* what() const override;
+		};
+
+		struct CircleShifting : public Interface
+		{
+			CircleShifting() = default;
+			CircleShifting(CircleShifting const&) = default;
+			virtual char const* what() const override;
+		};
+	}
+
 
 	using IntervalT = Misc::IntervalT<char32_t>;
 
@@ -77,11 +151,44 @@ export namespace Potato::Reg
 
 	struct NfaT
 	{
-
-		static NfaT Create(std::u32string_view Str, bool IsRaw = false, std::size_t Mask = 0);
 		
-		NfaT(std::u32string_view Str, bool IsRaw = false, std::size_t Mask = 0)
-			: NfaT(Create(Str, IsRaw, Mask)) {}
+		template<typename CharT, typename CharTraiT>
+		NfaT(std::basic_string_view<CharT, CharTraiT> Str, bool IsRaw = false, std::size_t Mask = 0)
+		{
+			using 
+
+			RegLexerT Lex(IsRaw);
+
+			using EncodeT = Encode::CharEncoder<CharT, char32_t>;
+
+			auto IteSpan = std::span(Str);
+
+			char32_t TemBuffer = 0;
+
+			std::span<char32_t> OutputSpan = { &TemBuffer, 1 };
+
+			while (!IteSpan.empty())
+			{
+				auto StartIndex = Str.size() - IteSpan.size();
+				auto EncodeRe = EncodeT::EncodeOnceUnsafe(IteSpan, OutputSpan);
+				if (!Lex.Consume(TemBuffer, { StartIndex, StartIndex + EncodeRe.SourceSpace }))
+					throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {StartIndex, Str.size()} };
+				IteSpan = IteSpan.subspan(EncodeRe.SourceSpace);
+			}
+			if (!Lex.EndOfFile())
+				throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {Str.size(), Str.size()} };
+			try {
+				return NfaT{ Lex.GetSpan(), Mask };
+			}
+			catch (BadRegexRef EIndex)
+			{
+				throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {EIndex.Index , Str.size()} };
+			}
+			catch (UnaccaptableRegexTokenIndex const& EIndex)
+			{
+				throw Exception::UnaccaptableRegex{ EIndex.Type, Str, EIndex.BadIndex };
+			}
+		}
 		NfaT(NfaT const&) = default;
 		NfaT(NfaT&&) = default;
 		void Link(NfaT const&);
@@ -345,7 +452,7 @@ export namespace Potato::Reg
 		std::size_t CacheRecordCount;
 		std::vector<NodeT> Nodes;
 		
-		friend struct NfaProcessor;
+		friend struct DfaProcessor;
 		friend struct DfaBinaryTable;
 		friend struct DfaBinaryTableProcessor;
 	};
@@ -357,10 +464,39 @@ export namespace Potato::Reg
 		Misc::IndexSpan<> MainCapture;
 	};
 
-	struct NfaProcessor
+	template<typename ProcessorT, typename CharT, typename CharTraidT>
+	std::optional<ProcessorAcceptT> RegCoreProcessor(ProcessorT& Pro, std::basic_string_view<CharT, CharTraidT> Str)
 	{
-		NfaProcessor(DfaT& Table);
-		NfaProcessor(NfaProcessor const&) = default;
+		char32_t TemBuffer = 0;
+		std::span<char32_t> OutputSpan{ &TemBuffer, 1 };
+
+		using EncoderT = Potato::Encode::CharEncoder<CharT, char32_t>;
+
+		auto IteStr = std::span(Str);
+
+		bool NeedEndOfFile = true;
+
+		while (!IteStr.empty())
+		{
+			auto EncodeRe = EncoderT::EncodeOnceUnSafe(IteStr, OutputSpan);
+			auto Re = Pro.Consume(TemBuffer, Str.size() - IteStr.size());
+			IteStr = IteStr.subspan(EncodeRe.SourceSpace);
+			if (!Re)
+			{
+				NeedEndOfFile = false;
+				break;
+			}
+		}
+
+		if (NeedEndOfFile)
+			Pro.EndOfFile(Str.size() - IteStr.size());
+		return Pro.GetAccept();
+	}
+
+	struct DfaProcessor
+	{
+		DfaProcessor(DfaT const& Table);
+		DfaProcessor(DfaProcessor const&) = default;
 
 		bool Consume(char32_t Token, std::size_t TokenIndex);
 		bool EndOfFile(std::size_t TokenIndex) { return Consume(Reg::EndOfFile(), TokenIndex); }
@@ -370,7 +506,7 @@ export namespace Potato::Reg
 	
 	public:
 		
-		DfaT& Table;
+		DfaT const& Table;
 		std::size_t CurNodeIndex;
 		std::vector<std::size_t> TempResult;
 		std::vector<std::size_t> CacheIndex;
@@ -379,6 +515,13 @@ export namespace Potato::Reg
 		
 		friend struct DfaBinaryTableProcessor;
 	};
+
+	template<typename CharT, typename CharTrais>
+	std::optional<ProcessorAcceptT> Process(DfaT const& Table, std::basic_string_view<CharT, CharTrais> Str)
+	{
+		DfaProcessor Processor{ Table };
+		return RegCoreProcessor(Processor, Str);
+	}
 
 	struct DfaBinaryTable
 	{
@@ -462,6 +605,14 @@ export namespace Potato::Reg
 		friend struct DfaBinaryTableProcessor;
 	};
 
+	template<typename CharT, typename CharTrais>
+	std::optional<ProcessorAcceptT> Process(DfaBinaryTable const& Table, std::basic_string_view<CharT, CharTrais> Str)
+	{
+		DfaBinaryTableProcessor Processor{ Table };
+		return RegCoreProcessor(Processor, Str);
+	}
+
+
 	struct DfaBinaryTableProcessor
 	{
 		DfaBinaryTableProcessor(DfaBinaryTable Table);
@@ -479,92 +630,6 @@ export namespace Potato::Reg
 		std::optional<Misc::IndexSpan<>> CurMainCapture;
 	};
 
-	namespace Exception
-	{
-		struct Interface : public std::exception
-		{ 
-			virtual ~Interface() = default;
-			virtual char const* what() const override;
-		};
-
-		struct UnaccaptableRegexTokenIndex : public Interface
-		{
-			enum class TypeT
-			{
-				OutOfCharRange,
-				UnSupportEof,
-				UnaccaptableNumber,
-				RawRegexInNotNormalState,
-				BadRegex,
-			};
-
-			TypeT Type;
-			Misc::IndexSpan<> BadIndex;
-
-			UnaccaptableRegexTokenIndex(UnaccaptableRegexTokenIndex const&) = default;
-			UnaccaptableRegexTokenIndex(TypeT Type, Misc::IndexSpan<> TokenIndex) :
-				Type(Type), BadIndex(TokenIndex) {}
-			virtual char const* what() const override;
-		};
-
-		struct UnaccaptableRegex : protected UnaccaptableRegexTokenIndex
-		{
-			using TypeT = UnaccaptableRegexTokenIndex::TypeT;
-			std::wstring TotalString;
-			std::wstring_view GetErrorRegex() const { return BadIndex.Slice(std::wstring_view(TotalString)); }
-			UnaccaptableRegex(TypeT Type, std::u8string_view Str, Misc::IndexSpan<> BadIndex);
-			UnaccaptableRegex(TypeT Type, std::wstring_view Str, Misc::IndexSpan<> BadIndex);
-			UnaccaptableRegex(TypeT Type, std::u16string_view Str, Misc::IndexSpan<> BadIndex);
-			UnaccaptableRegex(TypeT Type, std::u32string_view Str, Misc::IndexSpan<> BadIndex);
-			UnaccaptableRegex() = default;
-			UnaccaptableRegex(UnaccaptableRegex const&) = default;
-			virtual char const* what() const override;
-		};
-
-		struct RegexOutOfRange : public Interface
-		{
-			enum class TypeT
-			{
-				EdgeCount,
-				NodeOffset,
-				CharCount,
-				PropertyCount,
-				ConditionCount,
-				Solt,
-				Counter,
-				CaptureIndex,
-				Mask,
-				/*
-				Counter,
-				NodeCount,
-				NodeOffset,
-				ToIndeCount,
-				ActionCount,
-				ActionParameterCount,
-				EdgeCount,
-				EdgeOffset,
-				AcceptableCharCount,
-				PropertyCount,
-				CounterCount,
-				EdgeLength,
-				ContentIndex,
-				*/
-			};
-
-			TypeT Type;
-			std::size_t BadIndex;
-
-			RegexOutOfRange(TypeT Type, std::size_t BadIndex) : Type(Type), BadIndex(BadIndex) {}
-			RegexOutOfRange(RegexOutOfRange const&) = default;
-			virtual char const* what() const override;
-		};
-
-		struct CircleShifting : public Interface
-		{
-			CircleShifting() = default;
-			CircleShifting(CircleShifting const&) = default;
-			virtual char const* what() const override;
-		};
-	}
+	
 
 }
