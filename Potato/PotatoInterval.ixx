@@ -61,7 +61,7 @@ export namespace Potato::Misc
 	template<typename Type, typename Wrapper, typename Allocator>
 	struct IntervalT;
 
-	template<typename Type, typename Wrapper>
+	template<typename Type, typename Wrapper = DefaultIntervalWrapperT<Type>>
 	struct IntervalWrapperT
 	{
 
@@ -115,6 +115,8 @@ export namespace Potato::Misc
 		template<typename AllocatorT>
 		static bool AddOne(std::vector<ElementT, AllocatorT>&, ElementT Input);
 	};
+
+
 
 	template<typename Type, typename Wrapper = DefaultIntervalWrapperT<Type>, typename AllocatorT = std::allocator<IntervalElementT<Type, Wrapper>>>
 	struct IntervalT

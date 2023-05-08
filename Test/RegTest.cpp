@@ -154,7 +154,7 @@ void Test(DfaT::FormatE Format, std::vector<std::u32string_view> Reg, std::u32st
 
 int main()
 {
-	/*
+	
 	Test(
 		DfaT::FormatE::HeadMarch,
 		{
@@ -185,11 +185,6 @@ int main()
 		},
 		"case2"
 	);
-	*/
-
-	DfaT Bj(DfaT::FormatE::March, U"abcdefg");
-
-	auto Buffer = DfaBinaryTable::Create(Bj);
 
 	return 0;
 }
@@ -206,45 +201,91 @@ void Test(DfaT::FormatE Format, std::vector<std::u32string_view> Reg, std::u32st
 				NfaReg.Link(NfaT{ Reg[I], false, I });
 			}
 			DfaT RegTable(Format, NfaReg);
-			RegProcessor Pro(RegTable);
-			bool NeedEndOfFile = true;
-			for (std::size_t I = 0; I < SourceStr.size(); ++I)
+
 			{
-				auto Re = Pro.Consume(SourceStr[I], I);
-				if (!Re)
+				NfaProcessor Pro(RegTable);
+				bool NeedEndOfFile = true;
+				for (std::size_t I = 0; I < SourceStr.size(); ++I)
 				{
-					NeedEndOfFile = false;
-					break;
+					auto Re = Pro.Consume(SourceStr[I], I);
+					if (!Re)
+					{
+						NeedEndOfFile = false;
+						break;
+					}
 				}
-			}
-			if (NeedEndOfFile)
-				Pro.EndOfFile(SourceStr.size());
-			auto Accep = Pro.GetAccept();
-			if (Accep.has_value())
-			{
-				if (Accep->Mask != TargetMask)
+				if (NeedEndOfFile)
+					Pro.EndOfFile(SourceStr.size());
+				auto Accep = Pro.GetAccept();
+				if (Accep.has_value())
 				{
-					throw Error;
-				}
-				auto MainCaptureStr = Accep->MainCapture.Slice(SourceStr);
-				if (MainCaptureStr != MainCapture)
-				{
-					throw Error;
-				}
-				if (RequireCapture.size() != Accep->Capture.size())
-				{
-					throw Error;
-				}
-				for (std::size_t I = 0; I < RequireCapture.size(); ++I)
-				{
-					if (Accep->Capture[I].Slice(SourceStr) != RequireCapture[I])
+					if (Accep->Mask != TargetMask)
+					{
 						throw Error;
+					}
+					auto MainCaptureStr = Accep->MainCapture.Slice(SourceStr);
+					if (MainCaptureStr != MainCapture)
+					{
+						throw Error;
+					}
+					if (RequireCapture.size() != Accep->Capture.size())
+					{
+						throw Error;
+					}
+					for (std::size_t I = 0; I < RequireCapture.size(); ++I)
+					{
+						if (Accep->Capture[I].Slice(SourceStr) != RequireCapture[I])
+							throw Error;
+					}
 				}
+				else
+					throw Error;
 			}
-			else
-				throw Error;
+
+			auto Span = DfaBinaryTable::Create(RegTable);
+
+			{
+				DfaBinaryTableProcessor Pro(DfaBinaryTable{ Span });
+				bool NeedEndOfFile = true;
+				for (std::size_t I = 0; I < SourceStr.size(); ++I)
+				{
+					auto Re = Pro.Consume(SourceStr[I], I);
+					if (!Re)
+					{
+						NeedEndOfFile = false;
+						break;
+					}
+				}
+				if (NeedEndOfFile)
+					Pro.EndOfFile(SourceStr.size());
+				auto Accep = Pro.GetAccept();
+				if (Accep.has_value())
+				{
+					if (Accep->Mask != TargetMask)
+					{
+						throw Error;
+					}
+					auto MainCaptureStr = Accep->MainCapture.Slice(SourceStr);
+					if (MainCaptureStr != MainCapture)
+					{
+						throw Error;
+					}
+					if (RequireCapture.size() != Accep->Capture.size())
+					{
+						throw Error;
+					}
+					for (std::size_t I = 0; I < RequireCapture.size(); ++I)
+					{
+						if (Accep->Capture[I].Slice(SourceStr) != RequireCapture[I])
+							throw Error;
+					}
+				}
+				else
+					throw Error;
+			}
+			
 		}
-		catch (...)
+		catch (Exception::Interface const& Inter)
 		{
 			throw Error;
 		}

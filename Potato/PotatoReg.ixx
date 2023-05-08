@@ -345,8 +345,9 @@ export namespace Potato::Reg
 		std::size_t CacheRecordCount;
 		std::vector<NodeT> Nodes;
 		
-		friend class RegProcessor;
-		friend class DfaBinaryTable;
+		friend struct NfaProcessor;
+		friend struct DfaBinaryTable;
+		friend struct DfaBinaryTableProcessor;
 	};
 
 	struct ProcessorAcceptT
@@ -356,10 +357,10 @@ export namespace Potato::Reg
 		Misc::IndexSpan<> MainCapture;
 	};
 
-	struct RegProcessor
+	struct NfaProcessor
 	{
-		RegProcessor(DfaT& Table);
-		RegProcessor(RegProcessor const&) = default;
+		NfaProcessor(DfaT& Table);
+		NfaProcessor(NfaProcessor const&) = default;
 
 		bool Consume(char32_t Token, std::size_t TokenIndex);
 		bool EndOfFile(std::size_t TokenIndex) { return Consume(Reg::EndOfFile(), TokenIndex); }
@@ -371,23 +372,22 @@ export namespace Potato::Reg
 		
 		DfaT& Table;
 		std::size_t CurNodeIndex;
-
-		enum class DetectResultE
-		{
-			True,
-			False
-		};
-
-		std::vector<DetectResultE> TempResult;
+		std::vector<std::size_t> TempResult;
 		std::vector<std::size_t> CacheIndex;
 		std::optional<DfaT::AcceptT> Accept;
 		std::optional<Misc::IndexSpan<>> CurMainCapture;
+		
+		friend struct DfaBinaryTableProcessor;
 	};
 
 	struct DfaBinaryTable
 	{
 		using StandardT = std::uint32_t;
 		using HalfStandardT = std::uint16_t;
+
+		std::size_t GetStartupNodeIndex() const { return reinterpret_cast<HeadT const*>(Wrapper.data())->StartupNodeIndex; }
+		std::size_t GetCacheCounterCount() const { return reinterpret_cast<HeadT const*>(Wrapper.data())->CacheSolt;; }
+
 
 		struct NodeT
 		{
@@ -413,6 +413,14 @@ export namespace Potato::Reg
 		{
 			HalfStandardT PropertyCount;
 			HalfStandardT ConditionCount;
+		};
+
+		struct HeadT
+		{
+			DfaT::FormatE Format;
+			StandardT StartupNodeIndex;
+			StandardT NodeCount;
+			StandardT CacheSolt;
 		};
 
 		struct AcceptT
@@ -444,9 +452,31 @@ export namespace Potato::Reg
 			return Buffer;
 		}
 
+		DfaBinaryTable(std::span<StandardT> Buffer) : Wrapper() {};
+
 	private:
+
 		static void SerilizeToExe(Misc::StructedSerilizerWriter<StandardT>& Writer, DfaT const& RefTable);
 		std::span<StandardT> Wrapper;
+
+		friend struct DfaBinaryTableProcessor;
+	};
+
+	struct DfaBinaryTableProcessor
+	{
+		DfaBinaryTableProcessor(DfaBinaryTable Table) : Table(Table) { Reset(); }
+		bool Consume(char32_t Token, std::size_t TokenIndex);
+		bool EndOfFile(std::size_t TokenIndex) { return Consume(Reg::EndOfFile(), TokenIndex); }
+		void Reset();
+		bool HasAccept() const { return Accept.has_value(); }
+		std::optional<ProcessorAcceptT> GetAccept() const;
+	protected:
+		DfaBinaryTable Table;
+		std::size_t CurrentNode;
+		std::vector<std::size_t> TempResult;
+		std::vector<std::size_t> CacheIndex;
+		std::optional<DfaBinaryTable::AcceptT> Accept;
+		std::optional<Misc::IndexSpan<>> CurMainCapture;
 	};
 
 	namespace Exception

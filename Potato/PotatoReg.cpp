@@ -2186,13 +2186,13 @@ namespace Potato::Reg
 		}
 	}
 
-	RegProcessor::RegProcessor(DfaT& Table)
+	NfaProcessor::NfaProcessor(DfaT& Table)
 		: Table(Table), CurNodeIndex(Table.GetStartupNodeIndex())
 	{
 		CacheIndex.resize(Table.GetCacheCounterCount());
 	}
 
-	void RegProcessor::Reset()
+	void NfaProcessor::Reset()
 	{
 		CurNodeIndex = Table.GetStartupNodeIndex();
 		CacheIndex.clear();
@@ -2202,7 +2202,7 @@ namespace Potato::Reg
 		CurMainCapture.reset();
 	}
 
-	auto RegProcessor::Consume(char32_t Token, std::size_t TokenIndex) -> bool
+	auto NfaProcessor::Consume(char32_t Token, std::size_t TokenIndex) -> bool
 	{
 		auto& NodeRef = Table.Nodes[CurNodeIndex];
 		for (auto& Ite : NodeRef.Edges)
@@ -2211,10 +2211,10 @@ namespace Potato::Reg
 			{
 				TempResult.clear();
 
-				auto DetectReuslt = DetectResultE::True;
+				bool DetectReuslt = true;
 				for (auto& Ite2 : Ite.Propertys)
 				{
-					if (DetectReuslt == DetectResultE::True)
+					if (DetectReuslt)
 					{
 						switch (Ite2.Action)
 						{
@@ -2227,20 +2227,20 @@ namespace Potato::Reg
 						case DfaT::PropertyActioE::NewContext:
 							break;
 						case DfaT::PropertyActioE::ConstraintsTrueTrue:
-							if(TempResult[Ite2.Solt] == DetectResultE::True)
-								DetectReuslt = DetectResultE::True;
+							if(TempResult[Ite2.Solt])
+								DetectReuslt = true;
 							break;
 						case DfaT::PropertyActioE::ConstraintsFalseFalse:
-							if (TempResult[Ite2.Solt] == DetectResultE::False)
-								DetectReuslt = DetectResultE::False;
+							if (!TempResult[Ite2.Solt])
+								DetectReuslt = false;
 							break;
 						case DfaT::PropertyActioE::ConstraintsFalseTrue:
-							if (TempResult[Ite2.Solt] == DetectResultE::False)
-								DetectReuslt = DetectResultE::True;
+							if (!TempResult[Ite2.Solt])
+								DetectReuslt = true;
 							break;
 						case DfaT::PropertyActioE::ConstraintsTrueFalse:
-							if (TempResult[Ite2.Solt] == DetectResultE::True)
-								DetectReuslt = DetectResultE::False;
+							if (TempResult[Ite2.Solt])
+								DetectReuslt = false;
 							break;
 						case DfaT::PropertyActioE::OneCounter:
 							CacheIndex[Ite2.Solt] = 1;
@@ -2250,11 +2250,11 @@ namespace Potato::Reg
 							break;
 						case DfaT::PropertyActioE::LessCounter:
 							if(CacheIndex[Ite2.Solt] > Ite2.Par)
-								DetectReuslt = DetectResultE::False;
+								DetectReuslt = false;
 							break;
 						case DfaT::PropertyActioE::BiggerCounter:
 							if (CacheIndex[Ite2.Solt] < Ite2.Par)
-								DetectReuslt = DetectResultE::False;
+								DetectReuslt = false;
 							break;
 						default:
 							assert(false);
@@ -2263,12 +2263,12 @@ namespace Potato::Reg
 					}
 					if (Ite2.Action == DfaT::PropertyActioE::NewContext)
 					{
-						TempResult.push_back(DetectReuslt);
-						DetectReuslt = DetectResultE::True;
+						TempResult.push_back(DetectReuslt ? 0 : 1);
+						DetectReuslt = true;
 					}
 				}
 
-				TempResult.push_back(DetectReuslt);
+				TempResult.push_back(DetectReuslt ? 0 : 1);
 
 				std::size_t NextIte = 0;
 				std::optional<std::size_t> ToNode;
@@ -2278,7 +2278,7 @@ namespace Potato::Reg
 				{
 					assert(!ToNode.has_value());
 					auto& Cond = Ite.Conditions[NextIte];
-					if (Ite2 == DetectResultE::True)
+					if (Ite2 == 1)
 					{
 						switch (Cond.PassCommand)
 						{
@@ -2295,7 +2295,7 @@ namespace Potato::Reg
 							break;
 						}
 					}
-					else if (Ite2 == DetectResultE::False)
+					else if (Ite2 == 0)
 					{
 						switch (Cond.UnpassCommand)
 						{
@@ -2331,7 +2331,7 @@ namespace Potato::Reg
 		return false;
 	}
 
-	std::optional<ProcessorAcceptT> RegProcessor::GetAccept() const
+	std::optional<ProcessorAcceptT> NfaProcessor::GetAccept() const
 	{
 		if (Accept.has_value())
 		{
@@ -2348,15 +2348,14 @@ namespace Potato::Reg
 		return {};
 	}
 
-
 	void DfaBinaryTable::SerilizeToExe(Misc::StructedSerilizerWriter<StandardT>& Writer, DfaT const& RefTable)
 	{
 		using WriterT = Misc::StructedSerilizerWriter<StandardT>;
 		using namespace Potato::Reg::Exception;
 
-		std::array<StandardT, 6> Array;
+		HeadT Head;
 
-		Writer.WriteObjectArray(std::span(Array));
+		Writer.WriteObject(Head);
 
 		std::vector<StandardT> NodeIndexOffset;
 
@@ -2523,12 +2522,245 @@ namespace Potato::Reg
 				{
 					Reader->SetPointer(NodeAdress);
 					auto N = Reader->ReadObject<NodeT>();
-					N->AcceptOffset = static_cast<StandardT>(Adress);
+					N->AcceptOffset = static_cast<HalfStandardT>(Adress - NodeAdress);
 				}
 			}
 		}
 
+		
+		auto Reader = Writer.GetReader();
+		if (Reader.has_value())
+		{
+			for (auto& Ite : ConditionReference)
+			{
+				Reader->SetPointer(Ite.Adress);
+				auto Condi = Reader->ReadObject<ConditionT>();
+				if (Condi->PassCommand == static_cast<HalfStandardT>(DfaT::ConditionT::CommandE::ToNode) && Condi->Pass == 0)
+				{
+					Condi->Pass = NodeIndexOffset[Ite.RefCount];
+				}
+				else if (Condi->UnpassCommand == static_cast<HalfStandardT>(DfaT::ConditionT::CommandE::ToNode) && Condi->Unpass == 0)
+				{
+					Condi->Unpass = NodeIndexOffset[Ite.RefCount];
+				}
+				else
+					assert(false);
+			}
 
+			Reader->SetPointer(0);
+			auto Head = Reader->ReadObject<HeadT>();
+
+			Head->Format = RefTable.Format;
+			Head->StartupNodeIndex = NodeIndexOffset[0];
+			Head->NodeCount = static_cast<StandardT>(NodeIndexOffset.size());
+			Head->CacheSolt = static_cast<StandardT>(RefTable.CacheRecordCount);
+		}
+
+	}
+
+	DfaBinaryTableProcessor::DfaBinaryTableProcessor(DfaBinaryTable Table)
+		: Table(Table), CurrentNode(Table.GetStartupNodeIndex())
+	{
+		CacheIndex.resize(Table.GetCacheCounterCount());
+		Reset();
+	}
+
+	void DfaBinaryTableProcessor::Reset()
+	{
+		Accept.reset();
+		CurMainCapture.reset();
+		CurrentNode = Table.GetStartupNodeIndex();
+		auto Reader = Misc::StructedSerilizerReader(Table.Wrapper);
+		Reader.SetPointer(CurrentNode);
+		auto Node = Reader.ReadObject<DfaBinaryTable::NodeT>();
+		if (Node->AcceptOffset != 0 || Node->EdgeCount == 0)
+		{
+			Reader.SetPointer(Node->AcceptOffset + CurrentNode);
+			auto TAccept = Reader.ReadObject<DfaBinaryTable::AcceptT>();
+			Accept = *TAccept;
+		}
+	}
+
+
+	bool DfaBinaryTableProcessor::Consume(char32_t Token, std::size_t TokenIndex)
+	{
+		auto Reader = Misc::StructedSerilizerReader(Table.Wrapper);
+		Reader.SetPointer(CurrentNode);
+		auto Node = Reader.ReadObject<DfaBinaryTable::NodeT>();
+		std::size_t ECount = Node->EdgeCount;
+		for (std::size_t I = 0; I < ECount; ++I)
+		{
+			auto Pro = Reader.ReadObject<DfaBinaryTable::CharSetPropertyT>();
+			auto IntervalSpan = Reader.ReadObjectArray<IntervalT::ElementT>(Pro->CharCount);
+			if (Misc::IntervalWrapperT<char32_t>::IsInclude(IntervalSpan, Token))
+			{
+				Reader.SetPointer(CurrentNode + Pro->EdgeOffset);
+				auto Edge = Reader.ReadObject<DfaBinaryTable::EdgeT>();
+				std::size_t ECount = Edge->PropertyCount;
+				std::size_t CCount = Edge->ConditionCount;
+				TempResult.clear();
+				bool DetectResult = true;
+				for (std::size_t I2 = 0; I2 < ECount; ++I2)
+				{
+					auto Action = static_cast<DfaT::PropertyActioE>(*Reader.ReadObject<DfaBinaryTable::StandardT>());
+					switch (Action)
+					{
+					case DfaT::PropertyActioE::CopyValue:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						auto P2 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if(DetectResult)
+							CacheIndex[P2] = CacheIndex[P2];
+						break;
+					}
+					case DfaT::PropertyActioE::RecordLocation:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if(DetectResult)
+							CacheIndex[P1] = TokenIndex;
+						break;
+					}
+					case DfaT::PropertyActioE::NewContext:
+						break;
+					case DfaT::PropertyActioE::ConstraintsTrueTrue:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if (DetectResult && TempResult[P1])
+							DetectResult = true;
+						break;
+					}
+					case DfaT::PropertyActioE::ConstraintsFalseFalse:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if (DetectResult && !TempResult[P1])
+							DetectResult = false;
+						break;
+					}
+					case DfaT::PropertyActioE::ConstraintsFalseTrue:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if (DetectResult && !TempResult[P1])
+							DetectResult = true;
+						break;
+					}
+					case DfaT::PropertyActioE::ConstraintsTrueFalse:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if (DetectResult && TempResult[P1])
+							DetectResult = false;
+						break;
+					}
+					case DfaT::PropertyActioE::OneCounter:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if (DetectResult)
+							CacheIndex[P1] = 1;
+						break;
+					}
+					case DfaT::PropertyActioE::AddCounter:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if (DetectResult)
+							CacheIndex[P1] += 1;
+						break;
+					}
+					case DfaT::PropertyActioE::LessCounter:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						auto P2 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if (DetectResult && CacheIndex[P1] > P2)
+							DetectResult = false;
+						break;
+					}
+					case DfaT::PropertyActioE::BiggerCounter:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						auto P2 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if (DetectResult && CacheIndex[P1] < P2)
+							DetectResult = false;
+						break;
+					}
+					default:
+						assert(false);
+						break;
+					}
+					if (Action == DfaT::PropertyActioE::NewContext)
+					{
+						TempResult.push_back(DetectResult ? 0 : 1);
+						DetectResult = true;
+					}
+				}
+
+				TempResult.push_back(DetectResult);
+				auto ConditionSpan = Reader.ReadObjectArray<DfaBinaryTable::ConditionT>(Edge->ConditionCount);
+				std::size_t LastCondition = 0;
+				for (auto Ite : TempResult)
+				{
+					auto CurCondition = ConditionSpan[LastCondition];
+					auto TarCommand = DfaT::ConditionT::CommandE::Fail;
+					std::size_t Solt = 0;
+					if (Ite == 1)
+					{
+						TarCommand = static_cast<DfaT::ConditionT::CommandE>(CurCondition.PassCommand);
+						Solt = CurCondition.Pass;
+					}
+					else {
+						TarCommand = static_cast<DfaT::ConditionT::CommandE>(CurCondition.UnpassCommand);
+						Solt = CurCondition.Unpass;
+					}
+					switch (TarCommand)
+					{
+					case DfaT::ConditionT::CommandE::Next:
+						LastCondition = Solt;
+						break;
+					case DfaT::ConditionT::CommandE::ToNode:
+					{
+						CurrentNode = Solt;
+						Reader.SetPointer(CurrentNode);
+						Accept = {};
+						auto Node = Reader.ReadObject<DfaBinaryTable::NodeT>();
+						if (Node->AcceptOffset != 0 || Node->EdgeCount == 0)
+						{
+							Reader.SetPointer(Node->AcceptOffset + CurrentNode);
+							auto TAccept = Reader.ReadObject<DfaBinaryTable::AcceptT>();
+							Accept = *TAccept;
+						}
+						if (CurMainCapture.has_value())
+						{
+							CurMainCapture = { TokenIndex, TokenIndex };
+						}
+						else {
+							CurMainCapture = { CurMainCapture->Begin(), TokenIndex };
+						}
+						return true;
+					}
+					case DfaT::ConditionT::CommandE::Fail:
+						return false;
+					default:
+						assert(false);
+						return false;
+					}
+				}
+			}
+		}
+		return false;
+	}
+
+	std::optional<ProcessorAcceptT> DfaBinaryTableProcessor::GetAccept() const
+	{
+		if (Accept.has_value())
+		{
+			ProcessorAcceptT NewAccept;
+			NewAccept.Mask = Accept->Mask;
+			for (std::size_t I = Accept->CaptureIndexBegin; I + 1 < Accept->CaptureIndexEnd; I += 2)
+			{
+				NewAccept.Capture.push_back(Misc::IndexSpan<>(CacheIndex[I], CacheIndex[I + 1]));
+			}
+			if (CurMainCapture.has_value())
+				NewAccept.MainCapture = *CurMainCapture;
+			return NewAccept;
+		}
+		return {};
 	}
 
 	namespace Exception
