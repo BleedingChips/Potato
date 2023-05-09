@@ -1,586 +1,541 @@
+module;
+
 export module Potato.Reg;
 export import Potato.SLRX;
 export import Potato.Interval;
+export import Potato.Encode;
+export import Potato.STD;
 
 export namespace Potato::Reg
 {
-	using IntervalT = Misc::Interval<char32_t>;
-	using SeqIntervalT = Misc::SequenceInterval<char32_t>;
-	using SeqIntervalWrapperT = Misc::SequenceIntervalWrapper<char32_t>;
 
-	using StandardT = std::uint32_t;
+	using IntervalT = Misc::IntervalT<char32_t>;
 
 	inline constexpr char32_t MaxChar() { return 0x110000; };
-
 	inline constexpr char32_t EndOfFile() { return 0; }
 
-	struct Accept
+	struct RegLexerT
 	{
-		StandardT Mask = 0;
-		StandardT SubMask = 0;
-		std::strong_ordering operator<=>(Accept const&) const = default;
+		
+		enum class ElementEnumT : Potato::SLRX::StandardT
+		{
+			SingleChar = 0, // µ¥×Ö·û
+			CharSet, // ¶à×Ö·û
+			Min, // -
+			BracketsLeft, //[
+			BracketsRight, // ]
+			ParenthesesLeft, //(
+			ParenthesesRight, //)
+			CurlyBracketsLeft, //{
+			CurlyBracketsRight, //}
+			Num, // 0 - 1
+			Comma, // ,
+			Mulity, //*
+			Question, // ?
+			Or, // |
+			Add, // +
+			Not, // ^
+			Colon, // :
+		};
+
+		struct ElementT
+		{
+			ElementEnumT Value;
+			IntervalT Chars;
+			Misc::IndexSpan<> Token;
+		};
+
+		std::span<ElementT const> GetSpan() const { return std::span(StoragedSymbol); }
+
+		bool Consume(char32_t InfoutSymbol, Misc::IndexSpan<> TokenIndex);
+		bool EndOfFile();
+
+		RegLexerT(bool IsRaw = false);
+		RegLexerT(RegLexerT&&) = default;
+
+		template<typename CharT, typename CharTraiT>
+		static RegLexerT Create(std::basic_string_view<CharT, CharTraiT> Str, bool IsRaw = false);
+
+	protected:
+
+		enum class StateT
+		{
+			Normal,
+			Transfer,
+			BigNumber,
+			Number,
+			Done,
+			Raw,
+		};
+
+		StateT CurrentState;
+		std::size_t Number = 0;
+		char32_t NumberChar = 0;
+		bool NumberIsBig = false;
+		char32_t RecordSymbol = 0;
+		std::size_t RecordTokenIndex = 0;
+		std::size_t TokenIndexIte = 0;
+		std::vector<ElementT> StoragedSymbol;
 	};
 
-	struct Capture
+	struct NfaT
 	{
-		bool IsBegin;
-		std::size_t Index;
-	};
+		
+		template<typename CharT, typename CharTraiT>
+		NfaT(std::basic_string_view<CharT, CharTraiT> Str, bool IsRaw = false, std::size_t Mask = 0);
 
-	struct Counter
-	{
-		StandardT Target = 0;
-		std::strong_ordering operator<=>(Counter const&) const = default;
-	};
+		NfaT(NfaT const&) = default;
+		NfaT(NfaT&&) = default;
+		void Link(NfaT const&);
 
+	protected:
 
-	struct EpsilonNFA
-	{
+		NfaT(RegLexerT const& Lexer, std::size_t Mask = 0);
+		NfaT() = default;
 
-		enum class EdgeType
-		{
-			Consume = 0,
-			Acceptable,
-			CaptureBegin,
-			CaptureEnd,
-			CounterPush,
-			CounterPop,
-			CounterAdd,
-			CounterEqual,
-			CounterBigEqual,
-			CounterSmallEqual,
-		};
-
-		struct PropertyT
-		{
-			EdgeType Type;
-			std::variant<std::monostate, std::vector<IntervalT>, Accept, Counter> Datas;
-			bool operator==(PropertyT const&) const = default;
-		};
-
-		struct Edge
-		{
-			PropertyT Property;
-			std::size_t ShiftNode;
-			std::size_t UniqueID = 0;
-		};
-
-		struct Node
-		{
-			std::size_t Index;
-			std::vector<Edge> Edges;
-			std::size_t TokenIndex;
-		};
-
-		struct NodeSet
+		
+		struct NodeSetT
 		{
 			std::size_t In;
 			std::size_t Out;
 		};
 
-		static EpsilonNFA Create(std::u8string_view Str, bool IsRaw, Accept AcceptData);
-		static EpsilonNFA Create(std::wstring_view Str, bool IsRaw, Accept AcceptData);
-		static EpsilonNFA Create(std::u16string_view Str, bool IsRaw, Accept AcceptData);
-		static EpsilonNFA Create(std::u32string_view Str, bool IsRaw, Accept AcceptData);
+		std::size_t AddNode();
 
-		void Link(EpsilonNFA const& OtherTable, bool ThisHasHigherPriority = true);
-
-		EpsilonNFA(EpsilonNFA&&) = default;
-		EpsilonNFA(EpsilonNFA const&) = default;
-		EpsilonNFA& operator=(EpsilonNFA const&) = default;
-		EpsilonNFA& operator=(EpsilonNFA&&) = default;
-		EpsilonNFA() {}
-		bool IsAvailable() const { return !Nodes.empty(); }
-		operator bool() const { return IsAvailable(); }
-
-		std::size_t NewNode(std::size_t TokenIndex);
-		void AddComsumeEdge(std::size_t From, std::size_t To, std::vector<IntervalT> Acceptable);
-		void AddAcceptableEdge(std::size_t From, std::size_t To, Accept Data);
-		void AddCapture(NodeSet OutsideSet, NodeSet InsideSet);
-		NodeSet AddCounter(std::size_t TokenIndex, NodeSet InSideSet, std::optional<std::size_t> Equal, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool IsGreedy);
-		//void AddCounter(EdgeType Type, std::size_t From, std::size_t To, Counter Counter);
-		void AddEdge(std::size_t From, Edge Edge);
-
-		std::vector<Node> Nodes;
-	};
-
-	struct NFA
-	{
-
-		struct Edge
+		struct ContentT
 		{
-			std::vector<EpsilonNFA::PropertyT> Propertys;
-			std::vector<IntervalT> ConsumeChars;
-			std::size_t ToNode;
-			std::size_t UniqueID;
+			Misc::IndexSpan<> TokenIndex;
+			std::span<RegLexerT::ElementT const> Tokens;
 		};
 
-		struct Node
-		{
-			std::vector<Edge> Edges;
-		};
+		void AddConsume(NodeSetT Set, IntervalT Chars, ContentT Content);
+		NodeSetT AddCapture(NodeSetT Inside, ContentT Content, std::size_t CaptureIndex);
+		NodeSetT AddCounter(NodeSetT Inside, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool Greedy, ContentT Content, std::size_t CaptureIndex);
 
-		std::vector<Node> Nodes;
-
-		static NFA Create(EpsilonNFA const& Table);
-		static NFA Create(std::u8string_view Str, bool IsRow = false, Accept Mask = { 0 }) {
-			return Create(EpsilonNFA::Create(Str, IsRow, Mask));
-		}
-		static NFA Create(std::wstring_view Str, bool IsRow = false, Accept Mask = { 0 }) {
-			return Create(EpsilonNFA::Create(Str, IsRow, Mask));
-		}
-		static NFA Create(std::u16string_view Str, bool IsRow = false, Accept Mask = { 0 }) {
-			return Create(EpsilonNFA::Create(Str, IsRow, Mask));
-		}
-		static NFA Create(std::u32string_view Str, bool IsRow = false, Accept Mask = { 0 }) {
-			return Create(EpsilonNFA::Create(Str, IsRow, Mask));
-		}
-
-		NFA(EpsilonNFA const& Table) : NFA(Create(Table)) {}
-		NFA(std::u8string_view Str, bool IsRow = false, Accept Mask = {0}) : NFA(Create(Str, IsRow, Mask)) {}
-		NFA(std::wstring_view Str, bool IsRow = false, Accept Mask = { 0 }) : NFA(Create(Str, IsRow, Mask)) {}
-		NFA(std::u16string_view Str, bool IsRow = false, Accept Mask = { 0 }) : NFA(Create(Str, IsRow, Mask)) {}
-		NFA(std::u32string_view Str, bool IsRow = false, Accept Mask = { 0 }) : NFA(Create(Str, IsRow, Mask)) {}
-		NFA(NFA const&) = default;
-		NFA(NFA&&) = default;
-		NFA& operator=(NFA const&) = default;
-		NFA& operator=(NFA &&) = default;
-		NFA() = default;
-		bool IsAvailable() const { return !Nodes.empty(); }
-		operator bool() const { return IsAvailable(); }
-	private:
-		NFA(std::vector<Node> Nodes) : Nodes(std::move(Nodes)) {}
-	};
-
-	struct DFA
-	{
-
-		enum class ActionT : StandardT
+		enum class EdgePropertyE
 		{
 			CaptureBegin,
 			CaptureEnd,
-			ContentBegin,
-			ContentEnd,
-			CounterSmaller,
-			CounterBigEqual,
-			CounterEqual,
-			CounterAdd,
-			CounterPush,
-			CounterPop,
-			Accept
+			OneCounter,
+			AddCounter,
+			LessCounter,
+			BiggerCounter,
 		};
 
-		struct Edge
+		struct PropertyT
 		{
-			std::vector<ActionT> List;
-			std::vector<StandardT> Parameter;
-			std::vector<std::size_t> ToIndex;
-			std::vector<IntervalT> ConsumeSymbols;
-			bool ContentNeedChange = true;
+			EdgePropertyE Type = EdgePropertyE::CaptureBegin;
+			std::size_t Index = 0;
+			std::size_t Par = 0;
+			bool operator==(PropertyT const& T1) const { return Type == T1.Type && Index == T1.Index && Par == T1.Par; }
 		};
 
-		struct Node
+		struct EdgeT
 		{
-			std::vector<Edge> Edges;
-			std::vector<Edge> KeepAcceptableEdges;
+			std::vector<PropertyT> Propertys;
+			std::size_t ToNode;
+			IntervalT CharSets;
+			Misc::IndexSpan<> TokenIndex;
+			std::size_t MaskIndex = 0;
+			bool IsEpsilonEdge() const { return CharSets.Size() == 0; }
+			bool HasCapture() const;
+			bool HasCounter() const;
+			bool operator==(EdgeT const& T1) const {
+				return ToNode == T1.ToNode && Propertys == T1.Propertys && CharSets == T1.CharSets;
+			}
 		};
 
-		std::vector<Node> Nodes;
-		static constexpr std::size_t StartupNode() { return 0; }
+		struct AcceptT
+		{
+			std::size_t Mask;
+			std::size_t MaskIndex;
+			bool operator==(AcceptT const& T1) const {
+				return Mask == T1.Mask && MaskIndex == T1.MaskIndex;
+			}
+		};
 
-		static DFA Create(EpsilonNFA const& Table) {
-			return Create(NFA::Create(Table));
-		}
-		static DFA Create(NFA const& Table);
-		static DFA Create(std::u8string_view Str, bool IsRow = false, Accept Mask = { 0 }) {
-			return Create(EpsilonNFA::Create(Str, IsRow, Mask));
-		}
-		static DFA Create(std::wstring_view Str, bool IsRow = false, Accept Mask = { 0 }) {
-			return Create(EpsilonNFA::Create(Str, IsRow, Mask));
-		}
-		static DFA Create(std::u16string_view Str, bool IsRow = false, Accept Mask = { 0 }) {
-			return Create(EpsilonNFA::Create(Str, IsRow, Mask));
-		}
-		static DFA Create(std::u32string_view Str, bool IsRow = false, Accept Mask = { 0 }) {
-			return Create(EpsilonNFA::Create(Str, IsRow, Mask));
-		}
+		struct NodeT
+		{
+			std::vector<EdgeT> Edges;
+			std::size_t CurIndex;
+			std::optional<AcceptT> Accept;
+			bool operator==(NodeT const& I1) const {
+				return Accept == I1.Accept && Edges == I1.Edges;
+			}
+		};
 
-		DFA(EpsilonNFA const& ETable) : DFA(Create(ETable)) {}
-		DFA(NFA const& Input) : DFA(Create(Input)) {}
-		DFA(std::u8string_view Str, bool IsRaw = false, Accept Mask = {0}) : DFA(Create(Str, IsRaw, Mask)) {}
-		DFA(std::wstring_view Str, bool IsRaw = false, Accept Mask = { 0 }) : DFA(Create(Str, IsRaw, Mask)) {}
-		DFA(std::u16string_view Str, bool IsRaw = false, Accept Mask = { 0 }) : DFA(Create(Str, IsRaw, Mask)) {}
-		DFA(std::u32string_view Str, bool IsRaw = false, Accept Mask = { 0 }) : DFA(Create(Str, IsRaw, Mask)) {}
-		DFA(DFA const&) = default;
-		DFA(DFA&&) = default;
-		DFA& operator=(DFA const&) = default;
-		DFA& operator=(DFA&&) = default;
-		DFA() = default;
-		bool IsAvailable() const { return !Nodes.empty(); }
-		operator bool() const { return IsAvailable(); }
-	private:
-		DFA(std::vector<Node> Nodes) : Nodes(std::move(Nodes)) {}
+		static Misc::IndexSpan<> CollectTokenIndexFromNodePath(std::span<NodeT const> NodeView, Misc::IndexSpan<> Default, std::span<std::size_t const> NodeStateView);
+
+		std::vector<NodeT> Nodes;
+		std::size_t MaskIndex = 1;
+
+		friend struct DfaT;
 	};
 
-	struct TableWrapper
+	struct NfaEdgeKeyT
 	{
-		using StandardT = Reg::StandardT;
+		std::size_t From;
+		std::size_t EdgeIndex;
+		std::strong_ordering operator<=>(NfaEdgeKeyT const&) const = default;
+	};
 
+	struct NfaEdgePropertyT
+	{
+		std::size_t ToNode;
+		std::size_t MaskIndex;
+		bool ToAccept = false;
+		bool HasCounter = false;
+		bool HasCapture = false;
+
+		struct RangeT
+		{
+			std::size_t Index;
+			std::size_t Min;
+			std::size_t Max;
+		};
+
+		std::vector<RangeT> Ranges;
+	};
+
+	struct NfaActionKeyT
+	{
+		std::size_t Index;
+		std::size_t MaskIndex;
+	};
+
+	struct MartixStateT
+	{
+		enum class StateE
+		{
+			UnSet,
+			True,
+			False
+		};
+		
+		std::vector<StateE> States;
+		std::size_t RowCount = 0;
+		std::size_t LineCount = 0;
+		
+		MartixStateT() {}
+		void ResetRowCount(std::size_t RowCount);
+		std::size_t GetLineCount() const { return LineCount; }
+		std::size_t GetRowCount() const { return RowCount; }
+		std::size_t CopyLine(std::size_t SourceLine);
+		bool RemoveAllFalseLine();
+		std::span<StateE const> ReadLine(std::size_t LineIndex) const;
+
+		StateE& Get(std::size_t RowIndex, std::size_t LineIndex);
+
+	};
+
+	struct DfaT
+	{
+
+		enum class FormatE
+		{
+			Match,
+			HeadMatch,
+			GreedyHeadMatch,
+		};
+
+		DfaT(FormatE Format, NfaT const& T1);
+
+		template<typename CharT, typename CharTraisT>
+		DfaT(FormatE Format, std::basic_string_view<CharT, CharTraisT> Str, bool IsRaw = false, std::size_t Mask = 0);
+		
+		std::size_t GetStartupNodeIndex() const { return 0; }
+		std::size_t GetCacheCounterCount() const { return CacheRecordCount; }
+	
+	protected:
+
+		
+		enum class ActionE
+		{
+			True,
+			False,
+			Ignore
+		};
+
+		struct ConstraintT
+		{
+			std::size_t Source;
+			ActionE PassAction;
+			ActionE UnpassAction;
+			std::strong_ordering operator<=>(ConstraintT const&) const = default;
+		};
+
+		struct TempToNodeT
+		{
+			std::vector<ActionE> Actions;
+			std::size_t ToNode;
+		};
+
+		struct TempPropertyT
+		{
+			std::map<NfaEdgeKeyT, NfaEdgePropertyT>::const_iterator Key;
+			std::vector<ConstraintT> Constraints;
+		};
+
+		struct TempEdgeT
+		{
+			IntervalT CharSets;
+			std::vector<TempPropertyT> Propertys;
+			std::vector<TempToNodeT> ToNode;
+		};
+
+		struct TempNodeT
+		{
+			std::vector<TempEdgeT> TempEdge;
+			std::vector<std::size_t> OriginalToNode;
+			std::optional<NfaT::AcceptT> Accept;
+		};
+
+		enum class PropertyActioE
+		{
+			CopyValue,
+			RecordLocation,
+			NewContext,
+			ConstraintsTrueTrue,
+			ConstraintsFalseFalse,
+			ConstraintsFalseTrue,
+			ConstraintsTrueFalse,
+			OneCounter,
+			AddCounter,
+			LessCounter,
+			BiggerCounter,
+		};
+
+		struct PropertyT
+		{
+			PropertyActioE Action;
+			std::size_t Solt = 0;
+			std::size_t Par = 0;
+		};
+
+		struct ConditionT
+		{
+			enum CommandE
+			{
+				Next,
+				ToNode,
+				Fail,
+			};
+			CommandE PassCommand = CommandE::Fail;
+			CommandE UnpassCommand = CommandE::Fail;
+			std::size_t Pass = 0;
+			std::size_t Unpass = 0;
+		};
+
+		struct EdgeT
+		{
+			IntervalT CharSets;
+			std::vector<PropertyT> Propertys;
+			std::vector<ConditionT> Conditions;
+		};
+
+		struct AcceptT
+		{
+			std::size_t Mask;
+			Misc::IndexSpan<> CaptureIndex;
+		};
+
+		struct NodeT
+		{
+			std::vector<EdgeT> Edges;
+			std::optional<AcceptT> Accept;
+		};
+
+		FormatE Format;
+		std::size_t CacheRecordCount;
+		std::vector<NodeT> Nodes;
+		
+		friend struct DfaProcessor;
+		friend struct DfaBinaryTable;
+		friend struct DfaBinaryTableProcessor;
+	};
+
+	struct ProcessorAcceptT
+	{
+		std::size_t Mask;
+		std::vector<Misc::IndexSpan<>> Capture;
+		Misc::IndexSpan<> MainCapture;
+	};
+
+	template<typename ProcessorT, typename CharT, typename CharTraidT>
+	std::optional<ProcessorAcceptT> RegCoreProcessor(ProcessorT& Pro, std::basic_string_view<CharT, CharTraidT> Str)
+	{
+		char32_t TemBuffer = 0;
+		std::span<char32_t> OutputSpan{ &TemBuffer, 1 };
+
+		using EncoderT = Potato::Encode::CharEncoder<CharT, char32_t>;
+
+		auto IteStr = std::span(Str);
+
+		bool NeedEndOfFile = true;
+
+		while (!IteStr.empty())
+		{
+			auto EncodeRe = EncoderT::EncodeOnceUnSafe(IteStr, OutputSpan);
+			auto Re = Pro.Consume(TemBuffer, Str.size() - IteStr.size());
+			IteStr = IteStr.subspan(EncodeRe.SourceSpace);
+			if (!Re)
+			{
+				NeedEndOfFile = false;
+				break;
+			}
+		}
+
+		if (NeedEndOfFile)
+			Pro.EndOfFile(Str.size() - IteStr.size());
+		return Pro.GetAccept();
+	}
+
+	struct DfaProcessor
+	{
+		DfaProcessor(DfaT const& Table);
+		DfaProcessor(DfaProcessor const&) = default;
+
+		bool Consume(char32_t Token, std::size_t TokenIndex);
+		bool EndOfFile(std::size_t TokenIndex) { return Consume(Reg::EndOfFile(), TokenIndex); }
+		void Reset();
+		bool HasAccept() const { return Accept.has_value(); }
+		std::optional<ProcessorAcceptT> GetAccept() const;
+	
+	public:
+		
+		DfaT const& Table;
+		std::size_t CurNodeIndex;
+		std::vector<std::size_t> TempResult;
+		std::vector<std::size_t> CacheIndex;
+		std::optional<DfaT::AcceptT> Accept;
+		std::optional<Misc::IndexSpan<>> CurMainCapture;
+		
+		friend struct DfaBinaryTableProcessor;
+	};
+
+	template<typename CharT, typename CharTrais>
+	std::optional<ProcessorAcceptT> Process(DfaT const& Table, std::basic_string_view<CharT, CharTrais> Str)
+	{
+		DfaProcessor Processor{ Table };
+		return RegCoreProcessor(Processor, Str);
+	}
+
+	struct DfaBinaryTable
+	{
+		using StandardT = std::uint32_t;
 		using HalfStandardT = std::uint16_t;
 
-		static_assert(sizeof(HalfStandardT) * 2 == sizeof(StandardT));
+		std::size_t GetStartupNodeIndex() const { return reinterpret_cast<HeadT const*>(Wrapper.data())->StartupNodeIndex; }
+		std::size_t GetCacheCounterCount() const { return reinterpret_cast<HeadT const*>(Wrapper.data())->CacheSolt; }
 
-		struct alignas(StandardT) ZipChar
+
+		struct NodeT
 		{
-			char32_t IsSingleChar : 1;
-			char32_t Char : 31;
-			std::strong_ordering operator<=>(ZipChar const&) const = default;
-			static_assert(sizeof(StandardT) == sizeof(char32_t));
+			HalfStandardT EdgeCount = 0;
+			HalfStandardT AcceptOffset = 0;
 		};
 
-		struct alignas(StandardT) ZipEdge
+		struct CharSetPropertyT
 		{
-			StandardT ConsumeSymbolCount;
-			StandardT ToIndexCount;
-			HalfStandardT NeedContentChange;
-			HalfStandardT ParmaterCount;
-			HalfStandardT ActionCount;
-			HalfStandardT NextEdgeOffset;
+			HalfStandardT CharCount = 0;
+			HalfStandardT EdgeOffset = 0;
 		};
 
-		struct alignas(StandardT) ZipNode
+		struct ConditionT
 		{
-			HalfStandardT AcceptEdgeOffset;
-			HalfStandardT EdgeCount;
+			HalfStandardT PassCommand = 0;
+			HalfStandardT UnpassCommand = 0;
+			StandardT Pass = 0;
+			StandardT Unpass = 0;
 		};
 
-		static std::size_t CalculateRequireSpaceWithStanderT(DFA const& Tab);
-		static std::size_t SerializeTo(DFA const& Tab, std::span<StandardT> Source);
-		static std::vector<StandardT> Create(DFA const& Tab);
-		static std::vector<StandardT> Create(std::u8string_view Reg, bool IsRow = false, Accept Acce = {0}) { return Create(DFA{Reg, IsRow, Acce}); }
-		static std::vector<StandardT> Create(std::wstring_view Reg, bool IsRow = false, Accept Acce = { 0 }) { return Create(DFA{ Reg, IsRow, Acce }); }
-		static std::vector<StandardT> Create(std::u16string_view Reg, bool IsRow = false, Accept Acce = { 0 }) { return Create(DFA{ Reg, IsRow, Acce }); }
-		static std::vector<StandardT> Create(std::u32string_view Reg, bool IsRow = false, Accept Acce = { 0 }) { return Create(DFA{ Reg, IsRow, Acce }); }
+		struct EdgeT
+		{
+			HalfStandardT PropertyCount = 0;
+			HalfStandardT ConditionCount = 0;
+		};
 
-		TableWrapper(std::span<StandardT const> Wrapper) : Wrapper(Wrapper) {}
-		TableWrapper() = default;
-		TableWrapper(TableWrapper const&) = default;
-		TableWrapper& operator=(TableWrapper const& )= default;
-		std::size_t BufferSize() const { return Wrapper.size(); }
-		operator bool() const { return !Wrapper.empty(); }
-		std::size_t NodeSize() const { return *this ? Wrapper[0] : 0; };
-		static constexpr std::size_t StartupNode() { return 1; };
+		struct HeadT
+		{
+			DfaT::FormatE Format;
+			StandardT StartupNodeIndex = 0;
+			StandardT NodeCount = 0;
+			StandardT CacheSolt = 0;
+		};
+
+		struct AcceptT
+		{
+			StandardT Mask = 0;
+			HalfStandardT CaptureIndexBegin = 0;
+			HalfStandardT CaptureIndexEnd = 0;
+		};
 		
-		std::span<StandardT const> Wrapper;
-	};
+		static std::size_t PredicateSize(DfaT const& RefTable)
+		{
+			Misc::StructedSerilizerWriter<StandardT> Writer;
+			SerilizeToExe(Writer, RefTable);
+			return Writer.GetWritedSize();
+		}
+		static std::size_t SerilizeTo(std::span<StandardT> Buffer, DfaT const& RefTable)
+		{
+			Misc::StructedSerilizerWriter<StandardT> Writer(Buffer);
+			SerilizeToExe(Writer, RefTable);
+			return Writer.GetWritedSize();
+		}
+		
+		template<typename AllocatorT = std::allocator<StandardT>>
+		static auto Create(DfaT const& RefTable, AllocatorT const& Acclcator= {}) -> std::vector<StandardT, AllocatorT>
+		{
+			std::vector<StandardT, AllocatorT> Buffer(Acclcator);
+			Buffer.resize(PredicateSize(RefTable));
+			SerilizeTo(std::span(Buffer), RefTable);
+			return Buffer;
+		}
 
-	struct Table
-	{
-		Table(std::u8string_view Str, bool IsRow = false, Accept AcceptData = {}) : SerializeBuffer(TableWrapper::Create(Str, IsRow, AcceptData)) {}
-		Table(std::wstring_view Str, bool IsRow = false, Accept AcceptData = {}) : SerializeBuffer(TableWrapper::Create(Str, IsRow, AcceptData)) {}
-		Table(std::u16string_view Str, bool IsRow = false, Accept AcceptData = {}) : SerializeBuffer(TableWrapper::Create(Str, IsRow, AcceptData)) {}
-		Table(std::u32string_view Str, bool IsRow = false, Accept AcceptData = {}) : SerializeBuffer(TableWrapper::Create(Str, IsRow, AcceptData)) {}
-		TableWrapper AsWrapper() const { return TableWrapper{ SerializeBuffer }; };
-	protected:
-		std::vector<StandardT> SerializeBuffer;
-	};
-
-	struct CaptureWrapper
-	{
-		CaptureWrapper() = default;
-		CaptureWrapper(std::span<Capture const> SubCaptures)
-			: SubCaptures(SubCaptures) {}
-		CaptureWrapper(CaptureWrapper const&) = default;
-		CaptureWrapper(Misc::IndexSpan<> CurCapture) : CurrentCapture(CurCapture) {}
-		CaptureWrapper(Misc::IndexSpan<> CurCapture, std::span<Capture const> SubCaptures) : CurrentCapture(CurCapture), SubCaptures(SubCaptures) {}
-		CaptureWrapper& operator=(CaptureWrapper const&) = default;
-		bool HasSubCapture() const { return !SubCaptures.empty(); }
-		bool HasNextCapture() const { return !NextCaptures.empty(); }
-		bool HasCapture() const { return CurrentCapture.has_value(); }
-
-		auto Slice(std::u8string_view Source) const {return decltype(Source){CurrentCapture->Slice(Source)}; }
-		auto Slice(std::wstring_view Source) const { return decltype(Source){CurrentCapture->Slice(Source)}; }
-		auto Slice(std::u16string_view Source) const { return decltype(Source){CurrentCapture->Slice(Source)}; }
-		auto Slice(std::u32string_view Source) const { return decltype(Source){CurrentCapture->Slice(Source)}; }
-
-		Misc::IndexSpan<> GetCapture() const { return *CurrentCapture; }
-
-		CaptureWrapper GetTopSubCapture() const;
-		CaptureWrapper GetNextCapture() const;
-		std::size_t Count() const { return CurrentCapture->Count(); }
-
-		static std::optional<Misc::IndexSpan<>> FindFirstCapture(std::span<Capture const> Captures);
+		DfaBinaryTable(std::span<StandardT> Buffer) : Wrapper(Buffer) {};
 
 	private:
 
-		std::span<Capture const> SubCaptures;
-		std::span<Capture const> NextCaptures;
-		std::optional<Misc::IndexSpan<>> CurrentCapture;
+		static void SerilizeToExe(Misc::StructedSerilizerWriter<StandardT>& Writer, DfaT const& RefTable);
+		std::span<StandardT> Wrapper;
+
+		friend struct DfaBinaryTableProcessor;
 	};
 
-	struct ProcessorContent
+	template<typename CharT, typename CharTrais>
+	std::optional<ProcessorAcceptT> Process(DfaBinaryTable const& Table, std::basic_string_view<CharT, CharTrais> Str)
 	{
-		struct CaptureBlock
-		{
-			Capture CaptureData;
-			std::size_t BlockIndex;
-		};
+		DfaBinaryTableProcessor Processor{ Table };
+		return RegCoreProcessor(Processor, Str);
+	}
 
-		struct CounterBlock
-		{
-			StandardT CountNumber;
-			std::size_t BlockIndex;
-		};
 
-		std::vector<CaptureBlock> CaptureBlocks;
-		std::vector<CounterBlock> CounterBlocks;
-		void Clear() { CounterBlocks.clear(); CaptureBlocks.clear(); }
-		Misc::IndexSpan<> FindCaptureIndex(std::size_t BlockIndex) const;
-		std::span<CaptureBlock const> FindCaptureSpan(std::size_t BlockIndex) const { return FindCaptureIndex(BlockIndex).Slice(CaptureBlocks); }
-		Misc::IndexSpan<> FindCounterIndex(std::size_t BlockIndex) const;
-		std::span<CounterBlock const> FindCounterSpan(std::size_t BlockIndex) const { return FindCounterIndex(BlockIndex).Slice(CounterBlocks); }
-	};
-
-	struct CoreProcessor
+	struct DfaBinaryTableProcessor
 	{
-
-		struct AcceptResult
-		{
-			std::optional<Accept> AcceptData;
-			Misc::IndexSpan<> CaptureSpan;
-			operator bool () const { return AcceptData.has_value(); }
-		};
-
-		struct Result
-		{
-			std::size_t NextNodeIndex;
-			AcceptResult AcceptData;
-			bool ContentNeedChange = true;
-		};
-
-		static std::optional<Result> ConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeIndex, DFA const& Table, char32_t Symbol, std::size_t TokenIndex, bool KeepAccept);
-		static std::optional<Result> ConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeOffset, TableWrapper Wrapper, char32_t Symbol, std::size_t TokenIndex, bool KeepAccept);
-
-		struct KeepAcceptResult
-		{
-			AcceptResult AcceptData;
-			bool ContentNeedChange = true;
-			bool MeetAcceptRequireConsume = false;
-		};
-
-		static KeepAcceptResult KeepAcceptConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeIndex, DFA const& Table, char32_t Symbol, std::size_t TokenIndex);
-		static KeepAcceptResult KeepAcceptConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeOffset, TableWrapper Wrapper, char32_t Symbol, std::size_t TokenIndex);
-	
-	};
-
-	struct MatchProcessor
-	{
-		struct Result
-		{
-			Misc::IndexSpan<> MainCapture;
-			std::vector<Capture> SubCaptures;
-			Accept AcceptData;
-			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ MainCapture, SubCaptures }; }
-		};
-
-		MatchProcessor(DFA const& Table) : Table(Table), StartupNodeOffset(DFA::StartupNode()), NodeIndex(DFA::StartupNode()) {}
-		MatchProcessor(TableWrapper Table) : Table(Table), StartupNodeOffset(Table.StartupNode()), NodeIndex(Table.StartupNode()) {}
-		bool Consume(char32_t Symbol, std::size_t TokenIndex);
-		std::optional<Result> EndOfFile(std::size_t TokenIndex);
-		void Clear();
-
-	private:
-
-		ProcessorContent Contents;
-		ProcessorContent TempBuffer;
-		std::size_t NodeIndex = 0;
-		std::size_t StartupNodeOffset;
-		std::variant<TableWrapper, std::reference_wrapper<DFA const>> Table;
-	};
-
-	struct HeadMatchProcessor
-	{
-		using Result = MatchProcessor::Result;
-
-		HeadMatchProcessor(DFA const& Table, bool Greedy = false) : Table(Table), StartupNode(DFA::StartupNode()), NodeIndex(DFA::StartupNode()), Greedy(Greedy) {}
-		HeadMatchProcessor(TableWrapper Table, bool Greedy = false) : Table(Table), StartupNode(Table.StartupNode()), NodeIndex(Table.StartupNode()), Greedy(Greedy) {}
-		HeadMatchProcessor(HeadMatchProcessor const&) = default;
-
-		std::optional<std::optional<Result>> Consume(char32_t Symbol, std::size_t TokenIndex);
-		std::optional<Result> EndOfFile(std::size_t TokenIndex);
-		void Clear();
-
-		ProcessorContent Contents;
-		ProcessorContent TempBuffer;
-		std::optional<Result> CacheResult;
-		std::size_t NodeIndex = 0;
-		std::size_t StartupNode = 0;
-		bool Greedy = false;
-		std::variant<TableWrapper, std::reference_wrapper<DFA const>> Table;
-	};
-
-	struct SearchMatchProcessor
-	{
-		struct Result
-		{
-			Misc::IndexSpan<> MainCapture;
-			std::vector<Capture> SubCaptures;
-			Accept AcceptData;
-			CaptureWrapper GetCaptureWrapper() const { return CaptureWrapper{ SubCaptures }; }
-			CaptureWrapper GetMainCaptureWrapper() const {}
-		};
-
-		SearchMatchProcessor(DFA const& Table, bool Greedy = false) : Table(Table), StartupNode(DFA::StartupNode()), NodeIndex(DFA::StartupNode()), Greedy(Greedy) {}
-		SearchMatchProcessor(TableWrapper Table, bool Greedy = false) : Table(Table), StartupNode(Table.StartupNode()), NodeIndex(Table.StartupNode()), Greedy(Greedy) {}
-		SearchMatchProcessor(SearchMatchProcessor const&) = default;
-
-		std::optional<std::optional<Result>> Consume(char32_t Symbol, std::size_t TokenIndex);
-		std::optional<Result> EndOfFile(std::size_t TokenIndex);
-		void Clear();
-
-		ProcessorContent Contents;
-		ProcessorContent TempBuffer;
-		std::optional<Result> CacheResult;
-		std::size_t NodeIndex = 0;
-		std::size_t StartupNode = 0;
-		bool Greedy = false;
-		std::variant<TableWrapper, std::reference_wrapper<DFA const>> Table;
-	};
-
-	template<typename ResultT>
-	struct MatchResult
-	{
-		std::optional<ResultT> SuccessdResult;
-		std::size_t LastTokenIndex;
-		operator bool () const { return SuccessdResult.has_value(); }
-		ResultT* operator->() { return SuccessdResult.operator->(); }
-		ResultT const* operator->() const { return SuccessdResult.operator->(); }
-		ResultT& operator*() { return *SuccessdResult; }
-		ResultT const& operator*() const { return *SuccessdResult; }
-	};
-
-	auto Match(MatchProcessor& Processor, std::u8string_view Str) ->MatchResult<MatchProcessor::Result>;
-	auto Match(MatchProcessor& Processor, std::wstring_view Str) -> MatchResult<MatchProcessor::Result>;
-	auto Match(MatchProcessor& Processor, std::u16string_view Str) -> MatchResult<MatchProcessor::Result>;
-	auto Match(MatchProcessor& Processor, std::u32string_view Str) -> MatchResult<MatchProcessor::Result>;
-
-	inline auto Match(DFA const& Table, std::u8string_view Str)->MatchResult<MatchProcessor::Result>{
-		MatchProcessor Pro{Table};
-		return Match(Pro, Str);
-	}
-
-	inline auto Match(DFA const& Table, std::wstring_view Str) -> MatchResult<MatchProcessor::Result> {
-		MatchProcessor Pro{ Table };
-		return Match(Pro, Str);
-	}
-
-	inline auto Match(DFA const& Table, std::u16string_view Str) -> MatchResult<MatchProcessor::Result> {
-		MatchProcessor Pro{ Table };
-		return Match(Pro, Str);
-	}
-
-	inline auto Match(DFA const& Table, std::u32string_view Str) -> MatchResult<MatchProcessor::Result> {
-		MatchProcessor Pro{ Table };
-		return Match(Pro, Str);
-	}
-
-
-	inline auto Match(TableWrapper Wrapper, std::u8string_view Str)->MatchResult<MatchProcessor::Result> {
-		MatchProcessor Pro{ Wrapper };
-		return Match(Pro, Str);
-	}
-	inline auto Match(TableWrapper Wrapper, std::wstring_view Str) -> MatchResult<MatchProcessor::Result> {
-		MatchProcessor Pro{ Wrapper };
-		return Match(Pro, Str);
-	}
-	inline auto Match(TableWrapper Wrapper, std::u16string_view Str) -> MatchResult<MatchProcessor::Result> {
-		MatchProcessor Pro{ Wrapper };
-		return Match(Pro, Str);
-	}
-	inline auto Match(TableWrapper Wrapper, std::u32string_view Str) -> MatchResult<MatchProcessor::Result> {
-		MatchProcessor Pro{ Wrapper };
-		return Match(Pro, Str);
-	}
-
-
-	auto HeadMatch(HeadMatchProcessor& Table, std::u8string_view Str)->MatchResult<HeadMatchProcessor::Result>;
-	auto HeadMatch(HeadMatchProcessor& Table, std::wstring_view Str) -> MatchResult<HeadMatchProcessor::Result>;
-	auto HeadMatch(HeadMatchProcessor& Table, std::u16string_view Str) -> MatchResult<HeadMatchProcessor::Result>;
-	auto HeadMatch(HeadMatchProcessor& Table, std::u32string_view Str) -> MatchResult<HeadMatchProcessor::Result>;
-
-
-	inline auto HeadMatch(DFA const& Table, std::u8string_view Str, bool Greddy = false)->MatchResult<HeadMatchProcessor::Result>
-	{
-		HeadMatchProcessor Pro{ Table, Greddy };
-		return HeadMatch(Pro, Str);
-	}
-	inline auto HeadMatch(DFA const& Table, std::wstring_view Str, bool Greddy = false) -> MatchResult<HeadMatchProcessor::Result>
-	{
-		HeadMatchProcessor Pro{ Table, Greddy };
-		return HeadMatch(Pro, Str);
-	}
-	inline auto HeadMatch(DFA const& Table, std::u16string_view Str, bool Greddy = false) -> MatchResult<HeadMatchProcessor::Result>
-	{
-		HeadMatchProcessor Pro{ Table, Greddy };
-		return HeadMatch(Pro, Str);
-	}
-	inline auto HeadMatch(DFA const& Table, std::u32string_view Str, bool Greddy = false) -> MatchResult<HeadMatchProcessor::Result>
-	{
-		HeadMatchProcessor Pro{ Table, Greddy };
-		return HeadMatch(Pro, Str);
-	}
-
-	inline auto HeadMatch(TableWrapper Table, std::u8string_view Str, bool Greddy = false)->MatchResult<HeadMatchProcessor::Result>
-	{
-		HeadMatchProcessor Pro{ Table, Greddy };
-		return HeadMatch(Pro, Str);
-	}
-	inline auto HeadMatch(TableWrapper Table, std::wstring_view Str, bool Greddy = false) -> MatchResult<HeadMatchProcessor::Result>
-	{
-		HeadMatchProcessor Pro{ Table, Greddy };
-		return HeadMatch(Pro, Str);
-	}
-	inline auto HeadMatch(TableWrapper Table, std::u16string_view Str, bool Greddy = false) -> MatchResult<HeadMatchProcessor::Result>
-	{
-		HeadMatchProcessor Pro{ Table, Greddy };
-		return HeadMatch(Pro, Str);
-	}
-	inline auto HeadMatch(TableWrapper Table, std::u32string_view Str, bool Greddy = false) -> MatchResult<HeadMatchProcessor::Result>
-	{
-		HeadMatchProcessor Pro{ Table, Greddy };
-		return HeadMatch(Pro, Str);
-	}
-
-	struct MulityRegCreater
-	{
-		MulityRegCreater() = default;
-		MulityRegCreater(MulityRegCreater const&) = default;
-		MulityRegCreater(MulityRegCreater &&) = default;
-		MulityRegCreater& operator= (MulityRegCreater const&)  = default;
-		MulityRegCreater& operator= (MulityRegCreater &&) = default;
-
-		MulityRegCreater(std::u8string_view Str, bool IsRow, Accept Acce) : ETable(EpsilonNFA::Create(Str, IsRow, Acce)) {}
-		MulityRegCreater(std::wstring_view Str, bool IsRow, Accept Acce) : ETable(EpsilonNFA::Create(Str, IsRow, Acce)) {}
-		MulityRegCreater(std::u16string_view Str, bool IsRow, Accept Acce) : ETable(EpsilonNFA::Create(Str, IsRow, Acce)) {}
-		MulityRegCreater(std::u32string_view Str, bool IsRow, Accept Acce) : ETable(EpsilonNFA::Create(Str, IsRow, Acce)) {}
-		void LowPriorityLink(std::u8string_view Str, bool IsRow, Accept Acce);
-		std::optional<DFA> GenerateDFA() const;
-		std::optional<std::vector<StandardT>> GenerateTableBuffer() const;
-
+		DfaBinaryTableProcessor(DfaBinaryTable Table);
+		bool Consume(char32_t Token, std::size_t TokenIndex);
+		bool EndOfFile(std::size_t TokenIndex) { return Consume(Reg::EndOfFile(), TokenIndex); }
+		void Reset();
+		bool HasAccept() const { return Accept.has_value(); }
+		std::optional<ProcessorAcceptT> GetAccept() const;
 	protected:
-
-		std::optional<EpsilonNFA> ETable;
+		DfaBinaryTable Table;
+		std::size_t CurrentNode;
+		std::vector<std::size_t> TempResult;
+		std::vector<std::size_t> CacheIndex;
+		std::optional<DfaBinaryTable::AcceptT> Accept;
+		std::optional<Misc::IndexSpan<>> CurMainCapture;
 	};
 
-	namespace Exception
+	export namespace Exception
 	{
 		struct Interface : public std::exception
-		{ 
+		{
 			virtual ~Interface() = default;
 			virtual char const* what() const override;
 		};
 
-		struct UnaccaptableRegex : public Interface
+		struct UnaccaptableRegexTokenIndex : public Interface
 		{
 			enum class TypeT
 			{
@@ -590,13 +545,25 @@ export namespace Potato::Reg
 				RawRegexInNotNormalState,
 				BadRegex,
 			};
+
 			TypeT Type;
+			Misc::IndexSpan<> BadIndex;
+
+			UnaccaptableRegexTokenIndex(UnaccaptableRegexTokenIndex const&) = default;
+			UnaccaptableRegexTokenIndex(TypeT Type, Misc::IndexSpan<> TokenIndex) :
+				Type(Type), BadIndex(TokenIndex) {}
+			virtual char const* what() const override;
+		};
+
+		struct UnaccaptableRegex : protected UnaccaptableRegexTokenIndex
+		{
+			using TypeT = UnaccaptableRegexTokenIndex::TypeT;
 			std::wstring TotalString;
-			std::size_t BadOffset;
-			UnaccaptableRegex(TypeT Type, std::u8string_view Str, std::size_t BadOffset);
-			UnaccaptableRegex(TypeT Type, std::wstring_view Str, std::size_t BadOffset);
-			UnaccaptableRegex(TypeT Type, std::u16string_view Str, std::size_t BadOffset);
-			UnaccaptableRegex(TypeT Type, std::u32string_view Str, std::size_t BadOffset);
+			std::wstring_view GetErrorRegex() const { return BadIndex.Slice(std::wstring_view(TotalString)); }
+			UnaccaptableRegex(TypeT Type, std::u8string_view Str, Misc::IndexSpan<> BadIndex);
+			UnaccaptableRegex(TypeT Type, std::wstring_view Str, Misc::IndexSpan<> BadIndex);
+			UnaccaptableRegex(TypeT Type, std::u16string_view Str, Misc::IndexSpan<> BadIndex);
+			UnaccaptableRegex(TypeT Type, std::u32string_view Str, Misc::IndexSpan<> BadIndex);
 			UnaccaptableRegex() = default;
 			UnaccaptableRegex(UnaccaptableRegex const&) = default;
 			virtual char const* what() const override;
@@ -606,25 +573,21 @@ export namespace Potato::Reg
 		{
 			enum class TypeT
 			{
-				Counter,
-				NodeCount,
-				NodeOffset,
-				ToIndeCount,
-				ActionCount,
-				ActionParameterCount,
 				EdgeCount,
-				EdgeOffset,
-				AcceptableCharCount,
+				NodeOffset,
+				CharCount,
 				PropertyCount,
-				CounterCount,
-				EdgeLength,
-				ContentIndex,
+				ConditionCount,
+				Solt,
+				Counter,
+				CaptureIndex,
+				Mask,
 			};
 
 			TypeT Type;
-			std::size_t Value;
+			std::size_t BadIndex;
 
-			RegexOutOfRange(TypeT Type, std::size_t Value) : Type(Type), Value(Value) {}
+			RegexOutOfRange(TypeT Type, std::size_t BadIndex) : Type(Type), BadIndex(BadIndex) {}
 			RegexOutOfRange(RegexOutOfRange const&) = default;
 			virtual char const* what() const override;
 		};
@@ -637,4 +600,46 @@ export namespace Potato::Reg
 		};
 	}
 
+	template<typename CharT, typename CharTraiT>
+	RegLexerT RegLexerT::Create(std::basic_string_view<CharT, CharTraiT> Str, bool IsRaw)
+	{
+		using namespace Exception;
+		RegLexerT Lex(IsRaw);
+		using EncodeT = Encode::CharEncoder<CharT, char32_t>;
+		using EncodeT = Encode::CharEncoder<CharT, char32_t>;
+
+		auto IteSpan = std::span(Str);
+
+		char32_t TemBuffer = 0;
+
+		std::span<char32_t> OutputSpan = { &TemBuffer, 1 };
+
+		while (!IteSpan.empty())
+		{
+			auto StartIndex = Str.size() - IteSpan.size();
+			auto EncodeRe = EncodeT::EncodeOnceUnSafe(IteSpan, OutputSpan);
+			if (!Lex.Consume(TemBuffer, { StartIndex, StartIndex + EncodeRe.SourceSpace }))
+				throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {StartIndex, Str.size()} };
+			IteSpan = IteSpan.subspan(EncodeRe.SourceSpace);
+		}
+		if (!Lex.EndOfFile())
+			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {Str.size(), Str.size()} };
+		return Lex;
+	}
+
+	template<typename CharT, typename CharTraiT>
+	NfaT::NfaT(std::basic_string_view<CharT, CharTraiT> Str, bool IsRaw, std::size_t Mask)
+		try : NfaT(RegLexerT::Create(Str, IsRaw), Mask) {}
+	catch (Exception::UnaccaptableRegexTokenIndex const& EIndex)
+	{
+		throw Exception::UnaccaptableRegex{ EIndex.Type, Str, EIndex.BadIndex };
+	}
+
+	template<typename CharT, typename CharTraisT>
+	DfaT::DfaT(FormatE Format, std::basic_string_view<CharT, CharTraisT> Str, bool IsRaw, std::size_t Mask)
+		try : DfaT(Format, NfaT{ Str, IsRaw, Mask }) {}
+	catch (Exception::UnaccaptableRegexTokenIndex const& EIndex)
+	{
+		throw Exception::UnaccaptableRegex{ EIndex.Type, Str, EIndex.BadIndex };
+	}
 }

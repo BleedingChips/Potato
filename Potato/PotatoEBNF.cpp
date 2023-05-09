@@ -7,7 +7,6 @@ module Potato.EBNF;
 namespace Potato::EBNF
 {
 
-
 	using namespace Exception;
 
 	static constexpr SLRX::StandardT SmallBrace = 0;

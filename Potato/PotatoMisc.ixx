@@ -6,29 +6,59 @@ export import Potato.TMP;
 
 export namespace Potato::Misc
 {
-	template<typename RequireType>
-	struct SelfCompare
-	{
-		auto operator()(RequireType const& i1, RequireType const& i2) const { return i1 <=> i2; }
-	};
 
-	template<typename StorageType = std::size_t>
+	template<typename Type = std::size_t>
 	struct IndexSpan
 	{
-		StorageType Offset = 0;
-		StorageType Length = 0;
-		template<typename ArrayType>
-		constexpr auto Slice(ArrayType&& Type) const ->std::span<std::remove_reference_t<decltype(*Type.data())>>
-		{
-			return std::span<std::remove_reference_t<decltype(*Type.begin())>>(Type.data() + Begin(), Length);
+		constexpr IndexSpan(Type Start, Type End) : StartPoint(Start), EndPoint(End) { assert(End >= Start); }
+		constexpr IndexSpan() : StartPoint(0), EndPoint(0) {   }
+		constexpr IndexSpan(IndexSpan const&) = default;
+		constexpr IndexSpan& operator=(IndexSpan const&) = default;
+
+		constexpr Type Begin() const { return StartPoint; }
+		constexpr Type End() const { return EndPoint; }
+		constexpr Type begin() const { return Begin(); }
+		constexpr Type end() const { return End(); }
+		constexpr Type Size() const { return End() - Begin(); }
+		constexpr IndexSpan Expand(IndexSpan const& IS) const {
+			return IndexSpan{
+				Begin() < IS.Begin() ? Begin() : IS.Begin(),
+				End() > IS.End() ? End() : IS.End()
+			};
 		};
-		constexpr StorageType Begin() const noexcept { return Offset; }
-		constexpr StorageType End() const noexcept { return Offset + Length; }
-		constexpr StorageType Count() const noexcept { return Length; };
-		constexpr bool IsInclude(StorageType Index) const noexcept { return Begin() <= Index && End() > Index; };
-		constexpr explicit operator bool() const noexcept { return Length != 0; }
-		constexpr IndexSpan Sub(StorageType InputOffset) const noexcept { assert(InputOffset <= Length);  return { Offset + InputOffset, Length - InputOffset }; }
-		constexpr IndexSpan Sub(StorageType InputOffset, StorageType Count) const noexcept { assert(InputOffset + Count <= Length);  return { Offset + InputOffset, Count }; }
+
+		constexpr bool IsInclude(Type Value) const { return Begin()<= Value && Value < End(); }
+
+		template<typename ArrayType>
+		constexpr auto Slice(std::span<ArrayType> Span) const ->std::span<ArrayType>
+		{
+			return Span.subspan(Begin(), Size());
+		};
+
+		template<typename CharT, typename CharTTarid>
+		constexpr auto Slice(std::basic_string_view<CharT, CharTTarid> Str) const ->std::basic_string_view<CharT, CharTTarid>
+		{
+			return Str.substr(Begin(), Size());
+		};
+
+		constexpr IndexSpan SubIndex(Type Offset, Type Size = std::numeric_limits<Type>::max()) const {
+			auto CurSize = this->Size();
+			assert(Offset <= CurSize);
+			auto LastSize = CurSize - Offset;
+			return IndexSpan { 
+				StartPoint + Offset,
+				StartPoint + Offset + std::min(LastSize, Size)
+			};
+		}
+
+		constexpr IndexSpan ForwardBegin(Type Offset) { StartPoint += Offset; return *this; }
+		constexpr IndexSpan BackwardEnd(Type Offset) { StartPoint += Offset; return *this; }
+		constexpr IndexSpan Normalize(Type Length) { EndPoint = StartPoint + Length; return *this; };
+
+	protected:
+		
+		Type StartPoint;
+		Type EndPoint;
 	};
 
 	struct AtomicRefCount
@@ -47,13 +77,143 @@ export namespace Potato::Misc
 	};
 
 	template<typename RequireAlignType>
-	constexpr std::size_t AlignedSize(std::size_t Input)
+	inline constexpr std::size_t AlignedSize(std::size_t Input)
 	{
 		auto A1 = Input / sizeof(RequireAlignType);
 		if (Input % sizeof(RequireAlignType) != 0)
 			++A1;
 		return A1;
 	}
+
+	template<typename SourceT, typename TargetT>
+	inline constexpr bool CrossTypeSet(SourceT& Source, TargetT const& Target) requires(std::is_convertible_v<TargetT, SourceT>)
+	{
+		Source = static_cast<SourceT>(Target);
+		return Source == Target;
+	}
+
+	template<typename ExceptableT, typename SourceT, typename TargetT, typename ...Par>
+	inline constexpr void CrossTypeSetThrow(SourceT& Source, TargetT const& Target, Par&& ...Pars) requires(std::is_convertible_v<TargetT, SourceT>&& std::is_constructible_v<ExceptableT, Par...>)
+	{
+		if (!CrossTypeSet(Source, Target))
+			throw ExceptableT{ std::forward<Par>(Pars)... };
+	}
+
+	template<typename StructT>
+	struct StructedSerilizerReader
+	{
+		StructedSerilizerReader(std::span<StructT> Buffer) : Buffer(Buffer), PointerIndex(0) {}
+		void SetPointer(std::size_t Pointer) { PointerIndex = Pointer; }
+
+		template<typename OtherT>
+		auto ReadObject() -> OtherT*;
+
+		template<typename OtherT>
+		auto ReadObjectArray(std::size_t ObjectCount) -> std::span<OtherT>;
+
+	public:
+
+		std::size_t PointerIndex;
+		std::span<StructT> Buffer;
+	};
+
+	template<typename StructT>
+	StructedSerilizerReader(std::span<StructT> Buffer) -> StructedSerilizerReader<StructT>;
+
+	template<typename StructT>
+	template<typename OtherT>
+	auto StructedSerilizerReader<StructT>::ReadObject() -> OtherT*
+	{
+		auto TarSpan = Buffer.subspan(PointerIndex);
+		PointerIndex += AlignedSize<StructT>(sizeof(OtherT));
+		return reinterpret_cast<OtherT*>(TarSpan.data());
+	}
+
+	template<typename StructT>
+	template<typename OtherT>
+	auto StructedSerilizerReader<StructT>::ReadObjectArray(std::size_t ObjectCount)->std::span<OtherT>
+	{
+		auto TarSpan = Buffer.subspan(PointerIndex);
+		PointerIndex += AlignedSize<StructT>(sizeof(OtherT) * ObjectCount);
+		return std::span(reinterpret_cast<OtherT*>(TarSpan.data()), ObjectCount);
+	}
+
+	template<typename OtherT>
+	auto ReadObjectArray(std::size_t ObjectType) -> std::span<OtherT>;
+
+	template<typename StructT>
+	struct StructedSerilizerWriter
+	{
+		bool IsPredice() const { return !OutputBuffer.has_value(); }
+		bool IsWritting() const { return OutputBuffer.has_value(); }
+
+		template<typename OtherT>
+		std::size_t WriteObject(OtherT const& Type);
+
+		template<typename OtherT, std::size_t Count>
+		std::size_t WriteObjectArray(std::span<OtherT, Count> Input) { return WriteObjectArray(Input.data(), Input.size()); }
+
+		template<typename OtherT>
+		std::size_t WriteObjectArray(OtherT* BufferAdress, std::size_t Count);
+
+		std::optional<StructedSerilizerReader<StructT>> GetReader() const {
+			if (IsWritting())
+			{
+				return StructedSerilizerReader<StructT>{std::span(*OutputBuffer).subspan(0, WritedSize)};
+			}
+			return {};
+		}
+
+		std::size_t GetWritedSize() const { return WritedSize; }
+
+		StructedSerilizerWriter() = default;
+		StructedSerilizerWriter(std::span<StructT> ProxyBuffer) :
+			OutputBuffer(ProxyBuffer) {}
+
+	public:
+
+		std::size_t WritedSize = 0;
+		std::optional<std::span<StructT>> OutputBuffer;
+	};
+
+	template<typename StructT>
+	StructedSerilizerWriter(std::span<StructT> ProxyBuffer) -> StructedSerilizerWriter<StructT>;
+
+	template<typename StructT>
+	template<typename OtherT>
+	std::size_t StructedSerilizerWriter<StructT>::WriteObject(OtherT const& Type)
+	{
+		auto OldWriteSize = WritedSize;
+		auto TargetObject = AlignedSize<StructT>(sizeof(OtherT));
+		if (OutputBuffer.has_value())
+		{
+			auto Tar = OutputBuffer->subspan(WritedSize);
+			new (Tar.data()) OtherT{ Type };
+		}
+		WritedSize += TargetObject;
+		return OldWriteSize;
+	}
+
+	template<typename StructT>
+	template<typename OtherT>
+	std::size_t StructedSerilizerWriter<StructT>::WriteObjectArray(OtherT* BufferAdress, std::size_t Count)
+	{
+		auto OldWriteSize = WritedSize;
+		auto TargetObject = AlignedSize<StructT>(sizeof(OtherT) * Count);
+		if (OutputBuffer.has_value())
+		{
+			auto Tar = OutputBuffer->subspan(WritedSize);
+			auto Adress = reinterpret_cast<std::byte*>(Tar.data());
+			for (std::size_t I = 0; I < Count; ++I)
+			{
+				new (Adress) OtherT{ BufferAdress[I]};
+				Adress += sizeof(OtherT);
+			}
+		}
+		WritedSize += TargetObject;
+		return OldWriteSize;
+	}
+
 
 	namespace SerilizerHelper
 	{

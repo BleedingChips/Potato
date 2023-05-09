@@ -15,133 +15,62 @@ export namespace Potato::Format
 		bool Scan(std::span<UnicodeType const> Par, SourceType& Input) = delete;
 	};
 
-	template<typename TargetType>
-	bool DirectScan(std::u32string_view Parameter, TargetType& tar_type)
+	template<typename CharT, typename CharTraiT, typename TargetT>
+	bool DirectScan(std::basic_string_view<CharT, CharTraiT> Pars, TargetT& TarType)
 	{
-		return Scanner<std::remove_cvref_t<TargetType>, char32_t>{}.Scan(Parameter, tar_type);
+		return Scanner<std::remove_cvref_t<TargetT>, CharT>{}.Scan(Pars, TarType);
 	}
 
-	template<typename TargetType>
-	bool DirectScan(std::u16string_view Parameter, TargetType& tar_type)
+	template<typename CharT, typename CharTraits>
+	bool CaptureScan(std::span<Misc::IndexSpan<> const>, std::basic_string_view<CharT, CharTraits> InputStr)
 	{
-		return Scanner<std::remove_cvref_t<TargetType>, char16_t>{}.Scan(Parameter, tar_type);
+		return true;
 	}
 
-	template<typename TargetType>
-	bool DirectScan(std::u8string_view Parameter, TargetType& tar_type)
+	template<typename CharT, typename CharTraits, typename CT, typename ...OT>
+	bool CaptureScan(std::span<Misc::IndexSpan<> const> CaptureIndex, std::basic_string_view<CharT, CharTraits> InputStr, CT& O1, OT& ...OO)
 	{
-		return Scanner<std::remove_cvref_t<TargetType>, char8_t>{}.Scan(Parameter, tar_type);
+		return CaptureIndex.size() >= 1 && DirectScan(CaptureIndex[0].Slice(InputStr), O1) && CaptureScan(CaptureIndex.subspan(1), InputStr, OO...);
 	}
 
-	template<typename TargetType>
-	bool DirectScan(std::wstring_view Parameter, TargetType& tar_type)
+	template<typename CharT, typename CharTraits, typename ...OT>
+	bool RegAcceptScan(Reg::ProcessorAcceptT const& Accept, std::basic_string_view<CharT, CharTraits> InputStr,  OT& ...OO)
 	{
-		return Scanner<std::remove_cvref_t<TargetType>, wchar_t>{}.Scan(Parameter, tar_type);
+		return CaptureScan(std::span(Accept.Capture), InputStr, OO...);
 	}
 
-	template<typename UnicodeT>
-	struct CaptureScanProcessor
+	template<typename CharT, typename CharTraits, typename ...OT>
+	bool ProcessorScan(Reg::DfaProcessor& Processor, std::basic_string_view<CharT, CharTraits> Str, OT& ...OO)
 	{
-		template<typename ...TargetT>
-		bool FormatTo(TargetT& ...T) const {
-			return CaptureScanProcessor::FormatToImp(std::span(Capture), T...);
-		}
-		CaptureScanProcessor(CaptureScanProcessor&&) = default;
-		CaptureScanProcessor(CaptureScanProcessor const&) = default;
-		CaptureScanProcessor() = default;
-		std::vector<std::basic_string_view<UnicodeT>> Capture;
-
-	private:
-		
-		template<typename T, typename ...OT>
-		static bool FormatToImp(std::span<std::basic_string_view<UnicodeT> const> Pars, T& ct, OT& ...ot) {
-			return Pars.size() >= 1 && DirectScan(Pars[0], ct) && CaptureScanProcessor::FormatToImp(Pars.subspan(1), ot...);
-		}
-		static bool FormatToImp(std::span<std::basic_string_view<UnicodeT> const> Pars) {
-			return true;
-		}
-		
-		friend struct HeadMatchScanPatternProcessor;
-		friend struct MatchScanPatternProcessor;
-	};
-
-	struct HeadMatchScanPatternProcessor
-	{
-		std::optional<CaptureScanProcessor<char8_t>> Scan(std::u8string_view Str);
-		HeadMatchScanPatternProcessor(HeadMatchScanPatternProcessor const&) = default;
-		HeadMatchScanPatternProcessor(HeadMatchScanPatternProcessor&) = default;
-		HeadMatchScanPatternProcessor(Reg::TableWrapper Wrapper, bool Greedy = false) : Pro(Wrapper, Greedy) {}
-	private:
-		Reg::HeadMatchProcessor Pro;
-	};
-
-	struct MatchScanPatternProcessor
-	{
-		std::optional<CaptureScanProcessor<char8_t>> Scan(std::u8string_view Str);
-		MatchScanPatternProcessor(MatchScanPatternProcessor const&) = default;
-		MatchScanPatternProcessor(MatchScanPatternProcessor&) = default;
-		MatchScanPatternProcessor(Reg::TableWrapper Wrapper) : Pro(Wrapper) {}
-	private:
-		Reg::MatchProcessor Pro;
-	};
-
-	struct ScanPattern
-	{
-		ScanPattern(std::u8string_view Str) : Table(Str, false, {}) {}
-		ScanPattern(ScanPattern const&) = default;
-		ScanPattern(ScanPattern&&) = default;
-		MatchScanPatternProcessor AsMatchProcessor() const { return  MatchScanPatternProcessor{Table.AsWrapper()}; }
-		HeadMatchScanPatternProcessor AsHeadMatchProcessor() const { return  HeadMatchScanPatternProcessor{ Table.AsWrapper() }; }
-	private:
-		Reg::Table Table;
-	};
-
-	template<typename UnicodeT, typename ...TargetType>
-	bool Scan(CaptureScanProcessor<UnicodeT> const& Pro, TargetType& ... tar_type)
-	{
-		return Pro.FormatTo(tar_type...);
-	}
-
-	template<typename ...TargetType>
-	bool Scan(HeadMatchScanPatternProcessor& Pro, std::u8string_view Code, TargetType& ... tar_type)
-	{
-		auto Processor = Pro.Scan(Code);
-		if(Processor.has_value())
-			return Scan(*Processor, tar_type...);
+		auto Accept = Reg::RegCoreProcessor(Processor, Str);
+		if (Accept.has_value())
+			return RegAcceptScan(*Accept, Str, OO...);
 		return false;
 	}
 
-	template<typename ...TargetType>
-	bool Scan(MatchScanPatternProcessor& Pro, std::u8string_view Code, TargetType& ... tar_type)
+	template<typename CharT, typename CharTraits, typename ...OT>
+	bool ProcessorScan(Reg::DfaBinaryTableProcessor& Processor, std::basic_string_view<CharT, CharTraits> Str, OT& ...OO)
 	{
-		auto Processor = Pro.Scan(Code);
-		if(Processor.has_value())
-			return Scan(*Processor, tar_type...);
+		auto Accept = Reg::RegCoreProcessor(Processor, Str);
+		if (Accept.has_value())
+			return RegAcceptScan(*Accept, Str, OO...);
 		return false;
 	}
 
-	template<typename ...TargetType>
-	auto MatchScan(ScanPattern const& Pattern, std::u8string_view Code, TargetType& ... tar_type) {
-		auto Wrapper = Pattern.AsMatchProcessor();
-		return Scan(Wrapper, Code, tar_type...);
+	template<typename CharT1, typename CharTT1, typename CharT2, typename CharTT2, typename ...OT>
+	bool MatchScan(std::basic_string_view<CharT1, CharTT1> Regex, std::basic_string_view<CharT2, CharTT2> Source, OT&... OO)
+	{
+		Reg::DfaT Table(Reg::DfaT::FormatE::March, Regex, false, 0);
+		Reg::DfaProcessor Processor(Table);
+		return ProcessorScan(Processor, Source, OO...);
 	}
 
-	template<typename ...TargetType>
-	auto MatchScan(std::u8string_view PatternStr, std::u8string_view Code, TargetType& ... tar_type) {
-		ScanPattern Patten(PatternStr);
-		return MatchScan(Patten, Code, tar_type...);
-	}
-
-	template<typename ...TargetType>
-	auto HeadMatchScan(ScanPattern const& Pattern, std::u8string_view Code, TargetType& ... tar_type) {
-		auto Wrapper = Pattern.AsHeadMatchProcessor();
-		return Scan(Wrapper, Code, tar_type...);
-	}
-
-	template<typename ...TargetType>
-	auto HeadMatchScan(std::u8string_view PatternStr, std::u8string_view Code, TargetType& ... tar_type) {
-		ScanPattern Patten(PatternStr);
-		return HeadMatchScan(Patten, Code, tar_type...);
+	template<typename CharT1, typename CharTT1, typename CharT2, typename CharTT2, typename ...OT>
+	bool HeadMatchScan(std::basic_string_view<CharT1, CharTT1> Regex, std::basic_string_view<CharT2, CharTT2> Source, OT&... OO)
+	{
+		Reg::DfaT Table(Reg::DfaT::FormatE::HeadMarch, Regex, false, 0);
+		Reg::DfaProcessor Processor(Table);
+		return ProcessorScan(Processor, Source, OO...);
 	}
 
 

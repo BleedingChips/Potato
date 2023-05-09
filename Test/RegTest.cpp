@@ -1,6 +1,8 @@
 ﻿import Potato.Reg;
 using namespace Potato::Reg;
 
+
+/*
 bool TestMatch(std::u8string_view Reg, bool Raw, std::u8string_view Str, Accept Acce, const char* const Error)
 {
 		DFA Tab1(Reg, Raw, Acce);
@@ -112,6 +114,7 @@ void TestGreddyHeadMatch(const char* const Error)
 }
 
 
+
 void TestingReg()
 {
 
@@ -144,16 +147,127 @@ void TestingReg()
 
 	std::wcout << LR"(TestingReg Pass !)" << std::endl;
 }
+*/
+
+void Test(DfaT::FormatE Format, std::vector<std::u32string_view> Reg, std::u32string_view SourceStr, std::size_t TargetMask, std::u32string_view MainCapture, std::vector<std::u32string_view> RequireCapture, const char* Error);
+
 
 int main()
 {
-	try {
-		TestingReg();
-	}
-	catch (char const* Error)
-	{
-		std::cout << Error << std::endl;
-		return -1;
-	}
+	
+	Test(
+		DfaT::FormatE::HeadMatch,
+		{
+			U"a(a+?)a",
+			U"(a{1,16})(b{0,8})"
+		},
+		U"aaaaa",
+		0,
+		U"aaa",
+		{
+			U"a"
+		},
+		"case1"
+	);
+
+	Test(
+		DfaT::FormatE::GreedyHeadMatch,
+		{
+			U"a(a+?)a",
+			U"(a{1,16})(b{0,8})"
+		},
+		U"aaaaab",
+		1,
+		U"aaaaab",
+		{
+			U"aaaaa",
+			U"b"
+		},
+		"case2"
+	);
+
+	std::cout << "TestingReg Pass !" << std::endl;
+
 	return 0;
 }
+
+
+void Test(DfaT::FormatE Format, std::vector<std::u32string_view> Reg, std::u32string_view SourceStr, std::size_t TargetMask, std::u32string_view MainCapture, std::vector<std::u32string_view> RequireCapture, const char* Error)
+{
+	if (!Reg.empty())
+	{
+		try {
+			NfaT NfaReg(Reg[0], false, 0);
+			for (std::size_t I = 1; I < Reg.size(); ++I)
+			{
+				NfaReg.Link(NfaT{ Reg[I], false, I });
+			}
+			DfaT RegTable(Format, NfaReg);
+
+			{
+				auto Accep = Process(RegTable, SourceStr);
+				if (Accep.has_value())
+				{
+					if (Accep->Mask != TargetMask)
+					{
+						throw Error;
+					}
+					auto MainCaptureStr = Accep->MainCapture.Slice(SourceStr);
+					if (MainCaptureStr != MainCapture)
+					{
+						throw Error;
+					}
+					if (RequireCapture.size() != Accep->Capture.size())
+					{
+						throw Error;
+					}
+					for (std::size_t I = 0; I < RequireCapture.size(); ++I)
+					{
+						if (Accep->Capture[I].Slice(SourceStr) != RequireCapture[I])
+							throw Error;
+					}
+				}
+				else
+					throw Error;
+			}
+
+			auto Span = DfaBinaryTable::Create(RegTable);
+
+			{
+				auto Accep = Process(RegTable, SourceStr);
+				if (Accep.has_value())
+				{
+					if (Accep->Mask != TargetMask)
+					{
+						throw Error;
+					}
+					auto MainCaptureStr = Accep->MainCapture.Slice(SourceStr);
+					if (MainCaptureStr != MainCapture)
+					{
+						throw Error;
+					}
+					if (RequireCapture.size() != Accep->Capture.size())
+					{
+						throw Error;
+					}
+					for (std::size_t I = 0; I < RequireCapture.size(); ++I)
+					{
+						if (Accep->Capture[I].Slice(SourceStr) != RequireCapture[I])
+							throw Error;
+					}
+				}
+				else
+					throw Error;
+			}
+			
+		}
+		catch (Exception::Interface const& Inter)
+		{
+			throw Error;
+		}
+
+
+	}
+
+}
+

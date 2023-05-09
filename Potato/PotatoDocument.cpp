@@ -157,10 +157,10 @@ namespace Potato::Document
 	{
 		if (Reader.GetBom() == GetBom())
 		{
-			if (Reader.Available.Begin() != 0 && Reader.Available.Count() != 0 && Reader.Available.Count() <= Reader.Available.Begin())
+			if (Reader.Available.Begin() != 0 && Reader.Available.Size() != 0 && Reader.Available.Size() <= Reader.Available.Begin())
 			{
-				std::memcpy(Reader.DocumentSpan.data(), Reader.DocumentSpan.data() + Reader.Available.Begin(), Reader.Available.Count());
-				Reader.Available.Offset = 0;
+				std::memcpy(Reader.DocumentSpan.data(), Reader.DocumentSpan.data() + Reader.Available.Begin(), Reader.Available.Size());
+				Reader.Available = {0, Reader.Available.End()};
 			}
 
 			auto OldPos = File.tellg();
@@ -180,7 +180,7 @@ namespace Potato::Document
 						ReversoByte<2>(ReadedSpan);
 					std::span<char16_t> Buffer{ reinterpret_cast<char16_t*>(ReadedSpan.data()), ReadedSpan.size() / sizeof(char16_t) };
 					EncodeInfo Info = Encode::StrEncoder<char16_t, char16_t>::RequireSpace(Buffer);
-					Reader.Available.Length += Info.SourceSpace * sizeof(char16_t);
+					Reader.Available = Reader.Available.BackwardEnd(Info.SourceSpace * sizeof(char16_t));
 					Reader.TotalCharacter += Info.CharacterCount;
 					if (!Info)
 					{
@@ -198,7 +198,7 @@ namespace Potato::Document
 						ReversoByte<4>(ReadedSpan);
 					std::span<char32_t> Buffer{ reinterpret_cast<char32_t*>(ReadedSpan.data()), ReadedSpan.size() / sizeof(char32_t) };
 					EncodeInfo Info = Encode::StrEncoder<char32_t, char32_t>::RequireSpace(Buffer);
-					Reader.Available.Length += Info.SourceSpace * sizeof(char32_t);
+					Reader.Available = Reader.Available.BackwardEnd(Info.SourceSpace * sizeof(char32_t));
 					Reader.TotalCharacter += Info.CharacterCount;
 					if (!Info)
 					{
@@ -213,7 +213,7 @@ namespace Potato::Document
 				{
 					std::span<char8_t> Buffer{ reinterpret_cast<char8_t*>(ReadedSpan.data()), ReadedSpan.size() / sizeof(char8_t) };
 					EncodeInfo Info = Encode::StrEncoder<char8_t, char8_t>::RequireSpace(Buffer);
-					Reader.Available.Length += Info.SourceSpace * sizeof(char8_t);
+					Reader.Available = Reader.Available.BackwardEnd(Info.SourceSpace * sizeof(char8_t));
 					Reader.TotalCharacter += Info.CharacterCount;
 					if (!Info)
 					{

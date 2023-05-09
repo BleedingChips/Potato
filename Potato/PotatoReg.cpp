@@ -3,240 +3,159 @@ module;
 #include <cassert>
 
 module Potato.Reg;
-import Potato.Encode;
 
 namespace Potato::Reg
 {
-	
-	SeqIntervalT const& MaxIntervalRange() { 
-		static SeqIntervalT Temp{ IntervalT{ 1, MaxChar() } };
+
+	IntervalT const& MaxInterval() {
+		static IntervalT Temp{{ 1, MaxChar() }};
 		return Temp;
 	};
-	
-	using namespace Exception;
 
-	using SLRX::Symbol;
+	RegLexerT::RegLexerT(bool IsRaw) : 
+		CurrentState(IsRaw ? StateT::Raw : StateT::Normal) {}
 
-	enum class T : SLRX::StandardT
-	{
-		SingleChar = 0, // µ¥×Ö·û
-		CharSet, // ¶à×Ö·û
-		Min, // -
-		BracketsLeft, //[
-		BracketsRight, // ]
-		ParenthesesLeft, //(
-		ParenthesesRight, //)
-		CurlyBracketsLeft, //{
-		CurlyBracketsRight, //}
-		Num, // 0 - 1
-		Comma, // ,
-		Mulity, //*
-		Question, // ?
-		Or, // |
-		Add, // +
-		Not, // ^
-		Colon, // :
-	};
-
-	constexpr Symbol operator*(T Input) { return Symbol::AsTerminal(static_cast<SLRX::StandardT>(Input)); };
-
-	enum class NT : SLRX::StandardT
-	{
-		AcceptableSingleChar,
-		CharListAcceptableSingleChar,
-		Statement,
-		CharList,
-		Expression,
-		ExpressionStatement,
-		CharListSingleChar,
-		Number,
-		FinalCharList,
-	};
-
-	constexpr Symbol operator*(NT Input) { return Symbol::AsNoTerminal(static_cast<SLRX::StandardT>(Input)); };
-
-	struct RegLexer
-	{
-
-		struct Element
-		{
-			T Value;
-			std::variant<SeqIntervalT, char32_t> Acceptable;
-			std::size_t TokenIndex;
-		};
-
-		std::span<Element const> GetSpan() const { return StoragedSymbol;};
-
-		bool Consume(char32_t InputSymbol, std::size_t TokenIndex);
-		bool EndOfFile();
-
-		enum class State
-		{
-			Normal,
-			Transfer,
-			BigNumber,
-			Number,
-			Done,
-			Raw,
-		};
-
-		RegLexer(bool IsRaw) : CurrentState(IsRaw ? State::Raw : State::Normal) {}
-
-	protected:
-
-		State CurrentState;
-		std::size_t Number = 0;
-		char32_t NumberChar = 0;
-		bool NumberIsBig = false;
-		char32_t RecordSymbol;
-		std::size_t RecordTokenIndex = 0;
-		std::size_t TokenIndexIte = 0;
-
-		std::vector<Element> StoragedSymbol;
-	};
-
-	bool RegLexer::Consume(char32_t InputSymbol, std::size_t TokenIndex)
+	bool RegLexerT::Consume(char32_t InputSymbol, Misc::IndexSpan<> TokenIndex)
 	{
 		if (InputSymbol < MaxChar())
 		{
 			switch (CurrentState)
 			{
-			case State::Normal:
+			case StateT::Normal:
 			{
 				switch (InputSymbol)
 				{
 				case U'-':
-					StoragedSymbol.push_back({T::Min,  InputSymbol, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::Min, InputSymbol, TokenIndex });
 					break;
 				case U'[':
-					StoragedSymbol.push_back({T::BracketsLeft, InputSymbol, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::BracketsLeft, InputSymbol, TokenIndex });
 					break;
 				case U']':
-					StoragedSymbol.push_back({T::BracketsRight, InputSymbol, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::BracketsRight, InputSymbol, TokenIndex });
 					break;
 				case U'{':
-					StoragedSymbol.push_back({T::CurlyBracketsLeft, InputSymbol, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::CurlyBracketsLeft, InputSymbol, TokenIndex });
 					break;
 				case U'}':
-					StoragedSymbol.push_back({T::CurlyBracketsRight, InputSymbol, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::CurlyBracketsRight, InputSymbol, TokenIndex });
 					break;
 				case U',':
-					StoragedSymbol.push_back({T::Comma, InputSymbol, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::Comma, InputSymbol, TokenIndex });
 					break;
 				case U'(':
-					StoragedSymbol.push_back({T::ParenthesesLeft, InputSymbol, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::ParenthesesLeft, InputSymbol, TokenIndex });
 					break;
 				case U')':
-					StoragedSymbol.push_back({T::ParenthesesRight, InputSymbol, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::ParenthesesRight, InputSymbol, TokenIndex });
 					break;
 				case U'*':
-					StoragedSymbol.push_back({T::Mulity, InputSymbol, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::Mulity, InputSymbol, TokenIndex });
 					break;
 				case U'?':
-					StoragedSymbol.push_back({T::Question, InputSymbol, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::Question, InputSymbol, TokenIndex });
 					break;
 				case U'.':
-					StoragedSymbol.push_back({T::CharSet, MaxIntervalRange(), TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::CharSet, MaxInterval(), TokenIndex });
 					break;
 				case U'|':
-					StoragedSymbol.push_back({T::Or, InputSymbol, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::Or, InputSymbol, TokenIndex });
 					break;
 				case U'+':
-					StoragedSymbol.push_back({T::Add, InputSymbol, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::Add, InputSymbol, TokenIndex });
 					break;
 				case U'^':
-					StoragedSymbol.push_back({T::Not, InputSymbol, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::Not, InputSymbol, TokenIndex });
 					break;
 				case U':':
-					StoragedSymbol.push_back({T::Colon, InputSymbol, TokenIndex });
+					StoragedSymbol.push_back({ ElementEnumT::Colon, InputSymbol, TokenIndex });
 					break;
 				case U'\\':
-					CurrentState = State::Transfer;
+					CurrentState = StateT::Transfer;
 					RecordSymbol = InputSymbol;
 					break;
 				default:
 					if (InputSymbol >= U'0' && InputSymbol <= U'9')
-						StoragedSymbol.push_back({T::Num, InputSymbol, TokenIndex });
+						StoragedSymbol.push_back({ ElementEnumT::Num, InputSymbol, TokenIndex });
 					else
-						StoragedSymbol.push_back({T::SingleChar, InputSymbol, TokenIndex });
+						StoragedSymbol.push_back({ ElementEnumT::SingleChar, InputSymbol, TokenIndex });
 					break;
 				}
 				break;
 			}
-			case State::Transfer:
+			case StateT::Transfer:
 			{
 				switch (InputSymbol)
 				{
 				case U'd':
-					StoragedSymbol.push_back({T::CharSet, SeqIntervalT{ {U'0', U'9' + 1} }, TokenIndex });
-					CurrentState = State::Normal;
+					StoragedSymbol.push_back({ ElementEnumT::CharSet, {{U'0', U'9' + 1}}, TokenIndex });
+					CurrentState = StateT::Normal;
 					break;
 				case U'D':
 				{
-					SeqIntervalT Tem{ { {1, U'0'},{U'9' + 1, MaxChar()} } };
-					StoragedSymbol.push_back({T::CharSet, std::move(Tem), TokenIndex });
-					CurrentState = State::Normal;
+					IntervalT Tem{ {{1, U'0'}, {U'9' + 1, MaxChar()} } };
+					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(Tem), TokenIndex });
+					CurrentState = StateT::Normal;
 					break;
 				}
 				case U'f':
-					StoragedSymbol.push_back({T::SingleChar, U'\f', TokenIndex });
-					CurrentState = State::Normal;
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, U'\f', TokenIndex });
+					CurrentState = StateT::Normal;
 					break;
 				case U'n':
-					StoragedSymbol.push_back({T::SingleChar, U'\n', TokenIndex });
-					CurrentState = State::Normal;
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, U'\n', TokenIndex });
+					CurrentState = StateT::Normal;
 					break;
 				case U'r':
-					StoragedSymbol.push_back({T::SingleChar, U'\r', TokenIndex });
-					CurrentState = State::Normal;
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, U'\r', TokenIndex });
+					CurrentState = StateT::Normal;
 					break;
 				case U't':
-					StoragedSymbol.push_back({T::SingleChar, U'\t', TokenIndex });
-					CurrentState = State::Normal;
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, U'\t', TokenIndex });
+					CurrentState = StateT::Normal;
 					break;
 				case U'v':
-					StoragedSymbol.push_back({T::SingleChar, U'\v', TokenIndex });
-					CurrentState = State::Normal;
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, U'\v', TokenIndex });
+					CurrentState = StateT::Normal;
 					break;
 				case U's':
 				{
-					SeqIntervalT tem({ IntervalT{ 1, 33 }, IntervalT{127, 128} });
-					StoragedSymbol.push_back({T::CharSet, std::move(tem), TokenIndex });
-					CurrentState = State::Normal;
+					IntervalT tem({{ 1, 33 },{127, 128} });
+					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(tem), TokenIndex });
+					CurrentState = StateT::Normal;
 					break;
 				}
 				case U'S':
 				{
-					SeqIntervalT tem({ IntervalT{33, 127}, IntervalT{128, MaxChar()} });
-					StoragedSymbol.push_back({T::CharSet, std::move(tem), TokenIndex });
-					CurrentState = State::Normal;
+					IntervalT tem({{33, 127}, {128, MaxChar()} });
+					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(tem), TokenIndex });
+					CurrentState = StateT::Normal;
 					break;
 				}
 				case U'w':
 				{
-					SeqIntervalT tem({ IntervalT{ U'a', U'z' + 1 }, IntervalT{ U'A', U'Z' + 1 }, IntervalT{ U'_', U'_' + 1} });
-					StoragedSymbol.push_back({T::CharSet, std::move(tem), TokenIndex });
-					CurrentState = State::Normal;
+					IntervalT tem({{ U'A', U'Z' + 1 },{ U'_'}, { U'a', U'z' + 1 }});
+					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(tem), TokenIndex });
+					CurrentState = StateT::Normal;
 					break;
 				}
 				case U'W':
 				{
-					SeqIntervalT tem({ IntervalT{ U'a', U'z' + 1 }, IntervalT{ U'A', U'Z' + 1 }, IntervalT{ U'_', U'_' + 1} });
-					SeqIntervalT total({ 1, MaxChar() });
-					StoragedSymbol.push_back({T::CharSet, tem.Complementary(MaxIntervalRange()), TokenIndex });
-					CurrentState = State::Normal;
+					IntervalT tem({{ U'A', U'Z' + 1 },{ U'_'}, { U'a', U'z' + 1 } });
+					StoragedSymbol.push_back({ ElementEnumT::CharSet, MaxInterval() - tem, TokenIndex});
+					CurrentState = StateT::Normal;
 					break;
 				}
 				case U'z':
 				{
-					SeqIntervalT tem(IntervalT{ 256, MaxChar() });
-					StoragedSymbol.push_back({T::CharSet, std::move(tem), TokenIndex });
-					CurrentState = State::Normal;
+					IntervalT tem({{ 256, MaxChar() }});
+					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(tem), TokenIndex });
+					CurrentState = StateT::Normal;
 					break;
 				}
 				case U'u':
 				{
-					CurrentState = State::Number;
+					CurrentState = StateT::Number;
 					NumberChar = 0;
 					Number = 0;
 					NumberIsBig = false;
@@ -244,20 +163,20 @@ namespace Potato::Reg
 				}
 				case U'U':
 				{
-					CurrentState = State::Number;
+					CurrentState = StateT::Number;
 					NumberChar = 0;
 					Number = 0;
 					NumberIsBig = true;
 					break;
 				}
 				default:
-					StoragedSymbol.push_back({T::SingleChar, InputSymbol, TokenIndex });
-					CurrentState = State::Normal;
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, InputSymbol, TokenIndex });
+					CurrentState = StateT::Normal;
 					break;
 				}
 				break;
 			}
-			case State::Number:
+			case StateT::Number:
 			{
 				Number += 1;
 				if (InputSymbol >= U'0' && InputSymbol <= U'9')
@@ -280,39 +199,65 @@ namespace Potato::Reg
 				}
 				if ((Number == 4 && !NumberIsBig) || (NumberIsBig && Number == 6))
 				{
-					StoragedSymbol.push_back({T::SingleChar, NumberChar, TokenIndex });
-					CurrentState = State::Normal;
+					StoragedSymbol.push_back({ ElementEnumT::SingleChar, NumberChar, TokenIndex });
+					CurrentState = StateT::Normal;
 				}
 				break;
 			}
-			case State::Raw:
-				StoragedSymbol.push_back({ T::SingleChar, {InputSymbol}, TokenIndex });
+			case StateT::Raw:
+				StoragedSymbol.push_back({ ElementEnumT::SingleChar, InputSymbol, TokenIndex });
 				break;
 			default:
 				assert(false);
 			}
 			return true;
-		}else {
+		}
+		else {
 			return false;
 		}
 	}
 
-	bool RegLexer::EndOfFile()
+	bool RegLexerT::EndOfFile()
 	{
-		if (CurrentState == State::Normal || CurrentState == State::Raw)
+		if (CurrentState == StateT::Normal || CurrentState == StateT::Raw)
 		{
-			CurrentState = State::Done;
+			CurrentState = StateT::Done;
 			return true;
-		}	
+		}
 		else
 			return false;
 	}
 
+	
+	using namespace Exception;
+
+	using SLRX::Symbol;
+
+	using T = RegLexerT::ElementEnumT;
+
+	constexpr Symbol operator*(T Input) { return Symbol::AsTerminal(static_cast<SLRX::StandardT>(Input)); };
+
+	enum class NT : SLRX::StandardT
+	{
+		AcceptableSingleChar,
+		CharListAcceptableSingleChar,
+		Statement,
+		CharList,
+		Expression,
+		ExpressionStatement,
+		CharListSingleChar,
+		Number,
+		FinalCharList,
+	};
+
+	constexpr Symbol operator*(NT Input) { return Symbol::AsNoTerminal(static_cast<SLRX::StandardT>(Input)); };
+
+
 	const SLRX::TableWrapper RexSLRXWrapper()
 	{
-	#ifdef _DEBUG
+#ifdef _DEBUG
 		try {
-	#endif
+#endif
 			static SLRX::Table Table(
 				*NT::ExpressionStatement,
 				{
@@ -330,7 +275,7 @@ namespace Potato::Reg
 					{*NT::CharList, {*NT::CharListSingleChar, *T::Min, *NT::CharListSingleChar}, 42},
 					{*NT::CharList, {*T::CharSet}, 1},
 					{*NT::CharList, {*NT::CharList, *NT::CharList, SLRX::ItSelf{}}, 3},
-					
+
 					{*NT::FinalCharList, {*T::Min}, 60},
 					{*NT::FinalCharList, {*T::Min, *NT::CharList}, 61},
 					{*NT::FinalCharList, {*NT::CharList, *T::Min}, 62},
@@ -364,7 +309,7 @@ namespace Potato::Reg
 				}, {}
 			);
 			return Table.Wrapper;
-		#ifdef _DEBUG
+#ifdef _DEBUG
 		}
 		catch (SLRX::Exception::IllegalSLRXProduction const& Pro)
 		{
@@ -410,2404 +355,2374 @@ namespace Potato::Reg
 
 			throw;
 		}
-		#endif
+#endif
 
 	}
 
-	std::any RegNoTerminalFunction(Potato::SLRX::NTElement& NT, EpsilonNFA& Output)
+	bool NfaT::EdgeT::HasCapture() const
 	{
-
-		using NodeSet = EpsilonNFA::NodeSet;
-
-		switch (NT.Reduce.Mask)
+		for (auto& Ite : Propertys)
 		{
-		case 40:
-			return NT[0].Consume();
-		case 41:
-		{
-			char32_t Cur = NT[0].Consume<char32_t>();
-			SeqIntervalT Ptr({ Cur, Cur + 1 });
-			return Ptr;
-		}
-		case 42:
-		{
-			char32_t Cur = NT[0].Consume<char32_t>();
-			char32_t Cur2 = NT[2].Consume<char32_t>();
-
-			if (Cur <= Cur2)
+			if (Ite.Type == EdgePropertyE::CaptureBegin || Ite.Type == EdgePropertyE::CaptureEnd)
 			{
-				return SeqIntervalT({ Cur, Cur2 + 1 });
-			}
-			else {
-				return SeqIntervalT({ Cur2, Cur + 1 });
+				return true;
 			}
 		}
-		case 1:
-			return NT[0].Consume();
-		case 3:
+		return false;
+	}
+	bool NfaT::EdgeT::HasCounter() const
+	{
+		for (auto& Ite : Propertys)
 		{
-			auto T1 = NT[0].Consume<SeqIntervalT>();
-			auto T2 = NT[1].Consume<SeqIntervalT>();
-			return SeqIntervalT{ {T1.AsWrapper().Union(T2.AsWrapper())} };
+			if (
+				Ite.Type == EdgePropertyE::OneCounter
+				|| Ite.Type == EdgePropertyE::AddCounter
+				|| Ite.Type == EdgePropertyE::LessCounter
+				|| Ite.Type == EdgePropertyE::BiggerCounter
+			)
+			{
+				return true;
+			}
 		}
-		case 60:
-		{
-			auto T1 = NT[0].Consume<char32_t>();
-			SeqIntervalT Ptr({ T1, T1 + 1 });
-			return Ptr;
-		}
-		case 61:
-		{
-			auto T1 = NT[0].Consume<char32_t>();
-			SeqIntervalT Ptr2({ T1, T1 + 1 });
-			auto T2 = NT[1].Consume<SeqIntervalT>();
-			return SeqIntervalT{T2.AsWrapper().Union(Ptr2.AsWrapper())};
-		}
-		case 62:
-		{
-			auto T1 = NT[1].Consume<char32_t>();
-			SeqIntervalT Ptr2({ T1, T1 + 1 });
-			auto T2 = NT[0].Consume<SeqIntervalT>();
-			return SeqIntervalT{T2.AsWrapper().Union(Ptr2.AsWrapper())};
-		}
-		case 63:
-		{
-			return NT[0].Consume();
-		}
-		case 4:
-		{
-			auto T1 = Output.NewNode(NT.TokenIndex.Begin());
-			auto T2 = Output.NewNode(NT.TokenIndex.Begin());
-			NodeSet Set{ T1, T2 };
-			Output.AddComsumeEdge(T1, T2, NT[1].Consume<SeqIntervalT>());
-			return Set;
-		}
-		case 5:
-		{
-			auto Tar = NT[2].Consume<SeqIntervalT>();
-			auto P = MaxIntervalRange().AsWrapper().Remove(Tar);
-			auto T1 = Output.NewNode(NT.TokenIndex.Begin());
-			auto T2 = Output.NewNode(NT.TokenIndex.Begin());
-			NodeSet Set{ T1, T2 };
-			Output.AddComsumeEdge(T1, T2, P);
-			return Set;
-		}
-		case 6:
-		{
-			return NT[3].Consume();
-		}
-		case 7:
-		{
-			auto T1 = Output.NewNode(NT.TokenIndex.Begin());
-			auto T2 = Output.NewNode(NT.TokenIndex.Begin());
-			NodeSet Last = NT.Datas[1].Consume<NodeSet>();
-			NodeSet Set{ T1, T2 };
-			Output.AddCapture(Set, Last);
-			return Set;
-		}
-		case 8:
-		{
-			NodeSet Last1 = NT[0].Consume<NodeSet>();
-			NodeSet Last2 = NT[2].Consume<NodeSet>();
-			auto T1 = Output.NewNode(NT.TokenIndex.Begin());
-			auto T2 = Output.NewNode(NT.TokenIndex.Begin());
-			Output.AddComsumeEdge(T1, Last1.In, {});
-			Output.AddComsumeEdge(T1, Last2.In, {});
-			Output.AddComsumeEdge(Last1.Out, T2, {});
-			Output.AddComsumeEdge(Last2.Out, T2, {});
-			return NodeSet{ T1, T2 };
-		}
-		case 9:
-		{
-			auto T1 = Output.NewNode(NT.TokenIndex.Begin());
-			auto T2 = Output.NewNode(NT.TokenIndex.Begin());
-			auto Tar = NT[0].Consume<char32_t>();
-			NodeSet Set{ T1, T2 };
-			Output.AddComsumeEdge(T1, T2, { {Tar, Tar + 1} });
-			return Set;
-		}
-		case 50:
-		{
-			auto T1 = Output.NewNode(NT.TokenIndex.Begin());
-			auto T2 = Output.NewNode(NT.TokenIndex.Begin());
-			NodeSet Set{ T1, T2 };
-			Output.AddComsumeEdge(T1, T2, NT[0].Consume<SeqIntervalT>());
-			return Set;
-		}
-		case 10:
-		{
-			return NT[0].Consume();
-		}
-		case 11:
-		{
-			auto Last1 = NT[0].Consume<NodeSet>();
-			auto Last2 = NT[1].Consume<NodeSet>();
-			Output.AddComsumeEdge(Last1.Out, Last2.In, {});
-			return NodeSet{ Last1.In, Last2.Out };
-		}
-		case 12:
-		{
-			auto T1 = Output.NewNode(NT.TokenIndex.Begin());
-			auto T2 = Output.NewNode(NT.TokenIndex.Begin());
-			auto Last1 = NT[0].Consume<NodeSet>();
-			Output.AddComsumeEdge(T1, Last1.In, {});
-			Output.AddComsumeEdge(T1, T2, {});
-			Output.AddComsumeEdge(Last1.Out, Last1.In, {});
-			Output.AddComsumeEdge(Last1.Out, T2, {});
-			return NodeSet{ T1, T2 };
-		}
-		case 13:
-		{
-			auto T1 = Output.NewNode(NT.TokenIndex.Begin());
-			auto T2 = Output.NewNode(NT.TokenIndex.Begin());
-			auto Last1 = NT[0].Consume<NodeSet>();
-			Output.AddComsumeEdge(T1, Last1.In, {});
-			Output.AddComsumeEdge(Last1.Out, Last1.In, {});
-			Output.AddComsumeEdge(Last1.Out, T2, {});
-			return NodeSet{ T1, T2 };
-		}
-		case 14:
-		{
-			auto T1 = Output.NewNode(NT.TokenIndex.Begin());
-			auto T2 = Output.NewNode(NT.TokenIndex.Begin());
-			auto Last1 = NT[0].Consume<NodeSet>();
-			Output.AddComsumeEdge(T1, T2, {});
-			Output.AddComsumeEdge(T1, Last1.In, {});
-			Output.AddComsumeEdge(Last1.Out, T2, {});
-			Output.AddComsumeEdge(Last1.Out, Last1.In, {});
-			return NodeSet{ T1, T2 };
-		}
-		case 15:
-		{
-			auto T1 = Output.NewNode(NT.TokenIndex.Begin());
-			auto T2 = Output.NewNode(NT.TokenIndex.Begin());
-			auto Last1 = NT[0].Consume<NodeSet>();
-			Output.AddComsumeEdge(T1, Last1.In, {});
-			Output.AddComsumeEdge(Last1.Out, T2, {});
-			Output.AddComsumeEdge(Last1.Out, Last1.In, {});
-			return NodeSet{ T1, T2 };
-		}
-		case 16:
-		{
-			auto T1 = Output.NewNode(NT.TokenIndex.Begin());
-			auto T2 = Output.NewNode(NT.TokenIndex.Begin());
-			auto Last1 = NT[0].Consume<NodeSet>();
-			Output.AddComsumeEdge(T1, Last1.In, {});
-			Output.AddComsumeEdge(Last1.Out, T2, {});
-			Output.AddComsumeEdge(T1, T2, {});
-			return NodeSet{ T1, T2 };
-		}
-		case 17:
-		{
-			auto T1 = Output.NewNode(NT.TokenIndex.Begin());
-			auto T2 = Output.NewNode(NT.TokenIndex.Begin());
-			auto Last1 = NT[0].Consume<NodeSet>();
-			Output.AddComsumeEdge(T1, T2, {});
-			Output.AddComsumeEdge(T1, Last1.In, {});
-			Output.AddComsumeEdge(Last1.Out, T2, {});
-			return NodeSet{ T1, T2 };
-		}
-		case 18:
-		{
-			char32_t Te = NT[0].Consume<char32_t>();
-			std::size_t Count = Te - U'0';
-			return Count;
-		}
-		case 19:
-		{
-			auto Te = NT[0].Consume<std::size_t>();
-			Te *= 10;
-			auto Te2 = NT[1].Consume<char32_t>();
-			Te += Te2 - U'0';
-			return Te;
-		}
-		case 20: // {num}
-			return Output.AddCounter(NT.TokenIndex.Begin(), NT[0].Consume<NodeSet>(), NT[2].Consume<std::size_t>(), {}, {}, false);
-		case 25: // {,N}?
-			return Output.AddCounter(NT.TokenIndex.Begin(), NT[0].Consume<NodeSet>(), {}, {}, NT[3].Consume<std::size_t>(), false);
-		case 21: // {,N}
-			return Output.AddCounter(NT.TokenIndex.Begin(), NT[0].Consume<NodeSet>(), {}, {}, NT[3].Consume<std::size_t>(), true);
-		case 26: // {N,} ?
-			return Output.AddCounter(NT.TokenIndex.Begin(), NT[0].Consume<NodeSet>(), NT[2].Consume<std::size_t>(), {}, {}, false);
-		case 22: // {N,}
-			return Output.AddCounter(NT.TokenIndex.Begin(), NT[0].Consume<NodeSet>(), NT[2].Consume<std::size_t>(), {}, {}, true);
-		case 27: // {N, N} ?
-			return Output.AddCounter(NT.TokenIndex.Begin(), NT[0].Consume<NodeSet>(), {}, NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), false);
-		case 23: // {N, N}
-			return Output.AddCounter(NT.TokenIndex.Begin(), NT[0].Consume<NodeSet>(), {}, NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), true);
-		default:
-			assert(false);
-			return {};
-			break;
-		}
+		return false;
+
 	}
 
-	std::any RegTerminalFunction(Potato::SLRX::TElement& Ele, RegLexer& Translater)
+	std::size_t NfaT::AddNode()
 	{
-		auto& Ref = Translater.GetSpan()[Ele.Shift.TokenIndex].Acceptable;
-		if (std::holds_alternative<char32_t>(Ref))
-		{
-			return std::get<char32_t>(Ref);
-		}
-		else if (std::holds_alternative<SeqIntervalT>(Ref))
-		{
-			return std::move(std::get<SeqIntervalT>(Ref));
-		}
-		else
-		{
-			assert(false);
-			return {};
-		}
+		NodeT Node;
+		auto OldSize = Nodes.size();
+		Node.CurIndex = OldSize;
+		Nodes.push_back(std::move(Node));
+		return OldSize;
 	}
 
-	std::size_t EpsilonNFA::NewNode(std::size_t TokenIndex)
+	Misc::IndexSpan<> Translate(Misc::IndexSpan<> TokenIndex, std::span<RegLexerT::ElementT const> Tokens)
 	{
-		std::size_t Index = Nodes.size();
-		Nodes.push_back({ Index, {}, TokenIndex });
-		return Index;
-	}
-
-	EpsilonNFA::NodeSet EpsilonNFA::AddCounter(std::size_t TokenIndex, NodeSet InSideSet, std::optional<std::size_t> Equal, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool IsGreedy)
-	{
-		if (Equal.has_value() || (Min.has_value() && Max.has_value() && *Min == *Max))
+		Misc::IndexSpan<> Result;
+		for (auto Index = TokenIndex.Begin() + 1; Index < TokenIndex.End(); ++Index)
 		{
-			std::size_t Tar = Equal.has_value() ? *Equal : *Min;
-			if (Tar == 0)
-			{
-				auto T1 = NewNode(Nodes[InSideSet.In].TokenIndex);
-				auto T2 = NewNode(TokenIndex);
-				AddComsumeEdge(T1, T2, {});
-				return NodeSet{T1, T2};
-			}
-			else if (Tar == 1)
-			{
-				return InSideSet;
-			}
-		}
-		else if (Min.has_value() && !Max.has_value() && *Min <= 1)
-		{
-			std::size_t Index = *Min;
-			auto T1 = NewNode(TokenIndex);
-			auto T2 = NewNode(TokenIndex);
-
-			if (Index == 0)
-			{
-				if (IsGreedy)
-				{
-					AddComsumeEdge(T1, InSideSet.In, {});
-					AddComsumeEdge(T1, T2, {});
-				}
-				else {
-					AddComsumeEdge(T1, T2, {});
-					AddComsumeEdge(T1, InSideSet.In, {});
-				}
-			}
+			if(Result.End() == 0)
+				Result = Tokens[Index].Token;
 			else
-				AddComsumeEdge(T1, InSideSet.In, {});
-			if (IsGreedy)
-			{
-				AddComsumeEdge(InSideSet.Out, InSideSet.In, {});
-				AddComsumeEdge(InSideSet.Out, T2, {});
-			}
-			else {
-				AddComsumeEdge(InSideSet.Out, T2, {});
-				AddComsumeEdge(InSideSet.Out, InSideSet.In, {});
-			}
-			return NodeSet{ T1, T2 };
-		}
-		else if ((!Min.has_value() || (Min.has_value() && *Min == 0)) && Max.has_value() && *Max <= 1)
-		{
-			if (*Max == 0)
-			{
-				auto T1 = NewNode(TokenIndex);
-				auto T2 = NewNode(TokenIndex);
-				AddComsumeEdge(T1, T2, {});
-				return NodeSet{ T1, T2 };
-			}
-			else {
-				auto T1 = NewNode(TokenIndex);
-				auto T2 = NewNode(TokenIndex);
-				if (IsGreedy)
-				{
-					AddComsumeEdge(T1, InSideSet.In, {});
-					AddComsumeEdge(T1, T2, {});
-				}
-				else {
-					AddComsumeEdge(T1, T2, {});
-					AddComsumeEdge(T1, InSideSet.In, {});
-				}
-				AddComsumeEdge(InSideSet.Out, T2, {});
-				return NodeSet{T1, T2};
-			}
-		}	
-
-		auto T1 = NewNode(TokenIndex);
-		auto T2 = NewNode(TokenIndex);
-		auto T3 = NewNode(TokenIndex);
-		auto T4 = NewNode(TokenIndex);
-
-		{
-			EpsilonNFA::Edge Edge{ {EpsilonNFA::EdgeType::CounterPush}, T2, 0 };
-			AddEdge(T1, std::move(Edge));
-		}
-
-		AddComsumeEdge(T2, InSideSet.In, {});
-		AddComsumeEdge(InSideSet.Out, T3, {});
-
-		auto Start = T3;
-
-		if (Equal.has_value() || Max.has_value())
-		{
-			Start = NewNode(TokenIndex);
-			std::size_t Tar = Equal.has_value() ? *Equal : *Max;
-			assert(Tar > 1);
-
-			Counter Tem;
-			Misc::SerilizerHelper::CrossTypeSetThrow<RegexOutOfRange>(Tem.Target, Tar - 1, RegexOutOfRange::TypeT::Counter, Tar - 1);
-
-			EpsilonNFA::Edge Edge{ {EpsilonNFA::EdgeType::CounterSmallEqual, Tem}, Start, 0 };
-			AddEdge(T3, std::move(Edge));
-		}
-
-		{
-			EpsilonNFA::Edge Edge{ {EpsilonNFA::EdgeType::CounterAdd}, T2, 0 };
-			AddEdge(Start, std::move(Edge));
-		}
-
-		Start = T3;
-
-		if (Min.has_value())
-		{
-			Counter Tem;
-			Misc::SerilizerHelper::CrossTypeSetThrow<RegexOutOfRange>(Tem.Target, *Min, RegexOutOfRange::TypeT::Counter, *Min);
-
-			auto New = NewNode(TokenIndex);
-
-			EpsilonNFA::Edge Edge{ {EpsilonNFA::EdgeType::CounterBigEqual, Tem}, New, 0 };
-			AddEdge(Start, std::move(Edge));
-
-			Start = New;
-		}
-
-		if (Max.has_value())
-		{
-			Counter Tem;
-			Misc::SerilizerHelper::CrossTypeSetThrow<RegexOutOfRange>(Tem.Target, *Max, RegexOutOfRange::TypeT::Counter, *Max);
-
-			auto New = NewNode(TokenIndex);
-			EpsilonNFA::Edge Edge{ {EpsilonNFA::EdgeType::CounterSmallEqual, Tem}, New, 0 };
-			AddEdge(Start, std::move(Edge));
-
-			Start = New;
-		}
-
-		{
-			EpsilonNFA::Edge Edge{ {EpsilonNFA::EdgeType::CounterPop}, T4, 0 };
-			AddEdge(Start, std::move(Edge));
-		}
-
-		if (!IsGreedy)
-		{
-			auto& Ref = Nodes[T3].Edges;
-			assert(Ref.size() == 2);
-			std::swap(Ref[0], Ref[1]);
-		}
-
-		return NodeSet{ T1, T4 };
-	}
-
-	void EpsilonNFA::AddComsumeEdge(std::size_t From, std::size_t To, std::vector<IntervalT> Acceptable) {
-		Edge NewEdge;
-		NewEdge.Property.Type = EdgeType::Consume;
-		NewEdge.Property.Datas = std::move(Acceptable);
-		NewEdge.ShiftNode = To;
-		AddEdge(From, std::move(NewEdge));
-	}
-
-	void EpsilonNFA::AddAcceptableEdge(std::size_t From, std::size_t To, Accept Data)
-	{
-		Edge NewEdge;
-		NewEdge.Property.Type = EdgeType::Acceptable;
-		NewEdge.ShiftNode = To;
-		NewEdge.Property.Datas = std::move(Data);
-		AddEdge(From, std::move(NewEdge));
-	}
-
-	void EpsilonNFA::AddCapture(NodeSet OutsideSet, NodeSet InsideSet)
-	{
-		Edge NewEdge;
-		NewEdge.ShiftNode = InsideSet.In;
-		NewEdge.Property.Type = EdgeType::CaptureBegin;
-		AddEdge(OutsideSet.In, NewEdge);
-
-		NewEdge.ShiftNode = OutsideSet.Out;
-		NewEdge.Property.Type = EdgeType::CaptureEnd;
-		AddEdge(InsideSet.Out, NewEdge);
-	}
-
-	void EpsilonNFA::AddEdge(std::size_t FormNodeIndex, Edge Edge)
-	{
-		assert(FormNodeIndex < Nodes.size());
-		auto& Cur = Nodes[FormNodeIndex];
-		Edge.UniqueID = 0;
-		Cur.Edges.push_back(std::move(Edge));
-	}
-
-	void EpsilonNFA::Link(EpsilonNFA const& OtherTable, bool ThisHasHigherPriority)
-	{
-		if (!OtherTable.Nodes.empty())
-		{
-			if (Nodes.empty())
-			{
-				Nodes = OtherTable.Nodes;
-			}
-			else {
-				for (auto& Ite : Nodes)
-				{
-					for (auto& Ite2 : Ite.Edges)
-					{
-						Ite2.UniqueID += 1;
-					}
-				}
-				Nodes.reserve(Nodes.size() + OtherTable.Nodes.size());
-				std::size_t NodeOffset = Nodes.size();
-				for (auto& Ite : OtherTable.Nodes)
-				{
-					Node NewNode{ Ite.Index + NodeOffset, {} };
-					NewNode.Edges.reserve(Ite.Edges.size());
-					for (auto& Ite2 : Ite.Edges)
-					{
-						auto NewEdges = Ite2;
-						NewEdges.ShiftNode += NodeOffset;
-						NewNode.Edges.push_back(NewEdges);
-					}
-					Nodes.push_back(std::move(NewNode));
-				}
-				Edge NewEdges;
-				NewEdges.Property.Type = EdgeType::Consume;
-				NewEdges.Property.Datas = std::vector<IntervalT>{};
-				NewEdges.ShiftNode = NodeOffset;
-				if (ThisHasHigherPriority)
-					Nodes[0].Edges.emplace_back(NewEdges);
-				else {
-					auto& Ref = Nodes[0].Edges;
-					Ref.emplace(Ref.begin(), NewEdges);
-				}
-			}
-		}
-	}
-
-	std::optional<std::size_t> CreateUnfaTable(RegLexer& Translater, EpsilonNFA& Output, Accept AcceptData)
-	{
-		auto N1 = Output.NewNode(0);
-		auto N2 = Output.NewNode(0);
-		auto N3 = Output.NewNode(0);
-		Output.AddComsumeEdge(N2, N3, { {EndOfFile(), EndOfFile() + 1} });
-		auto Wrapper = RexSLRXWrapper();
-
-		SLRX::SymbolProcessor Pro(Wrapper);
-		std::size_t TokenIndex = 0;
-		auto Spans = Translater.GetSpan();
-		for (auto& Ite : Translater.GetSpan())
-		{
-			if (!Pro.Consume(*Ite.Value, TokenIndex))
-				return { Ite.TokenIndex };
-			TokenIndex++;
-		}
-		if (!Pro.EndOfFile())
-			return Spans.empty() ? 0 : Spans.rbegin()->TokenIndex;
-
-		EpsilonNFA::NodeSet Set = SLRX::ProcessParsingStepWithOutputType<EpsilonNFA::NodeSet>(Pro.GetSteps(),
-			[&](SLRX::VariantElement Elements)-> std::any {
-				if (Elements.IsTerminal())
-					return RegTerminalFunction(Elements.AsTerminal(), Translater);
-				else
-					return RegNoTerminalFunction(Elements.AsNoTerminal(), Output);
-			}
-		);
-		Output.AddComsumeEdge(N1, Set.In, {});
-		Output.AddAcceptableEdge(Set.Out, N2, AcceptData);
-		return {};
-	}
-
-	template<typename CharT>
-	EpsilonNFA CreateEpsilonNFAImp(std::basic_string_view<CharT> Str, bool IsRaw, Accept AcceptData)
-	{
-		EpsilonNFA Result;
-		RegLexer Tran(IsRaw);
-		std::size_t TokenIndex = 0;
-		auto Span = std::span(Str);
-		char32_t Tembuffer;
-		std::span<char32_t> OutSpan = { &Tembuffer, 1 };
-		while (!Span.empty())
-		{
-			auto Re = Encode::CharEncoder<CharT, char32_t>::EncodeOnceUnSafe(Span, OutSpan);
-			assert(Re);
-			if (!Tran.Consume(Tembuffer, TokenIndex))
-				throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, TokenIndex };
-			Span = Span.subspan(Re.SourceSpace);
-			TokenIndex += Re.SourceSpace;
-		}
-		if (!Tran.EndOfFile())
-		{
-			throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, TokenIndex };
-		}
-
-		auto Re = CreateUnfaTable(Tran, Result, AcceptData);
-		if (Re.has_value())
-		{
-			throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, *Re };
+				Result = Result.Expand(Tokens[Index].Token);
 		}
 		return Result;
 	}
 
-	EpsilonNFA EpsilonNFA::Create(std::u8string_view Str, bool IsRaw, Accept AcceptData)
+	void NfaT::AddConsume(NodeSetT Set, IntervalT Chars, ContentT Content)
 	{
-		return CreateEpsilonNFAImp(Str, IsRaw, std::move(AcceptData));
+		EdgeT Edge;
+		Edge.ToNode = Set.Out;
+		Edge.CharSets = std::move(Chars);
+		Edge.TokenIndex = Translate(Content.TokenIndex, Content.Tokens);
+		Nodes[Set.In].Edges.push_back(std::move(Edge));
 	}
 
-	EpsilonNFA EpsilonNFA::Create(std::wstring_view Str, bool IsRaw, Accept AcceptData)
+	Misc::IndexSpan<> NfaT::CollectTokenIndexFromNodePath(std::span<NodeT const> NodeView, Misc::IndexSpan<> Default, std::span<std::size_t const> NodeStateView)
 	{
-		return CreateEpsilonNFAImp(Str, IsRaw, std::move(AcceptData));
-	}
-
-	EpsilonNFA EpsilonNFA::Create(std::u16string_view Str, bool IsRaw, Accept AcceptData)
-	{
-		return CreateEpsilonNFAImp(Str, IsRaw, std::move(AcceptData));
-	}
-
-	EpsilonNFA EpsilonNFA::Create(std::u32string_view Str, bool IsRaw, Accept AcceptData)
-	{
-		return CreateEpsilonNFAImp(Str, IsRaw, std::move(AcceptData));
-	}
-
-	struct ExpandResult
-	{
-		std::vector<std::size_t> ContainNodes;
-		std::vector<NFA::Edge> Edges;
-	};
-
-	struct SearchCore
-	{
-		std::size_t ToNode;
-		
-		struct Element
+		for (auto Ite1 = NodeStateView.begin(); Ite1 != NodeStateView.end(); ++Ite1)
 		{
-			std::size_t From;
-			std::size_t To;
-			EpsilonNFA::PropertyT Propertys;
-		};
-
-		std::vector<Element> Propertys;
-
-		struct UniqueID
-		{
-			bool HasUniqueID;
-			std::size_t UniqueID;
-		};
-		std::optional<UniqueID> UniqueID;
-		void AddUniqueID(std::size_t ID)
-		{
-			if (!UniqueID.has_value())
+			auto Next = Ite1 + 1;
+			if (Next != NodeStateView.end())
 			{
-				UniqueID = {true, ID };
-			}
-			else {
-				if (UniqueID->HasUniqueID && UniqueID->UniqueID != ID)
-					UniqueID->HasUniqueID = false;
-			}
-		}
-	};
-
-	bool CheckProperty(std::span<SearchCore::Element const> Ref)
-	{
-		std::vector<std::size_t> Temp;
-		for (auto& Ite : Ref)
-		{
-			switch (Ite.Propertys.Type)
-			{
-			case EpsilonNFA::EdgeType::CounterPush:
-				Temp.push_back(0);
-				break;
-			case EpsilonNFA::EdgeType::CounterAdd:
-				if (!Temp.empty())
-					*Temp.rbegin() += 1;
-				break;
-			case EpsilonNFA::EdgeType::CounterPop:
-				if (!Temp.empty())
-					Temp.pop_back();
-				break;
-			case EpsilonNFA::EdgeType::CounterEqual:
-				if (!Temp.empty())
+				auto& Edges = NodeView[*Ite1].Edges;
+				for (auto& Ite : Edges)
 				{
-					auto Last = *Temp.rbegin();
-					return Last == std::get<Counter>(Ite.Propertys.Datas).Target;
-				}
-				break;
-			case EpsilonNFA::EdgeType::CounterSmallEqual:
-				if (!Temp.empty())
-				{
-					auto Last = *Temp.rbegin();
-					return Last <= std::get<Counter>(Ite.Propertys.Datas).Target;
-				}
-				break;
-			case EpsilonNFA::EdgeType::CounterBigEqual:
-				if (!Temp.empty())
-				{
-					auto Last = *Temp.rbegin();
-					return Last >= std::get<Counter>(Ite.Propertys.Datas).Target;
-				}
-				break;
-			default:
-				break;
-			}
-			return true;
-		}
-		return true;
-	}
-
-	ExpandResult SearchEpsilonNode(EpsilonNFA const& Input, std::size_t SearchNode)
-	{
-		ExpandResult Result;
-
-		std::vector<SearchCore> SearchStack;
-		
-		SearchStack.push_back({ SearchNode, {}, {}});
-		Result.ContainNodes.push_back(SearchNode);
-		while (!SearchStack.empty())
-		{
-			auto Cur = std::move(*SearchStack.rbegin());
-			SearchStack.pop_back();
-			assert(Input.Nodes.size() > Cur.ToNode);
-			auto& Node = Input.Nodes[Cur.ToNode];
-			for (auto EdgeIte = Node.Edges.rbegin(); EdgeIte != Node.Edges.rend(); ++EdgeIte)
-			{
-				auto& Ite = *EdgeIte;
-
-				bool IsLast = ( EdgeIte  + 1 == Node.Edges.rend());
-
-				if (Ite.Property.Type == EpsilonNFA::EdgeType::Consume && !std::get<std::vector<IntervalT>>(Ite.Property.Datas).empty())
-				{
-					if (!CheckProperty(std::span(Cur.Propertys)))
-						continue;
-
-					NFA::Edge NewEdge;
-					NewEdge.ToNode = Ite.ShiftNode;
-
-					Cur.AddUniqueID(Ite.UniqueID);
-
-					assert(Cur.UniqueID.has_value());
-
-					if (Cur.UniqueID->HasUniqueID)
-						NewEdge.UniqueID = Cur.UniqueID->UniqueID;
-					NewEdge.ConsumeChars = std::get<std::vector<IntervalT>>(Ite.Property.Datas);
-					for (auto& Ite : Cur.Propertys)
+					if (Ite.ToNode == *Next)
 					{
-						if(Ite.Propertys.Type != EpsilonNFA::EdgeType::Consume)
-							NewEdge.Propertys.push_back(Ite.Propertys);
-					}
-
-					Result.Edges.push_back(std::move(NewEdge));
-
-				}
-				else {
-
-					auto CircleDetected = std::find_if(Cur.Propertys.begin(), Cur.Propertys.end(), [&](SearchCore::Element& Ele){
-						return Ele.From == Ite.ShiftNode;
-					});
-
-					if (CircleDetected != Cur.Propertys.end())
-					{
-						throw Exception::CircleShifting{};
-					}
-
-					Result.ContainNodes.push_back(Ite.ShiftNode);
-
-					SearchCore NewOne;
-					if (IsLast)
-						NewOne = std::move(Cur);
-					else
-						NewOne = Cur;
-
-					NewOne.AddUniqueID(Ite.UniqueID);
-
-					NewOne.Propertys.push_back({ NewOne.ToNode, Ite.ShiftNode, Ite.Property });
-					NewOne.ToNode = Ite.ShiftNode;
-					SearchStack.push_back(std::move(NewOne));
-				}
-			}
-		}
-		return Result;
-	}
-
-	struct NodeAllocator
-	{
-		std::vector<std::vector<std::size_t>> Mapping;
-		std::tuple<std::size_t, bool> FindOrAdd(std::span<std::size_t const> Ref) {
-			auto Res = Find(Ref);
-			if(Res.has_value())
-				return {*Res, false};
-			else {
-				std::size_t ID = Mapping.size();
-				std::vector<std::size_t> NewSet{ Ref .begin(), Ref.end() };
-				Mapping.push_back(std::move(NewSet));
-				return {ID, true};
-			}
-		}
-		std::optional<std::size_t> Find(std::span<std::size_t const> Ref) const
-		{
-			for (std::size_t I = 0; I < Mapping.size(); ++I)
-			{
-				auto TRef = std::span(Mapping[I]);
-				if(TRef.size() == Ref.size() && std::equal(TRef.begin(), TRef.end(), Ref.begin(), Ref.end()))
-					return I;
-			}
-			return {};
-		}
-		std::size_t Size() const { return Mapping.size(); }
-		std::span<std::size_t const> Read(std::size_t Require)  const
-		{
-			assert(Mapping.size() > Require);
-			return std::span(Mapping[Require]);
-		}
-	};
-
-	NFA NFA::Create(EpsilonNFA const& Table)
-	{
-		std::vector<Node> Nodes;
-
-		struct NodeStorage
-		{
-			std::size_t FirstStartNode;
-			std::vector<Edge> Edges;
-		};
-
-		std::vector<NodeStorage> NodesFastMapping;
-
-		NodesFastMapping.push_back({ 0, {} });
-
-		for (std::size_t Index = 0; Index < NodesFastMapping.size(); ++Index)
-		{
-			auto SearchNode = NodesFastMapping[Index].FirstStartNode;
-			auto SearchResult = SearchEpsilonNode(Table, SearchNode);
-			for (auto& Ite : SearchResult.Edges)
-			{
-				std::optional<std::size_t> FindedState;
-				for (std::size_t Index2 = 0; Index2 < NodesFastMapping.size(); ++Index2)
-				{
-					if (Ite.ToNode == NodesFastMapping[Index2].FirstStartNode)
-					{
-						FindedState = Index2;
+						Default = Default.Expand(Ite.TokenIndex);
 						break;
 					}
 				}
-				if (!FindedState.has_value())
-				{
-					FindedState = NodesFastMapping.size();
-					NodesFastMapping.push_back({ Ite.ToNode, {} });
-				}
-				assert(FindedState.has_value());
-				Ite.ToNode = *FindedState;
 			}
-			NodesFastMapping[Index].Edges = std::move(SearchResult.Edges);
 		}
-
-		for (auto& Ite : NodesFastMapping)
-		{
-			Nodes.push_back({ std::move(Ite.Edges) });
-		}
-
-		return {std::move(Nodes)};
+		return Default;
 	}
-
-	struct TemporaryProperty
+	
+	NfaT::NfaT(RegLexerT const& Lexer, std::size_t Mask)
 	{
-		std::vector<EpsilonNFA::PropertyT> Propertys;
-		std::size_t OriginalFrom;
-		std::size_t OriginalTo;
-		std::size_t UniqueID;
-		bool HasCounter = false;
-		bool HasAcceptable = false;
-		bool operator ==(TemporaryProperty const&) const = default;
-	};
-
-	struct TemporaryEdge
-	{
-		std::vector<TemporaryProperty> Propertys;
-		std::vector<IntervalT> ConsumeSymbols;
-		std::vector<std::size_t> ToIndexs;
-		bool operator ==(TemporaryEdge const&) const = default;
-	};
-
-	struct TemporaryNode
-	{
-		std::vector<TemporaryEdge> KeepAcceptEdges;
-		std::vector<TemporaryEdge> Edges;
-		bool HasAccept = false;
-	};
-
-	void CollectEdgeProperty(std::size_t SourceIndex, NFA::Edge const& Source, TemporaryProperty& Target)
-	{
-		Target.OriginalFrom = SourceIndex;
-		Target.OriginalTo = Source.ToNode;
-		Target.UniqueID = Source.UniqueID;
-		Target.HasAcceptable = false;
-		Target.HasCounter = false;
-		Target.Propertys.reserve(Source.Propertys.size());
-		for (auto& Ite : Source.Propertys)
+		auto InputSpan = Lexer.GetSpan();
+		SLRX::SymbolProcessor SymPro(RexSLRXWrapper());
+		auto IteSpan = InputSpan;
+		while (!IteSpan.empty())
 		{
-			switch (Ite.Type)
+			auto Top = *IteSpan.begin();
+			if (!SymPro.Consume(*Top.Value, InputSpan.size() - IteSpan.size()))
+				throw UnaccaptableRegexTokenIndex{
+						UnaccaptableRegexTokenIndex::TypeT::BadRegex,
+						Top.Token
+					};
+			IteSpan = IteSpan.subspan(1);
+		}
+		if (!SymPro.EndOfFile())
+		{
+			throw UnaccaptableRegexTokenIndex{
+					UnaccaptableRegexTokenIndex::TypeT::BadRegex,
+				InputSpan.empty() ? Misc::IndexSpan<>{0, 0} : InputSpan.rbegin()->Token
+			};
+		}
+
+		auto StepSpan = SymPro.GetSteps();
+
+		auto Top = AddNode();
+
+		std::size_t CaptureCount = 0;
+		std::size_t CounterCount = 0;
+
+		auto Re = ProcessParsingStepWithOutputType<NodeSetT>(StepSpan, [&, this](SLRX::VariantElement Var) -> std::any
+		{
+			if (Var.IsTerminal())
 			{
-			case EpsilonNFA::EdgeType::Acceptable:
-				Target.HasAcceptable = true;
-				break;
-			case EpsilonNFA::EdgeType::CounterBigEqual:
-			case EpsilonNFA::EdgeType::CounterEqual:
-			case EpsilonNFA::EdgeType::CounterSmallEqual:
-				Target.HasCounter = true;
-				break;
-			default:
-				break;
+				auto Ele = Var.AsTerminal();
+				if (Ele.Value == *T::ParenthesesLeft)
+				{
+					return CaptureCount++;
+				}
+				else if (Ele.Value == *T::CurlyBracketsLeft)
+				{
+					return CounterCount++;
+				}
+				return InputSpan[Ele.Shift.TokenIndex].Chars;
 			}
-			Target.Propertys.push_back(Ite);
-		}
-	}
-
-	void CollectTemporaryProperty(NFA const& Input, std::span<std::size_t const> Indexs, TemporaryNode& Output)
-	{
-		std::vector<std::size_t> RemovedUniqueID;
-		bool ReadAccept = false;
-		bool LastAccept = false;
-		for (auto IndexIte : Indexs)
-		{
-			auto& NodeRef = Input.Nodes[IndexIte];
-			for (auto& Ite : NodeRef.Edges)
+			else
 			{
 
-				TemporaryProperty Temporary;
-				CollectEdgeProperty(IndexIte, Ite, Temporary);
+				assert(Var.IsNoTerminal());
+				auto NT = Var.AsNoTerminal();
 
-				TemporaryEdge Edges;
-				Edges.ConsumeSymbols = Ite.ConsumeChars;
+				ContentT Content{NT.TokenIndex, InputSpan };
 
-				if (Temporary.HasAcceptable)
+				switch (NT.Reduce.Mask)
 				{
-					ReadAccept = true;
-					LastAccept = true;
-					Output.HasAccept = true;
-					RemovedUniqueID.push_back(Ite.UniqueID);
+				case 40:
+					return NT[0].Consume();
+				case 60:
+				case 41:
+				{
+					return NT[0].Consume<IntervalT>();
 				}
-				else {
-					if (LastAccept)
-						Output.KeepAcceptEdges = Output.Edges;
-					LastAccept = false;
-					if (ReadAccept)
+				case 42:
+				{
+					auto Cur = NT[0].Consume<IntervalT>();
+					auto Cur2 = NT[2].Consume<IntervalT>();
+					return IntervalT{ Cur[0].Expand(Cur2[0])};
+				}
+				case 1:
+					return NT[0].Consume();
+				case 3:
+				{
+					auto T1 = NT[0].Consume<IntervalT>();
+					auto T2 = NT[1].Consume<IntervalT>();
+					return T1 + T2;
+				}
+				case 61:
+				{
+					auto T1 = NT[0].Consume<IntervalT>();
+					auto T2 = NT[1].Consume<IntervalT>();
+					return T1 + T2;
+				}
+				case 62:
+				{
+					auto T1 = NT[1].Consume<IntervalT>();
+					auto T2 = NT[0].Consume<IntervalT>();
+					return T1 + T2;
+				}
+				case 63:
+				{
+					return NT[0].Consume();
+				}
+				case 4:
+				{
+					auto T1 = AddNode();
+					auto T2 = AddNode();
+					NodeSetT Set{ T1, T2 };
+					AddConsume(Set, NT[1].Consume<IntervalT>(), Content);
+					return Set;
+				}
+				case 5:
+				{
+					auto Tar = NT[2].Consume<IntervalT>();
+					auto P = MaxInterval() - Tar;
+					auto T1 = AddNode();
+					auto T2 = AddNode();
+					NodeSetT Set{ T1, T2 };
+					AddConsume(Set, P, Content);
+					return Set;
+				}
+				case 6:
+				{
+					return NT[3].Consume();
+				}
+				case 7:
+				{
+					auto InDex = NT.Datas[0].Consume<std::size_t>();
+					NodeSetT Last = NT.Datas[1].Consume<NodeSetT>();
+					return AddCapture(Last, Content, InDex);
+				}
+				case 8:
+				{
+					NodeSetT Last1 = NT[0].Consume<NodeSetT>();
+					NodeSetT Last2 = NT[2].Consume<NodeSetT>();
+					auto T1 = AddNode();
+					auto T2 = AddNode();
+					AddConsume({T1, Last1.In}, {}, Content);
+					AddConsume({T1, Last2.In}, {}, Content);
+					AddConsume({Last1.Out, T2}, {}, Content);
+					AddConsume({Last2.Out, T2}, {}, Content);
+					return NodeSetT{ T1, T2 };
+				}
+				case 9:
+				{
+					auto T1 = AddNode();
+					auto T2 = AddNode();
+					auto Tar = NT[0].Consume<IntervalT>();
+					NodeSetT Set{ T1, T2 };
+					AddConsume({T1, T2}, std::move(Tar), Content);
+					return Set;
+				}
+				case 50:
+				{
+					auto T1 = AddNode();
+					auto T2 = AddNode();
+					NodeSetT Set{ T1, T2 };
+					AddConsume(Set, NT[0].Consume<IntervalT>(), Content);
+					return Set;
+				}
+				case 10:
+				{
+					return NT[0].Consume();
+				}
+				case 11:
+				{
+					auto Last1 = NT[0].Consume<NodeSetT>();
+					auto Last2 = NT[1].Consume<NodeSetT>();
+					NodeSetT Set{ Last1.Out, Last2.In };
+					AddConsume(Set, {}, Content);
+					return NodeSetT{Last1.In, Last2.Out};
+				}
+				case 12:
+				{
+					auto T1 = AddNode();
+					auto T2 = AddNode();
+					auto Last1 = NT[0].Consume<NodeSetT>();
+					AddConsume({T1, Last1.In}, {}, Content);
+					AddConsume({T1, T2}, {}, Content);
+					AddConsume({Last1.Out, Last1.In}, {}, Content);
+					AddConsume({Last1.Out, T2}, {}, Content);
+					return NodeSetT{ T1, T2 };
+				}
+				case 13:
+				{
+					auto T1 = AddNode();
+					auto T2 = AddNode();
+					auto Last1 = NT[0].Consume<NodeSetT>();
+					AddConsume({T1, Last1.In}, {}, Content);
+					AddConsume({Last1.Out, Last1.In}, {}, Content);
+					AddConsume({Last1.Out, T2}, {}, Content);
+					return NodeSetT{ T1, T2 };
+				}
+				case 14:
+				{
+					auto T1 = AddNode();
+					auto T2 = AddNode();
+					auto Last1 = NT[0].Consume<NodeSetT>();
+					AddConsume({T1, T2}, {}, Content);
+					AddConsume({T1, Last1.In}, {}, Content);
+					AddConsume({Last1.Out, T2}, {}, Content);
+					AddConsume({Last1.Out, Last1.In}, {}, Content);
+					return NodeSetT{ T1, T2 };
+				}
+				case 15:
+				{
+					auto T1 = AddNode();
+					auto T2 = AddNode();
+					auto Last1 = NT[0].Consume<NodeSetT>();
+					AddConsume({T1, Last1.In}, {}, Content);
+					AddConsume({Last1.Out, T2}, {}, Content);
+					AddConsume({Last1.Out, Last1.In}, {}, Content);
+					return NodeSetT{ T1, T2 };
+				}
+				case 16:
+				{
+					auto T1 = AddNode();
+					auto T2 = AddNode();
+					auto Last1 = NT[0].Consume<NodeSetT>();
+					AddConsume({T1, Last1.In}, {}, Content);
+					AddConsume({Last1.Out, T2}, {}, Content);
+					AddConsume({T1, T2}, {}, Content);
+					return NodeSetT{ T1, T2 };
+				}
+				case 17:
+				{
+					auto T1 = AddNode();
+					auto T2 = AddNode();
+					auto Last1 = NT[0].Consume<NodeSetT>();
+					AddConsume({T1, T2}, {}, Content);
+					AddConsume({T1, Last1.In}, {}, Content);
+					AddConsume({Last1.Out, T2}, {}, Content);
+					return NodeSetT{ T1, T2 };
+				}
+				case 18:
+				{
+					char32_t Te = NT[0].Consume<IntervalT>()[0].Start;
+					std::size_t Count = Te - U'0';
+					return Count;
+				}
+				case 19:
+				{
+					auto Te = NT[0].Consume<std::size_t>();
+					Te *= 10;
+					auto Te2 = NT[1].Consume<IntervalT>()[0].Start;
+					Te += Te2 - U'0';
+					return Te;
+				}
+				case 20: // {num}
+					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), {}, true, Content, NT[0].Consume<std::size_t>());
+				case 25: // {,N}?
+					return AddCounter(NT[0].Consume<NodeSetT>(), {}, NT[3].Consume<std::size_t>(), false, Content, NT[0].Consume<std::size_t>());
+				case 21: // {,N}
+					return AddCounter(NT[0].Consume<NodeSetT>(), {}, NT[3].Consume<std::size_t>(), true, Content, NT[0].Consume<std::size_t>());
+				case 26: // {N,} ?
+					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), {}, false, Content, NT[0].Consume<std::size_t>());
+				case 22: // {N,}
+					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), {}, true, Content, NT[0].Consume<std::size_t>());
+				case 27: // {N, N} ?
+					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), false, Content, NT[1].Consume<std::size_t>());
+				case 23: // {N, N}
+					return AddCounter(NT[0].Consume<NodeSetT>(), NT[2].Consume<std::size_t>(), NT[4].Consume<std::size_t>(), true, Content, NT[1].Consume<std::size_t>());
+				default:
+					assert(false);
+					break;
+				}
+				return {};
+			}
+		});
+
+		{
+			EdgeT Tem;
+			Tem.ToNode = Re.In;
+			Nodes[Top].Edges.push_back(Tem);
+		}
+
+		{
+			auto Last = AddNode();
+			AddConsume({Re.Out, Last}, EndOfFile(), {});
+			Nodes[Last].Accept = AcceptT{Mask, 0};
+		}
+
+		auto TargetNode = std::move(Nodes);
+		Nodes.clear();
+
+		{
+			std::map<std::size_t, std::size_t> NodeMapping;
+
+			std::vector<decltype(NodeMapping)::const_iterator> SearchingStack;
+
+			{
+				auto CT = AddNode();
+				auto [Ite, B] = NodeMapping.insert({ 0, CT });
+				SearchingStack.push_back(Ite);
+			}
+
+			std::vector<std::size_t> StateStack;
+			std::vector<PropertyT> Pros;
+
+			struct StackRecord
+			{
+				std::size_t StateSize;
+				std::size_t PropertySize;
+				std::size_t EdgeSize;
+				std::optional<Misc::IndexSpan<>> TokenIndex;
+			};
+
+			std::vector<StackRecord> RecordStack;
+			
+
+			while (!SearchingStack.empty())
+			{
+				auto Top = *SearchingStack.rbegin();
+				SearchingStack.pop_back();
+				
+				StateStack.clear();
+				Pros.clear();
+				RecordStack.clear();
+				StateStack.push_back(Top->first);
+				std::optional<Misc::IndexSpan<>> LastRecordTokenIndex;
+				RecordStack.push_back({ 1, 0, 0, LastRecordTokenIndex });
+				
+				while (!RecordStack.empty())
+				{
+					auto TopRecord = *RecordStack.rbegin();
+					RecordStack.pop_back();
+					StateStack.resize(TopRecord.StateSize);
+					Pros.resize(TopRecord.PropertySize);
+					LastRecordTokenIndex = TopRecord.TokenIndex;
+					auto& CurNode = TargetNode[*StateStack.rbegin()];
+					if (TopRecord.EdgeSize < CurNode.Edges.size())
 					{
-						if (std::find(RemovedUniqueID.begin(), RemovedUniqueID.end(), Ite.UniqueID) == RemovedUniqueID.end())
+
+						auto& CurEdge = CurNode.Edges[TopRecord.EdgeSize];
+						RecordStack.push_back({ TopRecord.StateSize, TopRecord.PropertySize, TopRecord.EdgeSize + 1, LastRecordTokenIndex });
+						
+						if (LastRecordTokenIndex.has_value())
 						{
-							TemporaryEdge Edges;
-							Edges.ConsumeSymbols = Ite.ConsumeChars;
-							Edges.Propertys.push_back(Temporary); 
-							Output.KeepAcceptEdges.push_back(std::move(Edges));
+							LastRecordTokenIndex = LastRecordTokenIndex->Expand(CurEdge.TokenIndex);
+						}
+						else {
+							LastRecordTokenIndex = CurEdge.TokenIndex;
+						}
+						
+						Pros.insert(Pros.end(), CurEdge.Propertys.begin(), CurEdge.Propertys.end());
+						if (CurEdge.IsEpsilonEdge())
+						{
+							auto SameStateStackIte = std::find(StateStack.begin(), StateStack.end(), CurEdge.ToNode);
+							if (SameStateStackIte != StateStack.end())
+							{
+								StateStack.push_back(CurEdge.ToNode);
+								auto ErrorTokenIndex = CollectTokenIndexFromNodePath(
+									std::span(TargetNode),
+									CurEdge.TokenIndex,
+									std::span(StateStack).subspan(std::distance(StateStack.begin(), SameStateStackIte))
+								);
+								throw UnaccaptableRegexTokenIndex{
+									UnaccaptableRegexTokenIndex::TypeT::BadRegex,
+									ErrorTokenIndex };
+							}
+							StateStack.push_back(CurEdge.ToNode);
+
+							RecordStack.push_back({
+								StateStack.size(),
+								Pros.size(),
+								0,
+								LastRecordTokenIndex
+								});
+						}
+						else {
+							StateStack.push_back(CurEdge.ToNode);
+							std::size_t FinnalToNode = 0;
+							auto [MIte, B] = NodeMapping.insert({ CurEdge.ToNode, FinnalToNode });
+							auto Sets = CurEdge.CharSets;
+							if (B)
+							{
+								FinnalToNode = AddNode();
+
+								{
+									auto& RefToNode = TargetNode[CurEdge.ToNode];
+									if (RefToNode.Accept.has_value())
+									{
+										Nodes[FinnalToNode].Accept = RefToNode.Accept;
+									}
+								}
+
+								MIte->second = FinnalToNode;
+								//if(Sets.Size() != 0)
+								SearchingStack.push_back(MIte);
+							}
+							else {
+								FinnalToNode = MIte->second;
+							}
+
+							auto& CurEdges = Nodes[Top->second].Edges;
+
+							for (auto& Ite : CurEdges)
+							{
+								if (Ite.ToNode == FinnalToNode)
+								{
+									throw 
+										UnaccaptableRegexTokenIndex{
+											UnaccaptableRegexTokenIndex::TypeT::BadRegex,
+											CurEdge.TokenIndex 
+									};
+								}
+							}
+
+							Nodes[Top->second].Edges.push_back({
+									Pros,
+									FinnalToNode,
+									std::move(Sets),
+									(LastRecordTokenIndex.has_value() ? *LastRecordTokenIndex : Misc::IndexSpan<>{0, 0}),
+									CurEdge.MaskIndex
+								}
+							);
 						}
 					}
 				}
-				Edges.Propertys.push_back(std::move(Temporary));
-				Output.Edges.push_back(std::move(Edges));
+			}
+
+			bool Change = true;
+			while (Change)
+			{
+				Change = false;
+				for (std::size_t I1 = 0; I1 < Nodes.size(); ++I1)
+				{
+					for (std::size_t I2 = I1 + 1; I2 < Nodes.size(); )
+					{
+						auto& N1 = Nodes[I1];
+						auto& N2 = Nodes[I2];
+						if (N1 == N2)
+						{
+							for (auto& Ite3 : Nodes)
+							{
+								if (Ite3.CurIndex > N2.CurIndex)
+									--Ite3.CurIndex;
+								for (auto& Ite4 : Ite3.Edges)
+								{
+									if (Ite4.ToNode == N2.CurIndex)
+										Ite4.ToNode = N1.CurIndex;
+									else if (Ite4.ToNode > N2.CurIndex)
+										--Ite4.ToNode;
+								}
+							}
+							Nodes.erase(Nodes.begin() + I2);
+							Change = true;
+						}
+						else {
+							++I2;
+						}
+					}
+				}
 			}
 		}
 	}
 
-	void UnionEdges(std::vector<TemporaryEdge>& TempBuffer, std::vector<TemporaryEdge>& Output)
+	auto NfaT::AddCapture(NodeSetT Inside, ContentT Content, std::size_t CaptureIndex) -> NodeSetT
 	{
-		if (Output.size() >= 2)
+		auto T1 = AddNode();
+		auto T2 = AddNode();
+
+		auto Tk = Translate(Content.TokenIndex, Content.Tokens);
+
+		EdgeT Ege;
+		Ege.Propertys.push_back(
+			{ EdgePropertyE::CaptureBegin, CaptureIndex, 0}
+		);
+		Ege.ToNode = Inside.In;
+		Ege.TokenIndex = Tk;
+
+		Nodes[T1].Edges.push_back(Ege);
+
+		EdgeT Ege2;
+
+		Ege2.Propertys.push_back(
+			{ EdgePropertyE::CaptureEnd, CaptureIndex, 0 }
+		);
+		Ege2.ToNode = T2;
+		Ege2.TokenIndex = Tk;
+
+		Nodes[Inside.Out].Edges.push_back(Ege2);
+
+		return {T1, T2};
+	}
+
+	auto NfaT::AddCounter(NodeSetT Inside, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool Greedy, ContentT Content, std::size_t CounterIndex) -> NodeSetT
+	{
+		auto Tk = Translate(Content.TokenIndex, Content.Tokens);
+		assert(static_cast<bool>(Min) || static_cast<bool>(Max));
+		auto T1 = AddNode();
+		auto T2 = AddNode();
+
+		std::size_t IMin = 0;
+
+		if (Min.has_value())
 		{
-			TempBuffer.clear();
-			bool Change = true;
-			while(Change)
+			IMin = *Min;
+		}
+
+		std::size_t IMax = std::numeric_limits<std::size_t>::max();
+
+		if (Max.has_value())
+		{
+			IMax = *Max;
+		}
+
+		{
+			auto& Ref = Nodes[T1];
+			EdgeT Ege;
+			Ege.Propertys.push_back(
+				{ EdgePropertyE::OneCounter, CounterIndex, 0 }
+			);
+			Ege.ToNode = Inside.In;
+			Ege.TokenIndex = Tk;
+			Ref.Edges.push_back(std::move(Ege));
+
+			if (IMin == 0)
 			{
-				Change = false;
-				std::span<TemporaryEdge> Span = std::span(Output);
+				EdgeT Ege2;
+				Ege2.ToNode = T2;
+				Ege2.TokenIndex = Tk;
+				Ref.Edges.push_back(std::move(Ege2));
+			}
 
-				while (!Span.empty())
+			if (IMin == 0 && !Greedy)
+				std::swap(Ref.Edges[0], Ref.Edges[1]);
+		}
+
+		{
+			EdgeT Ege;
+			Ege.ToNode = Inside.In;
+			Ege.TokenIndex = Tk;
+			if (IMax != 0)
+			{
+				Ege.Propertys.push_back(
+					{ EdgePropertyE::LessCounter, CounterIndex, IMax - 1 }
+				);
+			}
+			Ege.Propertys.push_back(
+				{ EdgePropertyE::AddCounter, CounterIndex, 0 }
+			);
+			EdgeT Ege2;
+			Ege2.ToNode = T2;
+			Ege2.TokenIndex = Tk;
+			if (IMin != 0)
+			{
+				Ege2.Propertys.push_back(
+					{ EdgePropertyE::BiggerCounter, CounterIndex, IMin }
+				);
+			}
+			
+			if (IMax != 0)
+			{
+				Ege2.Propertys.push_back(
+					{ EdgePropertyE::LessCounter, CounterIndex, IMax }
+				);
+			}
+
+			auto& Ref = Nodes[Inside.Out];
+			if (Greedy)
+			{
+				Ref.Edges.push_back(std::move(Ege));
+				Ref.Edges.push_back(std::move(Ege2));
+			}
+			else {
+				Ref.Edges.push_back(std::move(Ege2));
+				Ref.Edges.push_back(std::move(Ege));
+			}
+			
+		}
+		return {T1, T2};
+	}
+
+	void NfaT::Link(NfaT const& Input)
+	{
+		assert(Input.Nodes.size() >= 1);
+		Nodes.reserve(Nodes.size() + Input.Nodes.size() - 1);
+		auto Last = Nodes.size();
+		Nodes.insert(Nodes.end(), Input.Nodes.begin() + 1, Input.Nodes.end());
+		auto Span = std::span(Nodes).subspan(Last);
+		auto IndexOffset = Last - 1;
+		for (auto& Ite : Span)
+		{
+			Ite.CurIndex += IndexOffset;
+			for (auto& Ite2 : Ite.Edges)
+			{
+				Ite2.MaskIndex += MaskIndex;
+				if(Ite2.ToNode != 0)
+					Ite2.ToNode += IndexOffset;
+			}
+			if (Ite.Accept.has_value())
+				Ite.Accept->MaskIndex += MaskIndex;
+		}
+
+		auto& CTopNodeEdge = Nodes[0].Edges;
+		auto& TTopNodeEdge = Input.Nodes[0].Edges;
+
+		auto OldEdgeSize = CTopNodeEdge.size();
+		CTopNodeEdge.insert(CTopNodeEdge.end(), TTopNodeEdge.begin(), TTopNodeEdge.end());
+
+		for (auto& Ite : std::span(CTopNodeEdge).subspan(OldEdgeSize))
+		{
+			Ite.MaskIndex += MaskIndex;
+			if (Ite.ToNode != 0)
+				Ite.ToNode += IndexOffset;
+		}
+
+		MaskIndex += Input.MaskIndex;
+	}
+
+
+	void MartixStateT::ResetRowCount(std::size_t RowCount)
+	{
+		States.clear();
+		assert(RowCount >= 1);
+		this->RowCount = RowCount;
+		LineCount = 1;
+		States.insert(States.end(), RowCount, StateE::UnSet);
+	}
+
+	MartixStateT::StateE& MartixStateT::Get(std::size_t IRowIndex, std::size_t ILineIndex) {
+		assert(IRowIndex < RowCount && ILineIndex < LineCount);
+		return States[IRowIndex + ILineIndex * RowCount];
+	}
+
+	std::size_t MartixStateT::CopyLine(std::size_t SourceLine)
+	{
+		assert(SourceLine < LineCount);
+		auto OldLineCount = LineCount;
+		States.insert(States.end(), RowCount, StateE::UnSet);
+		LineCount += 1;
+		for (std::size_t I = 0; I < RowCount; ++I)
+		{
+			Get(I, OldLineCount) = Get(I, SourceLine);
+		}
+		return OldLineCount;
+	}
+
+	bool MartixStateT::RemoveAllFalseLine()
+	{
+		bool Removed = false;
+		for (std::size_t Line = 0; Line < LineCount; )
+		{
+			bool HasTrue = false;
+			for (std::size_t Row = 0; Row < RowCount; ++Row)
+			{
+				if (Get(Row, Line) == StateE::True)
 				{
-					auto Top = std::move(Span[0]);
-					Span = Span.subspan(1);
+					HasTrue = true;
+					break;
+				}
+			}
+			if (!HasTrue)
+			{
+				States.erase(
+					States.begin() + Line * RowCount,
+					States.begin() + (Line + 1) * RowCount
+				);
+				--LineCount;
+				Removed = true;
+			}
+			else {
+				++Line;
+			}
+		}
+		return Removed;
+	}
 
-					if (Top.ConsumeSymbols.empty())
-						continue;
+	std::span<MartixStateT::StateE const> MartixStateT::ReadLine(std::size_t LineIndex) const
+	{
+		assert(LineIndex < LineCount);
+		return std::span(States).subspan(
+			LineIndex * RowCount,
+			RowCount
+		);
+	}
 
-					for (auto& Ite : Span)
+	struct ActionIndexT
+	{
+		enum class CategoryE
+		{
+			CaptureBegin,
+			CaptureEnd,
+			Counter,
+		};
+
+		CategoryE Category = CategoryE::Counter;
+		std::size_t Index = 0;
+		std::size_t MaskIndex = 0;
+
+		bool operator==(ActionIndexT const& T1) const = default;
+		bool operator<(ActionIndexT const& T1) const {
+			if (Category != T1.Category)
+			{
+				if (Category == CategoryE::Counter)
+					return false;
+				else if (T1.Category == CategoryE::Counter)
+					return true;
+			}
+
+			if (MaskIndex < T1.MaskIndex)
+				return true;
+			else if (MaskIndex == T1.MaskIndex)
+			{
+				if (Index < T1.Index)
+					return true;
+				else if (Index == T1.Index)
+					return static_cast<std::size_t>(Category) < static_cast<std::size_t>(T1.Category);
+			}
+			return false;
+		}
+	};
+
+	struct ActionIndexWithSubIndexT
+	{
+		ActionIndexT Original;
+		std::size_t SubIndex = 0;
+
+		bool operator==(ActionIndexWithSubIndexT const& T1) const = default;
+		bool operator<(ActionIndexWithSubIndexT const& T1) const {
+
+			if(SubIndex < T1.SubIndex)
+				return true;
+			else if (SubIndex == T1.SubIndex)
+			{
+				return Original < T1.Original;
+			}
+			return false;
+		}
+	};
+
+	DfaT::DfaT(FormatE Format, NfaT const& T1)
+		: Format(Format)
+	{
+
+		std::map<NfaEdgeKeyT, NfaEdgePropertyT> EdgeMapping;
+
+		{
+			for (std::size_t From = 0; From < T1.Nodes.size(); ++From)
+			{
+				auto& CurNode = T1.Nodes[From];
+				for (std::size_t EdgeIndex = 0; EdgeIndex < CurNode.Edges.size(); ++EdgeIndex)
+				{
+					auto& CrEdge = CurNode.Edges[EdgeIndex];
+					auto Key = NfaEdgeKeyT{From, EdgeIndex};
+					NfaEdgePropertyT Property;
+					Property.ToNode = CrEdge.ToNode;
+					Property.ToAccept = T1.Nodes[CrEdge.ToNode].Accept.has_value();
+					Property.MaskIndex = CrEdge.MaskIndex;
+					for (auto& Ite : CrEdge.Propertys)
 					{
-						auto Result = Misc::SequenceIntervalWrapper{ Top.ConsumeSymbols }.Collision(Ite.ConsumeSymbols);
-						if (!Result.middle.empty())
+						switch (Ite.Type)
 						{
-							TemporaryEdge New;
-							New.ConsumeSymbols = Result.middle;
-							New.Propertys = Top.Propertys;
-							New.Propertys.insert(New.Propertys.end(), Ite.Propertys.begin(), Ite.Propertys.end());
-							TempBuffer.push_back(std::move(New));
+						case NfaT::EdgePropertyE::CaptureBegin:
+						case NfaT::EdgePropertyE::CaptureEnd:
+							Property.HasCapture = true;
+							break;
+						case NfaT::EdgePropertyE::OneCounter:
+						case NfaT::EdgePropertyE::AddCounter:
+							Property.HasCounter = true;
+							break;
+						case NfaT::EdgePropertyE::LessCounter:
+						{
+							if (Property.Ranges.empty() || Property.Ranges.rbegin()->Index != Ite.Index)
+							{
+								Property.Ranges.push_back({
+									Ite.Index,
+									0,
+									Ite.Par
+									}
+								);
+							}
+							else {
+								Property.Ranges.rbegin()->Max = Ite.Par;
+							}
+							Property.HasCounter = true;
+							break;
+						}
+						case NfaT::EdgePropertyE::BiggerCounter:
+						{
+							if (Property.Ranges.empty() || Property.Ranges.rbegin()->Index != Ite.Index)
+							{
+								Property.Ranges.push_back({
+									Ite.Index,
+									Ite.Par,
+									std::numeric_limits<std::size_t>::max()
+								});
+							}
+							else {
+								Property.Ranges.rbegin()->Min = Ite.Par;
+							}
+							Property.HasCounter = true;
+						}
+						break;
+						default:
+							break;
+						}
+					}
+					EdgeMapping.insert({ Key, std::move(Property)});
+				}
+			}
+		}
 
-							Top.ConsumeSymbols = std::move(Result.left);
-							Ite.ConsumeSymbols = std::move(Result.right);
+		std::map<std::vector<std::size_t>, std::size_t> Mapping;
 
-							Change = true;
+		std::vector<decltype(Mapping)::const_iterator> SearchingStack;
 
-							if (Top.ConsumeSymbols.empty())
+		std::vector<TempNodeT> TempNode;
+
+		{
+			std::vector<std::size_t> StartupNode = {0};
+			auto [Ite, B] = Mapping.insert({ StartupNode, TempNode.size() });
+
+			TempNodeT Startup;
+
+			for (auto Ite : StartupNode)
+			{
+				Startup.Accept = T1.Nodes[Ite].Accept;
+				if (Startup.Accept.has_value())
+					break;
+			}
+
+			Startup.OriginalToNode = std::move(StartupNode);
+			
+			TempNode.push_back(std::move(Startup));
+			SearchingStack.push_back(Ite);
+		}
+
+		std::vector<TempEdgeT> TempEdges;
+
+		MartixStateT MartixState;
+
+		while (!SearchingStack.empty())
+		{
+			TempEdges.clear();
+			auto Top = *SearchingStack.rbegin();
+			SearchingStack.pop_back();
+
+			for (auto Ite : Top->first)
+			{
+				auto& EdgeRef = T1.Nodes[Ite].Edges;
+				std::size_t EdgeIndex = 0;
+
+				for (auto& Ite2 : EdgeRef)
+				{
+
+					auto EdgeIndexIte = EdgeIndex++;
+
+					auto Key = EdgeMapping.find({ Ite, EdgeIndexIte });
+
+					TempPropertyT Property{Key, {}};
+
+					auto TempCharSets = Ite2.CharSets;
+
+					if (
+						(Format == FormatE::HeadMatch || Format == FormatE::GreedyHeadMatch)
+						&& Key->second.ToAccept
+					)
+					{
+						TempCharSets = IntervalT{
+							{1, MaxChar()},
+							{EndOfFile(), EndOfFile() + 1}
+						};
+					}
+
+					TempEdgeT Temp{
+						std::move(TempCharSets),
+						{Property},
+						{},
+					};
+					
+					for (std::size_t I = 0; I < TempEdges.size(); ++I)
+					{
+						auto& Ite3 = TempEdges[I];
+						auto Middle = (Temp.CharSets & Ite3.CharSets);
+						if (Middle.Size() != 0)
+						{
+							TempEdgeT NewEdge;
+							NewEdge.Propertys.insert(NewEdge.Propertys.end(), Ite3.Propertys.begin(), Ite3.Propertys.end());
+							NewEdge.Propertys.insert(NewEdge.Propertys.end(), Temp.Propertys.begin(), Temp.Propertys.end());
+							Temp.CharSets = Temp.CharSets - Middle;
+							Ite3.CharSets = Ite3.CharSets - Middle;
+							NewEdge.CharSets = std::move(Middle);
+							TempEdges.push_back(std::move(NewEdge));
+							if (Temp.CharSets.Size() == 0)
 								break;
 						}
 					}
 
-					if (!Top.ConsumeSymbols.empty())
-						TempBuffer.push_back(std::move(Top));
+					if (!Temp.CharSets.Size() == 0)
+					{
+						TempEdges.push_back(std::move(Temp));
+					}
+						
+
+					TempEdges.erase(
+						std::remove_if(TempEdges.begin(), TempEdges.end(), [](TempEdgeT const& T) { return T.CharSets.Size() == 0; }),
+						TempEdges.end()
+					);
 				}
-				std::swap(TempBuffer, Output);
-				TempBuffer.clear();
 			}
-		}
-	}
 
-	struct DFASearchCore
-	{
-		std::size_t Index;
-		TemporaryNode TempRawNodes;
-	};
+			std::sort(
+				TempEdges.begin(),
+				TempEdges.end(),
+				[](TempEdgeT const& T1, TempEdgeT const& T2){ return T1.CharSets.Size() < T2.CharSets.Size(); }
+			);
 
-	void ClassifyNodeIndes(NFA const& Table, std::vector<TemporaryEdge>& TempraryEdges, NodeAllocator& Mapping, std::vector<DFASearchCore>& SeachStack)
-	{
-		if (!TempraryEdges.empty())
-		{
+			for (std::size_t I = 0; I < TempEdges.size(); ++I)
+			{
+				auto& Cur = TempEdges[I];
+				for (std::size_t I2 = I + 1; I2 < TempEdges.size(); ++I2)
+				{
+					auto& Last = TempEdges[I2];
+					auto NewCharSets = (Cur.CharSets + Last.CharSets);
+					if (NewCharSets.Size() <= Last.CharSets.Size())
+						Last.CharSets = std::move(NewCharSets);
+				}
+			}
 			
-			for (auto& Ite : TempraryEdges)
+			for (auto& Ite : TempEdges)
 			{
-				std::size_t ToNodeBuffer = 1;
-				for (auto& Ite2 : Ite.Propertys)
+				if (Format == FormatE::HeadMatch || Format == FormatE::Match)
 				{
-					if(Ite2.HasCounter)
-						ToNodeBuffer *= 2;
-				}
-				std::vector<std::vector<std::size_t>> TemporaryMapping;
-				TemporaryMapping.reserve(ToNodeBuffer);
-				TemporaryMapping.push_back({});
-				for (auto& Ite2 : Ite.Propertys)
-				{
-					if (!Ite2.HasCounter)
+					for (auto Ite2 = Ite.Propertys.begin(); Ite2 != Ite.Propertys.end(); ++Ite2)
 					{
-						for (auto& Ite3 : TemporaryMapping)
+						auto& EdgePro = Ite2->Key->second;
+						if (EdgePro.Ranges.empty() && EdgePro.ToAccept)
 						{
-							if(std::find(Ite3.begin(), Ite3.end(), Ite2.OriginalTo) == Ite3.end())
-								Ite3.push_back(Ite2.OriginalTo);
-						}
-					}
-					else {
-						std::size_t Cur = TemporaryMapping.size();
-						for (std::size_t I = 0; I < Cur; ++I)
-						{
-							auto New = TemporaryMapping[I];
-							if(std::find(New.begin(), New.end(), Ite2.OriginalTo) == New.end())
-								New.push_back(Ite2.OriginalTo);
-							TemporaryMapping.push_back({std::move(New)});
+							Ite.Propertys.erase(Ite2 + 1, Ite.Propertys.end());
+							break;
 						}
 					}
 				}
-				Ite.ToIndexs.resize(ToNodeBuffer);
-				for (std::size_t I = 0; I < TemporaryMapping.size(); ++I)
+				else if (Format == FormatE::GreedyHeadMatch)
 				{
-					assert(I < Ite.ToIndexs.size());
-					auto& Ref = TemporaryMapping[I];
-					if(Ref.empty())
-						Ite.ToIndexs[I] = std::numeric_limits<std::size_t>::max();
-					else {
-						auto [ID, IsNew] = Mapping.FindOrAdd(std::span(Ref));
-						if (IsNew)
+					bool HasAccept = false;
+					for (std::size_t I = 0; I < Ite.Propertys.size(); )
+					{
+						auto& EdgePro = Ite.Propertys[I].Key->second;
+						if (EdgePro.Ranges.empty() && EdgePro.ToAccept)
 						{
-							DFASearchCore New;
-							New.Index = ID;
-							CollectTemporaryProperty(Table, std::span(Ref), New.TempRawNodes);
-							SeachStack.push_back(std::move(New));
+							std::size_t TarMaskIndex = EdgePro.MaskIndex;
+
+							Ite.Propertys.erase(
+								std::remove_if(Ite.Propertys.begin() + I + 1, Ite.Propertys.end(), [=](TempPropertyT const& T) {
+									return T.Key->second.MaskIndex == TarMaskIndex;
+								}),
+								Ite.Propertys.end()
+							);
+
+							if (HasAccept)
+							{
+								Ite.Propertys.erase(Ite.Propertys.begin() + I);
+								continue;
+							}
 						}
-						Ite.ToIndexs[I] = ID;
+						++I;
+					}
+				}
+
+				assert(!Ite.Propertys.empty());
+
+				MartixState.ResetRowCount(Ite.Propertys.size());
+
+				for (std::size_t I = 0; I < Ite.Propertys.size(); ++I)
+				{
+					auto& RefProperty = Ite.Propertys[I];
+					auto& EdgePro = RefProperty.Key->second;
+					for (std::size_t I2 = 0; I2 < I; ++I2)
+					{
+						auto& Tar = Ite.Propertys[I2].Key->second;
+						
+						bool SameTrue = false;
+						bool SameFalse = false;
+
+						if (Tar.MaskIndex == EdgePro.MaskIndex)
+						{
+							SameTrue = true;
+							for (auto& Ite2 : EdgePro.Ranges)
+							{
+								auto F1 = std::find_if(
+									Tar.Ranges.begin(),
+									Tar.Ranges.end(),
+									[&](NfaEdgePropertyT::RangeT const& Reg) { return Reg.Index == Ite2.Index; }
+								);
+								if (
+									F1 == Tar.Ranges.end()
+									|| F1->Min < Ite2.Min || F1->Max > Ite2.Max
+									)
+								{
+									SameTrue = false;
+									break;
+								}
+							}
+
+							SameFalse = true;
+							for (auto& Ite2 : Tar.Ranges)
+							{
+								auto F1 = std::find_if(
+									EdgePro.Ranges.begin(),
+									EdgePro.Ranges.end(),
+									[&](NfaEdgePropertyT::RangeT const& Reg) { return Reg.Index == Ite2.Index; }
+								);
+								if (
+									F1 == EdgePro.Ranges.end()
+									|| F1->Min > Ite2.Min || F1->Max < Ite2.Max
+									)
+								{
+									SameFalse = false;
+									break;
+								}
+							}
+						}
+
+						if (Tar.ToAccept)
+						{
+							if (Format == FormatE::Match || Format == FormatE::HeadMatch)
+							{
+								RefProperty.Constraints.push_back({
+									I2,
+									ActionE::False,
+									SameFalse ? ActionE::False : ActionE::Ignore
+								});
+							}
+							else {
+								if (Tar.MaskIndex == EdgePro.MaskIndex)
+								{
+									RefProperty.Constraints.push_back({
+										I2,
+										ActionE::False,
+										SameFalse ? ActionE::False : ActionE::Ignore
+									});
+								}
+								else if(SameTrue || SameFalse){
+									RefProperty.Constraints.push_back({
+										I2,
+										SameTrue ? ActionE::True : ActionE::Ignore,
+										SameFalse ? ActionE::False : ActionE::Ignore
+									});
+								}
+							}
+						}
+						else {
+							if (SameTrue || SameFalse)
+							{
+								RefProperty.Constraints.push_back({
+									I2,
+									SameTrue ? ActionE::True : ActionE::Ignore,
+									SameFalse ? ActionE::False : ActionE::Ignore
+								});
+							}
+						}
+					}
+
+					std::size_t OldLineSize = MartixState.GetLineCount();
+					for (std::size_t LC = 0; LC < OldLineSize; ++LC)
+					{
+						ActionE CurAction = ActionE::Ignore;
+
+						for (auto& Ite6 : RefProperty.Constraints)
+						{
+							auto RCState = MartixState.Get(Ite6.Source, LC);
+							CurAction = (RCState == MartixStateT::StateE::True ? Ite6.PassAction : Ite6.UnpassAction);
+							if(CurAction != ActionE::Ignore)
+								break;
+						}
+
+						switch (CurAction)
+						{
+						case ActionE::True:
+							MartixState.Get(I, LC) = MartixStateT::StateE::True;
+							break;
+						case ActionE::False:
+							MartixState.Get(I, LC) = MartixStateT::StateE::False;
+							break;
+						case ActionE::Ignore:
+						{
+							if (EdgePro.Ranges.empty())
+							{
+								MartixState.Get(I, LC) = MartixStateT::StateE::True;
+							}
+							else {
+								MartixState.Get(I, LC) = MartixStateT::StateE::False;
+								auto NewLine = MartixState.CopyLine(LC);
+								MartixState.Get(I, NewLine) = MartixStateT::StateE::True;
+							}
+							break;
+						}
+						default:
+							assert(false);
+							break;
+						}
+					}
+				}
+
+				Ite.ToNode.reserve(MartixState.GetLineCount());
+
+				std::vector<std::size_t> CacheNode;
+
+				CacheNode.reserve(Ite.Propertys.size());
+
+				MartixState.RemoveAllFalseLine();
+
+				assert(MartixState.GetLineCount() != 0);
+
+				for (std::size_t Line = 0; Line < MartixState.GetLineCount(); ++Line)
+				{
+					CacheNode.clear();
+					for (std::size_t Row = 0; Row < MartixState.GetRowCount(); ++Row)
+					{
+						if (MartixState.Get(Row, Line) == MartixStateT::StateE::True)
+						{
+							std::size_t TNode = Ite.Propertys[Row].Key->second.ToNode;
+							auto F = std::find(CacheNode.begin(), CacheNode.end(), TNode);
+							if(F == CacheNode.end())
+								CacheNode.push_back(TNode);
+							else {
+								auto Key = Ite.Propertys[Row].Key->first;
+								throw UnaccaptableRegexTokenIndex{
+									UnaccaptableRegexTokenIndex::TypeT::BadRegex,
+									T1.Nodes[Key.From].Edges[Key.EdgeIndex].TokenIndex
+								};
+							}
+						}
+					}
+
+					assert(!CacheNode.empty());
+
+					auto [MapIte, Bool] = Mapping.insert({ CacheNode, TempNode.size() });
+
+					if (Bool)
+					{
+						TempNodeT TemNode;
+						for (auto Ite3 : CacheNode)
+						{
+							TemNode.Accept = T1.Nodes[Ite3].Accept;
+							if (TemNode.Accept.has_value())
+								break;
+						}
+						TemNode.OriginalToNode = CacheNode;
+						TempNode.push_back(std::move(TemNode));
+						SearchingStack.push_back(MapIte);
+					}
+
+					auto Re = MartixState.ReadLine(Line);
+
+					TempToNodeT NewToNode;
+
+					for (auto Ite : Re)
+					{
+						switch (Ite)
+						{
+						case MartixStateT::StateE::True:
+							NewToNode.Actions.push_back(ActionE::True);
+							break;
+						case MartixStateT::StateE::False:
+							NewToNode.Actions.push_back(ActionE::False);
+							break;
+						default:
+							assert(false);
+							break;
+						}
+					}
+
+					NewToNode.ToNode = MapIte->second;
+
+					Ite.ToNode.push_back(std::move(NewToNode));
+				}
+
+			}
+
+			TempNode[Top->second].TempEdge = TempEdges;
+		}
+
+		struct ActionIndexMappingNodeT
+		{
+			std::map<ActionIndexT, std::size_t> Indexs;
+			bool HasAccept = false;
+		};
+
+		std::vector<ActionIndexMappingNodeT> ActionIndexNodes;
+		std::vector<ActionIndexWithSubIndexT> ActionIndexLocate;
+
+		auto LocateActionIndex = [&](ActionIndexT Index, std::size_t NodeIndex) -> std::size_t {
+
+			std::size_t SubIndex = 0;
+			auto F1 = ActionIndexNodes[NodeIndex].Indexs.find(Index);
+			assert(F1 != ActionIndexNodes[NodeIndex].Indexs.end());
+			SubIndex = F1->second;
+			ActionIndexWithSubIndexT AIWSB {Index, SubIndex};
+			for (std::size_t I = 0; I < ActionIndexLocate.size(); ++I)
+			{
+				if(ActionIndexLocate[I] == AIWSB)
+					return I;
+			}
+			assert(false);
+			return ActionIndexLocate.size();
+		};
+
+		{
+
+			ActionIndexNodes.resize(T1.Nodes.size());
+
+			std::set<NfaEdgeKeyT> UsedKeys;
+
+			struct SerarchStackT
+			{
+				ActionIndexT Index;
+				std::size_t NodeIndex;
+			};
+
+			std::vector<SerarchStackT> SearchStackT;
+
+			for (auto& Ite : TempNode)
+			{
+				for (auto& Ite2 : Ite.TempEdge)
+				{
+					for (auto Ite3 : Ite2.Propertys)
+					{
+						auto NfaEdgeKey = Ite3.Key->first;
+						auto [I, B] = UsedKeys.insert(NfaEdgeKey);
+						if(B)
+						{
+							auto& FromNode = ActionIndexNodes[Ite3.Key->first.From];
+							auto& NfaEdgeProperty = Ite3.Key->second;
+							if (NfaEdgeProperty.ToAccept || NfaEdgeProperty.HasCounter || NfaEdgeProperty.HasCapture)
+							{
+								auto& Ref = ActionIndexNodes[NfaEdgeProperty.ToNode];
+								Ref.HasAccept = NfaEdgeProperty.ToAccept;
+
+								if (NfaEdgeProperty.HasCounter || NfaEdgeProperty.HasCapture)
+								{
+									auto& Edge = T1.Nodes[NfaEdgeKey.From].Edges[NfaEdgeKey.EdgeIndex];
+									for (auto& Ite4 : Edge.Propertys)
+									{
+										switch (Ite4.Type)
+										{
+										case NfaT::EdgePropertyE::CaptureBegin:
+										{
+											ActionIndexT Index{
+												ActionIndexT::CategoryE::CaptureBegin, Ite4.Index, Edge.MaskIndex
+											};
+											FromNode.Indexs.insert({Index, 0});
+											SearchStackT.push_back({Index, NfaEdgeProperty.ToNode });
+											break;
+										}
+										case NfaT::EdgePropertyE::CaptureEnd:
+										{
+											ActionIndexT Index{
+												ActionIndexT::CategoryE::CaptureEnd, Ite4.Index, Edge.MaskIndex
+											};
+											FromNode.Indexs.insert({Index, 0});
+											SearchStackT.push_back({ Index, NfaEdgeProperty.ToNode });
+											break;
+										}
+										case NfaT::EdgePropertyE::OneCounter:
+										case NfaT::EdgePropertyE::AddCounter:
+										case NfaT::EdgePropertyE::LessCounter:
+										case NfaT::EdgePropertyE::BiggerCounter:
+										{
+											ActionIndexT Index{
+												ActionIndexT::CategoryE::Counter, Ite4.Index, Edge.MaskIndex
+											};
+											FromNode.Indexs.insert({Index, 0});
+											Ref.Indexs.insert({Index, 0});
+											break;
+										}
+										}
+									}
+								}
+							}
+						}
 					}
 				}
 			}
+
+			while (!SearchStackT.empty())
+			{
+				auto Top = *SearchStackT.rbegin();
+				SearchStackT.pop_back();
+				auto& Ref = ActionIndexNodes[Top.NodeIndex];
+				auto [Ite, B] = Ref.Indexs.insert({Top.Index, 0});
+				if (B)
+				{
+					for (auto& Ite2 : UsedKeys)
+					{
+						if (Ite2.From == Top.NodeIndex)
+						{
+							auto& EdgeRef = T1.Nodes[Ite2.From].Edges[Ite2.EdgeIndex];
+							SearchStackT.push_back({ Top.Index, EdgeRef.ToNode });
+						}
+					}
+				}
+			}
+
+			bool Change = true;
+
+			while (Change)
+			{
+				Change = false;
+
+				for (auto& Ite : TempNode)
+				{
+					if (Ite.OriginalToNode.size() <= 1)
+						continue;
+					for (std::size_t I = 0; I < Ite.OriginalToNode.size(); ++I)
+					{
+						auto& Cur = ActionIndexNodes[Ite.OriginalToNode[I]];
+						for (std::size_t I2 = I + 1; I2 < Ite.OriginalToNode.size(); ++I2)
+						{
+							auto& Cur2 = ActionIndexNodes[Ite.OriginalToNode[I2]];
+							for (auto& Ite2 : Cur.Indexs)
+							{
+								auto Find = Cur2.Indexs.find(Ite2.first);
+								if (Find != Cur2.Indexs.end() && Ite2.second == Find->second)
+								{
+									assert(!(Cur.HasAccept && Cur2.HasAccept));
+									if (Cur2.HasAccept)
+										Ite2.second += 1;
+									else
+										Find->second += 1;
+									Change = true;
+								}
+							}
+						}
+					}
+				}
+			}
+
+			for (auto& Ite : ActionIndexNodes)
+			{
+				for (auto Ite2 : Ite.Indexs)
+				{
+					auto Action = ActionIndexWithSubIndexT{ Ite2.first, Ite2.second };
+					auto F = std::find(ActionIndexLocate.begin(), ActionIndexLocate.end(), Action);
+					if (F == ActionIndexLocate.end())
+					{
+						ActionIndexLocate.push_back(Action);
+					}
+				}
+			}
+
+			std::sort(ActionIndexLocate.begin(), ActionIndexLocate.end());
+
+		}
+
+		CacheRecordCount = ActionIndexLocate.size();
+
+		Nodes.reserve(TempNode.size());
+
+		for (auto& Ite : TempNode)
+		{
+			NodeT NewNode;
+
+			if (Ite.Accept.has_value())
+			{
+				std::optional<std::size_t> Begin;
+				std::size_t Last = 0;
+
+				for (; Last < ActionIndexLocate.size(); ++Last)
+				{
+					auto& Ref = ActionIndexLocate[Last];
+					if (Ref.SubIndex == 0 
+						&& (Ref.Original.Category == ActionIndexT::CategoryE::CaptureBegin 
+							|| Ref.Original.Category == ActionIndexT::CategoryE::CaptureEnd
+							)
+						&& Ref.Original.MaskIndex == Ite.Accept->MaskIndex)
+					{
+						if (!Begin.has_value())
+							Begin = Last;
+					}else if(Begin.has_value())
+						break;
+				}
+
+				AcceptT NewAccept{
+					Ite.Accept->Mask,
+					Begin.has_value() ? Misc::IndexSpan<>{ 
+						*Begin, 
+						Last
+					} : Misc::IndexSpan<>{0, 0}
+				};
+				NewNode.Accept = NewAccept;
+			}
+
+			for (auto& Ite2 : Ite.TempEdge)
+			{
+				EdgeT NewEdge;
+				NewEdge.CharSets = Ite2.CharSets;
+				auto ToNode = Ite2.ToNode;
+
+				bool LastHasNoRange = false;
+
+				std::vector<std::size_t> ConstraintsMapping;
+
+				ConstraintsMapping.resize(Ite2.Propertys.size());
+
+				for (std::size_t I = 0; I < Ite2.Propertys.size(); ++I)
+					ConstraintsMapping[I] = I;
+
+				for (std::size_t I = 0; I < Ite2.Propertys.size(); ++I)
+				{
+					auto& Pro = Ite2.Propertys[I];
+					auto& Edge = T1.Nodes[Pro.Key->first.From].Edges[Pro.Key->first.EdgeIndex];
+					bool NeedMerge = false;
+					if (LastHasNoRange && Pro.Key->second.Ranges.empty())
+					{
+						NeedMerge = true;
+
+						#ifdef _DEBUG
+
+						for (std::size_t LC = 0; LC < Ite2.ToNode.size(); ++LC)
+						{
+							if (Ite2.ToNode[LC].Actions[I - 1] != Ite2.ToNode[LC].Actions[I])
+							{
+								assert(false);
+							}
+						}
+
+						#endif
+
+						for (auto& Ite3 : ToNode)
+						{
+							Ite3.Actions[I] = ActionE::Ignore;
+							//Ite3.Actions.erase(Ite3.Actions.begin() + I);
+						}
+
+						for(std::size_t I2 = I; I2 < Ite2.Propertys.size(); ++I2)
+							ConstraintsMapping[I2] -= 1;
+					}
+
+					LastHasNoRange = Pro.Key->second.Ranges.empty();
+
+					if (I != 0 && !NeedMerge)
+						NewEdge.Propertys.push_back({ PropertyActioE::NewContext });
+					
+					if (!NeedMerge)
+					{
+						for (auto& Ite3 : Pro.Constraints)
+						{
+							std::size_t Tar = ConstraintsMapping[Ite3.Source];
+
+							if (Ite3.PassAction == ActionE::True)
+							{
+								NewEdge.Propertys.push_back({ PropertyActioE::ConstraintsTrueTrue, Tar });
+							}
+							else if (Ite3.PassAction == ActionE::False)
+							{
+								NewEdge.Propertys.push_back({ PropertyActioE::ConstraintsTrueFalse, Tar });
+							}
+
+							if (Ite3.UnpassAction == ActionE::True)
+							{
+								NewEdge.Propertys.push_back({ PropertyActioE::ConstraintsFalseTrue, Tar });
+							}
+							else if (Ite3.UnpassAction == ActionE::False)
+							{
+								NewEdge.Propertys.push_back({ PropertyActioE::ConstraintsFalseFalse, Tar });
+							}
+						}
+					}
+
+					struct CopyRecord
+					{
+						std::size_t FromSolt;
+						std::size_t ToSolt;
+						std::strong_ordering operator<=>(CopyRecord const& CR) const = default;
+					};
+
+					std::set<CopyRecord> HasCounter;
+
+					std::set<std::size_t> OverwritedCapture;
+
+					if (Pro.Key->second.HasCapture)
+					{
+						for (auto Ite3 : Edge.Propertys)
+						{
+							switch (Ite3.Type)
+							{
+							case NfaT::EdgePropertyE::CaptureBegin:
+							{
+								ActionIndexT Index{
+									ActionIndexT::CategoryE::CaptureBegin,
+									Ite3.Index,
+									Edge.MaskIndex
+								};
+								OverwritedCapture.insert(LocateActionIndex(Index, Edge.ToNode));
+								break;
+							}
+							case NfaT::EdgePropertyE::CaptureEnd:
+							{
+								ActionIndexT Index{
+									ActionIndexT::CategoryE::CaptureEnd,
+									Ite3.Index,
+									Edge.MaskIndex
+								};
+								OverwritedCapture.insert(LocateActionIndex(Index, Edge.ToNode));
+								break;
+							}
+							default:
+								break;
+							}
+						}
+					}
+					
+
+					auto& FromSubIndex = ActionIndexNodes[Pro.Key->first.From].Indexs;
+					auto& ToSubIndex = ActionIndexNodes[Edge.ToNode].Indexs;
+
+					for (auto& Ite3 : FromSubIndex)
+					{
+						if (Ite3.first.Category == ActionIndexT::CategoryE::CaptureBegin || Ite3.first.Category == ActionIndexT::CategoryE::CaptureEnd)
+						{
+							auto F1 = ToSubIndex.find(Ite3.first);
+							if (F1 != ToSubIndex.end() && Ite3.second != F1->second)
+							{
+								auto Target = LocateActionIndex(Ite3.first, Edge.ToNode);
+								if (OverwritedCapture.find(Target) == OverwritedCapture.end())
+								{
+									NewEdge.Propertys.push_back({
+										PropertyActioE::CopyValue,
+										LocateActionIndex(Ite3.first, Pro.Key->first.From),
+										LocateActionIndex(Ite3.first, Edge.ToNode),
+									});
+								}
+							}
+						}
+					}
+
+					for (auto Ite3 : Edge.Propertys)
+					{
+						switch (Ite3.Type)
+						{
+						case NfaT::EdgePropertyE::CaptureBegin:
+						{
+							ActionIndexT Index{
+								ActionIndexT::CategoryE::CaptureBegin,
+								Ite3.Index,
+								Edge.MaskIndex
+							};
+							NewEdge.Propertys.push_back({
+								PropertyActioE::RecordLocation,
+								LocateActionIndex(Index, Edge.ToNode)
+							});
+
+							break;
+						}
+						case NfaT::EdgePropertyE::CaptureEnd:
+						{
+							ActionIndexT Index{
+								ActionIndexT::CategoryE::CaptureEnd,
+								Ite3.Index,
+								Edge.MaskIndex
+							};
+							NewEdge.Propertys.push_back({
+								PropertyActioE::RecordLocation,
+								LocateActionIndex(Index, Edge.ToNode)
+							});
+							break;
+						}
+						case NfaT::EdgePropertyE::OneCounter:
+						{
+							ActionIndexT Index{
+								ActionIndexT::CategoryE::Counter,
+								Ite3.Index,
+								Edge.MaskIndex
+							};
+							NewEdge.Propertys.push_back({
+								PropertyActioE::OneCounter,
+								LocateActionIndex(Index, Edge.ToNode)
+							});
+							break;
+						}
+						case NfaT::EdgePropertyE::AddCounter:
+						{
+							ActionIndexT Index{
+								ActionIndexT::CategoryE::Counter,
+								Ite3.Index,
+								Edge.MaskIndex
+							};
+							NewEdge.Propertys.push_back({
+								PropertyActioE::AddCounter,
+								LocateActionIndex(Index, Edge.ToNode)
+							});
+							break;
+						}
+						case NfaT::EdgePropertyE::LessCounter:
+						{
+							ActionIndexT Index{
+								ActionIndexT::CategoryE::Counter,
+								Ite3.Index,
+								Edge.MaskIndex
+							};
+							std::size_t FormSolt = LocateActionIndex(Index, Pro.Key->first.From);
+							std::size_t ToSolt = LocateActionIndex(Index, Edge.ToNode);
+							NewEdge.Propertys.push_back({
+								PropertyActioE::LessCounter,
+								FormSolt,
+								Ite3.Par
+							});
+							HasCounter.insert({ FormSolt, ToSolt });
+							break;
+						}
+						case NfaT::EdgePropertyE::BiggerCounter:
+						{
+							ActionIndexT Index{
+								ActionIndexT::CategoryE::Counter,
+								Ite3.Index,
+								Edge.MaskIndex
+							};
+							std::size_t FormSolt = LocateActionIndex(Index, Pro.Key->first.From);
+							std::size_t ToSolt = LocateActionIndex(Index, Edge.ToNode);
+							NewEdge.Propertys.push_back({
+								PropertyActioE::BiggerCounter,
+								FormSolt,
+								Ite3.Par
+							});
+							HasCounter.insert({ FormSolt, ToSolt });
+							break;
+						}
+						default:
+							assert(false);
+							break;
+						}
+					}
+
+					for (auto& Ite3 : HasCounter)
+					{
+						if (Ite3.FromSolt != Ite3.ToSolt)
+						{
+							NewEdge.Propertys.push_back({
+								PropertyActioE::CopyValue,
+								Ite3.FromSolt,
+								Ite3.ToSolt
+							});
+						}
+					}
+				}
+
+				for (auto& Ite3 : ToNode)
+				{
+					Ite3.Actions.erase(
+						std::remove_if(Ite3.Actions.begin(), Ite3.Actions.end(), [](ActionE I){ return I == ActionE::Ignore; }),
+						Ite3.Actions.end()
+					);
+				}
+
+				std::vector<ConditionT> Conditions;
+
+				for (auto& Ite3 : ToNode)
+				{
+					std::size_t NextIndex = 0;
+
+					for (auto Ite4 : Ite3.Actions)
+					{
+						if (NextIndex >= Conditions.size())
+						{
+							ConditionT NewCondi;
+
+							if (Ite4 == ActionE::True)
+							{
+								NewCondi.PassCommand = ConditionT::CommandE::Next;
+								NewCondi.Pass = Conditions.size() + 1;
+								NextIndex = NewCondi.Pass;
+							}
+							else {
+								NewCondi.UnpassCommand = ConditionT::CommandE::Next;
+								NewCondi.Unpass = Conditions.size() + 1;
+								NextIndex = NewCondi.Unpass;
+							}
+
+							Conditions.push_back(NewCondi);
+						}
+						else {
+							auto& Cur = Conditions[NextIndex];
+							if (Ite4 == ActionE::True)
+							{
+								if(Cur.PassCommand == ConditionT::CommandE::Fail)
+								{
+									Cur.PassCommand = ConditionT::CommandE::Next;
+									Cur.Pass = Conditions.size();
+								}
+								NextIndex = Cur.Pass;
+							}
+							else if (Ite4 == ActionE::False)
+							{
+								if (Cur.UnpassCommand == ConditionT::CommandE::Fail);
+								{
+									Cur.UnpassCommand = ConditionT::CommandE::Next;
+									Cur.Unpass = Conditions.size();
+								}
+								NextIndex = Conditions.size();
+							}
+						}
+					}
+
+					for (auto& Ite4 : Conditions)
+					{
+						if (Ite4.PassCommand == ConditionT::CommandE::Next && Ite4.Pass == Conditions.size())
+						{
+							Ite4.PassCommand = ConditionT::CommandE::ToNode;
+							Ite4.Pass = Ite3.ToNode;
+						}
+						if (Ite4.UnpassCommand == ConditionT::CommandE::Next && Ite4.Unpass == Conditions.size())
+						{
+							Ite4.UnpassCommand = ConditionT::CommandE::ToNode;
+							Ite4.Unpass = Ite3.ToNode;
+						}
+					}
+				}
+
+				NewEdge.Conditions = std::move(Conditions);
+				NewNode.Edges.push_back(NewEdge);
+			}
+
+
+			Nodes.push_back(std::move(NewNode));
 		}
 	}
 
-	std::vector<DFA::Edge> CollectDFAEdge(std::vector<TemporaryEdge>& Source)
+	DfaProcessor::DfaProcessor(DfaT const& Table)
+		: Table(Table), CurNodeIndex(Table.GetStartupNodeIndex())
 	{
+		CacheIndex.resize(Table.GetCacheCounterCount());
+	}
 
-		using EdgeType = EpsilonNFA::EdgeType;
-		using ActionT = DFA::ActionT;
+	void DfaProcessor::Reset()
+	{
+		CurNodeIndex = Table.GetStartupNodeIndex();
+		CacheIndex.clear();
+		CacheIndex.resize(Table.GetCacheCounterCount(), 0);
+		auto& NodeRef = Table.Nodes[CurNodeIndex];
+		Accept = NodeRef.Accept;
+		CurMainCapture.reset();
+	}
 
-		std::vector<DFA::Edge> Target;
-		Target.reserve(Source.size());
-		for (auto& Ite : Source)
+	auto DfaProcessor::Consume(char32_t Token, std::size_t TokenIndex) -> bool
+	{
+		auto& NodeRef = Table.Nodes[CurNodeIndex];
+		for (auto& Ite : NodeRef.Edges)
 		{
-			DFA::Edge NewOne;
-			NewOne.ConsumeSymbols = std::move(Ite.ConsumeSymbols);
-			NewOne.ToIndex = std::move(Ite.ToIndexs);
-			NewOne.ContentNeedChange = false;
-			for (auto& Ite2 : Ite.Propertys)
+			if (Ite.CharSets.IsInclude(Token))
 			{
-				NewOne.List.push_back(ActionT::ContentBegin);
-				StandardT From;
-				StandardT To;
-				Misc::SerilizerHelper::CrossTypeSetThrow<Exception::RegexOutOfRange>(From, Ite2.OriginalFrom, RegexOutOfRange::TypeT::ContentIndex, Ite2.OriginalFrom);
-				Misc::SerilizerHelper::CrossTypeSetThrow<Exception::RegexOutOfRange>(To, Ite2.OriginalTo, RegexOutOfRange::TypeT::ContentIndex, Ite2.OriginalTo);
-				NewOne.Parameter.push_back(From);
-				NewOne.Parameter.push_back(To);
-				if(From != To)
-					NewOne.ContentNeedChange = true;
-				for (auto& Ite3 : Ite2.Propertys)
+				TempResult.clear();
+
+				bool DetectReuslt = true;
+				for (auto& Ite2 : Ite.Propertys)
 				{
-					switch (Ite3.Type)
+					if (DetectReuslt)
 					{
-					case EdgeType::Consume:
-						assert(false);
-						break;
-					case EdgeType::Acceptable:
+						switch (Ite2.Action)
+						{
+						case DfaT::PropertyActioE::CopyValue:
+							CacheIndex[Ite2.Par] = CacheIndex[Ite2.Solt];
+							break;
+						case DfaT::PropertyActioE::RecordLocation:
+							CacheIndex[Ite2.Solt] = TokenIndex;
+							break;
+						case DfaT::PropertyActioE::NewContext:
+							
+							break;
+						case DfaT::PropertyActioE::ConstraintsTrueTrue:
+							if(TempResult[Ite2.Solt])
+								DetectReuslt = true;
+							break;
+						case DfaT::PropertyActioE::ConstraintsFalseFalse:
+							if (!TempResult[Ite2.Solt])
+								DetectReuslt = false;
+							break;
+						case DfaT::PropertyActioE::ConstraintsFalseTrue:
+							if (!TempResult[Ite2.Solt])
+								DetectReuslt = true;
+							break;
+						case DfaT::PropertyActioE::ConstraintsTrueFalse:
+							if (TempResult[Ite2.Solt])
+								DetectReuslt = false;
+							break;
+						case DfaT::PropertyActioE::OneCounter:
+							CacheIndex[Ite2.Solt] = 1;
+							break;
+						case DfaT::PropertyActioE::AddCounter:
+							CacheIndex[Ite2.Solt] += 1;
+							break;
+						case DfaT::PropertyActioE::LessCounter:
+							if(CacheIndex[Ite2.Solt] > Ite2.Par)
+								DetectReuslt = false;
+							break;
+						case DfaT::PropertyActioE::BiggerCounter:
+							if (CacheIndex[Ite2.Solt] < Ite2.Par)
+								DetectReuslt = false;
+							break;
+						default:
+							assert(false);
+							break;
+						}
+					}
+					if (Ite2.Action == DfaT::PropertyActioE::NewContext)
 					{
-						auto Accr = std::get<Accept>(Ite3.Datas);
-						NewOne.Parameter.push_back(Accr.Mask);
-						NewOne.Parameter.push_back(Accr.SubMask);
-						NewOne.List.push_back(ActionT::Accept);
+						TempResult.push_back(DetectReuslt ? 1 : 0);
+						DetectReuslt = true;
+					}
+				}
+
+				TempResult.push_back(DetectReuslt ? 1 : 0);
+
+				std::size_t NextIte = 0;
+				std::optional<std::size_t> ToNode;
+				assert(!Ite.Conditions.empty());
+
+				for (auto Ite2 : TempResult)
+				{
+					assert(!ToNode.has_value());
+					auto& Cond = Ite.Conditions[NextIte];
+					if (Ite2 == 1)
+					{
+						switch (Cond.PassCommand)
+						{
+						case DfaT::ConditionT::CommandE::Next:
+							NextIte = Cond.Pass;
+							break;
+						case DfaT::ConditionT::CommandE::Fail:
+							return false;
+						case DfaT::ConditionT::CommandE::ToNode:
+							ToNode = Cond.Pass;
+							break;
+						default:
+							assert(false);
+							break;
+						}
+					}
+					else if (Ite2 == 0)
+					{
+						switch (Cond.UnpassCommand)
+						{
+						case DfaT::ConditionT::CommandE::Next:
+							NextIte = Cond.Unpass;
+							break;
+						case DfaT::ConditionT::CommandE::Fail:
+							return false;
+						case DfaT::ConditionT::CommandE::ToNode:
+							ToNode = Cond.Unpass;
+							break;
+						default:
+							assert(false);
+							break;
+						}
+					}
+				}
+
+				assert(ToNode.has_value());
+
+				CurNodeIndex = *ToNode;
+				Accept = Table.Nodes[CurNodeIndex].Accept;
+				if (!CurMainCapture.has_value())
+				{
+					CurMainCapture = {TokenIndex, TokenIndex};
+				}
+				else {
+					CurMainCapture = { CurMainCapture->Begin(), TokenIndex };
+				}
+				return true;
+			}
+		}
+		return false;
+	}
+
+	std::optional<ProcessorAcceptT> DfaProcessor::GetAccept() const
+	{
+		if (Accept.has_value())
+		{
+			ProcessorAcceptT NewAccept;
+			NewAccept.Mask = Accept->Mask;
+			for (std::size_t I = Accept->CaptureIndex.Begin(); I + 1 < Accept->CaptureIndex.End(); I += 2)
+			{
+				NewAccept.Capture.push_back(Misc::IndexSpan<>(CacheIndex[I], CacheIndex[I + 1]));
+			}
+			if (CurMainCapture.has_value())
+				NewAccept.MainCapture = *CurMainCapture;
+			return NewAccept;
+		}
+		return {};
+	}
+
+	void DfaBinaryTable::SerilizeToExe(Misc::StructedSerilizerWriter<StandardT>& Writer, DfaT const& RefTable)
+	{
+		using WriterT = Misc::StructedSerilizerWriter<StandardT>;
+		using namespace Potato::Reg::Exception;
+
+		HeadT Head;
+
+		Writer.WriteObject(Head);
+
+		std::vector<StandardT> NodeIndexOffset;
+
+		struct BackwardReference
+		{
+			std::size_t Adress;
+			std::size_t RefCount;
+		};
+
+		std::vector<BackwardReference> EdgeReference;
+		std::vector<BackwardReference> ConditionReference;
+		
+		for (auto& Ite : RefTable.Nodes)
+		{
+			EdgeReference.clear();
+
+			NodeT NewNode;
+
+			Misc::CrossTypeSetThrow<RegexOutOfRange>(NewNode.EdgeCount, Ite.Edges.size(), RegexOutOfRange::TypeT::EdgeCount, Ite.Edges.size());
+		
+			
+			auto NodeAdress = Writer.WriteObject(NewNode);
+			
+			{
+				StandardT StandardNodeOffset = 0;
+				Misc::CrossTypeSetThrow<RegexOutOfRange>(StandardNodeOffset, NodeAdress, RegexOutOfRange::TypeT::NodeOffset, NodeAdress);
+				if (Writer.IsWritting())
+				{
+					NodeIndexOffset.push_back(StandardNodeOffset);
+				}
+			}
+
+
+			for (std::size_t I = 0; I < Ite.Edges.size(); ++I)
+			{
+				auto& CurEdge = Ite.Edges[I];
+				CharSetPropertyT NewSetProperty;
+				Misc::CrossTypeSetThrow<RegexOutOfRange>(NewSetProperty.CharCount, CurEdge.CharSets.Size(), RegexOutOfRange::TypeT::CharCount, CurEdge.CharSets.Size());
+				auto CurEdgeOffset = Writer.WriteObject(NewSetProperty);
+				auto CharSetsSpan = CurEdge.CharSets.GetSpan();
+				if (Writer.IsWritting())
+				{
+					EdgeReference.push_back({ CurEdgeOffset, I });
+				}
+				Writer.WriteObjectArray(CharSetsSpan);
+			}
+
+			for (std::size_t I = 0; I < Ite.Edges.size(); ++I)
+			{
+				auto& CurEdge = Ite.Edges[I];
+				EdgeT NewEdge;
+				Misc::CrossTypeSetThrow<RegexOutOfRange>(NewEdge.PropertyCount, CurEdge.Propertys.size(), RegexOutOfRange::TypeT::PropertyCount, CurEdge.Propertys.size());
+				Misc::CrossTypeSetThrow<RegexOutOfRange>(NewEdge.ConditionCount, CurEdge.Conditions.size(), RegexOutOfRange::TypeT::ConditionCount, CurEdge.Conditions.size());
+				auto EdgeAdress = Writer.WriteObject(NewEdge);
+				auto Reader = Writer.GetReader();
+				if (Reader.has_value())
+				{
+					for (auto& Ite2 : EdgeReference)
+					{
+						if (Ite2.RefCount == I)
+						{
+							Reader->SetPointer(Ite2.Adress);
+							auto Ref = Reader->ReadObject<CharSetPropertyT>();
+							Ref->EdgeOffset = EdgeAdress - NodeAdress;
+						}
+					}
+				}
+				for (auto& Ite2 : CurEdge.Propertys)
+				{
+					static_assert(sizeof(DfaT::PropertyActioE) <= sizeof(StandardT));
+					Writer.WriteObject(static_cast<StandardT>(Ite2.Action));
+					switch (Ite2.Action)
+					{
+					case DfaT::PropertyActioE::CopyValue:
+					{
+						StandardT Par1 = 0;
+						Misc::CrossTypeSetThrow<RegexOutOfRange>(Par1, Ite2.Solt, RegexOutOfRange::TypeT::Solt, Ite2.Solt);
+						Writer.WriteObject(Par1);
+						Misc::CrossTypeSetThrow<RegexOutOfRange>(Par1, Ite2.Par, RegexOutOfRange::TypeT::Solt, Ite2.Par);
+						Writer.WriteObject(Par1);
 						break;
 					}
-					case EdgeType::CaptureBegin:
-						NewOne.List.push_back(ActionT::CaptureBegin);
-						NewOne.ContentNeedChange = true;
+					case DfaT::PropertyActioE::NewContext:
 						break;
-					case EdgeType::CaptureEnd:
-						NewOne.List.push_back(ActionT::CaptureEnd);
-						NewOne.ContentNeedChange = true;
+					case DfaT::PropertyActioE::ConstraintsTrueTrue:
+					case DfaT::PropertyActioE::ConstraintsFalseFalse:
+					case DfaT::PropertyActioE::ConstraintsFalseTrue:
+					case DfaT::PropertyActioE::ConstraintsTrueFalse:
+					case DfaT::PropertyActioE::OneCounter:
+					case DfaT::PropertyActioE::AddCounter:
+					case DfaT::PropertyActioE::RecordLocation:
+					{
+						StandardT Par1 = 0;
+						Misc::CrossTypeSetThrow<RegexOutOfRange>(Par1, Ite2.Solt, RegexOutOfRange::TypeT::Solt, Ite2.Solt);
+						Writer.WriteObject(Par1);
 						break;
-					case EdgeType::CounterAdd:
-						NewOne.List.push_back(ActionT::CounterAdd);
-						NewOne.ContentNeedChange = true;
+					}
+					case DfaT::PropertyActioE::LessCounter:
+					case DfaT::PropertyActioE::BiggerCounter:
+					{
+						StandardT Solt = 0;
+						Misc::CrossTypeSetThrow<RegexOutOfRange>(Solt, Ite2.Solt, RegexOutOfRange::TypeT::Solt, Ite2.Solt);
+						Writer.WriteObject(Solt);
+						StandardT Par = 0;
+						Misc::CrossTypeSetThrow<RegexOutOfRange>(Par, Ite2.Par, RegexOutOfRange::TypeT::Counter, Ite2.Par);
+						Writer.WriteObject(Par);
 						break;
-					case EdgeType::CounterBigEqual:
-						NewOne.List.push_back(ActionT::CounterBigEqual);
-						NewOne.Parameter.push_back(std::get<Counter>(Ite3.Datas).Target);
-						break;
-					case EdgeType::CounterEqual:
-						NewOne.List.push_back(ActionT::CounterEqual);
-						NewOne.Parameter.push_back(std::get<Counter>(Ite3.Datas).Target);
-						break;
-					case EdgeType::CounterPop:
-						NewOne.List.push_back(ActionT::CounterPop);
-						NewOne.ContentNeedChange = true;
-						break;
-					case EdgeType::CounterPush:
-						NewOne.List.push_back(ActionT::CounterPush);
-						NewOne.ContentNeedChange = true;
-						break;
-					case EdgeType::CounterSmallEqual:
-						NewOne.List.push_back(ActionT::CounterSmaller);
-						NewOne.Parameter.push_back(std::get<Counter>(Ite3.Datas).Target);
-						break;
+					}
 					default:
 						assert(false);
 						break;
 					}
 				}
-				NewOne.List.push_back(ActionT::ContentEnd);
-			}
-			Target.push_back(std::move(NewOne));
-		}
-		return Target;
-	}
 
-	DFA DFA::Create(NFA const& Input)
-	{
-		std::vector<Node> Nodes;
-
-		assert(!Input.Nodes.empty());
-
-		using EdgeT = EpsilonNFA::EdgeType;
-
-		NodeAllocator NodeAll;
-
-
-		std::vector<DFASearchCore> SearchingStack;
-
-		{
-			DFASearchCore Startup;
-			Startup.Index = 0;
-			auto [ID, New] = NodeAll.FindOrAdd({ &Startup.Index, 1 });
-			assert(New);
-			CollectTemporaryProperty(Input, NodeAll.Read(ID), Startup.TempRawNodes);
-			SearchingStack.push_back(std::move(Startup));
-		}
-
-		std::vector<TemporaryNode> TempNodes;
-		std::vector<TemporaryEdge> TempBuffer;
-
-		while (!SearchingStack.empty())
-		{
-			auto Top = *SearchingStack.rbegin();
-			SearchingStack.pop_back();
-
-			if (TempNodes.size() <= Top.Index)
-				TempNodes.resize(Top.Index + 1);
-
-			UnionEdges(TempBuffer, Top.TempRawNodes.KeepAcceptEdges);
-			UnionEdges(TempBuffer, Top.TempRawNodes.Edges);
-
-			ClassifyNodeIndes(Input, Top.TempRawNodes.KeepAcceptEdges, NodeAll, SearchingStack);
-			ClassifyNodeIndes(Input, Top.TempRawNodes.Edges, NodeAll, SearchingStack);
-
-			if (Top.TempRawNodes.KeepAcceptEdges == Top.TempRawNodes.Edges)
-				Top.TempRawNodes.KeepAcceptEdges.clear();
-
-			TempNodes[Top.Index] = std::move(Top.TempRawNodes);
-
-		}
-
-		{ // shared empty node with accept node
-			std::optional<std::size_t> FirstEmpty;
-
-			for (std::size_t I1 = 0; I1 < TempNodes.size(); ++I1)
-			{
-				auto& Ref = TempNodes[I1];
-				if (Ref.Edges.empty())
+				for (auto& Ite2 : CurEdge.Conditions)
 				{
-					FirstEmpty = I1;
-					break;
-				}
-			}
-
-			if (FirstEmpty.has_value())
-			{
-				for (std::size_t I1 = *FirstEmpty + 1; I1 < TempNodes.size();)
-				{
-					auto& Ref = TempNodes[I1];
-					if (Ref.Edges.empty())
-					{
-						for (std::size_t I2 = 0; I2 < TempNodes.size(); ++I2)
-						{
-							auto& Tar = TempNodes[I2];
-							for (auto& Ite1 : Tar.Edges)
-							{
-								for (auto& Ite2 : Ite1.ToIndexs)
-								{
-									if (Ite2 == I1)
-										Ite2 = *FirstEmpty;
-									else if (Ite2 > I1)
-									{
-										Ite2 -= 1;
-									}
-								}
-							}
-							for (auto& Ite1 : Tar.KeepAcceptEdges)
-							{
-								for (auto& Ite2 : Ite1.ToIndexs)
-								{
-									if (Ite2 == I1)
-										Ite2 = *FirstEmpty;
-									else if (Ite2 > I1)
-									{
-										Ite2 -= 1;
-									}
-								}
-							}
-						}
-						TempNodes.erase(TempNodes.begin() + I1);
-					}
-					else {
-						++I1;
-					}
-				}
-			}
-		}
-
-		{ // remove no content change property
-
-			struct TemPro
-			{
-				std::size_t Count = 0;
-				bool HasContentChangedEdge = false;
-				std::size_t LastNodeIndex = 0;
-			};
-
-			std::vector<TemPro> Pros;
-			Pros.resize(Input.Nodes.size());
-			for (std::size_t I = 0; I < Input.Nodes.size(); ++I)
-			{
-				auto& Cur = Input.Nodes[I];
-				for (auto& Ite : Cur.Edges)
-				{
-					bool HasContentChangedEdge = false;
-					for (auto& Ite2 : Ite.Propertys)
-					{
-						switch (Ite2.Type)
-						{
-						case EdgeT::CaptureBegin:
-						case EdgeT::CaptureEnd:
-						case EdgeT::CounterPush:
-						case EdgeT::CounterPop:
-						case EdgeT::CounterAdd:
-						case EdgeT::Acceptable:
-							HasContentChangedEdge = true;
-							break;
-						default:
-							break;
-						}
-						if (HasContentChangedEdge)
-							break;
-					}
-					auto& Ref = Pros[Ite.ToNode];
-					Ref.Count += 1;
-					Ref.HasContentChangedEdge |= HasContentChangedEdge;
-					Ref.LastNodeIndex = I;
-				}
-			}
-
-			std::vector<std::tuple<std::size_t, std::size_t>> NoContentChangeNode;
-
-			for (std::size_t I = 0; I < Pros.size(); ++I)
-			{
-				auto& Cur = Pros[I];
-				if (Cur.Count == 1 && !Cur.HasContentChangedEdge)
-					NoContentChangeNode.push_back({ I, Cur.LastNodeIndex });
-			}
-
-			if (!NoContentChangeNode.empty())
-			{
-				bool Change = true;
-				while (Change)
-				{
-					Change = false;
-					for (auto Ite = NoContentChangeNode.begin(); Ite != NoContentChangeNode.end() && !Change; ++Ite)
-					{
-						auto& [T1, F1] = *Ite;
-						for (auto Ite2 = Ite + 1; Ite2 != NoContentChangeNode.end(); ++Ite2)
-						{
-							auto [T2, F2] = *Ite2;
-							if (F1 == T2)
-							{
-								F1 = F2;
-								Change = true;
-								break;
-							}
-						}
-					}
-				}
-
-				for (auto& Ite : TempNodes)
-				{
-					for (auto& Ite2 : Ite.Edges)
-					{
-						for (auto& Ite3 : Ite2.Propertys)
-						{
-							auto FindIte = std::find_if(NoContentChangeNode.begin(), NoContentChangeNode.end(), [&](auto Value) {
-								return std::get<0>(Value) == Ite3.OriginalTo;
-								});
-
-							if (FindIte != NoContentChangeNode.end())
-								Ite3.OriginalTo = std::get<1>(*FindIte);
-
-							auto FindIte2 = std::find_if(NoContentChangeNode.begin(), NoContentChangeNode.end(), [&](auto Value) {
-								return std::get<0>(Value) == Ite3.OriginalFrom;
-								});
-
-							if (FindIte2 != NoContentChangeNode.end())
-								Ite3.OriginalFrom = std::get<1>(*FindIte2);
-						}
-					}
-
-					for (auto& Ite2 : Ite.KeepAcceptEdges)
-					{
-						for (auto& Ite3 : Ite2.Propertys)
-						{
-							auto FindIte = std::find_if(NoContentChangeNode.begin(), NoContentChangeNode.end(), [&](auto Value) {
-								return std::get<0>(Value) == Ite3.OriginalTo;
-								});
-
-							if (FindIte != NoContentChangeNode.end())
-								Ite3.OriginalTo = std::get<1>(*FindIte);
-
-							auto FindIte2 = std::find_if(NoContentChangeNode.begin(), NoContentChangeNode.end(), [&](auto Value) {
-								return std::get<0>(Value) == Ite3.OriginalFrom;
-								});
-
-							if (FindIte2 != NoContentChangeNode.end())
-								Ite3.OriginalFrom = std::get<1>(*FindIte2);
-						}
-					}
-				}
-			}
-
-		}
-
-		Nodes.reserve(TempNodes.size());
-
-		for (auto& Ite : TempNodes)
-		{
-			Node NewNode;
-			NewNode.Edges = CollectDFAEdge(Ite.Edges);
-			NewNode.KeepAcceptableEdges = CollectDFAEdge(Ite.KeepAcceptEdges);
-			Nodes.push_back(std::move(NewNode));
-		}
-
-		return {std::move(Nodes)};
-	}
-
-	std::size_t CalConsumeSymbolSize(std::span<IntervalT const> Symbols)
-	{
-		std::size_t Count = 0;
-		for (auto& Ite : Symbols)
-		{
-			if(Ite.end - Ite.start == 1)
-				Count += 1;
-			else
-				Count += 2;
-		}
-		return Count;
-	}
-
-	void CalEdgeSize(Misc::SerilizerHelper::Predicter<StandardT>& Pre, std::span<DFA::Edge const> Symbols)
-	{
-		for (auto& Ite2 : Symbols)
-		{
-			Pre.WriteObject<TableWrapper::ZipEdge>();
-			Pre.WriteObjectArray(std::span(Ite2.List));
-			Pre.WriteObjectArray(std::span(Ite2.Parameter));
-			Pre.WriteObjectArray<StandardT>(Ite2.ToIndex.size());
-			Pre.WriteObjectArray<TableWrapper::ZipChar>(CalConsumeSymbolSize(Ite2.ConsumeSymbols));
-		}
-	}
-
-	std::size_t TranslateIntervalT(std::span<IntervalT const> Source, std::vector<TableWrapper::ZipChar>& Output)
-	{
-		auto OldSize = Output.size();
-		for (auto& Ite : Source)
-		{
-			if (Ite.start + 1 == Ite.end)
-				Output.push_back({ true, Ite.start });
-			else {
-				Output.push_back({ false, Ite.start });
-				Output.push_back({ false, Ite.end });
-			}
-		}
-		return Output.size() - OldSize;
-	}
-
-	std::size_t TableWrapper::CalculateRequireSpaceWithStanderT(DFA const& Tab)
-	{
-		Misc::SerilizerHelper::Predicter<StandardT> Pred;
-		Pred.WriteElement();
-		for (auto& Ite : Tab.Nodes)
-		{
-			Pred.WriteObject<ZipNode>();
-			CalEdgeSize(Pred, std::span(Ite.Edges));
-			CalEdgeSize(Pred, std::span(Ite.KeepAcceptableEdges));
-		}
-		return Pred.RequireSpace();
-	}
-
-	std::size_t TableWrapper::SerializeTo(DFA const& Tab, std::span<StandardT> Source)
-	{
-
-		std::vector<std::size_t> NodeOffset;
-
-
-		assert(CalculateRequireSpaceWithStanderT(Tab) <= Source.size());
-		std::vector<std::size_t> NodeOffetMapping;
-		NodeOffetMapping.reserve(Tab.Nodes.size());
-
-		struct ToIndexRecord
-		{
-			std::span<StandardT> Target;
-			std::span<std::size_t const> Source;
-		};
-
-		std::vector<ToIndexRecord> Records;
-
-		std::vector<ZipChar> TempZipBuffer;
-		{
-			std::size_t Count = 0;
-			std::size_t Record = 0;
-			for (auto& Ite : Tab.Nodes)
-			{
-				for (auto& Ite2 : Ite.Edges)
-				{
-					Count += Ite2.ToIndex.size();
-					Record += 1;
-				}
-				for (auto& Ite2 : Ite.KeepAcceptableEdges)
-				{
-					Count += Ite2.ToIndex.size();
-					Record += 1;
-				}
-			}
-			Records.reserve(Count);
-		}
-
-		Misc::SerilizerHelper::SpanReader<StandardT> Serilizer(Source);
-		auto NodeNumber = Serilizer.NewElement();
-		Serilizer.CrossTypeSetThrow<Exception::RegexOutOfRange>(*NodeNumber, Tab.Nodes.size(), RegexOutOfRange::TypeT::NodeCount, Tab.Nodes.size());
-		int NodeIndex =  0;
-		for (auto& Ite : Tab.Nodes)
-		{
-			NodeOffset.push_back(Serilizer.GetIteSpacePositon());
-			NodeOffetMapping.push_back(Serilizer.GetIteSpacePositon());
-			auto Node = Serilizer.NewObject<ZipNode>();
-			Serilizer.CrossTypeSetThrow<RegexOutOfRange>(Node->EdgeCount, Ite.Edges.size(), RegexOutOfRange::TypeT::EdgeCount, Ite.Edges.size());
-			std::size_t EdgeStartOffset = Serilizer.GetIteSpacePositon();
-			int EdgeIndex = 0;
-			auto SerilizeEdge = [&](std::span<DFA::Edge const> Edges)
-			{
-				EdgeIndex += 1;
-				ZipEdge* LastEdge = nullptr;
-				std::size_t LastEdgeBegin = 0;
-				for (auto& Ite : Edges)
-				{
-					std::size_t EdgeOffset  = Serilizer.GetIteSpacePositon();
-					auto Edge = Serilizer.NewObject<ZipEdge>();
-					assert(Edge != nullptr);
-					if (LastEdge != nullptr)
-					{
-						Serilizer.CrossTypeSetThrow<RegexOutOfRange>(LastEdge->NextEdgeOffset, EdgeOffset - LastEdgeBegin, RegexOutOfRange::TypeT::EdgeOffset, EdgeOffset - LastEdgeBegin);
-					}
-					LastEdge = Edge;
-					LastEdgeBegin = Serilizer.GetIteSpacePositon();
-					Edge->NeedContentChange = Ite.ContentNeedChange;
-					Edge->NextEdgeOffset = 0;
 					
-					TempZipBuffer.clear();
-					TranslateIntervalT(std::span(Ite.ConsumeSymbols), TempZipBuffer);
-					Serilizer.CrossTypeSetThrow<RegexOutOfRange>(Edge->ConsumeSymbolCount, TempZipBuffer.size(), RegexOutOfRange::TypeT::AcceptableCharCount, TempZipBuffer.size());
-					Serilizer.CrossTypeSetThrow<RegexOutOfRange>(Edge->ToIndexCount, Ite.ToIndex.size(), RegexOutOfRange::TypeT::ToIndeCount, Ite.ToIndex.size());
-					Serilizer.CrossTypeSetThrow<RegexOutOfRange>(Edge->ActionCount, Ite.List.size(), RegexOutOfRange::TypeT::ActionCount, Ite.List.size());
-					Serilizer.CrossTypeSetThrow<RegexOutOfRange>(Edge->ParmaterCount, Ite.Parameter.size(), RegexOutOfRange::TypeT::ActionParameterCount, Ite.Parameter.size());
-					Serilizer.NewObjectArray(std::span(TempZipBuffer));
-					Serilizer.NewObjectArray(std::span(Ite.List));
-					Serilizer.NewObjectArray(std::span(Ite.Parameter));
-					auto Span = Serilizer.NewObjectArray<StandardT>(Ite.ToIndex.size());
-					Records.push_back({*Span, std::span(Ite.ToIndex)});
-				}
-			};
-			NodeIndex += 1;
+					ConditionT NewCondition;
+					NewCondition.PassCommand = static_cast<HalfStandardT>(Ite2.PassCommand);
+					NewCondition.UnpassCommand = static_cast<HalfStandardT>(Ite2.UnpassCommand);
+					auto ConditionAdress = Writer.WriteObject(NewCondition);
 
-			SerilizeEdge(Ite.Edges);
-			
+					auto Reader = Writer.GetReader();
 
-			if (Ite.KeepAcceptableEdges.empty())
-			{
-				Node->AcceptEdgeOffset = 0;
-			}
-			else {
-				std::size_t Offset = Serilizer.GetIteSpacePositon();
-				Serilizer.CrossTypeSetThrow<RegexOutOfRange>(Node->AcceptEdgeOffset, Offset - EdgeStartOffset, RegexOutOfRange::TypeT::EdgeOffset, Offset - EdgeStartOffset);
-				EdgeIndex = 0;
-				SerilizeEdge(Ite.KeepAcceptableEdges);
-			}
-		}
-
-		for (auto& Ite : Records)
-		{
-			assert(Ite.Source.size() == Ite.Target.size());
-			for (std::size_t I1 = 0; I1 < Ite.Source.size(); ++I1)
-			{
-				auto ID = Ite.Source[I1];
-				if (ID == std::numeric_limits<std::size_t>::max())
-				{
-					Ite.Target[I1] = std::numeric_limits<StandardT>::max();
-				}
-				else {
-					Serilizer.CrossTypeSetThrow<RegexOutOfRange>(Ite.Target[I1], NodeOffset[ID], RegexOutOfRange::TypeT::NodeOffset, ID);
-				}
-			}
-		}
-
-		return Serilizer.GetIteSpacePositon();
-	}
-
-	std::vector<StandardT> TableWrapper::Create(DFA const& Tab)
-	{
-		std::vector<StandardT> Buffer;
-		Buffer.resize(CalculateRequireSpaceWithStanderT(Tab));
-		SerializeTo(Tab, std::span(Buffer));
-		return Buffer;
-	}
-
-	template<typename Tar> Misc::IndexSpan<> FindBlockIndex(std::span<Tar const> Blocks, std::size_t RequireBlockID) 
-		requires(std::is_same_v<Tar, ProcessorContent::CaptureBlock> || std::is_same_v<Tar, ProcessorContent::CounterBlock>)
-	{
-		std::size_t Start = 0;
-		for (; Start != Blocks.size(); ++Start)
-		{
-			if(Blocks[Start].BlockIndex == RequireBlockID)
-				break;
-		}
-
-		std::size_t End = Start;
-		for (; End < Blocks.size(); ++End)
-		{
-			if (Blocks[End].BlockIndex != RequireBlockID)
-				break;
-		}
-
-		return {Start, End - Start};
-	}
-
-	Misc::IndexSpan<> ProcessorContent::FindCaptureIndex(std::size_t BlockIndex) const
-	{
-		return FindBlockIndex(std::span(CaptureBlocks), BlockIndex);
-	}
-
-	Misc::IndexSpan<> ProcessorContent::FindCounterIndex(std::size_t BlockIndex) const
-	{
-		return FindBlockIndex(std::span(CounterBlocks), BlockIndex);
-	}
-
-	std::optional<Misc::IndexSpan<>> CaptureWrapper::FindFirstCapture(std::span<Capture const> Captures)
-	{
-		std::size_t Stack = 0;
-		std::optional<Misc::IndexSpan<>> First;
-		for (std::size_t Index = 0; Index < Captures.size(); ++Index)
-		{
-			auto Cur = Captures[Index];
-			if (Cur.IsBegin)
-			{
-				if (Stack == 0)
-				{
-					assert(!First.has_value());
-					First = {Index, 0};
-				}
-				++Stack;
-			}
-			else {
-				--Stack;
-				if (Stack == 0)
-				{
-					assert(First.has_value());
-					First->Length = Index - First->Offset + 1;
-					return First;
-				}
-			}
-		}
-		return First;
-	}
-
-	CaptureWrapper CaptureWrapper::GetNextCapture() const
-	{
-		auto First = FindFirstCapture(NextCaptures);
-		if (First.has_value())
-		{
-			CaptureWrapper Result;
-			Result.SubCaptures = First->Sub(1, First->Length - 2).Slice(NextCaptures);
-			Result.NextCaptures = NextCaptures.subspan(First->End());
-			auto Start = NextCaptures[First->Begin()];
-			auto End = NextCaptures[First->End() - 1];
-			Result.CurrentCapture = { Start.Index, End.Index - Start.Index };
-			return Result;
-		}
-		return {};
-	}
-
-	CaptureWrapper CaptureWrapper::GetTopSubCapture() const
-	{
-		auto First = FindFirstCapture(SubCaptures);
-		if (First.has_value())
-		{
-			auto Start = SubCaptures[First->Begin()];
-			auto End = SubCaptures[First->End() - 1];
-			CaptureWrapper Result;
-			Result.SubCaptures = First->Sub(1, First->Length - 2).Slice(SubCaptures);
-			Result.NextCaptures = SubCaptures.subspan(First->End());
-			Result.CurrentCapture = { Start.Index, End.Index - Start.Index };
-			return Result;
-		}
-		return {};
-	}
-	
-	struct ApplyActionResult
-	{
-		std::size_t NodeArrayIndex = 0;
-		CoreProcessor::AcceptResult AcceptData;
-	};
-
-	ApplyActionResult ApplyAction(std::span<DFA::ActionT const> Actions, std::span<StandardT const> Parameter, ProcessorContent& Target, ProcessorContent const& Source,  std::size_t TokenIndex, bool ContentNeedChange)
-	{
-		using ActionT = DFA::ActionT;
-		std::size_t CounterDeep = 1;
-		std::optional<std::size_t> CorrentBlockIndex;
-		bool CounterTestPass = true;
-		bool MeetCounter = false;
-		ApplyActionResult Result;
-
-		if (ContentNeedChange)
-		{
-			std::size_t CounterOffset = 0;
-			std::size_t CaptureOffset = 0;
-
-			for (auto TopAction : Actions)
-			{
-				switch (TopAction)
-				{
-				case ActionT::CaptureBegin:
-					if (CounterTestPass)
+					if (Reader.has_value())
 					{
-						assert(CorrentBlockIndex.has_value());
-						Target.CaptureBlocks.push_back({ true, TokenIndex, *CorrentBlockIndex });
-					}
-					break;
-				case ActionT::CaptureEnd:
-					if (CounterTestPass)
-					{
-						assert(CorrentBlockIndex.has_value());
-						Target.CaptureBlocks.push_back({ false, TokenIndex, *CorrentBlockIndex });
-					}
-					break;
-				case ActionT::ContentBegin:
-					assert(Parameter.size() >= 2);
-					CorrentBlockIndex = Parameter[1];
-					CounterOffset = Target.CounterBlocks.size();
-					CaptureOffset = Target.CaptureBlocks.size();
-
-					{
-						auto SourceCounter = Source.FindCounterSpan(Parameter[0]);
-						for(auto Ite2 : SourceCounter)
-							Target.CounterBlocks.push_back({ Ite2.CountNumber, *CorrentBlockIndex });
-						auto SourceCapture = Source.FindCaptureSpan(Parameter[0]);
-						for (auto Ite2 : SourceCapture)
-							Target.CaptureBlocks.push_back({ Ite2.CaptureData, *CorrentBlockIndex });
-					}
-					
-					Parameter = Parameter.subspan(2);
-					break;
-				case ActionT::ContentEnd:
-					if (MeetCounter)
-					{
-						if (CounterTestPass)
+						Reader->SetPointer(ConditionAdress);
+						auto Last = Reader->ReadObject<ConditionT>();
+						if (Ite2.PassCommand == DfaT::ConditionT::CommandE::ToNode)
 						{
-							Result.NodeArrayIndex += CounterDeep;
+							ConditionReference.push_back({ConditionAdress, Ite2.Pass});
 						}
 						else {
-							Target.CaptureBlocks.resize(CaptureOffset);
-							Target.CounterBlocks.resize(CounterOffset);
+							Misc::CrossTypeSetThrow<RegexOutOfRange>(Last->Pass, Ite2.Pass, RegexOutOfRange::TypeT::Solt, Ite2.Pass);
 						}
-						CounterDeep *= 2;
-					}
-					CounterTestPass = true;
-					MeetCounter = false;
-					CorrentBlockIndex.reset();
-					break;
-				case ActionT::CounterAdd:
-					if (CounterTestPass)
-					{
-						assert(CorrentBlockIndex.has_value());
-						assert(Target.CounterBlocks.size() > CounterOffset);
-						assert(Target.CounterBlocks.rbegin()->BlockIndex == *CorrentBlockIndex);
-						++Target.CounterBlocks.rbegin()->CountNumber;
-					}
-					break;
-				case ActionT::CounterBigEqual:
-					if (CounterTestPass)
-					{
-						assert(CorrentBlockIndex.has_value());
-						assert(Target.CounterBlocks.size() > CounterOffset);
-						assert(Target.CounterBlocks.rbegin()->BlockIndex == *CorrentBlockIndex);
-						assert(Parameter.size() >= 1);
-						if (Target.CounterBlocks.rbegin()->CountNumber < Parameter[0])
+						if (Ite2.UnpassCommand == DfaT::ConditionT::CommandE::ToNode)
 						{
-							CounterTestPass = false;
+							ConditionReference.push_back({ ConditionAdress, Ite2.Unpass });
+						}
+						else {
+							Misc::CrossTypeSetThrow<RegexOutOfRange>(Last->Unpass, Ite2.Unpass, RegexOutOfRange::TypeT::Solt, Ite2.Unpass);
 						}
 					}
-					MeetCounter = true;
-					Parameter = Parameter.subspan(1);
-					break;
-				case ActionT::CounterSmaller:
-					if (CounterTestPass)
-					{
-						assert(CorrentBlockIndex.has_value());
-						assert(Target.CounterBlocks.size() > CounterOffset);
-						assert(Target.CounterBlocks.rbegin()->BlockIndex == *CorrentBlockIndex);
-						assert(Parameter.size() >= 1);
-						if (Target.CounterBlocks.rbegin()->CountNumber >= Parameter[0])
-						{
-							CounterTestPass = false;
-						}
-					}
-					MeetCounter = true;
-					Parameter = Parameter.subspan(1);
-					break;
-				case ActionT::CounterEqual:
-					if (CounterTestPass)
-					{
-						assert(CorrentBlockIndex.has_value());
-						assert(Target.CounterBlocks.size() > CounterOffset);
-						assert(Target.CounterBlocks.rbegin()->BlockIndex == *CorrentBlockIndex);
-						assert(Parameter.size() >= 1);
-						if (Target.CounterBlocks.rbegin()->CountNumber != Parameter[0])
-						{
-							CounterTestPass = false;
-						}
-					}
-					MeetCounter = true;
-					Parameter = Parameter.subspan(1);
-					break;
-				case ActionT::CounterPush:
-					if (CounterTestPass)
-					{
-						assert(CorrentBlockIndex.has_value());
-						Target.CounterBlocks.push_back({ 0, *CorrentBlockIndex });
-					}
-					break;
-				case ActionT::CounterPop:
-					if (CounterTestPass)
-					{
-						assert(CorrentBlockIndex.has_value());
-						assert(Target.CounterBlocks.size() > CounterOffset);
-						assert(Target.CounterBlocks.rbegin()->BlockIndex == *CorrentBlockIndex);
-						Target.CounterBlocks.pop_back();
-					}
-					break;
-				case ActionT::Accept:
-					if (CounterTestPass && !Result.AcceptData)
-					{
-						assert(CorrentBlockIndex.has_value());
-						assert(Parameter.size() >= 2);
-						Result.AcceptData.AcceptData = { Parameter[0], Parameter[1]};
-						Result.AcceptData.CaptureSpan = {CaptureOffset, Target.CaptureBlocks.size() - CaptureOffset};
-					}
-					Parameter = Parameter.subspan(2);
-					break;
-				default:
-					assert(false);
-					break;
 				}
 			}
-		}
-		else {
-			for (auto TopAction : Actions)
+
+			if (Ite.Accept.has_value())
 			{
-				std::span<ProcessorContent::CaptureBlock const> CacheCapture;
-				std::span<ProcessorContent::CounterBlock const> CacheCounter;
-				Misc::IndexSpan<> CacheCaptureIndex;
-				switch (TopAction)
+				AcceptT NewAccept;
+				Misc::CrossTypeSetThrow<RegexOutOfRange>(
+					NewAccept.Mask, Ite.Accept->Mask, RegexOutOfRange::TypeT::Mask, Ite.Accept->Mask
+				);
+				Misc::CrossTypeSetThrow<RegexOutOfRange>(
+					NewAccept.CaptureIndexBegin, Ite.Accept->CaptureIndex.Begin(), 
+					RegexOutOfRange::TypeT::CaptureIndex, Ite.Accept->CaptureIndex.Begin()
+				);
+				Misc::CrossTypeSetThrow<RegexOutOfRange>(
+					NewAccept.CaptureIndexEnd, Ite.Accept->CaptureIndex.End(),
+					RegexOutOfRange::TypeT::CaptureIndex, Ite.Accept->CaptureIndex.End()
+				);
+				auto Adress = Writer.WriteObject(NewAccept);
+				auto Reader = Writer.GetReader();
+				if (Reader.has_value())
 				{
-				case ActionT::ContentBegin:
-					assert(Parameter.size() >= 2);
-					CorrentBlockIndex = Parameter[1];
-					CacheCaptureIndex = Source.FindCaptureIndex(*CorrentBlockIndex);
-					CacheCapture = CacheCaptureIndex.Slice(Source.CaptureBlocks);
-					Parameter = Parameter.subspan(2);
-					break;
-				case ActionT::ContentEnd:
-					if (MeetCounter)
-					{
-						if (CounterTestPass)
-						{
-							Result.NodeArrayIndex += CounterDeep;
-						}
-						CounterDeep *= 2;
-					}
-					CounterTestPass = true;
-					MeetCounter = false;
-					CorrentBlockIndex.reset();
-					break;
-				case ActionT::CounterBigEqual:
-					if (CounterTestPass)
-					{
-						assert(CorrentBlockIndex.has_value());
-						assert(!CacheCounter.empty());
-						assert(CacheCounter.rbegin()->BlockIndex == *CorrentBlockIndex);
-						assert(Parameter.size() >= 1);
-						if (CacheCounter.rbegin()->CountNumber < Parameter[0])
-						{
-							CounterTestPass = false;
-						}
-					}
-					MeetCounter = true;
-					Parameter = Parameter.subspan(1);
-					break;
-				case ActionT::CounterSmaller:
-					if (CounterTestPass)
-					{
-						assert(CorrentBlockIndex.has_value());
-						assert(!CacheCounter.empty());
-						assert(CacheCounter.rbegin()->BlockIndex == *CorrentBlockIndex);
-						assert(Parameter.size() >= 1);
-						if (CacheCounter.rbegin()->CountNumber >= Parameter[0])
-						{
-							CounterTestPass = false;
-						}
-					}
-					MeetCounter = true;
-					Parameter = Parameter.subspan(1);
-					break;
-				case ActionT::CounterEqual:
-					if (CounterTestPass)
-					{
-						assert(CorrentBlockIndex.has_value());
-						assert(!CacheCounter.empty());
-						assert(CacheCounter.rbegin()->BlockIndex == *CorrentBlockIndex);
-						assert(Parameter.size() >= 1);
-						if (CacheCounter.rbegin()->CountNumber != Parameter[0])
-						{
-							CounterTestPass = false;
-						}
-					}
-					MeetCounter = true;
-					Parameter = Parameter.subspan(1);
-					break;
-				case ActionT::Accept:
-					if (CounterTestPass && !Result.AcceptData)
-					{
-						assert(CorrentBlockIndex.has_value());
-						assert(Parameter.size() >= 2);
-						Result.AcceptData.CaptureSpan = CacheCaptureIndex;
-						Result.AcceptData.AcceptData = { Parameter[0], Parameter[1]};
-					}
-					Parameter = Parameter.subspan(2);
-					break;
-				default:
-					assert(false);
-					break;
+					Reader->SetPointer(NodeAdress);
+					auto N = Reader->ReadObject<NodeT>();
+					N->AcceptOffset = static_cast<HalfStandardT>(Adress - NodeAdress);
 				}
 			}
 		}
-		return Result;
+
 		
-	}
-
-	auto CoreProcessor::ConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeIndex, DFA const& Table, char32_t Symbol, std::size_t TokenIndex, bool KeepAccept) -> std::optional<Result>
-	{
-		assert(CurNodeIndex < Table.Nodes.size());
-
-		auto& CurNode = Table.Nodes[CurNodeIndex];
-
-		decltype(CurNode.Edges)::const_iterator Begin;
-		decltype(CurNode.Edges)::const_iterator End;
-
-		if (KeepAccept && !CurNode.KeepAcceptableEdges.empty())
+		auto Reader = Writer.GetReader();
+		if (Reader.has_value())
 		{
-			Begin = CurNode.KeepAcceptableEdges.begin();
-			End = CurNode.KeepAcceptableEdges.end();
-		}
-		else {
-			Begin = CurNode.Edges.begin();
-			End = CurNode.Edges.end();
-		}
-
-		for (auto Ite = Begin; Ite != End; ++Ite)
-		{
-			if (Misc::SequenceIntervalWrapper{ Ite->ConsumeSymbols }.IsInclude(Symbol))
+			for (auto& Ite : ConditionReference)
 			{
-				auto Pars = std::span{ Ite->Parameter };
-				auto Actions = std::span{ Ite->List };
-				auto AR = ApplyAction(Actions, Pars, Target, Source, TokenIndex, Ite->ContentNeedChange);
-				auto NodexIndex = Ite->ToIndex[AR.NodeArrayIndex];
-				if (NodexIndex != std::numeric_limits<std::size_t>::max())
+				Reader->SetPointer(Ite.Adress);
+				auto Condi = Reader->ReadObject<ConditionT>();
+				if (Condi->PassCommand == static_cast<HalfStandardT>(DfaT::ConditionT::CommandE::ToNode) && Condi->Pass == 0)
 				{
-					Result Re;
-					Re.NextNodeIndex = NodexIndex;
-					Re.ContentNeedChange = Ite->ContentNeedChange;
-					Re.AcceptData = AR.AcceptData;
-					return Re;
+					Condi->Pass = NodeIndexOffset[Ite.RefCount];
 				}
-				else {
-					return {};
-				}
-			}
-		}
-
-		return {};
-	}
-
-	bool AcceptConsumeSymbol(std::span<TableWrapper::ZipChar const> Source, char32_t Symbol)
-	{
-		while (!Source.empty())
-		{
-			auto Cur = Source[0];
-			if (Cur.IsSingleChar)
-			{
-				if(Symbol == Cur.Char)
-					return true;
-				Source = Source.subspan(1);
-			}
-			else {
-				assert(Source.size() >= 2);
-				assert(!Source[1].IsSingleChar);
-				if (Symbol >= Cur.Char && Symbol < Source[1].Char)
-					return true;
-				Source = Source.subspan(2);
-			}
-		}
-		return false;
-	}
-
-	auto CoreProcessor::ConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeOffset, TableWrapper Wrapper, char32_t Symbol, std::size_t TokenIndex, bool KeepAccept) ->std::optional<Result>
-	{
-		assert(CurNodeOffset < Wrapper.BufferSize());
-
-		auto IteSpan = Wrapper.Wrapper.subspan(CurNodeOffset);
-
-		Misc::SerilizerHelper::SpanReader<StandardT const> Reader(IteSpan);
-
-		auto CurNode = Reader.ReadObject<TableWrapper::ZipNode const>();
-		if (CurNode->EdgeCount != 0)
-		{
-			TableWrapper::ZipEdge const* Edge = nullptr;
-			if (KeepAccept)
-				Reader = Reader.SubSpan(CurNode->AcceptEdgeOffset);
-			Edge = Reader.ReadObject<TableWrapper::ZipEdge const>();
-			auto EdgeReader = Reader;
-			assert(Edge != nullptr);
-
-			while (Edge != nullptr)
-			{
-				auto Symbols = EdgeReader.ReadObjectArray<TableWrapper::ZipChar const>(Edge->ConsumeSymbolCount);
-				assert(Symbols.has_value());
-				if (AcceptConsumeSymbol(*Symbols, Symbol))
+				else if (Condi->UnpassCommand == static_cast<HalfStandardT>(DfaT::ConditionT::CommandE::ToNode) && Condi->Unpass == 0)
 				{
-					auto List = EdgeReader.ReadObjectArray<DFA::ActionT const>(Edge->ActionCount);
-					auto Par = EdgeReader.ReadObjectArray<StandardT const>(Edge->ParmaterCount);
-					auto ToIndex = EdgeReader.ReadObjectArray<StandardT const>(Edge->ToIndexCount);
-					assert(List.has_value() && Par.has_value() && ToIndex.has_value());
-					auto AR = ApplyAction(*List, *Par, Target, Source, TokenIndex, Edge->NeedContentChange);
-					auto NodexIndex = (*ToIndex)[AR.NodeArrayIndex];
-					if (NodexIndex != std::numeric_limits<StandardT>::max())
+					Condi->Unpass = NodeIndexOffset[Ite.RefCount];
+				}
+				else
+					assert(false);
+			}
+
+			Reader->SetPointer(0);
+			auto Head = Reader->ReadObject<HeadT>();
+
+			Head->Format = RefTable.Format;
+			Head->StartupNodeIndex = NodeIndexOffset[0];
+			Head->NodeCount = static_cast<StandardT>(NodeIndexOffset.size());
+			Head->CacheSolt = static_cast<StandardT>(RefTable.CacheRecordCount);
+		}
+
+	}
+
+	DfaBinaryTableProcessor::DfaBinaryTableProcessor(DfaBinaryTable Table)
+		: Table(Table), CurrentNode(Table.GetStartupNodeIndex())
+	{
+		CacheIndex.resize(Table.GetCacheCounterCount());
+		Reset();
+	}
+
+	void DfaBinaryTableProcessor::Reset()
+	{
+		Accept.reset();
+		CurMainCapture.reset();
+		CurrentNode = Table.GetStartupNodeIndex();
+		auto Reader = Misc::StructedSerilizerReader(Table.Wrapper);
+		Reader.SetPointer(CurrentNode);
+		auto Node = Reader.ReadObject<DfaBinaryTable::NodeT>();
+		if (Node->AcceptOffset != 0 || Node->EdgeCount == 0)
+		{
+			Reader.SetPointer(Node->AcceptOffset + CurrentNode);
+			auto TAccept = Reader.ReadObject<DfaBinaryTable::AcceptT>();
+			Accept = *TAccept;
+		}
+	}
+
+
+	bool DfaBinaryTableProcessor::Consume(char32_t Token, std::size_t TokenIndex)
+	{
+		auto Reader = Misc::StructedSerilizerReader(Table.Wrapper);
+		Reader.SetPointer(CurrentNode);
+		auto Node = Reader.ReadObject<DfaBinaryTable::NodeT>();
+		std::size_t ECount = Node->EdgeCount;
+		for (std::size_t I = 0; I < ECount; ++I)
+		{
+			auto Pro = Reader.ReadObject<DfaBinaryTable::CharSetPropertyT>();
+			auto IntervalSpan = Reader.ReadObjectArray<IntervalT::ElementT>(Pro->CharCount);
+			if (Misc::IntervalWrapperT<char32_t>::IsInclude(IntervalSpan, Token))
+			{
+				Reader.SetPointer(CurrentNode + Pro->EdgeOffset);
+				auto Edge = Reader.ReadObject<DfaBinaryTable::EdgeT>();
+				std::size_t ECount = Edge->PropertyCount;
+				std::size_t CCount = Edge->ConditionCount;
+				TempResult.clear();
+				bool DetectResult = true;
+				for (std::size_t I2 = 0; I2 < ECount; ++I2)
+				{
+					auto Action = static_cast<DfaT::PropertyActioE>(*Reader.ReadObject<DfaBinaryTable::StandardT>());
+					switch (Action)
 					{
-						Result Re;
-						Re.NextNodeIndex = NodexIndex;
-						Re.ContentNeedChange = Edge->NeedContentChange;
-						Re.AcceptData = AR.AcceptData;
-						return Re;
+					case DfaT::PropertyActioE::CopyValue:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						auto P2 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if(DetectResult)
+							CacheIndex[P2] = CacheIndex[P1];
+						break;
+					}
+					case DfaT::PropertyActioE::RecordLocation:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if(DetectResult)
+							CacheIndex[P1] = TokenIndex;
+						break;
+					}
+					case DfaT::PropertyActioE::NewContext:
+					{
+						TempResult.push_back(DetectResult ? 1 : 0);
+						DetectResult = true;
+						break;
+					}
+					case DfaT::PropertyActioE::ConstraintsTrueTrue:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if (DetectResult && TempResult[P1])
+							DetectResult = true;
+						break;
+					}
+					case DfaT::PropertyActioE::ConstraintsFalseFalse:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if (DetectResult && !TempResult[P1])
+							DetectResult = false;
+						break;
+					}
+					case DfaT::PropertyActioE::ConstraintsFalseTrue:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if (DetectResult && !TempResult[P1])
+							DetectResult = true;
+						break;
+					}
+					case DfaT::PropertyActioE::ConstraintsTrueFalse:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if (DetectResult && TempResult[P1])
+							DetectResult = false;
+						break;
+					}
+					case DfaT::PropertyActioE::OneCounter:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if (DetectResult)
+							CacheIndex[P1] = 1;
+						break;
+					}
+					case DfaT::PropertyActioE::AddCounter:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if (DetectResult)
+							CacheIndex[P1] += 1;
+						break;
+					}
+					case DfaT::PropertyActioE::LessCounter:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						auto P2 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if (DetectResult && CacheIndex[P1] > P2)
+							DetectResult = false;
+						break;
+					}
+					case DfaT::PropertyActioE::BiggerCounter:
+					{
+						auto P1 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						auto P2 = *Reader.ReadObject<DfaBinaryTable::StandardT>();
+						if (DetectResult && CacheIndex[P1] < P2)
+							DetectResult = false;
+						break;
+					}
+					default:
+						assert(false);
+						break;
+					}
+				}
+
+				TempResult.push_back(DetectResult ? 1 : 0);
+				auto ConditionSpan = Reader.ReadObjectArray<DfaBinaryTable::ConditionT>(Edge->ConditionCount);
+				std::size_t LastCondition = 0;
+				for (auto Ite : TempResult)
+				{
+					auto CurCondition = ConditionSpan[LastCondition];
+					auto TarCommand = DfaT::ConditionT::CommandE::Fail;
+					std::size_t Solt = 0;
+					if (Ite == 1)
+					{
+						TarCommand = static_cast<DfaT::ConditionT::CommandE>(CurCondition.PassCommand);
+						Solt = CurCondition.Pass;
 					}
 					else {
-						return {};
+						TarCommand = static_cast<DfaT::ConditionT::CommandE>(CurCondition.UnpassCommand);
+						Solt = CurCondition.Unpass;
 					}
-				}
-				if (Edge->NextEdgeOffset == 0)
-					Edge = nullptr;
-				else
-				{
-					Reader = Reader.SubSpan(Edge->NextEdgeOffset);
-					Edge = Reader.ReadObject<TableWrapper::ZipEdge const>();
-					EdgeReader = Reader;
-				}
-			}
-		}
-		return {};
-	}
-
-
-	auto CoreProcessor::KeepAcceptConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeIndex, DFA const& Table, char32_t Symbol, std::size_t TokenIndex) ->KeepAcceptResult
-	{
-		assert(CurNodeIndex < Table.Nodes.size());
-
-		auto& CurNode = Table.Nodes[CurNodeIndex];
-
-		decltype(CurNode.Edges)::const_iterator Begin;
-		decltype(CurNode.Edges)::const_iterator End;
-
-		if (!CurNode.KeepAcceptableEdges.empty())
-		{
-			Begin = CurNode.KeepAcceptableEdges.begin();
-			End = CurNode.KeepAcceptableEdges.end();
-		}
-		else {
-			Begin = CurNode.Edges.begin();
-			End = CurNode.Edges.end();
-		}
-
-		KeepAcceptResult KAResult;
-
-		for (auto Ite = Begin; Ite != End; ++Ite)
-		{
-			if (!KAResult.MeetAcceptRequireConsume && Misc::SequenceIntervalWrapper{ Ite->ConsumeSymbols }.IsInclude(Symbol))
-			{
-				KAResult.MeetAcceptRequireConsume = true;
-			}	
-			else if (Misc::SequenceIntervalWrapper{ Ite->ConsumeSymbols }.IsInclude(Reg::EndOfFile()))
-			{
-				auto Pars = std::span{ Ite->Parameter };
-				auto Actions = std::span{ Ite->List };
-				auto AR = ApplyAction(Actions, Pars, Target, Source, TokenIndex, Ite->ContentNeedChange);
-				auto NodexIndex = Ite->ToIndex[AR.NodeArrayIndex];
-				
-				if (NodexIndex != std::numeric_limits<std::size_t>::max())
-				{
-					KAResult.ContentNeedChange = Ite->ContentNeedChange;
-					KAResult.AcceptData = AR.AcceptData;
-				}
-				return KAResult;
-			}
-		}
-
-		return KAResult;
-	}
-
-	auto CoreProcessor::KeepAcceptConsumeSymbol(ProcessorContent& Target, ProcessorContent const& Source, std::size_t CurNodeOffset, TableWrapper Wrapper, char32_t Symbol, std::size_t TokenIndex) ->KeepAcceptResult
-	{
-		assert(CurNodeOffset < Wrapper.BufferSize());
-
-		auto IteSpan = Wrapper.Wrapper.subspan(CurNodeOffset);
-
-		Misc::SerilizerHelper::SpanReader<StandardT const> Reader(IteSpan);
-
-		auto CurNode = Reader.ReadObject<TableWrapper::ZipNode const>();
-
-		KeepAcceptResult KAResult;
-
-
-		if (CurNode->EdgeCount != 0)
-		{
-			Reader = Reader.SubSpan(CurNode->AcceptEdgeOffset);
-			auto Edge = Reader.ReadObject<TableWrapper::ZipEdge const>();
-			auto EdgeReader = Reader;
-			assert(Edge != nullptr);
-
-			while (Edge != nullptr)
-			{
-				auto Symbols = EdgeReader.ReadObjectArray<TableWrapper::ZipChar const>(Edge->ConsumeSymbolCount);
-				assert(Symbols.has_value());
-				if (!KAResult.MeetAcceptRequireConsume && AcceptConsumeSymbol(*Symbols, Symbol))
-				{
-					KAResult.MeetAcceptRequireConsume = true;
-				}
-				else if (AcceptConsumeSymbol(*Symbols, Reg::EndOfFile()))
-				{
-					auto List = EdgeReader.ReadObjectArray<DFA::ActionT const>(Edge->ActionCount);
-					auto Par = EdgeReader.ReadObjectArray<StandardT const>(Edge->ParmaterCount);
-					auto ToIndex = EdgeReader.ReadObjectArray<StandardT const>(Edge->ToIndexCount);
-					assert(List.has_value() && Par.has_value() && ToIndex.has_value());
-					auto AR = ApplyAction(*List, *Par, Target, Source, TokenIndex, Edge->NeedContentChange);
-					auto NodexIndex = (*ToIndex)[AR.NodeArrayIndex];
-					if (NodexIndex != std::numeric_limits<StandardT>::max())
+					switch (TarCommand)
 					{
-						KAResult.ContentNeedChange = Edge->NeedContentChange;
-						KAResult.AcceptData = AR.AcceptData;
-						return KAResult;
+					case DfaT::ConditionT::CommandE::Next:
+						LastCondition = Solt;
+						break;
+					case DfaT::ConditionT::CommandE::ToNode:
+					{
+						CurrentNode = Solt;
+						Reader.SetPointer(CurrentNode);
+						Accept = {};
+						auto Node = Reader.ReadObject<DfaBinaryTable::NodeT>();
+						if (Node->AcceptOffset != 0 || Node->EdgeCount == 0)
+						{
+							Reader.SetPointer(Node->AcceptOffset + CurrentNode);
+							auto TAccept = Reader.ReadObject<DfaBinaryTable::AcceptT>();
+							Accept = *TAccept;
+						}
+						if (!CurMainCapture.has_value())
+						{
+							CurMainCapture = { TokenIndex, TokenIndex };
+						}
+						else {
+							CurMainCapture = { CurMainCapture->Begin(), TokenIndex };
+						}
+						return true;
 					}
-					else {
-						return {};
+					case DfaT::ConditionT::CommandE::Fail:
+						return false;
+					default:
+						assert(false);
+						return false;
 					}
-				}
-				if (Edge->NextEdgeOffset == 0)
-					Edge = nullptr;
-				else
-				{
-					Reader = Reader.SubSpan(Edge->NextEdgeOffset);
-					Edge = Reader.ReadObject<TableWrapper::ZipEdge const>();
-					EdgeReader = Reader;
 				}
 			}
-		}
-		return KAResult;
-	}
-
-	void MatchProcessor::Clear()
-	{
-		NodeIndex = StartupNodeOffset;
-		Contents.Clear();
-		TempBuffer.Clear();
-	}
-
-	template<typename TableT>
-	bool MatchProcessorConsumeSymbol(MatchProcessor& Pro, TableT Table, char32_t Symbol, std::size_t TokenIndex)
-	{
-		assert(Symbol != Reg::EndOfFile());
-		Pro.TempBuffer.Clear();
-		auto Re = CoreProcessor::ConsumeSymbol(Pro.TempBuffer, Pro.Contents, Pro.NodeIndex, Table, Symbol, TokenIndex, false);
-		if (Re.has_value())
-		{
-			assert(!Re->AcceptData);
-			Pro.NodeIndex = Re->NextNodeIndex;
-			if (Re->ContentNeedChange)
-				std::swap(Pro.TempBuffer, Pro.Contents);
-			return true;
 		}
 		return false;
 	}
 
-	bool MatchProcessor::Consume(char32_t Symbol, std::size_t TokenIndex) {
-		assert(Symbol != Reg::EndOfFile());
-		TempBuffer.Clear();
-		std::optional<CoreProcessor::Result> Re;
-		if (std::holds_alternative<std::reference_wrapper<DFA const>>(Table))
-		{
-			Re = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<std::reference_wrapper<DFA const>>(Table).get(), Symbol, TokenIndex, false);
-		}
-		else {
-			Re = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<TableWrapper>(Table), Symbol, TokenIndex, false);
-		}
-		if (Re.has_value())
-		{
-			assert(!Re->AcceptData);
-			NodeIndex = Re->NextNodeIndex;
-			if (Re->ContentNeedChange)
-				std::swap(TempBuffer, Contents);
-			return true;
-		}
-		return false;
-	}
-
-	auto MatchProcessor::EndOfFile(std::size_t TokenIndex) -> std::optional<Result>
+	std::optional<ProcessorAcceptT> DfaBinaryTableProcessor::GetAccept() const
 	{
-		TempBuffer.Clear();
-		std::optional<CoreProcessor::Result> Re;
-		if (std::holds_alternative<std::reference_wrapper<DFA const>>(Table))
+		if (Accept.has_value())
 		{
-			Re = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<std::reference_wrapper<DFA const>>(Table).get(), Reg::EndOfFile(), TokenIndex, false);
-		}
-		else {
-			Re = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<TableWrapper>(Table), Reg::EndOfFile(), TokenIndex, false);
-		}
-		if (Re.has_value())
-		{
-			assert(Re->AcceptData);
-			MatchProcessor::Result NRe;
-			NRe.MainCapture = {0, TokenIndex};
-			NRe.AcceptData = *Re->AcceptData.AcceptData;
-			auto Span =  
-				Re->AcceptData.CaptureSpan.Slice(Re->ContentNeedChange ? TempBuffer.CaptureBlocks : Contents.CaptureBlocks);
-			for (auto Ite : Span)
+			ProcessorAcceptT NewAccept;
+			NewAccept.Mask = Accept->Mask;
+			for (std::size_t I = Accept->CaptureIndexBegin; I + 1 < Accept->CaptureIndexEnd; I += 2)
 			{
-				NRe.SubCaptures.push_back(Ite.CaptureData);
+				NewAccept.Capture.push_back(Misc::IndexSpan<>(CacheIndex[I], CacheIndex[I + 1]));
 			}
-			//Clear();
-			return NRe;
-		}
-		return {};
-	}
-
-	void HeadMatchProcessor::Clear()
-	{
-		Contents.Clear();
-		TempBuffer.Clear();
-		CacheResult.reset();
-		NodeIndex = StartupNode;
-	}
-
-	auto HeadMatchProcessor::Consume(char32_t Symbol, std::size_t TokenIndex) ->std::optional<std::optional<Result>>
-	{
-		assert(Symbol != Reg::EndOfFile());
-		TempBuffer.Clear();
-		CoreProcessor::KeepAcceptResult Re1;
-		if (std::holds_alternative<std::reference_wrapper<DFA const>>(Table))
-		{
-			Re1 = CoreProcessor::KeepAcceptConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<std::reference_wrapper<DFA const>>(Table).get(), Symbol, TokenIndex);
-		}
-		else {
-			Re1 = CoreProcessor::KeepAcceptConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<TableWrapper>(Table), Symbol, TokenIndex);
-		}
-		if (Re1.AcceptData)
-		{
-			HeadMatchProcessor::Result Re;
-			if (CacheResult.has_value())
-			{
-				Re = std::move(*CacheResult);
-				CacheResult.reset();
-			}
-			Re.AcceptData = *Re1.AcceptData.AcceptData;
-			std::span<ProcessorContent::CaptureBlock const> Span = Re1.ContentNeedChange ? std::span(TempBuffer.CaptureBlocks) : std::span(Contents.CaptureBlocks);
-			Re.SubCaptures.clear();
-			for (auto Ite : Span)
-				Re.SubCaptures.push_back(Ite.CaptureData);
-			Re.MainCapture = { 0, TokenIndex };
-			CacheResult = std::move(Re);
-
-			if (!Greedy && !Re1.MeetAcceptRequireConsume)
-			{
-				auto Re = std::move(CacheResult);
-				//Clear();
-				return Re;
-			}
-		}
-
-		std::optional<CoreProcessor::Result> Re2;
-		if (std::holds_alternative<std::reference_wrapper<DFA const>>(Table))
-		{
-			Re2 = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<std::reference_wrapper<DFA const>>(Table).get(), Symbol, TokenIndex, true);
-		}
-		else {
-			Re2 = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<TableWrapper>(Table), Symbol, TokenIndex, true);
-		}
-
-		if (Re2.has_value())
-		{
-			assert(!Re2->AcceptData);
-			NodeIndex = Re2->NextNodeIndex;
-			if (Re2->ContentNeedChange)
-				std::swap(TempBuffer, Contents);
-			return std::optional<HeadMatchProcessor::Result>{};
-		}
-		else {
-			if (CacheResult.has_value())
-			{
-				auto Re = std::move(CacheResult);
-				//Clear();
-				return Re;
-			}
-			else {
-				return {};
-			}
-		}
-	}
-
-	auto HeadMatchProcessor::EndOfFile(std::size_t TokenIndex) -> std::optional<Result>
-	{
-		TempBuffer.Clear();
-
-		std::optional<CoreProcessor::Result> Re1;
-		if (std::holds_alternative<std::reference_wrapper<DFA const>>(Table))
-		{
-			Re1 = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<std::reference_wrapper<DFA const>>(Table).get(), Reg::EndOfFile(), TokenIndex, true);
-		}
-		else {
-			Re1 = CoreProcessor::ConsumeSymbol(TempBuffer, Contents, NodeIndex, std::get<TableWrapper>(Table), Reg::EndOfFile(), TokenIndex, true);
-		}
-
-		if (Re1.has_value())
-		{
-			assert(Re1->AcceptData);
-			HeadMatchProcessor::Result Re;
-			if (CacheResult.has_value())
-			{
-				Re = std::move(*CacheResult);
-				CacheResult.reset();
-			}
-			Re.AcceptData = *Re1->AcceptData.AcceptData;
-			std::span<ProcessorContent::CaptureBlock const> Span = Re1->ContentNeedChange ? std::span(TempBuffer.CaptureBlocks) : std::span(Contents.CaptureBlocks);
-			Re.SubCaptures.clear();
-			for (auto Ite : Span)
-				Re.SubCaptures.push_back(Ite.CaptureData);
-			Re.MainCapture = { 0, TokenIndex };
-			//Clear();
-			return Re;
-		}
-		if (CacheResult.has_value())
-		{
-			HeadMatchProcessor::Result Re = std::move(*CacheResult);
-			//Clear();
-			return Re;
-		}
-		else {
-			return {};
-		}
-	}
-
-	template<typename CharT>
-	auto MatchTemp(MatchProcessor& Pro, std::basic_string_view<CharT> Str) ->MatchResult<typename MatchProcessor::Result>
-	{
-		char32_t TempBuffer;
-		std::span<char32_t> OutputSpan{ &TempBuffer, 1 };
-		std::size_t TotalSize = Str.size();
-
-		while (!Str.empty())
-		{
-			auto Re2 = Encode::CharEncoder<CharT, char32_t>::EncodeOnceUnSafe(Str, OutputSpan);
-			assert(Re2);
-			auto Re = Pro.Consume(TempBuffer, TotalSize - Str.size());
-			if (Re)
-			{
-				Str = Str.substr(Re2.SourceSpace);
-			}
-			else {
-				return { {}, TotalSize - Str.size() };
-			}
-		}
-		return { Pro.EndOfFile(TotalSize), TotalSize };
-	}
-
-	auto Match(MatchProcessor& Pro, std::u8string_view Str)->MatchResult<MatchProcessor::Result>
-	{
-		return MatchTemp(Pro, Str);
-	}
-
-	auto Match(MatchProcessor& Pro, std::wstring_view Str) -> MatchResult<MatchProcessor::Result>
-	{
-		return MatchTemp(Pro, Str);
-	}
-
-	auto Match(MatchProcessor& Pro, std::u16string_view Str) -> MatchResult<MatchProcessor::Result>
-	{
-		return MatchTemp(Pro, Str);
-	}
-
-	auto Match(MatchProcessor& Pro, std::u32string_view Str) -> MatchResult<MatchProcessor::Result>
-	{
-		return MatchTemp(Pro, Str);
-	}
-
-	template<typename CharT>
-	auto HeadMatchTemp(HeadMatchProcessor& Pro, std::basic_string_view<CharT> Str) ->MatchResult<typename HeadMatchProcessor::Result>
-	{
-		char32_t TempBuffer;
-		std::span<char32_t> OutputSpan{ &TempBuffer, 1 };
-		std::size_t TotalSize = Str.size();
-
-		while (!Str.empty())
-		{
-			auto Re2 = Encode::CharEncoder<CharT, char32_t>::EncodeOnceUnSafe(Str, OutputSpan);
-			assert(Re2);
-			auto Re = Pro.Consume(TempBuffer, TotalSize - Str.size());
-			if (Re.has_value())
-			{
-				if (Re->has_value())
-				{
-					return { **Re, TotalSize - Str.size() };
-				}
-				Str = Str.substr(Re2.SourceSpace);
-			}
-			else
-				break;
-		}
-		return { Pro.EndOfFile(TotalSize), TotalSize };
-	}
-
-	auto HeadMatch(HeadMatchProcessor& Pro, std::u8string_view Str)->MatchResult<HeadMatchProcessor::Result>
-	{
-		return HeadMatchTemp(Pro, Str);
-	}
-
-	auto HeadMatch(HeadMatchProcessor& Pro, std::wstring_view Str) -> MatchResult<HeadMatchProcessor::Result>
-	{
-		return HeadMatchTemp(Pro, Str);
-	}
-
-	auto HeadMatch(HeadMatchProcessor& Pro, std::u16string_view Str) -> MatchResult<HeadMatchProcessor::Result>
-	{
-		return HeadMatchTemp(Pro, Str);
-	}
-
-	auto HeadMatch(HeadMatchProcessor& Pro, std::u32string_view Str) -> MatchResult<HeadMatchProcessor::Result>
-	{
-		return HeadMatchTemp(Pro, Str);
-	}
-
-	void MulityRegCreater::LowPriorityLink(std::u8string_view Str, bool IsRow, Accept Acce)
-	{
-		if (ETable.has_value())
-		{
-			ETable->Link(EpsilonNFA::Create(Str, IsRow, Acce));
-		}
-		else {
-			ETable = EpsilonNFA::Create(Str, IsRow, Acce);
-		}
-	}
-
-	std::optional<DFA> MulityRegCreater::GenerateDFA() const
-	{
-		if (ETable.has_value())
-		{
-			return DFA{ *ETable };
-		}
-		else {
-			return {};
-		}
-	}
-
-	std::optional<std::vector<StandardT>> MulityRegCreater::GenerateTableBuffer() const
-	{
-		auto DFA = GenerateDFA();
-		if (DFA.has_value())
-		{
-			return TableWrapper::Create(*DFA);
+			if (CurMainCapture.has_value())
+				NewAccept.MainCapture = *CurMainCapture;
+			return NewAccept;
 		}
 		return {};
 	}
@@ -2819,27 +2734,32 @@ namespace Potato::Reg
 			return "PotatoRegException";
 		}
 
-		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u8string_view Str, std::size_t BadOffset)
-			: Type(Type), BadOffset(BadOffset)
+		char const* UnaccaptableRegexTokenIndex::what() const
+		{
+			return "PotatoRegException::UnaccaptableRegexTokenIndex";
+		}
+
+		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u8string_view Str, Misc::IndexSpan<> BadIndex)
+			: UnaccaptableRegexTokenIndex(Type, BadIndex)
 		{
 			TotalString.resize(Encode::StrEncoder<char8_t, wchar_t>::RequireSpace(Str).TargetSpace);
 			Encode::StrEncoder<char8_t, wchar_t>::EncodeUnSafe(Str, TotalString);
 		}
 
-		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::wstring_view Str, std::size_t BadOffset)
-			: Type(Type), TotalString(std::move(Str)), BadOffset(BadOffset)
+		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::wstring_view Str, Misc::IndexSpan<> BadIndex)
+			: UnaccaptableRegexTokenIndex(Type, BadIndex), TotalString(Str)
 		{
 		}
 
-		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u16string_view Str, std::size_t BadOffset)
-			: Type(Type), BadOffset(BadOffset)
+		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u16string_view Str, Misc::IndexSpan<> BadIndex)
+			: UnaccaptableRegexTokenIndex(Type, BadIndex)
 		{
 			TotalString.resize(Encode::StrEncoder<char16_t, wchar_t>::RequireSpace(Str).TargetSpace);
 			Encode::StrEncoder<char16_t, wchar_t>::EncodeUnSafe(Str, TotalString);
 		}
 
-		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u32string_view Str, std::size_t BadOffset)
-			: Type(Type), BadOffset(BadOffset)
+		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u32string_view Str, Misc::IndexSpan<> BadIndex)
+			: UnaccaptableRegexTokenIndex(Type, BadIndex)
 		{
 			TotalString.resize(Encode::StrEncoder<char32_t, wchar_t>::RequireSpace(Str).TargetSpace);
 			Encode::StrEncoder<char32_t, wchar_t>::EncodeUnSafe(Str, TotalString);
