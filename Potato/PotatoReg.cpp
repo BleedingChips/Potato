@@ -359,11 +359,6 @@ namespace Potato::Reg
 
 	}
 
-	struct BadRegexRef
-	{
-		std::size_t Index;
-	};
-
 	bool NfaT::EdgeT::HasCapture() const
 	{
 		for (auto& Ite : Propertys)
@@ -391,33 +386,6 @@ namespace Potato::Reg
 		}
 		return false;
 
-	}
-
-
-	NfaT NfaT::Create(std::u32string_view Str, bool IsRaw, std::size_t Mask)
-	{
-		RegLexerT Lex(IsRaw);
-
-		std::size_t Index = 0;
-		for (auto& Ite : Str)
-		{
-			if (!Lex.Consume(Ite, { Index, Index + 1 }))
-				throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {Index, Str.size()} };
-			++Index;
-		}
-		if(!Lex.EndOfFile())
-			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {Index, Str.size()} };
-		try {
-			return NfaT{ Lex.GetSpan(), Mask };
-		}
-		catch (BadRegexRef EIndex)
-		{
-			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {EIndex.Index , Str.size()} };
-		}
-		catch (UnaccaptableRegexTokenIndex const& EIndex)
-		{
-			throw Exception::UnaccaptableRegex{ EIndex.Type, Str, EIndex.BadIndex };
-		}
 	}
 
 	std::size_t NfaT::AddNode()
@@ -472,20 +440,27 @@ namespace Potato::Reg
 		return Default;
 	}
 	
-	NfaT::NfaT(std::span<RegLexerT::ElementT const> InputSpan, std::size_t Mask)
+	NfaT::NfaT(RegLexerT const& Lexer, std::size_t Mask)
 	{
+		auto InputSpan = Lexer.GetSpan();
 		SLRX::SymbolProcessor SymPro(RexSLRXWrapper());
 		auto IteSpan = InputSpan;
 		while (!IteSpan.empty())
 		{
 			auto Top = *IteSpan.begin();
 			if (!SymPro.Consume(*Top.Value, InputSpan.size() - IteSpan.size()))
-				throw BadRegexRef{ InputSpan.size() - IteSpan.size() };
+				throw UnaccaptableRegexTokenIndex{
+						UnaccaptableRegexTokenIndex::TypeT::BadRegex,
+						Top.Token
+					};
 			IteSpan = IteSpan.subspan(1);
 		}
 		if (!SymPro.EndOfFile())
 		{
-			throw BadRegexRef{ InputSpan.size() - IteSpan.size() };
+			throw UnaccaptableRegexTokenIndex{
+					UnaccaptableRegexTokenIndex::TypeT::BadRegex,
+				InputSpan.empty() ? Misc::IndexSpan<>{0, 0} : InputSpan.rbegin()->Token
+			};
 		}
 
 		auto StepSpan = SymPro.GetSteps();
@@ -1186,16 +1161,6 @@ namespace Potato::Reg
 		}
 	};
 
-	DfaT::DfaT(FormatE Format, std::u32string_view Str, bool IsRaw, std::size_t Mask)
-		try : DfaT(Format, NfaT{ Str, IsRaw, Mask })
-	{
-
-	}
-	catch (UnaccaptableRegexTokenIndex const& Error)
-	{
-		throw UnaccaptableRegex(Error.Type, Str, Error.BadIndex);
-	}
-
 	DfaT::DfaT(FormatE Format, NfaT const& T1)
 		: Format(Format)
 	{
@@ -1320,7 +1285,7 @@ namespace Potato::Reg
 					auto TempCharSets = Ite2.CharSets;
 
 					if (
-						(Format == FormatE::HeadMarch || Format == FormatE::GreedyHeadMarch)
+						(Format == FormatE::HeadMatch || Format == FormatE::GreedyHeadMatch)
 						&& Key->second.ToAccept
 					)
 					{
@@ -1387,7 +1352,7 @@ namespace Potato::Reg
 			
 			for (auto& Ite : TempEdges)
 			{
-				if (Format == FormatE::HeadMarch || Format == FormatE::March)
+				if (Format == FormatE::HeadMatch || Format == FormatE::Match)
 				{
 					for (auto Ite2 = Ite.Propertys.begin(); Ite2 != Ite.Propertys.end(); ++Ite2)
 					{
@@ -1399,7 +1364,7 @@ namespace Potato::Reg
 						}
 					}
 				}
-				else if (Format == FormatE::GreedyHeadMarch)
+				else if (Format == FormatE::GreedyHeadMatch)
 				{
 					bool HasAccept = false;
 					for (std::size_t I = 0; I < Ite.Propertys.size(); )
@@ -1482,7 +1447,7 @@ namespace Potato::Reg
 
 						if (Tar.ToAccept)
 						{
-							if (Format == FormatE::March || Format == FormatE::HeadMarch)
+							if (Format == FormatE::Match || Format == FormatE::HeadMatch)
 							{
 								RefProperty.Constraints.push_back({
 									I2,

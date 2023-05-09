@@ -156,7 +156,7 @@ int main()
 {
 	
 	Test(
-		DfaT::FormatE::HeadMarch,
+		DfaT::FormatE::HeadMatch,
 		{
 			U"a(a+?)a",
 			U"(a{1,16})(b{0,8})"
@@ -171,7 +171,7 @@ int main()
 	);
 
 	Test(
-		DfaT::FormatE::GreedyHeadMarch,
+		DfaT::FormatE::GreedyHeadMatch,
 		{
 			U"a(a+?)a",
 			U"(a{1,16})(b{0,8})"

@@ -10,24 +10,25 @@ export import Potato.STD;
 export namespace Potato::EBNF
 {
 
-	struct EBNFX
+	struct EBnfT
 	{
-		static EBNFX Create(std::u8string_view Str);
+		static EBnfT Create(std::u8string_view Str);
 		std::vector<std::u8string> MappingTerminalSymbols;
 		std::vector<std::u8string> MappingNoterminalSymbols;
-		Reg::DFA Lexical;
+		Reg::DfaT Lexical;
 		SLRX::LRX Syntax;
 
 		SLRX::LRX const& GetSyntaxWrapper() const { return Syntax; }
-		Reg::DFA const& GetLexicalWrapper() const { return Lexical; }
+		Reg::DfaT const& GetLexicalWrapper() const { return Lexical; }
 		std::optional<std::u8string_view> ReadSymbol(SLRX::Symbol Value) const;
 		bool IsNoName(SLRX::Symbol Value) const;
 	};
 
-	using StandardT = Reg::StandardT;
-
 	struct TableWrapper
 	{
+
+		using StandardT = std::uint32_t;
+
 		static std::size_t CalculateRequireSpace(EBNFX const& Ref);
 		static std::size_t SerilizeTo(std::span<StandardT> OutputBuffer, EBNFX const& Ref);
 		static std::vector<StandardT> Create(EBNFX const& Le);

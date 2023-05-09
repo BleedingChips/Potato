@@ -4,84 +4,10 @@ export module Potato.Reg;
 export import Potato.SLRX;
 export import Potato.Interval;
 export import Potato.Encode;
+export import Potato.STD;
 
 export namespace Potato::Reg
 {
-
-
-	namespace Exception
-	{
-		struct Interface : public std::exception
-		{
-			virtual ~Interface() = default;
-			virtual char const* what() const override;
-		};
-
-		struct UnaccaptableRegexTokenIndex : public Interface
-		{
-			enum class TypeT
-			{
-				OutOfCharRange,
-				UnSupportEof,
-				UnaccaptableNumber,
-				RawRegexInNotNormalState,
-				BadRegex,
-			};
-
-			TypeT Type;
-			Misc::IndexSpan<> BadIndex;
-
-			UnaccaptableRegexTokenIndex(UnaccaptableRegexTokenIndex const&) = default;
-			UnaccaptableRegexTokenIndex(TypeT Type, Misc::IndexSpan<> TokenIndex) :
-				Type(Type), BadIndex(TokenIndex) {}
-			virtual char const* what() const override;
-		};
-
-		struct UnaccaptableRegex : protected UnaccaptableRegexTokenIndex
-		{
-			using TypeT = UnaccaptableRegexTokenIndex::TypeT;
-			std::wstring TotalString;
-			std::wstring_view GetErrorRegex() const { return BadIndex.Slice(std::wstring_view(TotalString)); }
-			UnaccaptableRegex(TypeT Type, std::u8string_view Str, Misc::IndexSpan<> BadIndex);
-			UnaccaptableRegex(TypeT Type, std::wstring_view Str, Misc::IndexSpan<> BadIndex);
-			UnaccaptableRegex(TypeT Type, std::u16string_view Str, Misc::IndexSpan<> BadIndex);
-			UnaccaptableRegex(TypeT Type, std::u32string_view Str, Misc::IndexSpan<> BadIndex);
-			UnaccaptableRegex() = default;
-			UnaccaptableRegex(UnaccaptableRegex const&) = default;
-			virtual char const* what() const override;
-		};
-
-		struct RegexOutOfRange : public Interface
-		{
-			enum class TypeT
-			{
-				EdgeCount,
-				NodeOffset,
-				CharCount,
-				PropertyCount,
-				ConditionCount,
-				Solt,
-				Counter,
-				CaptureIndex,
-				Mask,
-			};
-
-			TypeT Type;
-			std::size_t BadIndex;
-
-			RegexOutOfRange(TypeT Type, std::size_t BadIndex) : Type(Type), BadIndex(BadIndex) {}
-			RegexOutOfRange(RegexOutOfRange const&) = default;
-			virtual char const* what() const override;
-		};
-
-		struct CircleShifting : public Interface
-		{
-			CircleShifting() = default;
-			CircleShifting(CircleShifting const&) = default;
-			virtual char const* what() const override;
-		};
-	}
-
 
 	using IntervalT = Misc::IntervalT<char32_t>;
 
@@ -125,6 +51,10 @@ export namespace Potato::Reg
 		bool EndOfFile();
 
 		RegLexerT(bool IsRaw = false);
+		RegLexerT(RegLexerT&&) = default;
+
+		template<typename CharT, typename CharTraiT>
+		static RegLexerT Create(std::basic_string_view<CharT, CharTraiT> Str, bool IsRaw = false);
 
 	protected:
 
@@ -148,54 +78,19 @@ export namespace Potato::Reg
 		std::vector<ElementT> StoragedSymbol;
 	};
 
-
 	struct NfaT
 	{
 		
 		template<typename CharT, typename CharTraiT>
-		NfaT(std::basic_string_view<CharT, CharTraiT> Str, bool IsRaw = false, std::size_t Mask = 0)
-		{
-			using 
+		NfaT(std::basic_string_view<CharT, CharTraiT> Str, bool IsRaw = false, std::size_t Mask = 0);
 
-			RegLexerT Lex(IsRaw);
-
-			using EncodeT = Encode::CharEncoder<CharT, char32_t>;
-
-			auto IteSpan = std::span(Str);
-
-			char32_t TemBuffer = 0;
-
-			std::span<char32_t> OutputSpan = { &TemBuffer, 1 };
-
-			while (!IteSpan.empty())
-			{
-				auto StartIndex = Str.size() - IteSpan.size();
-				auto EncodeRe = EncodeT::EncodeOnceUnsafe(IteSpan, OutputSpan);
-				if (!Lex.Consume(TemBuffer, { StartIndex, StartIndex + EncodeRe.SourceSpace }))
-					throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {StartIndex, Str.size()} };
-				IteSpan = IteSpan.subspan(EncodeRe.SourceSpace);
-			}
-			if (!Lex.EndOfFile())
-				throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {Str.size(), Str.size()} };
-			try {
-				return NfaT{ Lex.GetSpan(), Mask };
-			}
-			catch (BadRegexRef EIndex)
-			{
-				throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {EIndex.Index , Str.size()} };
-			}
-			catch (UnaccaptableRegexTokenIndex const& EIndex)
-			{
-				throw Exception::UnaccaptableRegex{ EIndex.Type, Str, EIndex.BadIndex };
-			}
-		}
 		NfaT(NfaT const&) = default;
 		NfaT(NfaT&&) = default;
 		void Link(NfaT const&);
 
 	protected:
 
-		NfaT(std::span<RegLexerT::ElementT const> InputSpan, std::size_t Mask = 0);
+		NfaT(RegLexerT const& Lexer, std::size_t Mask = 0);
 		NfaT() = default;
 
 		
@@ -338,13 +233,15 @@ export namespace Potato::Reg
 
 		enum class FormatE
 		{
-			March,
-			HeadMarch,
-			GreedyHeadMarch,
+			Match,
+			HeadMatch,
+			GreedyHeadMatch,
 		};
 
 		DfaT(FormatE Format, NfaT const& T1);
-		DfaT(FormatE Format, std::u32string_view Str, bool IsRaw = false, std::size_t Mask = 0);
+
+		template<typename CharT, typename CharTraisT>
+		DfaT(FormatE Format, std::basic_string_view<CharT, CharTraisT> Str, bool IsRaw = false, std::size_t Mask = 0);
 		
 		std::size_t GetStartupNodeIndex() const { return 0; }
 		std::size_t GetCacheCounterCount() const { return CacheRecordCount; }
@@ -630,6 +527,119 @@ export namespace Potato::Reg
 		std::optional<Misc::IndexSpan<>> CurMainCapture;
 	};
 
-	
+	export namespace Exception
+	{
+		struct Interface : public std::exception
+		{
+			virtual ~Interface() = default;
+			virtual char const* what() const override;
+		};
 
+		struct UnaccaptableRegexTokenIndex : public Interface
+		{
+			enum class TypeT
+			{
+				OutOfCharRange,
+				UnSupportEof,
+				UnaccaptableNumber,
+				RawRegexInNotNormalState,
+				BadRegex,
+			};
+
+			TypeT Type;
+			Misc::IndexSpan<> BadIndex;
+
+			UnaccaptableRegexTokenIndex(UnaccaptableRegexTokenIndex const&) = default;
+			UnaccaptableRegexTokenIndex(TypeT Type, Misc::IndexSpan<> TokenIndex) :
+				Type(Type), BadIndex(TokenIndex) {}
+			virtual char const* what() const override;
+		};
+
+		struct UnaccaptableRegex : protected UnaccaptableRegexTokenIndex
+		{
+			using TypeT = UnaccaptableRegexTokenIndex::TypeT;
+			std::wstring TotalString;
+			std::wstring_view GetErrorRegex() const { return BadIndex.Slice(std::wstring_view(TotalString)); }
+			UnaccaptableRegex(TypeT Type, std::u8string_view Str, Misc::IndexSpan<> BadIndex);
+			UnaccaptableRegex(TypeT Type, std::wstring_view Str, Misc::IndexSpan<> BadIndex);
+			UnaccaptableRegex(TypeT Type, std::u16string_view Str, Misc::IndexSpan<> BadIndex);
+			UnaccaptableRegex(TypeT Type, std::u32string_view Str, Misc::IndexSpan<> BadIndex);
+			UnaccaptableRegex() = default;
+			UnaccaptableRegex(UnaccaptableRegex const&) = default;
+			virtual char const* what() const override;
+		};
+
+		struct RegexOutOfRange : public Interface
+		{
+			enum class TypeT
+			{
+				EdgeCount,
+				NodeOffset,
+				CharCount,
+				PropertyCount,
+				ConditionCount,
+				Solt,
+				Counter,
+				CaptureIndex,
+				Mask,
+			};
+
+			TypeT Type;
+			std::size_t BadIndex;
+
+			RegexOutOfRange(TypeT Type, std::size_t BadIndex) : Type(Type), BadIndex(BadIndex) {}
+			RegexOutOfRange(RegexOutOfRange const&) = default;
+			virtual char const* what() const override;
+		};
+
+		struct CircleShifting : public Interface
+		{
+			CircleShifting() = default;
+			CircleShifting(CircleShifting const&) = default;
+			virtual char const* what() const override;
+		};
+	}
+
+	template<typename CharT, typename CharTraiT>
+	RegLexerT RegLexerT::Create(std::basic_string_view<CharT, CharTraiT> Str, bool IsRaw)
+	{
+		using namespace Exception;
+		RegLexerT Lex(IsRaw);
+		using EncodeT = Encode::CharEncoder<CharT, char32_t>;
+		using EncodeT = Encode::CharEncoder<CharT, char32_t>;
+
+		auto IteSpan = std::span(Str);
+
+		char32_t TemBuffer = 0;
+
+		std::span<char32_t> OutputSpan = { &TemBuffer, 1 };
+
+		while (!IteSpan.empty())
+		{
+			auto StartIndex = Str.size() - IteSpan.size();
+			auto EncodeRe = EncodeT::EncodeOnceUnSafe(IteSpan, OutputSpan);
+			if (!Lex.Consume(TemBuffer, { StartIndex, StartIndex + EncodeRe.SourceSpace }))
+				throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {StartIndex, Str.size()} };
+			IteSpan = IteSpan.subspan(EncodeRe.SourceSpace);
+		}
+		if (!Lex.EndOfFile())
+			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {Str.size(), Str.size()} };
+		return Lex;
+	}
+
+	template<typename CharT, typename CharTraiT>
+	NfaT::NfaT(std::basic_string_view<CharT, CharTraiT> Str, bool IsRaw, std::size_t Mask)
+		try : NfaT(RegLexerT::Create(Str, IsRaw), Mask) {}
+	catch (Exception::UnaccaptableRegexTokenIndex const& EIndex)
+	{
+		throw Exception::UnaccaptableRegex{ EIndex.Type, Str, EIndex.BadIndex };
+	}
+
+	template<typename CharT, typename CharTraisT>
+	DfaT::DfaT(FormatE Format, std::basic_string_view<CharT, CharTraisT> Str, bool IsRaw, std::size_t Mask)
+		try : DfaT(Format, NfaT{ Str, IsRaw, Mask }) {}
+	catch (Exception::UnaccaptableRegexTokenIndex const& EIndex)
+	{
+		throw Exception::UnaccaptableRegex{ EIndex.Type, Str, EIndex.BadIndex };
+	}
 }
