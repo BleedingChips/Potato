@@ -17,7 +17,7 @@ export namespace Potato::Reg
 	struct RegLexerT
 	{
 		
-		enum class ElementEnumT : Potato::SLRX::StandardT
+		enum class ElementEnumT
 		{
 			SingleChar = 0, // µ¥×Ö·û
 			CharSet, // ¶à×Ö·û
@@ -470,25 +470,18 @@ export namespace Potato::Reg
 			HalfStandardT CaptureIndexEnd = 0;
 		};
 		
-		static std::size_t PredicateSize(DfaT const& RefTable)
-		{
-			Misc::StructedSerilizerWriter<StandardT> Writer;
-			SerilizeToExe(Writer, RefTable);
-			return Writer.GetWritedSize();
-		}
-		static std::size_t SerilizeTo(std::span<StandardT> Buffer, DfaT const& RefTable)
-		{
-			Misc::StructedSerilizerWriter<StandardT> Writer(Buffer);
-			SerilizeToExe(Writer, RefTable);
-			return Writer.GetWritedSize();
-		}
+		static void Serilize(Misc::StructedSerilizerWritter<StandardT>& Writer, DfaT const& RefTable);
 		
 		template<typename AllocatorT = std::allocator<StandardT>>
 		static auto Create(DfaT const& RefTable, AllocatorT const& Acclcator= {}) -> std::vector<StandardT, AllocatorT>
 		{
+			Misc::StructedSerilizerWritter<StandardT> Predicted;
+			Serilize(Predicted, RefTable);
 			std::vector<StandardT, AllocatorT> Buffer(Acclcator);
-			Buffer.resize(PredicateSize(RefTable));
-			SerilizeTo(std::span(Buffer), RefTable);
+			Buffer.resize(Predicted.GetWritedSize());
+			auto Span = std::span(Buffer);
+			Misc::StructedSerilizerWritter<StandardT> Writter(Span);
+			Serilize(Writter, RefTable);
 			return Buffer;
 		}
 
@@ -496,7 +489,7 @@ export namespace Potato::Reg
 
 	private:
 
-		static void SerilizeToExe(Misc::StructedSerilizerWriter<StandardT>& Writer, DfaT const& RefTable);
+		
 		std::span<StandardT> Wrapper;
 
 		friend struct DfaBinaryTableProcessor;

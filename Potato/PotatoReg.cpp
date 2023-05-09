@@ -235,9 +235,9 @@ namespace Potato::Reg
 
 	using T = RegLexerT::ElementEnumT;
 
-	constexpr Symbol operator*(T Input) { return Symbol::AsTerminal(static_cast<SLRX::StandardT>(Input)); };
+	constexpr Symbol operator*(T Input) { return Symbol::AsTerminal(static_cast<std::size_t>(Input)); };
 
-	enum class NT : SLRX::StandardT
+	enum class NT
 	{
 		AcceptableSingleChar,
 		CharListAcceptableSingleChar,
@@ -250,15 +250,15 @@ namespace Potato::Reg
 		FinalCharList,
 	};
 
-	constexpr Symbol operator*(NT Input) { return Symbol::AsNoTerminal(static_cast<SLRX::StandardT>(Input)); };
+	constexpr Symbol operator*(NT Input) { return Symbol::AsNoTerminal(static_cast<std::size_t>(Input)); };
 
 
-	const SLRX::TableWrapper RexSLRXWrapper()
+	const SLRX::LRXBinaryTableWrapper RexSLRXWrapper()
 	{
 #ifdef _DEBUG
 		try {
 #endif
-			static SLRX::Table Table(
+			static SLRX::LRXBinaryTable Table(
 				*NT::ExpressionStatement,
 				{
 
@@ -2313,9 +2313,9 @@ namespace Potato::Reg
 		return {};
 	}
 
-	void DfaBinaryTable::SerilizeToExe(Misc::StructedSerilizerWriter<StandardT>& Writer, DfaT const& RefTable)
+	void DfaBinaryTable::Serilize(Misc::StructedSerilizerWritter<StandardT>& Writer, DfaT const& RefTable)
 	{
-		using WriterT = Misc::StructedSerilizerWriter<StandardT>;
+		using WriterT = Misc::StructedSerilizerWritter<StandardT>;
 		using namespace Potato::Reg::Exception;
 
 		HeadT Head;

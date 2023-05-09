@@ -1280,172 +1280,197 @@ namespace Potato::SLRX
 		return LRX{std::move(Nodes)};
 	}
 
-	std::size_t TableWrapper::CalculateRequireSpace(LRX const& Ref)
+	void LRXBinaryTableWrapper::Serilize(Misc::StructedSerilizerWritter<StandardT>& Writter, LRX const& Ref)
 	{
-		Misc::SerilizerHelper::Predicter<StandardT> Pre;
-		// NodeCount
-		Pre.WriteElement();
-
-		// StartupOffset
-		Pre.WriteElement();
-
-		for (auto& Ite : Ref.Nodes)
-		{
-			Pre.WriteObject<ZipNodeT>();
-			for (auto& Ite2 : Ite.RequireNodes)
-			{
-				Pre.WriteObject<ZipRequireNodeDescT>();
-				Pre.WriteObjectArray<ZipRequireNodeT>(Ite2.size());
-			}
-			for (auto& Ite2 : Ite.Reduces)
-			{
-				Pre.WriteObject<ZipReducePropertyT>();
-				Pre.WriteObjectArray<ZipReduceTupleT>(Ite2.Tuples.size());
-			}
-		}
-		return Pre.SpaceRecord;
-	}
-
-	std::size_t TableWrapper::SerilizeTo(std::span<StandardT> OutputBuffer, LRX const& Ref)
-	{
-		assert(OutputBuffer.size() >= CalculateRequireSpace(Ref));
-
 		std::vector<std::size_t> NodeOffset;
-		NodeOffset.reserve(Ref.Nodes.size());
 
-		Misc::SerilizerHelper::SpanReader<StandardT> Reader(OutputBuffer);
+		if(Writter.IsWritting())
+			NodeOffset.reserve(Ref.Nodes.size());
 
-		auto P1 = Reader.NewElement();
-		Reader.CrossTypeSetThrow<OutOfRange>(*P1, Ref.Nodes.size(), OutOfRange::TypeT::NodeCount, Ref.Nodes.size());
+		ZipHeadT Head;
 
-		auto StartupNode = Reader.NewElement();
+		Misc::CrossTypeSetThrow<OutOfRange>(Head.NodeCount, Ref.Nodes.size(), OutOfRange::TypeT::NodeCount, Ref.Nodes.size());
+
+		Writter.WriteObject(Head);
 
 		std::size_t NodeIndex = 0;
 
 		struct RequireNodeOffsetRecord
 		{
-			ZipRequireNodeT* Ptr;
+			std::size_t Adress;
+			std::size_t ArrayCount;
+			std::size_t ArrayIndex;
 			std::size_t Index;
 		};
 
 		struct ReduceTupleOffsetRecord
 		{
-			std::span<ZipReduceTupleT> Span;
+			std::size_t Adress;
+			std::size_t Count;
+			//std::span<ZipReduceTupleT> Span;
 			std::span<LRX::ReduceTuple const> Tuples;
 		};
 
 		std::vector<RequireNodeOffsetRecord> ReduceRecord;
 		std::vector<RequireNodeOffsetRecord> ShiftRecord;
 		std::vector<RequireNodeOffsetRecord> SymbolsRecord;
+
 		std::vector<ReduceTupleOffsetRecord> ReduceTupleRecord;
 
 		for (auto& Ite : Ref.Nodes)
 		{
-			NodeOffset.push_back(Reader.GetIteSpacePositon());
-			auto Node = Reader.NewObject<ZipNodeT>();
-			Reader.CrossTypeSetThrow<OutOfRange>(Node->RequireNodeDescCount, Ite.RequireNodes.size(), OutOfRange::TypeT::RequireNodeCount, Ite.RequireNodes.size());
-			Reader.CrossTypeSetThrow<OutOfRange>(Node->ReduceCount, Ite.Reduces.size(), OutOfRange::TypeT::RequireNodeCount, Ite.RequireNodes.size());
-			std::size_t CurNodeOffset = Reader.GetIteSpacePositon();
+			ZipNodeT NewNode;
+
+			Misc::CrossTypeSetThrow<OutOfRange>(NewNode.RequireNodeDescCount, Ite.RequireNodes.size(), OutOfRange::TypeT::RequireNodeCount, Ite.RequireNodes.size());
+			Misc::CrossTypeSetThrow<OutOfRange>(NewNode.ReduceCount, Ite.Reduces.size(), OutOfRange::TypeT::RequireNodeCount, Ite.Reduces.size());
+
+			auto NodeAdress = Writter.WriteObject(NewNode);
+			auto CurNodeOffset = Writter.GetWritedSize();
+
+			if(Writter.IsWritting())
+				NodeOffset.push_back(NodeAdress);
+
 			std::vector<std::size_t> DescOffset;
 			for (auto& Ite2 : Ite.RequireNodes)
 			{
-				DescOffset.push_back(Reader.GetIteSpacePositon() - CurNodeOffset);
-				auto Desc = Reader.ReadObject<ZipRequireNodeDescT>();
-				Reader.CrossTypeSetThrow<OutOfRange>(Desc->RequireNodeCount, Ite2.size(), OutOfRange::TypeT::RequireNodeCount, Ite2.size());
-				auto Node = *Reader.ReadObjectArray<ZipRequireNodeT>(Ite2.size());
-				for (std::size_t I = 0; I < Node.size(); ++I)
+				if (Writter.IsWritting())
+					DescOffset.push_back(Writter.GetWritedSize() - CurNodeOffset);
+
+				ZipRequireNodeDescT NodeDesc;
+				Misc::CrossTypeSetThrow<OutOfRange>(NodeDesc.RequireNodeCount, Ite2.size(), OutOfRange::TypeT::RequireNodeCount, Ite2.size());
+
+				Writter.WriteObject(NodeDesc);
+
+				auto RequireNodeOffset = Writter.NewObjectArray<ZipRequireNodeT>(Ite2.size());
+
+				auto Reader = Writter.GetReader();
+
+				if (Reader.has_value())
 				{
-					auto& Target= Node[I];
-					auto& Source = Ite2[I];
-					Target.IsEndOfFile = Source.RequireSymbol.IsEndOfFile();
-					Target.Type = Source.Type;
-					Target.Value = Source.RequireSymbol.Value;
-					RequireNodeOffsetRecord Record{ &Target, Source.ReferenceIndex };
-					switch (Target.Type)
+					Reader->SetPointer(RequireNodeOffset);
+					auto Node = Reader->ReadObjectArray<ZipRequireNodeT>(Ite2.size());
+					for (std::size_t I = 0; I < Node.size(); ++I)
 					{
-					case LRX::RequireNodeType::SymbolValue:
-						SymbolsRecord.push_back(Record);
-						break;
-					case LRX::RequireNodeType::NeedPredictShiftProperty:
-					case LRX::RequireNodeType::ShiftProperty:
-						ShiftRecord.push_back(Record);
-						break;
-					case LRX::RequireNodeType::ReduceProperty:
-						ReduceRecord.push_back(Record);
-						break;
-					default:
-						assert(false);
-						break;
+						auto& Target = Node[I];
+						auto& Source = Ite2[I];
+						Target.IsEndOfFile = Source.RequireSymbol.IsEndOfFile();
+						Target.Type = Source.Type;
+						Misc::CrossTypeSetThrow<OutOfRange>(Target.Value, Source.RequireSymbol.Value, OutOfRange::TypeT::SymbolValue, Source.RequireSymbol.Value);
+						RequireNodeOffsetRecord Record{ RequireNodeOffset, Ite2.size(), I, Source.ReferenceIndex };
+						switch (Target.Type)
+						{
+						case LRX::RequireNodeType::SymbolValue:
+							SymbolsRecord.push_back(Record);
+							break;
+						case LRX::RequireNodeType::NeedPredictShiftProperty:
+						case LRX::RequireNodeType::ShiftProperty:
+							ShiftRecord.push_back(Record);
+							break;
+						case LRX::RequireNodeType::ReduceProperty:
+							ReduceRecord.push_back(Record);
+							break;
+						default:
+							assert(false);
+							break;
+						}
 					}
 				}
 			}
-
-			for (auto Ite2 : SymbolsRecord)
-			{
-				std::size_t Tar = DescOffset[Ite2.Index];
-				Reader.CrossTypeSetThrow<OutOfRange>(Ite2.Ptr->ToIndexOffset, Tar, OutOfRange::TypeT::RequireNodeOffset, Tar);
-			}
-
-			SymbolsRecord.clear();
 
 			std::vector<std::size_t> ReduceOffset;
 
 			for (auto& Ite2 : Ite.Reduces)
 			{
-				ReduceOffset.push_back(Reader.GetIteSpacePositon() - CurNodeOffset);
-				auto Property = Reader.ReadObject<ZipReducePropertyT>();
-				Reader.CrossTypeSetThrow<OutOfRange>(Property->Mask, Ite2.Property.Reduce.Mask, OutOfRange::TypeT::Mask, Ite2.Property.Reduce.Mask);
-				Property->NoTerminalValue = Ite2.Property.ReduceSymbol.Value;
-				Reader.CrossTypeSetThrow<OutOfRange>(Property->ProductionIndex, Ite2.Property.Reduce.ProductionIndex, OutOfRange::TypeT::ReduceProperty, Ite2.Property.Reduce.ProductionIndex);
-				Reader.CrossTypeSetThrow<OutOfRange>(Property->ProductionCount, Ite2.Property.Reduce.ElementCount, OutOfRange::TypeT::ReduceProperty, Ite2.Property.Reduce.ElementCount);
-				Reader.CrossTypeSetThrow<OutOfRange>(Property->ReduceTupleCount, Ite2.Tuples.size(), OutOfRange::TypeT::ReduceProperty, Ite2.Tuples.size());
-				Property->NeedPredict = (Ite2.Property.NeedPredict ? 1 : 0);
-				auto Span = *Reader.ReadObjectArray<ZipReduceTupleT>(Ite2.Tuples.size());
-				ReduceTupleRecord.push_back({Span, std::span(Ite2.Tuples)});
+				ZipReducePropertyT Pro;
+				Misc::CrossTypeSetThrow<OutOfRange>(Pro.Mask, Ite2.Property.Reduce.Mask, OutOfRange::TypeT::Mask, Ite2.Property.Reduce.Mask);
+				Misc::CrossTypeSetThrow<OutOfRange>(Pro.NoTerminalValue, Ite2.Property.ReduceSymbol.Value, OutOfRange::TypeT::SymbolValue, Ite2.Property.ReduceSymbol.Value);
+				Misc::CrossTypeSetThrow<OutOfRange>(Pro.ProductionIndex, Ite2.Property.Reduce.ProductionIndex, OutOfRange::TypeT::ReduceProperty, Ite2.Property.Reduce.ProductionIndex);
+				Misc::CrossTypeSetThrow<OutOfRange>(Pro.ProductionCount, Ite2.Property.Reduce.ElementCount, OutOfRange::TypeT::ReduceProperty, Ite2.Property.Reduce.ElementCount);
+				Misc::CrossTypeSetThrow<OutOfRange>(Pro.ReduceTupleCount, Ite2.Tuples.size(), OutOfRange::TypeT::ReduceProperty, Ite2.Tuples.size());
+				Pro.NeedPredict = (Ite2.Property.NeedPredict ? 1 : 0);
+				auto ProAdress = Writter.WriteObject(Pro);
+				auto TupleAdress = Writter.NewObjectArray<ZipReduceTupleT>(Ite2.Tuples.size());
+				if (Writter.IsWritting())
+				{
+					ReduceOffset.push_back(ProAdress - CurNodeOffset);
+					ReduceTupleRecord.push_back({ TupleAdress, Ite2.Tuples.size(), std::span(Ite2.Tuples) });
+				}
 			}
 
-			for (auto Ite2 : ReduceRecord)
+			auto Reader = Writter.GetReader();
+
+			if (Reader.has_value())
 			{
-				std::size_t Tar = ReduceOffset[Ite2.Index];
-				Reader.CrossTypeSetThrow<OutOfRange>(Ite2.Ptr->ToIndexOffset, Tar, OutOfRange::TypeT::RequireNodeOffset, Tar);
+				for (auto Ite2 : SymbolsRecord)
+				{
+					std::size_t Tar = DescOffset[Ite2.Index];
+					Reader->SetPointer(Ite2.Adress);
+					auto RequireNode = Reader->ReadObjectArray<ZipRequireNodeT>(Ite2.ArrayCount);
+					Misc::CrossTypeSetThrow<OutOfRange>(RequireNode[Ite2.ArrayIndex].ToIndexOffset, Tar, OutOfRange::TypeT::RequireNodeOffset, Tar);
+				}
+				SymbolsRecord.clear();
+
+				for (auto Ite2 : ReduceRecord)
+				{
+					Reader->SetPointer(Ite2.Adress);
+					auto Node = Reader->ReadObjectArray<ZipRequireNodeT>(Ite2.ArrayCount);
+					std::size_t Tar = ReduceOffset[Ite2.Index];
+					Misc::CrossTypeSetThrow<OutOfRange>(Node[Ite2.ArrayIndex].ToIndexOffset, Tar, OutOfRange::TypeT::RequireNodeOffset, Tar);
+				}
+
+				ReduceRecord.clear();
+
 			}
-
-			ReduceRecord.clear();
 		}
 
-		for (auto& Ite : ShiftRecord)
-		{
-			std::size_t Tar = NodeOffset[Ite.Index];
-			Reader.CrossTypeSetThrow<OutOfRange>(Ite.Ptr->ToIndexOffset, Tar, OutOfRange::TypeT::NodeOffset, Tar);
-		}
+		auto Reader = Writter.GetReader();
 
-		for (auto Ite : ReduceTupleRecord)
+		if (Reader.has_value())
 		{
-			for (std::size_t I = 0; I < Ite.Span.size(); ++I)
+			for (auto& Ite2 : ShiftRecord)
 			{
-				auto& Target = Ite.Span[I];
-				auto& Source = Ite.Tuples[I];
-				Reader.CrossTypeSetThrow<OutOfRange>(Target.LastState, NodeOffset[Source.LastState], OutOfRange::TypeT::RequireNodeOffset, NodeOffset[Source.LastState]);
-				Reader.CrossTypeSetThrow<OutOfRange>(Target.ToState, NodeOffset[Source.TargetState], OutOfRange::TypeT::RequireNodeOffset, NodeOffset[Source.TargetState]);
-				Target.NeedPredict = (Source.NeedPredict ? 1 : 0);
+				Reader->SetPointer(Ite2.Adress);
+				auto Node = Reader->ReadObjectArray<ZipRequireNodeT>(Ite2.ArrayCount);
+				std::size_t Tar = NodeOffset[Ite2.Index];
+				Misc::CrossTypeSetThrow<OutOfRange>(Node[Ite2.ArrayIndex].ToIndexOffset, Tar, OutOfRange::TypeT::NodeOffset, Tar);
 			}
+
+			for (auto Ite : ReduceTupleRecord)
+			{
+				Reader->SetPointer(Ite.Adress);
+				auto Span = Reader->ReadObjectArray<ZipReduceTupleT>(Ite.Count);
+
+				for (std::size_t I = 0; I < Span.size(); ++I)
+				{
+					auto& Target = Span[I];
+					auto& Source = Ite.Tuples[I];
+					Misc::CrossTypeSetThrow<OutOfRange>(Target.LastState, NodeOffset[Source.LastState], OutOfRange::TypeT::RequireNodeOffset, NodeOffset[Source.LastState]);
+					Misc::CrossTypeSetThrow<OutOfRange>(Target.ToState, NodeOffset[Source.TargetState], OutOfRange::TypeT::RequireNodeOffset, NodeOffset[Source.TargetState]);
+					Target.NeedPredict = (Source.NeedPredict ? 1 : 0);
+				}
+			}
+
+			Reader->SetPointer(0);
+			auto Head = Reader->ReadObject<ZipHeadT>();
+			Misc::CrossTypeSetThrow<OutOfRange>(Head->StartupOffset, NodeOffset[1], OutOfRange::TypeT::NodeOffset, NodeOffset[1]);
 		}
-
-		Reader.CrossTypeSetThrow<OutOfRange>(*StartupNode, NodeOffset[1], OutOfRange::TypeT::NodeOffset, NodeOffset[1]);
-
-		return Reader.GetIteSpacePositon();
-
 	}
 
-	std::vector<StandardT> TableWrapper::Create(LRX const& Le)
+	auto LRXBinaryTableWrapper::Create(LRX const& Le) -> std::vector<StandardT>
 	{
+		Misc::StructedSerilizerWritter<StandardT> Predict;
+
+		Serilize(Predict, Le);
 		std::vector<StandardT> Re;
-		Re.resize(CalculateRequireSpace(Le));
-		SerilizeTo(std::span(Re), Le);
+		Re.resize(Predict.GetWritedSize());
+		auto Span = std::span(Re);
+		Misc::StructedSerilizerWritter<StandardT> Writter{Span};
+		Serilize(Writter, Le);
+
 		return Re;
 	}
 
-	SymbolProcessor::SymbolProcessor(TableWrapper Wrapper) : Table(Wrapper), StartupOffset(Wrapper.StartupNodeIndex()) {
+	SymbolProcessor::SymbolProcessor(LRXBinaryTableWrapper Wrapper) : Table(Wrapper), StartupOffset(Wrapper.StartupNodeIndex()) {
 		assert(Wrapper); 
 		
 		Clear();
@@ -1533,7 +1558,7 @@ namespace Potato::SLRX
 			Result = ConsumeImp(std::get<std::reference_wrapper<LRX const>>(Table).get(), Value, SuggestSymbols);
 		}
 		else {
-			Result = ConsumeImp(std::get<TableWrapper>(Table), Value, SuggestSymbols);
+			Result = ConsumeImp(std::get<LRXBinaryTableWrapper>(Table), Value, SuggestSymbols);
 		}
 
 		if (Result.has_value())
@@ -1592,7 +1617,7 @@ namespace Potato::SLRX
 						Result = ConsumeImp(std::get<std::reference_wrapper<LRX const>>(Table).get(), CacheSymbols[SymbolsIndex].Value, nullptr);
 					}
 					else {
-						Result = ConsumeImp(std::get<TableWrapper>(Table), CacheSymbols[SymbolsIndex].Value, nullptr);
+						Result = ConsumeImp(std::get<LRXBinaryTableWrapper>(Table), CacheSymbols[SymbolsIndex].Value, nullptr);
 					}
 					++SymbolsIndex;
 					assert(Result.has_value());
@@ -1675,24 +1700,26 @@ namespace Potato::SLRX
 		
 	}
 
-	auto SymbolProcessor::ConsumeImp(TableWrapper Wrapper, Symbol Value, std::vector<Symbol>* SuggestSymbol)  const ->std::optional<ConsumeResult> 
+	auto SymbolProcessor::ConsumeImp(LRXBinaryTableWrapper Wrapper, Symbol Value, std::vector<Symbol>* SuggestSymbol)  const ->std::optional<ConsumeResult>
 	{
 		assert(Wrapper.TotalBufferSize() > CurrentTopState);
 		assert(*States.rbegin() == CurrentTopState);
 
-		auto Reader = Wrapper.GetSpanReader(CurrentTopState);
+		auto Reader = Wrapper.GetReader();
 
-		auto Node = Reader.ReadObject<TableWrapper::ZipNodeT>();
+		Reader.SetPointer(CurrentTopState);
+
+		auto Node = Reader.ReadObject<LRXBinaryTableWrapper::ZipNodeT>();
 
 		assert(Node->RequireNodeDescCount != 0);
 
-		auto NodeDescReader = Reader.SubSpan(RequireNode);
+		auto NodeDescReader = Reader.SubReader(RequireNode);
 
-		auto Desc = NodeDescReader.ReadObject<TableWrapper::ZipRequireNodeDescT>();
+		auto Desc = NodeDescReader.ReadObject<LRXBinaryTableWrapper::ZipRequireNodeDescT>();
 
 		assert(Desc->RequireNodeCount != 0);
 
-		auto RequireNodes = *NodeDescReader.ReadObjectArray<TableWrapper::ZipRequireNodeT>(Desc->RequireNodeCount);
+		auto RequireNodes = NodeDescReader.ReadObjectArray<LRXBinaryTableWrapper::ZipRequireNodeT>(Desc->RequireNodeCount);
 
 		if (Value.IsTerminal())
 		{
@@ -1721,8 +1748,8 @@ namespace Potato::SLRX
 					case LRX::RequireNodeType::ReduceProperty:
 					{
 						ConsumeResult Re;
-						auto ReducePropertyReader = Reader.SubSpan(Ite.ToIndexOffset);
-						auto ReduceP = ReducePropertyReader.ReadObject<TableWrapper::ZipReducePropertyT>();
+						auto ReducePropertyReader = Reader.SubReader(Ite.ToIndexOffset);
+						auto ReduceP = ReducePropertyReader.ReadObject<LRXBinaryTableWrapper::ZipReducePropertyT>();
 						LR0::Reduce Reduce;
 						Reduce.ReduceSymbol = Symbol::AsNoTerminal(ReduceP->NoTerminalValue);
 						Reduce.Reduce.Mask = ReduceP->Mask;
@@ -1732,8 +1759,8 @@ namespace Potato::SLRX
 						Re.Reduce = Reduce;
 						assert(States.size() > Re.Reduce->Reduce.ElementCount);
 						auto RefState = States[States.size() - Re.Reduce->Reduce.ElementCount - 1];
-						auto ReduceTuples = *ReducePropertyReader.ReadObjectArray<TableWrapper::ZipReduceTupleT>(ReduceP->ReduceTupleCount);
-						auto FindIte = std::find_if(ReduceTuples.begin(), ReduceTuples.end(), [=](TableWrapper::ZipReduceTupleT Tupe) {
+						auto ReduceTuples = ReducePropertyReader.ReadObjectArray<LRXBinaryTableWrapper::ZipReduceTupleT>(ReduceP->ReduceTupleCount);
+						auto FindIte = std::find_if(ReduceTuples.begin(), ReduceTuples.end(), [=](LRXBinaryTableWrapper::ZipReduceTupleT Tupe) {
 							return Tupe.LastState == RefState;
 							});
 						assert(FindIte != ReduceTuples.end());
@@ -1788,7 +1815,7 @@ namespace Potato::SLRX
 					Re = TryReduceImp(std::get<std::reference_wrapper<LRX const>>(Table).get());
 				}
 				else {
-					Re = TryReduceImp(std::get<TableWrapper>(Table));
+					Re = TryReduceImp(std::get<LRXBinaryTableWrapper>(Table));
 				}
 				if (Re.has_value())
 				{
@@ -1836,18 +1863,19 @@ namespace Potato::SLRX
 		return {};
 	}
 
-	auto SymbolProcessor::TryReduceImp(TableWrapper Wrapper) const -> std::optional<ReduceResult>
+	auto SymbolProcessor::TryReduceImp(LRXBinaryTableWrapper Wrapper) const -> std::optional<ReduceResult>
 	{
 		assert(Wrapper.TotalBufferSize() > CurrentTopState);
 		assert(*States.rbegin() == CurrentTopState);
-		auto NodeReader = Wrapper.GetSpanReader(CurrentTopState);
-		auto Node = NodeReader.ReadObject<TableWrapper::ZipNodeT>();
+		auto NodeReader = Wrapper.GetReader();
+		NodeReader.SetPointer(CurrentTopState);
+		auto Node = NodeReader.ReadObject<LRXBinaryTableWrapper::ZipNodeT>();
 		if (Node->RequireNodeDescCount == 0)
 		{
 			assert(Node->ReduceCount <= 1);
 			if (Node->ReduceCount == 1)
 			{
-				auto ReduceP = NodeReader.ReadObject<TableWrapper::ZipReducePropertyT>();
+				auto ReduceP = NodeReader.ReadObject<LRXBinaryTableWrapper::ZipReducePropertyT>();
 				LR0::Reduce Reduce;
 				Reduce.ReduceSymbol = Symbol::AsNoTerminal(ReduceP->NoTerminalValue);
 				Reduce.Reduce.Mask = ReduceP->Mask;
@@ -1858,8 +1886,8 @@ namespace Potato::SLRX
 				Result.Reduce = Reduce;
 				assert(States.size() > Reduce.Reduce.ElementCount);
 				auto RefState = States[States.size() - Reduce.Reduce.ElementCount - 1];
-				auto ReduceTuples = *NodeReader.ReadObjectArray<TableWrapper::ZipReduceTupleT>(ReduceP->ReduceTupleCount);
-				auto FindIte = std::find_if(ReduceTuples.begin(), ReduceTuples.end(), [=](TableWrapper::ZipReduceTupleT Tupe) {
+				auto ReduceTuples = NodeReader.ReadObjectArray<LRXBinaryTableWrapper::ZipReduceTupleT>(ReduceP->ReduceTupleCount);
+				auto FindIte = std::find_if(ReduceTuples.begin(), ReduceTuples.end(), [=](LRXBinaryTableWrapper::ZipReduceTupleT Tupe) {
 					return Tupe.LastState == RefState;
 					});
 				assert(FindIte != ReduceTuples.end());

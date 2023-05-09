@@ -103,13 +103,27 @@ export namespace Potato::Misc
 	struct StructedSerilizerReader
 	{
 		StructedSerilizerReader(std::span<StructT> Buffer) : Buffer(Buffer), PointerIndex(0) {}
+		
+		StructedSerilizerReader(StructedSerilizerReader const&) = default;
+
+		template<typename OtherT>
+		using FollowConst = std::conditional_t<
+			std::is_const_v<StructT>,
+			std::add_const_t<OtherT>,
+			OtherT
+		>;
+
 		void SetPointer(std::size_t Pointer) { PointerIndex = Pointer; }
 
 		template<typename OtherT>
-		auto ReadObject() -> OtherT*;
+		auto ReadObject() -> FollowConst<OtherT>*;
 
 		template<typename OtherT>
-		auto ReadObjectArray(std::size_t ObjectCount) -> std::span<OtherT>;
+		auto ReadObjectArray(std::size_t ObjectCount) -> std::span<FollowConst<OtherT>>;
+
+		StructedSerilizerReader SubReader(std::size_t Offset = 0) { StructedSerilizerReader New(*this); New.SetPointer(PointerIndex + Offset);  return New; }
+
+		
 
 	public:
 
@@ -122,27 +136,26 @@ export namespace Potato::Misc
 
 	template<typename StructT>
 	template<typename OtherT>
-	auto StructedSerilizerReader<StructT>::ReadObject() -> OtherT*
+	auto StructedSerilizerReader<StructT>::ReadObject() -> FollowConst<OtherT>*
 	{
 		auto TarSpan = Buffer.subspan(PointerIndex);
 		PointerIndex += AlignedSize<StructT>(sizeof(OtherT));
-		return reinterpret_cast<OtherT*>(TarSpan.data());
+		return reinterpret_cast<
+			FollowConst<OtherT>*
+		>(TarSpan.data());
 	}
 
 	template<typename StructT>
 	template<typename OtherT>
-	auto StructedSerilizerReader<StructT>::ReadObjectArray(std::size_t ObjectCount)->std::span<OtherT>
+	auto StructedSerilizerReader<StructT>::ReadObjectArray(std::size_t ObjectCount)->std::span<FollowConst<OtherT>>
 	{
 		auto TarSpan = Buffer.subspan(PointerIndex);
 		PointerIndex += AlignedSize<StructT>(sizeof(OtherT) * ObjectCount);
-		return std::span(reinterpret_cast<OtherT*>(TarSpan.data()), ObjectCount);
+		return std::span(reinterpret_cast<FollowConst<OtherT>*>(TarSpan.data()), ObjectCount);
 	}
 
-	template<typename OtherT>
-	auto ReadObjectArray(std::size_t ObjectType) -> std::span<OtherT>;
-
 	template<typename StructT>
-	struct StructedSerilizerWriter
+	struct StructedSerilizerWritter
 	{
 		bool IsPredice() const { return !OutputBuffer.has_value(); }
 		bool IsWritting() const { return OutputBuffer.has_value(); }
@@ -156,6 +169,9 @@ export namespace Potato::Misc
 		template<typename OtherT>
 		std::size_t WriteObjectArray(OtherT* BufferAdress, std::size_t Count);
 
+		template<typename OtherT>
+		std::size_t NewObjectArray(std::size_t Count);
+
 		std::optional<StructedSerilizerReader<StructT>> GetReader() const {
 			if (IsWritting())
 			{
@@ -166,8 +182,8 @@ export namespace Potato::Misc
 
 		std::size_t GetWritedSize() const { return WritedSize; }
 
-		StructedSerilizerWriter() = default;
-		StructedSerilizerWriter(std::span<StructT> ProxyBuffer) :
+		StructedSerilizerWritter() = default;
+		StructedSerilizerWritter(std::span<StructT> ProxyBuffer) :
 			OutputBuffer(ProxyBuffer) {}
 
 	public:
@@ -177,11 +193,11 @@ export namespace Potato::Misc
 	};
 
 	template<typename StructT>
-	StructedSerilizerWriter(std::span<StructT> ProxyBuffer) -> StructedSerilizerWriter<StructT>;
+	StructedSerilizerWritter(std::span<StructT> ProxyBuffer) -> StructedSerilizerWritter<StructT>;
 
 	template<typename StructT>
 	template<typename OtherT>
-	std::size_t StructedSerilizerWriter<StructT>::WriteObject(OtherT const& Type)
+	std::size_t StructedSerilizerWritter<StructT>::WriteObject(OtherT const& Type)
 	{
 		auto OldWriteSize = WritedSize;
 		auto TargetObject = AlignedSize<StructT>(sizeof(OtherT));
@@ -196,7 +212,27 @@ export namespace Potato::Misc
 
 	template<typename StructT>
 	template<typename OtherT>
-	std::size_t StructedSerilizerWriter<StructT>::WriteObjectArray(OtherT* BufferAdress, std::size_t Count)
+	std::size_t StructedSerilizerWritter<StructT>::NewObjectArray(std::size_t Count)
+	{
+		auto OldWriteSize = WritedSize;
+		auto TargetObject = AlignedSize<StructT>(sizeof(OtherT) * Count);
+		if (OutputBuffer.has_value())
+		{
+			auto Tar = OutputBuffer->subspan(WritedSize);
+			auto Adress = reinterpret_cast<std::byte*>(Tar.data());
+			for (std::size_t I = 0; I < Count; ++I)
+			{
+				new (Adress) OtherT{ };
+				Adress += sizeof(OtherT);
+			}
+		}
+		WritedSize += TargetObject;
+		return OldWriteSize;
+	}
+
+	template<typename StructT>
+	template<typename OtherT>
+	std::size_t StructedSerilizerWritter<StructT>::WriteObjectArray(OtherT* BufferAdress, std::size_t Count)
 	{
 		auto OldWriteSize = WritedSize;
 		auto TargetObject = AlignedSize<StructT>(sizeof(OtherT) * Count);
@@ -214,7 +250,7 @@ export namespace Potato::Misc
 		return OldWriteSize;
 	}
 
-
+	/*
 	namespace SerilizerHelper
 	{
 
@@ -395,6 +431,7 @@ export namespace Potato::Misc
 		};
 
 	};
+	*/
 
 
 }

@@ -5,11 +5,9 @@ export import Potato.STD;
 export namespace Potato::SLRX
 {
 
-	using StandardT = uint32_t;
-
 	struct Symbol
 	{
-		enum class ValueType : StandardT
+		enum class ValueType
 		{
 			TERMINAL = 0,
 			NOTERMIAL,
@@ -20,15 +18,15 @@ export namespace Potato::SLRX
 		constexpr std::strong_ordering operator<=>(Symbol const& Input) const = default;
 		constexpr static Symbol EndOfFile() { return { ValueType::ENDOFFILE, 0 }; }
 		constexpr static Symbol StartSymbol() { return { ValueType::STARTSYMBOL, 0 }; }
-		constexpr static Symbol AsNoTerminal(StandardT Value) { return { ValueType::NOTERMIAL, Value};  }
-		constexpr static Symbol AsTerminal(StandardT Value) { return { ValueType::TERMINAL, Value }; }
+		constexpr static Symbol AsNoTerminal(std::size_t Value) { return { ValueType::NOTERMIAL, Value};  }
+		constexpr static Symbol AsTerminal(std::size_t Value) { return { ValueType::TERMINAL, Value }; }
 		constexpr bool IsTerminal() const { return Type == ValueType::TERMINAL || IsEndOfFile(); }
 		constexpr bool IsNoTerminal() const { return Type == ValueType::NOTERMIAL || IsStartSymbol(); }
 		constexpr bool IsEndOfFile() const { return Type == ValueType::ENDOFFILE; }
 		constexpr bool IsStartSymbol() const { return Type == ValueType::STARTSYMBOL; }
 
 		ValueType Type = ValueType::ENDOFFILE;
-		StandardT Value = 0;
+		std::size_t Value = 0;
 	};
 
 	struct ParsingStep
@@ -40,7 +38,7 @@ export namespace Potato::SLRX
 		{
 			std::size_t ProductionIndex =0 ;
 			std::size_t ElementCount = 0;
-			SLRX::StandardT Mask = 0;	
+			std::size_t Mask = 0;	
 		};
 
 		struct ShiftT
@@ -203,7 +201,7 @@ export namespace Potato::SLRX
 		constexpr ProductionBuilderElement(ProductionBuilderElement const&) = default;
 		constexpr ProductionBuilderElement& operator=(ProductionBuilderElement const&) = default;
 		constexpr ProductionBuilderElement(Symbol Value) : Type(TypeT::IsValue), ProductionValue(Value) {};
-		constexpr ProductionBuilderElement(StandardT Mask) : Type(TypeT::IsMask), ProductionMask(Mask) {};
+		constexpr ProductionBuilderElement(std::size_t Mask) : Type(TypeT::IsMask), ProductionMask(Mask) {};
 		constexpr ProductionBuilderElement(ItSelf) : Type(TypeT::ItSelf) {};
 
 		enum class TypeT
@@ -220,7 +218,7 @@ export namespace Potato::SLRX
 
 	struct ProductionBuilder
 	{
-		ProductionBuilder(Symbol ProductionValue, std::vector<ProductionBuilderElement> ProductionElement, StandardT ProductionMask = 0, bool NeedPredict = false)
+		ProductionBuilder(Symbol ProductionValue, std::vector<ProductionBuilderElement> ProductionElement, std::size_t ProductionMask = 0, bool NeedPredict = false)
 			: ProductionValue(ProductionValue), Element(std::move(ProductionElement)), ProductionMask(ProductionMask), NeedPredict(NeedPredict) {}
 		
 		/*
@@ -238,7 +236,7 @@ export namespace Potato::SLRX
 
 		Symbol ProductionValue;
 		std::vector<ProductionBuilderElement> Element;
-		StandardT ProductionMask = 0;
+		std::size_t ProductionMask = 0;
 		bool NeedPredict = false;
 	};
 
@@ -256,7 +254,7 @@ export namespace Potato::SLRX
 		struct Production
 		{
 			Symbol Symbol;
-			StandardT ProductionMask;
+			std::size_t ProductionMask;
 			std::vector<Element> Elements;
 			bool NeedPredict = false;
 		};
@@ -358,7 +356,7 @@ export namespace Potato::SLRX
 			LR0::Reduce Property;
 		};
 
-		enum class RequireNodeType : StandardT
+		enum class RequireNodeType
 		{
 			SymbolValue,
 			ShiftProperty,
@@ -405,15 +403,21 @@ export namespace Potato::SLRX
 		LRX(std::vector<Node> Nodes) : Nodes(std::move(Nodes)) {}
 	};
 
-	struct TableWrapper
+	struct LRXBinaryTableWrapper
 	{
-		using StandardT = SLRX::StandardT;
+		using StandardT = std::uint32_t;
 
 		using HalfStandardT = std::uint16_t;
 		using HalfHalfStandardT = std::uint8_t;
 
 		static_assert(sizeof(HalfStandardT) * 2 == sizeof(StandardT));
 		static_assert(sizeof(HalfHalfStandardT) * 2 == sizeof(HalfStandardT));
+
+		struct alignas(alignof(StandardT)) ZipHeadT
+		{
+			StandardT NodeCount = 0;
+			StandardT StartupOffset = 0;
+		};
 
 		struct alignas(alignof(StandardT)) ZipNodeT
 		{
@@ -442,8 +446,6 @@ export namespace Potato::SLRX
 			HalfStandardT NeedPredict;
 			StandardT Mask;
 			StandardT NoTerminalValue;
-
-			static_assert(sizeof(HalfStandardT) == sizeof(std::uint16_t));
 		};
 
 		struct alignas(alignof(StandardT)) ZipReduceTupleT
@@ -453,19 +455,19 @@ export namespace Potato::SLRX
 			StandardT NeedPredict;
 		};
 
-		static std::size_t CalculateRequireSpace(LRX const& Ref);
-		static std::size_t SerilizeTo(std::span<StandardT> OutputBuffer, LRX const& Ref);
+		static void Serilize(Misc::StructedSerilizerWritter<StandardT>& Writer, LRX const& Ref);
+
 		static std::vector<StandardT> Create(LRX const& Le);
 		static std::vector<StandardT> Create(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority, std::size_t MaxForwardDetect = 3) {
 			return Create(LRX{ StartSymbol, std::move(Production), std::move(Priority), MaxForwardDetect });
 		}
 
-		TableWrapper(std::span<StandardT const> InputBuffer) : Buffer(InputBuffer) {}
-		TableWrapper(TableWrapper const&) = default;
-		TableWrapper() = default;
-		TableWrapper& operator=(TableWrapper const&) = default;
+		LRXBinaryTableWrapper(std::span<StandardT const> InputBuffer) : Buffer(InputBuffer) {}
+		LRXBinaryTableWrapper(LRXBinaryTableWrapper const&) = default;
+		LRXBinaryTableWrapper() = default;
+		LRXBinaryTableWrapper& operator=(LRXBinaryTableWrapper const&) = default;
 
-		Misc::SerilizerHelper::SpanReader<StandardT const> GetSpanReader(std::size_t Offset = 0){ return Misc::SerilizerHelper::SpanReader<StandardT const>{Buffer}.SubSpan(Offset); }
+		Misc::StructedSerilizerReader<StandardT const> GetReader(){ return Misc::StructedSerilizerReader<StandardT const>(Buffer); }
 
 		operator bool() const { return !Buffer.empty(); }
 		std::size_t NodeCount() const { return Buffer[0]; }
@@ -486,7 +488,7 @@ export namespace Potato::SLRX
 			std::size_t TokenIndex;
 		};
 
-		SymbolProcessor(TableWrapper Wrapper);
+		SymbolProcessor(LRXBinaryTableWrapper Wrapper);
 		SymbolProcessor(LRX const& Wrapper);
 		bool Consume(Symbol Value, std::size_t TokenIndex, std::vector<Symbol>* SuggestSymbols = nullptr);
 		std::span<ParsingStep const> GetSteps() const;
@@ -509,7 +511,7 @@ export namespace Potato::SLRX
 		};
 
 		std::optional<ConsumeResult> ConsumeImp(LRX const&, Symbol Value, std::vector<Symbol>* SuggestSymbols = nullptr) const;
-		std::optional<ConsumeResult> ConsumeImp(TableWrapper , Symbol Value, std::vector<Symbol>* SuggestSymbols = nullptr) const;
+		std::optional<ConsumeResult> ConsumeImp(LRXBinaryTableWrapper, Symbol Value, std::vector<Symbol>* SuggestSymbols = nullptr) const;
 
 		struct ReduceResult
 		{
@@ -519,7 +521,7 @@ export namespace Potato::SLRX
 		};
 
 		std::optional<ReduceResult> TryReduceImp(LRX const& Table) const;
-		std::optional<ReduceResult> TryReduceImp(TableWrapper Table) const;
+		std::optional<ReduceResult> TryReduceImp(LRXBinaryTableWrapper Table) const;
 
 		void TryReduce();
 
@@ -536,43 +538,43 @@ export namespace Potato::SLRX
 		};
 
 		std::vector<std::size_t> PredictRecord;
-		std::variant<TableWrapper, std::reference_wrapper<LRX const>> Table;
+		std::variant<LRXBinaryTableWrapper, std::reference_wrapper<LRX const>> Table;
 		std::size_t StartupOffset;
 	};
 
-	struct Table
+	struct LRXBinaryTable
 	{
-		Table(Table const& Input) : Datas(Input.Datas) { Wrapper = TableWrapper{ Datas }; }
-		Table(Table&& Input) : Datas(std::move(Input.Datas)) { Wrapper = TableWrapper{ Datas }; Input.Wrapper = {}; }
-		Table& operator=(Table const& Input) {
+		LRXBinaryTable(LRXBinaryTable const& Input) : Datas(Input.Datas) { Wrapper = LRXBinaryTableWrapper{ Datas }; }
+		LRXBinaryTable(LRXBinaryTable&& Input) : Datas(std::move(Input.Datas)) { Wrapper = LRXBinaryTableWrapper{ Datas }; Input.Wrapper = {}; }
+		LRXBinaryTable& operator=(LRXBinaryTable const& Input) {
 			Datas = Input.Datas;
-			Wrapper = TableWrapper{ Datas };
+			Wrapper = LRXBinaryTableWrapper{ Datas };
 			return *this;
 		}
-		Table& operator=(Table&& Input) noexcept {
+		LRXBinaryTable& operator=(LRXBinaryTable&& Input) noexcept {
 			Datas = std::move(Input.Datas);
-			Wrapper = TableWrapper{ Datas };
+			Wrapper = LRXBinaryTableWrapper{ Datas };
 			return *this;
 		}
-		Table() = default;
-		Table(SLRX::LRX const& Table)
+		LRXBinaryTable() = default;
+		LRXBinaryTable(SLRX::LRX const& Table)
 		{
-			Datas = TableWrapper::Create(Table);
-			Wrapper = TableWrapper(Datas);
+			Datas = LRXBinaryTableWrapper::Create(Table);
+			Wrapper = LRXBinaryTableWrapper(Datas);
 		}
-		Table(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority, std::size_t MaxForwardDetected)
-			: Table(SLRX::LRX{ StartSymbol, std::move(Production), std::move(Priority), MaxForwardDetected })
+		LRXBinaryTable(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority, std::size_t MaxForwardDetected)
+			: LRXBinaryTable(SLRX::LRX{ StartSymbol, std::move(Production), std::move(Priority), MaxForwardDetected })
 		{
 			
 		}
-		Table(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority)
-			: Table(SLRX::LRX{ StartSymbol, std::move(Production), std::move(Priority) })
+		LRXBinaryTable(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority)
+			: LRXBinaryTable(SLRX::LRX{ StartSymbol, std::move(Production), std::move(Priority) })
 		{
 		}
 		std::size_t NodeCount() const { return Wrapper.NodeCount(); }
-		operator TableWrapper() const { return Wrapper; }
-		std::vector<TableWrapper::StandardT> Datas;
-		TableWrapper Wrapper;
+		operator LRXBinaryTableWrapper() const { return Wrapper; }
+		std::vector<LRXBinaryTableWrapper::StandardT> Datas;
+		LRXBinaryTableWrapper Wrapper;
 	};
 
 
@@ -686,6 +688,7 @@ export namespace Potato::SLRX
 				Mask,
 				AcceptableProductionCount,
 				AcceptableProductionIndex,
+				SymbolValue,
 			};
 			TypeT Type;
 			std::size_t Value;

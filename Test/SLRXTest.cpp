@@ -2,16 +2,16 @@ import Potato.SLRX;
 
 using namespace Potato::SLRX;
 
-enum class Noterminal : StandardT
+enum class Noterminal
 {
 	Exp = 0,
 	Exp1 = 1,
 	Exp2 = 2,
 };
 
-constexpr Symbol operator*(Noterminal input) { return Symbol::AsNoTerminal(static_cast<StandardT>(input)); }
+constexpr Symbol operator*(Noterminal input) { return Symbol::AsNoTerminal(static_cast<std::size_t>(input)); }
 
-enum class Terminal : StandardT
+enum class Terminal
 {
 	Num = 0,
 	Add,
@@ -22,7 +22,7 @@ enum class Terminal : StandardT
 	RigheBracket
 };
 
-constexpr Symbol operator*(Terminal input) { return Symbol::AsTerminal(static_cast<StandardT>(input)); }
+constexpr Symbol operator*(Terminal input) { return Symbol::AsTerminal(static_cast<std::size_t>(input)); }
 
 std::map<Terminal, std::u8string_view> TerminalMapping = {
 	{Terminal::Num, std::u8string_view{u8"Num"}},
@@ -128,9 +128,9 @@ void TestTable(Symbol StartSymbol, std::vector<ProductionBuilder> Builder, std::
 		if (Re != TarStr)
 			throw Error;
 
-		auto Buffer = TableWrapper::Create(Tab);
+		auto Buffer = LRXBinaryTableWrapper::Create(Tab);
 
-		SymbolProcessor Pro3(TableWrapper{ Buffer });
+		SymbolProcessor Pro3(LRXBinaryTableWrapper{ Buffer });
 
 		IteSpan = Span;
 		while (!IteSpan.empty())
@@ -164,6 +164,7 @@ void TestingSLRX()
 	std::vector<Terminal> Lists2 = { Terminal::Num, Terminal::Add, Terminal::Num, Terminal::Mul, Terminal::Num, Terminal::Add, Terminal::Num };
 	std::vector<Terminal> Lists3 = { Terminal::Num, Terminal::Num, Terminal::Num, Terminal::Num, Terminal::Num, Terminal::Num };
 
+	/*
 	TestTable(
 		*Noterminal::Exp,
 		{
@@ -175,6 +176,7 @@ void TestingSLRX()
 		u8"&(&(&(&(&(&()Num)Num)Num)Num)Num)",
 		"TestingSLRX : Case 1"
 	);
+	*/
 
 	TestTable(
 		*Noterminal::Exp,

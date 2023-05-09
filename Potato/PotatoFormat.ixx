@@ -60,7 +60,7 @@ export namespace Potato::Format
 	template<typename CharT1, typename CharTT1, typename CharT2, typename CharTT2, typename ...OT>
 	bool MatchScan(std::basic_string_view<CharT1, CharTT1> Regex, std::basic_string_view<CharT2, CharTT2> Source, OT&... OO)
 	{
-		Reg::DfaT Table(Reg::DfaT::FormatE::March, Regex, false, 0);
+		Reg::DfaT Table(Reg::DfaT::FormatE::Match, Regex, false, 0);
 		Reg::DfaProcessor Processor(Table);
 		return ProcessorScan(Processor, Source, OO...);
 	}
@@ -68,7 +68,7 @@ export namespace Potato::Format
 	template<typename CharT1, typename CharTT1, typename CharT2, typename CharTT2, typename ...OT>
 	bool HeadMatchScan(std::basic_string_view<CharT1, CharTT1> Regex, std::basic_string_view<CharT2, CharTT2> Source, OT&... OO)
 	{
-		Reg::DfaT Table(Reg::DfaT::FormatE::HeadMarch, Regex, false, 0);
+		Reg::DfaT Table(Reg::DfaT::FormatE::HeadMatch, Regex, false, 0);
 		Reg::DfaProcessor Processor(Table);
 		return ProcessorScan(Processor, Source, OO...);
 	}
