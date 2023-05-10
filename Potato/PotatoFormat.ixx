@@ -49,7 +49,7 @@ export namespace Potato::Format
 	}
 
 	template<typename CharT, typename CharTraits, typename ...OT>
-	bool ProcessorScan(Reg::DfaBinaryTableProcessor& Processor, std::basic_string_view<CharT, CharTraits> Str, OT& ...OO)
+	bool ProcessorScan(Reg::DfaBinaryTableWrapperProcessor& Processor, std::basic_string_view<CharT, CharTraits> Str, OT& ...OO)
 	{
 		auto Accept = Reg::RegCoreProcessor(Processor, Str);
 		if (Accept.has_value())
@@ -74,11 +74,63 @@ export namespace Potato::Format
 	}
 
 
+	template<typename SourceType>
+	struct FormatWritter
+	{
+		constexpr FormatWritter() = default;
+		constexpr FormatWritter(std::span<SourceType> Output) : Output(Output) {}
+
+		constexpr bool IsWritting() const { return Output.has_value(); }
+
+		constexpr std::optional<std::span<SourceType>> GetLastBuffer() const{
+			if (Output.has_value())
+			{
+				return Output->subspan(WritedCount);
+			}
+			return {};
+		}
+
+		constexpr std::size_t GetWritedSize() const { return WritedCount; }
+
+		constexpr std::size_t Write(SourceType Input)
+		{
+			if (Output.has_value())
+			{
+				Output->operator[](WritedCount) = Input;
+			}
+			auto Old = WritedCount;
+			WritedCount += 1;
+			return Old;
+		}
+
+		constexpr std::size_t Write(std::span<SourceType const> Input)
+		{
+			if (Output.has_value())
+			{
+				std::copy_n(Input.begin(), Input.size(), Output->subspan(WritedCount).begin());
+			}
+			auto Old = WritedCount;
+			WritedCount += Input.size();
+			return Old;
+		}
+
+		constexpr std::size_t Allocate(std::size_t Size)
+		{
+			auto Old = WritedCount;
+			WritedCount += Size;
+			return Old;
+		}
+
+	protected:
+
+		std::size_t WritedCount = 0;
+		std::optional<std::span<SourceType>> Output;
+	};
+
 	template<typename SourceType, typename UnicodeType>
 	struct Formatter
 	{
-		static std::optional<std::size_t> Format(std::span<UnicodeType> Output, std::basic_string_view<UnicodeType> Parameter, SourceType const& Input) = delete;
-		static std::optional<std::size_t> FormatSize(std::basic_string_view<UnicodeType> Parameter, SourceType const& Input) = delete;
+		bool operator()(FormatWritter<SourceType>& Writer, std::basic_string_view<UnicodeType> Parameter, SourceType const& Input) = delete;
 	};
 
 	namespace Implement
@@ -193,54 +245,39 @@ export namespace Potato::Format
 		}
 
 
-		template<bool GetSize, std::size_t CurIndex, typename CharT, typename CharTT>
-		constexpr std::optional<std::size_t> FormatExe(std::span<CharT> Output, std::basic_string_view<CharT, CharTT> Par, std::size_t RequireSize)
+		template<std::size_t CurIndex, typename CharT, typename CharTT>
+		constexpr bool FormatExe(FormatWritter<CharT>& Writter, std::basic_string_view<CharT, CharTT> Par, std::size_t RequireSize)
 		{
-			return {};
+			return false;
 		}
 
-		template<bool GetSize, std::size_t CurIndex, typename CharT, typename CharTT, typename CurType, typename ...OtherType>
-		constexpr std::optional<std::size_t> FormatExe(std::span<CharT> Output, std::basic_string_view<CharT, CharTT> Par, std::size_t RequireSize, CurType&& CT, OtherType&& ...OT)
+		template<std::size_t CurIndex, typename CharT, typename CharTT, typename CurType, typename ...OtherType>
+		constexpr bool FormatExe(FormatWritter<CharT>& Writter, std::basic_string_view<CharT, CharTT> Par, std::size_t RequireSize, CurType&& CT, OtherType&& ...OT)
 		{
 			if (RequireSize == CurIndex)
 			{
-				if constexpr (GetSize)
-				{
-					return Formatter<std::remove_cvref_t<CurType>, CharT>::FormatSize(Par, CT);
-				}else
-					return Formatter<std::remove_cvref_t<CurType>, CharT>::Format(Output, Par, CT);
+				return Formatter<std::remove_cvref_t<CurType>, CharT>{}(Writter, Par, CT);
 			}
 			else {
-				return FormatExe<GetSize, CurIndex + 1>(Output, Par, RequireSize, std::forward<OtherType>(OT)...);
+				return FormatExe<CurIndex + 1>(Writter, Par, RequireSize, std::forward<OtherType>(OT)...);
 			}
 		}
 
-		struct ApplyResult
-		{
-			std::size_t Count;
-			std::size_t Index;
-			std::size_t OutputUsed;
-		};
-
-		template<bool GetSize, typename CharT, typename ...OtherType >
-		constexpr std::optional<ApplyResult> ApplyFormat(std::span<CharT> Output, std::size_t Index, FormatPatternT Type, std::basic_string_view<CharT> Par, OtherType&& ...OT)
+		template<typename CharT, typename ...OtherType>
+		constexpr std::optional<std::size_t> ApplyFormat(FormatWritter<CharT>& Writter, std::size_t Index, FormatPatternT Type, std::basic_string_view<CharT> Par, OtherType&& ...OT)
 		{
 			switch (Type)
 			{
 			case Implement::FormatPatternT::BadFormat:
 				return {};
 			case Implement::FormatPatternT::NormalString:
-				if constexpr (!GetSize)
-				{
-					std::copy_n(Par.begin(), Par.size(), Output.begin());
-				}
-				return ApplyResult{Par.size(), Index, Par.size()};
+				Writter.Write(Par);
+				return Index;
 			case Implement::FormatPatternT::Parameter:
 			{
-				auto Re = FormatExe<GetSize, 0>(Output, Par, Index, std::forward<OtherType>(OT)...);
-				if (Re.has_value())
+				if (FormatExe<0>(Writter, Par, Index, std::forward<OtherType>(OT)...))
 				{
-					return ApplyResult{*Re, Index + 1, *Re};
+					return Index + 1;
 				}
 				else
 					return {};
@@ -250,67 +287,37 @@ export namespace Potato::Format
 			}
 		}
 	}
-	
-	template<typename CharT, typename ...OType>
-	constexpr std::optional<std::size_t> FormatSize(std::basic_string_view<CharT> Formatter, OType&& ...OT) {
-		std::basic_string_view Str = Formatter;
-		std::size_t Count = 0;
+
+	template<typename CharT, typename CharTraisT, typename ...OType>
+	constexpr bool Format(FormatWritter<CharT>& Writter, std::basic_string_view<CharT, CharTraisT> Formatter, OType&& ...OT)
+	{
 		std::size_t Index = 0;
-		while (!Str.empty())
+		while (!Formatter.empty())
 		{
-			auto [Type, Par, Last] = Implement::FindFomatterTopElement(Str);
-			auto Re = Implement::ApplyFormat<true>({}, Index, Type, Par, std::forward<OType>(OT)...);
+			auto [Type, Par, Last] = Implement::FindFomatterTopElement(Formatter);
+			auto Re = Implement::ApplyFormat(Writter, Index, Type, Par, std::forward<OType>(OT)...);
 			if (Re.has_value())
 			{
-				Count += Re->Count;
-				Index = Re->Index;
-			}else
-				return {};
-			Str = Last;
+				Index = *Re;
+			}
+			else
+				return false;
+			Formatter = Last;
 		}
-		return Count;
+		return true;
 	}
 
-	template<typename CharT, typename ...OType>
-	constexpr std::optional<std::size_t> FormatSize(const CharT * Formatter, OType&& ...OT) {
-		return FormatSize(std::basic_string_view<CharT>{Formatter}, std::forward<OType>(OT)...);
-	}
+	template<typename CharT, typename CharTrais, typename ...OType>
+	auto FormatToString(std::basic_string_view<CharT, CharTrais> Formatter, OType&& ...OT) -> std::optional<std::basic_string<CharT, CharTrais>> {
+		
+		FormatWritter<CharT> Predict;
 
-	template<typename CharT, typename ...OType>
-	constexpr std::optional<std::size_t> FormatToUnSafe(std::span<CharT> OutputBuffer, std::basic_string_view<CharT> Formatter, OType&& ...OT) {
-		auto Str = Formatter;
-		std::size_t Count = 0;
-		std::size_t Index = 0;
-		while (!Str.empty())
+		if (Format(Predict, Formatter, OT...))
 		{
-			auto [Type, Par, Last] = Implement::FindFomatterTopElement(Str);
-			auto Re = Implement::ApplyFormat<false>(OutputBuffer, Index, Type, Par, std::forward<OType>(OT)...);
-			if (Re.has_value())
-			{
-				Count += Re->Count;
-				Index = Re->Index;
-				OutputBuffer = OutputBuffer.subspan(Re->OutputUsed);
-			}else
-				return {};
-			Str = Last;
-		}
-		return Count;
-	}
-
-	template<typename CharT, typename ...OType>
-	constexpr std::optional<std::size_t> FormatToUnSafe(std::span<CharT> OutputBuffer, const CharT* Formatter, OType&& ...OT) {
-		return FormatToUnSafe(OutputBuffer, std::basic_string_view<CharT>{Formatter}, std::forward<OType>(OT)...);
-	}
-
-	template<typename CharT, typename ...OType>
-	auto Format(std::basic_string_view<CharT> Formatter, OType&& ...OT) -> std::optional<std::basic_string<CharT>> {
-		std::basic_string<CharT> Buffer;
-		auto Re = FormatSize(Formatter, std::forward<OType>(OT)...);
-		if (Re)
-		{
-			Buffer.resize(*Re);
-			auto Re2 = FormatToUnSafe(std::span(Buffer), Formatter, std::forward<OType>(OT)...);
-			if (Re2)
+			std::basic_string<CharT, CharTrais> Buffer;
+			Buffer.resize(Predict.GetWritedSize());
+			FormatWritter<CharT> Writter(Buffer);
+			if (Format(Writter, Formatter, OT...))
 			{
 				return Buffer;
 			}
@@ -318,17 +325,11 @@ export namespace Potato::Format
 		return {};
 	}
 
-	template<typename CharT, typename ...OType>
-	auto Format(const CharT* Formatter, OType&& ...OT) -> std::optional<std::basic_string<CharT>>
-	{
-		return Format(std::basic_string_view<CharT>{Formatter}, std::forward<OType>(OT)...);
-	}
-
 	namespace Implement
 	{
 		
-		template<typename CharT>
-		constexpr std::size_t StaticFormatCount(std::basic_string_view<CharT> Str)
+		template<typename CharT, typename CharTT>
+		constexpr std::size_t StaticFormatCount(std::basic_string_view<CharT, CharTT> Str)
 		{
 			std::size_t Count = 0;
 			while (!Str.empty())
@@ -340,10 +341,10 @@ export namespace Potato::Format
 			return Count;
 		}
 
-		template<std::size_t N, typename CharT>
-		constexpr std::array<std::tuple<Implement::FormatPatternT, std::basic_string_view<CharT>>, N> StaticFormatExe(std::basic_string_view<CharT> Str)
+		template<std::size_t N, typename CharT, typename CharTT>
+		constexpr std::array<std::tuple<Implement::FormatPatternT, std::basic_string_view<CharT, CharTT>>, N> StaticFormatExe(std::basic_string_view<CharT, CharTT> Str)
 		{
-			std::array<std::tuple<Implement::FormatPatternT, std::basic_string_view<CharT>>, N> Tem;
+			std::array<std::tuple<Implement::FormatPatternT, std::basic_string_view<CharT, CharTT>>, N> Tem;
 			std::size_t Count = 0;
 			while (!Str.empty())
 			{
@@ -365,91 +366,66 @@ export namespace Potato::Format
 		static constexpr std::size_t ElementCount = Implement::StaticFormatCount(StrFormatter);
 		static constexpr std::array<std::tuple<Implement::FormatPatternT, std::basic_string_view<Type>>, ElementCount> Patterns
 			= Implement::StaticFormatExe<ElementCount>(StrFormatter);
-		
+
 		template<typename ...OT>
-		static constexpr std::optional<std::size_t> FormatSize(OT&& ...ot) {
-			std::size_t Count = 0;
+		static constexpr bool Format(FormatWritter<Type>& Writter, OT&& ...ot)
+		{
 			std::size_t Index = 0;
 			for (auto Ite : Patterns)
 			{
 				auto [Type, Par] = Ite;
-				auto Re = Implement::ApplyFormat<true>({}, Index, Type, Par, std::forward<OT>(ot)...);
+				auto Re = Implement::ApplyFormat(Writter, Index, Type, Par, std::forward<OT>(ot)...);
 				if (Re.has_value())
 				{
-					Count += Re->Count;
-					Index = Re->Index;
-				}else
-					return {};
+					Index = *Re;
+				}
+				else
+					return false;
 			}
-			return Count;
+			return true;
 		}
 
 		template<typename ...OT>
-		static constexpr  std::optional<std::size_t> FormatToUnsafe(std::span<Type> Output, OT&& ...ot) {
-			std::size_t Count = 0;
-			std::size_t Index = 0;
-			for (auto Ite : Patterns)
+		static auto FormatToString(OT&& ...ot) -> std::optional<std::basic_string<Type>>
+		{
+			FormatWritter<Type> Predicte;
+			if (StaticFormatPattern::Format(Predicte, ot...))
 			{
-				auto [Type, Par] = Ite;
-				auto Re = Implement::ApplyFormat<false>(Output, Index, Type, Par, std::forward<OT>(ot)...);
-				if (Re.has_value())
+				std::basic_string<Type> Result;
+				Result.resize(Predicte.GetWritedSize());
+				FormatWritter<Type> Writter{std::span(Result)};
+				if (StaticFormatPattern::Format(Writter, ot...))
 				{
-					Count += Re->Count;
-					Index = Re->Index;
-					Output = Output.subspan(Re->OutputUsed);
+					return Result;
 				}
-				else
-					return {};
 			}
-			return Count;
+			return {};
 		}
 
 	};
 
 	template<TMP::TypeString Formatter, typename ...Type>
-	auto StaticFormat(Type&& ...Cur) -> std::optional<std::basic_string<typename StaticFormatPattern<Formatter>::Type>>
+	auto StaticFormatToString(Type&& ...Cur) -> std::optional<std::basic_string<typename StaticFormatPattern<Formatter>::Type>>
 	{
-		std::basic_string<typename StaticFormatPattern<Formatter>::Type> Par;
-		auto Re = StaticFormatPattern<Formatter>::FormatSize(std::forward<Type>(Cur)...);
-		if (Re.has_value())
+		return StaticFormatPattern<Formatter>::FormatToString(Cur...);
+	}
+
+	template<typename CharT, typename CharTT, typename SourceT>
+	auto DirectFormatToString(std::basic_string_view<CharT, CharTT> Par, SourceT && S) -> std::optional<std::basic_string<CharT, CharTT>> {
+		
+		FormatWritter<CharT> Predicte;
+		using Formatter = Formatter<std::remove_cvref_t<SourceT>, CharT>;
+		if (Formatter{}(Predicte, Par, S))
 		{
-			Par.resize(*Re);
-			Re = StaticFormatPattern<Formatter>::FormatToUnsafe(std::span(Par), std::forward<Type>(Cur)...);
-			if(*Re)
-				return Par;
-		}
-		return {};
-	}
-
-	template<typename CharT, typename SourceT>
-	std::optional<std::size_t> DirectFormatSize(std::basic_string_view<CharT> Par, SourceT&& S)
-	{
-		return Formatter<std::remove_cvref_t<SourceT>, CharT>::FormatSize(Par, std::forward<SourceT>(S));
-	}
-
-	template<typename CharT, typename SourceT>
-	std::optional<std::size_t> DirectFormatToUnSafe(std::span<CharT> Output, std::basic_string_view<CharT> Par, SourceT& S)
-	{
-		return Formatter<std::remove_cvref_t<SourceT>, CharT>::Format(Output, Par, std::forward<SourceT>(S));
-	}
-
-
-	template<typename CharT, typename SourceT>
-	auto DirectFormat(std::basic_string_view<CharT> Par, SourceT && S) -> std::optional<std::basic_string<CharT>> { 
-		auto Size = Formatter<std::remove_cvref_t<SourceT>, CharT>::FormatSize(Par, std::forward<SourceT>(S));
-		if (Size.has_value())
-		{
-			std::basic_string<CharT> Result(*Size, 0);
-			auto Re = Formatter<std::remove_cvref_t<SourceT>, CharT>::Format(std::span(Result), Par, std::forward<SourceT>(S));
-			if (Re.has_value() && *Size == *Re)
+			std::basic_string<CharT, CharTT> Result;
+			Result.resize(Predicte.GetWritedSize());
+			FormatWritter<CharT> Writter{ std::span(Result) };
+			if (Formatter{}(Writter, Par, S))
+			{
 				return Result;
+			}
 		}
 		return {};
-	}
-
-	template<typename CharT, typename SourceT>
-	auto DirectFormat(const CharT* Par, SourceT&& S) -> std::optional<std::basic_string<CharT>> {
-		return DirectFormat(std::basic_string_view<CharT>{Par}, std::forward<SourceT>(S));
 	}
 
 }
@@ -507,43 +483,31 @@ export namespace Potato::Format
 	template<typename NumberType, typename UnicodeType>
 	struct BuildInNumberFormatter
 	{
-		static std::optional<std::size_t> Format(std::span<UnicodeType> Output, std::basic_string_view<UnicodeType> Pars, NumberType Input) {
+		bool operator()(FormatWritter<UnicodeType>& Writter, std::basic_string_view<UnicodeType> Pars, NumberType Input) {
 			std::wstringstream wss;
 			wss << Input;
-			std::size_t Index = 0;
 			while (true)
 			{
 				wchar_t Temp;
 				wss.read(&Temp, 1);
 				if (wss.good())
 				{
-					auto Result = Encode::CharEncoder<wchar_t, UnicodeType>::EncodeOnceUnSafe({ &Temp, 1 }, Output.subspan(Index));
-					Index += Result.TargetSpace;
+					auto Last = Writter.GetLastBuffer();
+					if (Last.has_value())
+					{
+						auto Result = Encode::CharEncoder<wchar_t, UnicodeType>::EncodeOnceUnSafe({ &Temp, 1 }, *Last);
+						Writter.Allocate(Result.TargetSpace);
+					}
+					else {
+						auto Result = Encode::CharEncoder<wchar_t, UnicodeType>::RequireSpaceOnceUnSafe({ &Temp, 1 });
+						Writter.Allocate(Result.TargetSpace);
+					}
 				}
 				else {
 					break;
 				}
 			}
-			return Index;
-		}
-		static std::optional<std::size_t> FormatSize(std::basic_string_view<UnicodeType> Parameter, NumberType Input) {
-			std::wstringstream wss;
-			wss << Input;
-			std::size_t Index = 0;
-			while (true)
-			{
-				wchar_t Temp;
-				wss.read(&Temp, 1);
-				if (wss.good())
-				{
-					auto Result = Encode::CharEncoder<wchar_t, UnicodeType>::RequireSpaceOnceUnSafe({ &Temp, 1 });
-					Index += Result.TargetSpace;
-				}
-				else {
-					break;
-				}
-			}
-			return Index;
+			return true;
 		}
 	};
 
@@ -571,9 +535,19 @@ export namespace Potato::Format
 	template<typename SUnicodeT, typename CharTrais, typename UnicodeType>
 	struct Formatter<std::basic_string_view<SUnicodeT, CharTrais>, UnicodeType>
 	{
-		static std::optional<std::size_t> Format(std::span<UnicodeType> Output, std::basic_string_view<UnicodeType> Parameter, std::basic_string_view<SUnicodeT, CharTrais> const& Input) {
-			auto Info = Encode::StrEncoder<SUnicodeT, UnicodeType>::EncodeUnSafe(Input, Output);
-			return Info.TargetSpace;
+		bool operator()(FormatWritter<UnicodeType>& Writter, std::basic_string_view<UnicodeType> Parameter, std::basic_string_view<SUnicodeT, CharTrais> const& Input) {
+			
+			auto Last = Writter.GetLastBuffer();
+			if (Last.has_value())
+			{
+				auto Result = Encode::CharEncoder<wchar_t, UnicodeType>::EncodeOnceUnSafe(Input, *Last);
+				Writter.Allocate(Result.TargetSpace);
+			}
+			else {
+				auto Result = Encode::CharEncoder<wchar_t, UnicodeType>::RequireSpaceUnSafe(Input);
+				Writter.Allocate(Result.TargetSpace);
+			}
+			return true;
 		}
 		static std::optional<std::size_t> FormatSize(std::basic_string_view<UnicodeType> Parameter, std::basic_string_view<SUnicodeT, CharTrais> const& Input) {
 			auto Info = Encode::StrEncoder<SUnicodeT, UnicodeType>::RequireSpaceUnSafe(Input);

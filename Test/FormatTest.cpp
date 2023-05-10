@@ -17,7 +17,7 @@ void TestScan(std::u8string_view Pattern, std::u8string_view Str, Target Tar, co
 template<typename ...Target>
 void TestFormat(std::u8string_view Pattern, std::u8string_view TarStr, const char* Error, Target&& ...Tar)
 {
-	auto FormatStr = Format(Pattern, std::forward<Target>(Tar)...);
+	auto FormatStr = FormatToString(Pattern, std::forward<Target>(Tar)...);
 	if (!FormatStr.has_value() || FormatStr != TarStr)
 	{
 		throw Error;
@@ -25,16 +25,21 @@ void TestFormat(std::u8string_view Pattern, std::u8string_view TarStr, const cha
 }
 
 
+constexpr std::size_t Fund()
+{
+	FormatWritter<char8_t> Predict;
+	auto K = Format(Predict, std::u8string_view{ u8"abcedc" });
+	return Predict.GetWritedSize();
+}
+
 void TestingStrFormat()
 {
-
-	constexpr auto K = FormatSize(u8"abcedc");
+	
+	constexpr auto K = Fund();
 
 	StaticFormatPattern<u8"abcd"> K2;
 
-	constexpr auto K6 = decltype(K2)::FormatSize();
-
-	auto P233 = StaticFormat<u8"aabcc">(1);
+	auto P233 = StaticFormatToString<u8"aabcc">(1);
 
 	//auto P = Formatt<u8"abc">();
 	

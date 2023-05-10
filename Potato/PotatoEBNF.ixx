@@ -24,20 +24,20 @@ export namespace Potato::EBNF
 		bool IsNoName(SLRX::Symbol Value) const;
 	};
 
-	struct TableWrapper
+	struct EBnfBinaryTableWrapper
 	{
 
 		using StandardT = std::uint32_t;
 
-		static std::size_t CalculateRequireSpace(EBNFX const& Ref);
-		static std::size_t SerilizeTo(std::span<StandardT> OutputBuffer, EBNFX const& Ref);
-		static std::vector<StandardT> Create(EBNFX const& Le);
+		static std::size_t CalculateRequireSpace(EBnfT const& Ref);
+		static std::size_t SerilizeTo(std::span<StandardT> OutputBuffer, EBnfT const& Ref);
+		static std::vector<StandardT> Create(EBnfT const& Le);
 		static std::vector<StandardT> Create(std::u8string_view Str) {
-			return Create(EBNFX::Create(Str));
+			return Create(EBnfT::Create(Str));
 		}
 
-		SLRX::TableWrapper GetSyntaxWrapper() const;
-		Reg::TableWrapper GetLexicalWrapper() const;
+		SLRX::LRXBinaryTableWrapper GetSyntaxWrapper() const;
+		Reg::DfaBinaryTableWrapper GetLexicalWrapper() const;
 		std::optional<std::u8string_view> ReadSymbol(SLRX::Symbol Value) const;
 		operator bool() const { return !Wrapper.empty(); }
 		bool IsNoName(SLRX::Symbol Value) const;
@@ -69,8 +69,8 @@ export namespace Potato::EBNF
 
 		std::optional<std::u8string_view> Consume(std::u8string_view Str, std::size_t MarkedOffset);
 
-		LexicalProcessor(EBNFX const& Table) : Pro(Table.GetLexicalWrapper(), true), Table(Table) {}
-		LexicalProcessor(TableWrapper Table) : Pro(Table.GetLexicalWrapper(), true), Table(Table) {}
+		LexicalProcessor(EBnfT const& Table) : Pro(Table.GetLexicalWrapper(), true), Table(Table) {}
+		LexicalProcessor(EBnfBinaryTableWrapper Table) : Pro(Table.GetLexicalWrapper(), true), Table(Table) {}
 		std::span<LexicalElement> GetSpan() { return std::span(Elements); }
 		void Clear() { Elements.clear(); }
 

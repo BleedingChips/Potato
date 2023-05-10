@@ -350,8 +350,8 @@ export namespace Potato::Reg
 		std::vector<NodeT> Nodes;
 		
 		friend struct DfaProcessor;
-		friend struct DfaBinaryTable;
-		friend struct DfaBinaryTableProcessor;
+		friend struct DfaBinaryTableWrapper;
+		friend struct DfaBinaryTableWrapperProcessor;
 	};
 
 	struct ProcessorAcceptT
@@ -410,7 +410,7 @@ export namespace Potato::Reg
 		std::optional<DfaT::AcceptT> Accept;
 		std::optional<Misc::IndexSpan<>> CurMainCapture;
 		
-		friend struct DfaBinaryTableProcessor;
+		friend struct DfaBinaryTableWrapperProcessor;
 	};
 
 	template<typename CharT, typename CharTrais>
@@ -420,7 +420,7 @@ export namespace Potato::Reg
 		return RegCoreProcessor(Processor, Str);
 	}
 
-	struct DfaBinaryTable
+	struct DfaBinaryTableWrapper
 	{
 		using StandardT = std::uint32_t;
 		using HalfStandardT = std::uint16_t;
@@ -485,40 +485,42 @@ export namespace Potato::Reg
 			return Buffer;
 		}
 
-		DfaBinaryTable(std::span<StandardT> Buffer) : Wrapper(Buffer) {};
+		DfaBinaryTableWrapper(std::span<StandardT> Buffer) : Wrapper(Buffer) {};
 
 	private:
 
 		
 		std::span<StandardT> Wrapper;
 
-		friend struct DfaBinaryTableProcessor;
+		friend struct DfaBinaryTableWrapperProcessor;
 	};
 
-	template<typename CharT, typename CharTrais>
-	std::optional<ProcessorAcceptT> Process(DfaBinaryTable const& Table, std::basic_string_view<CharT, CharTrais> Str)
-	{
-		DfaBinaryTableProcessor Processor{ Table };
-		return RegCoreProcessor(Processor, Str);
-	}
+	
 
 
-	struct DfaBinaryTableProcessor
+	struct DfaBinaryTableWrapperProcessor
 	{
-		DfaBinaryTableProcessor(DfaBinaryTable Table);
+		DfaBinaryTableWrapperProcessor(DfaBinaryTableWrapper Table);
 		bool Consume(char32_t Token, std::size_t TokenIndex);
 		bool EndOfFile(std::size_t TokenIndex) { return Consume(Reg::EndOfFile(), TokenIndex); }
 		void Reset();
 		bool HasAccept() const { return Accept.has_value(); }
 		std::optional<ProcessorAcceptT> GetAccept() const;
 	protected:
-		DfaBinaryTable Table;
+		DfaBinaryTableWrapper Table;
 		std::size_t CurrentNode;
 		std::vector<std::size_t> TempResult;
 		std::vector<std::size_t> CacheIndex;
-		std::optional<DfaBinaryTable::AcceptT> Accept;
+		std::optional<DfaBinaryTableWrapper::AcceptT> Accept;
 		std::optional<Misc::IndexSpan<>> CurMainCapture;
 	};
+
+	template<typename CharT, typename CharTrais>
+	std::optional<ProcessorAcceptT> Process(DfaBinaryTableWrapper const& Table, std::basic_string_view<CharT, CharTrais> Str)
+	{
+		DfaBinaryTableWrapperProcessor Processor{ Table };
+		return RegCoreProcessor(Processor, Str);
+	}
 
 	export namespace Exception
 	{
