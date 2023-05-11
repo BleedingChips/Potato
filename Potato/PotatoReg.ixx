@@ -361,8 +361,13 @@ export namespace Potato::Reg
 		Misc::IndexSpan<> MainCapture;
 	};
 
+	struct ProcessorUnacceptT
+	{
+		Misc::IndexSpan<> FailCapture;
+	};
+
 	template<typename ProcessorT, typename CharT, typename CharTraidT>
-	std::optional<ProcessorAcceptT> RegCoreProcessor(ProcessorT& Pro, std::basic_string_view<CharT, CharTraidT> Str)
+	std::variant<ProcessorAcceptT, ProcessorUnacceptT> CoreProcessorWithUnaccept(ProcessorT& Pro, std::basic_string_view<CharT, CharTraidT> Str)
 	{
 		char32_t TemBuffer = 0;
 		std::span<char32_t> OutputSpan{ &TemBuffer, 1 };
@@ -373,11 +378,14 @@ export namespace Potato::Reg
 
 		bool NeedEndOfFile = true;
 
+		std::size_t TokeIndex = 0;
+
 		while (!IteStr.empty())
 		{
 			auto EncodeRe = EncoderT::EncodeOnceUnSafe(IteStr, OutputSpan);
-			auto Re = Pro.Consume(TemBuffer, Str.size() - IteStr.size());
+			auto Re = Pro.Consume(TemBuffer, TokeIndex);
 			IteStr = IteStr.subspan(EncodeRe.SourceSpace);
+			TokeIndex += EncodeRe.SourceSpace;
 			if (!Re)
 			{
 				NeedEndOfFile = false;
@@ -386,8 +394,23 @@ export namespace Potato::Reg
 		}
 
 		if (NeedEndOfFile)
-			Pro.EndOfFile(Str.size() - IteStr.size());
-		return Pro.GetAccept();
+			Pro.EndOfFile(TokeIndex);
+
+		auto Accept = Pro.GetAccept();
+
+		if(Accept.has_value())
+			return std::move(*Accept);
+		else
+			return ProcessorUnacceptT{{0, TokeIndex} };
+	}
+
+	template<typename ProcessorT, typename CharT, typename CharTraidT>
+	std::optional<ProcessorAcceptT> CoreProcessor(ProcessorT& Pro, std::basic_string_view<CharT, CharTraidT> Str)
+	{
+		auto Re = CoreProcessorWithUnaccept(Pro, Str);
+		if(std::holds_alternative<ProcessorAcceptT>(Re))
+			return std::move(std::get<ProcessorAcceptT>(Re));
+		return {};
 	}
 
 	struct DfaProcessor
@@ -417,7 +440,7 @@ export namespace Potato::Reg
 	std::optional<ProcessorAcceptT> Process(DfaT const& Table, std::basic_string_view<CharT, CharTrais> Str)
 	{
 		DfaProcessor Processor{ Table };
-		return RegCoreProcessor(Processor, Str);
+		return CoreProcessor(Processor, Str);
 	}
 
 	struct DfaBinaryTableWrapper

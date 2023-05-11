@@ -42,7 +42,7 @@ export namespace Potato::Format
 	template<typename CharT, typename CharTraits, typename ...OT>
 	bool ProcessorScan(Reg::DfaProcessor& Processor, std::basic_string_view<CharT, CharTraits> Str, OT& ...OO)
 	{
-		auto Accept = Reg::RegCoreProcessor(Processor, Str);
+		auto Accept = Reg::CoreProcessor(Processor, Str);
 		if (Accept.has_value())
 			return RegAcceptScan(*Accept, Str, OO...);
 		return false;
@@ -51,7 +51,7 @@ export namespace Potato::Format
 	template<typename CharT, typename CharTraits, typename ...OT>
 	bool ProcessorScan(Reg::DfaBinaryTableWrapperProcessor& Processor, std::basic_string_view<CharT, CharTraits> Str, OT& ...OO)
 	{
-		auto Accept = Reg::RegCoreProcessor(Processor, Str);
+		auto Accept = Reg::CoreProcessor(Processor, Str);
 		if (Accept.has_value())
 			return RegAcceptScan(*Accept, Str, OO...);
 		return false;

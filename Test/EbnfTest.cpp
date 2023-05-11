@@ -2,7 +2,7 @@ import Potato.EBNF;
 
 using namespace Potato::EBNF;
 
-
+/*
 std::u8string HandleCondiction(Condition Tions)
 {
 	std::u8string Result;
@@ -95,12 +95,13 @@ struct StringMaker
 
 	const char* Error;
 };
+*/
 
 void Test(std::u8string_view Table, std::u8string_view InputStr, std::u8string_view TargetReg, const char* Error)
 {
 	try {
-		EBNFX Tab = EBNFX::Create(Table);
-
+		EbnfT Tab { Table };
+		/*
 		{
 			auto IteStr = InputStr;
 
@@ -166,6 +167,7 @@ void Test(std::u8string_view Table, std::u8string_view InputStr, std::u8string_v
 			if (Strs != TargetReg)
 				throw Error;
 		}
+		*/
 	}
 	catch (Exception::Interface const&)
 	{

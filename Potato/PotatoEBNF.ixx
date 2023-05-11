@@ -9,10 +9,34 @@ export import Potato.STD;
 
 export namespace Potato::EBNF
 {
-
-	struct EBnfT
+	
+	struct EbnfLexer
 	{
-		static EBnfT Create(std::u8string_view Str);
+		
+		template<typename CharT, typename CharTrais>
+		EbnfLexer(std::basic_string_view<CharT, CharTrais> Str);
+
+		struct Element
+		{
+			SLRX::Symbol Symbol;
+			Misc::IndexSpan<> TokenIndex;
+		};
+
+	protected:
+
+		static Reg::DfaBinaryTableWrapper GetRegTable();
+		static bool ShouldIgnore(SLRX::Symbol InputSymbol);
+
+		std::vector<Element> Elements;
+	};
+
+	struct EbnfT
+	{
+		template<typename CharT, typename CharTraisT>
+		EbnfT(std::basic_string_view<CharT, CharTraisT> EbnfStr);
+
+
+		/*
 		std::vector<std::u8string> MappingTerminalSymbols;
 		std::vector<std::u8string> MappingNoterminalSymbols;
 		Reg::DfaT Lexical;
@@ -22,7 +46,11 @@ export namespace Potato::EBNF
 		Reg::DfaT const& GetLexicalWrapper() const { return Lexical; }
 		std::optional<std::u8string_view> ReadSymbol(SLRX::Symbol Value) const;
 		bool IsNoName(SLRX::Symbol Value) const;
+		*/
 	};
+
+	/*
+	
 
 	struct EBnfBinaryTableWrapper
 	{
@@ -242,6 +270,7 @@ export namespace Potato::EBNF
 	{
 		return std::any_cast<RT>(*ProcessParsingStep(Input, Func));
 	}
+	*/
 }
 
 export namespace Potato::EBNF::Exception
@@ -284,7 +313,9 @@ export namespace Potato::EBNF::Exception
 	struct UnacceptableRegex : public Interface
 	{
 		std::wstring Regex;
-		UnacceptableRegex(std::wstring Regex) : Regex(std::move(Regex)) {}
+
+		template<typename CharT>
+		UnacceptableRegex(std::basic_string_view<CharT> InputRegex) : Regex(*Encode::StrEncoder<CharT, wchar_t>::EncodeToString(InputRegex)) {}
 		UnacceptableRegex(UnacceptableRegex const&) = default;
 		virtual char const* what() const override;
 	};
@@ -337,12 +368,39 @@ export namespace Potato::EBNF::Exception
 	};
 }
 
-export namespace Potato::StrFormat
+export namespace Potato::EBNF
 {
-	/*
-	template<> struct Formatter<Ebnf::Table>
+	template<typename CharT, typename CharTrais>
+	EbnfLexer::EbnfLexer(std::basic_string_view<CharT, CharTrais> Str)
 	{
-		std::u32string operator()(std::u32string_view, Ebnf::Table const& ref);
-	};
-	*/
+		Reg::DfaBinaryTableWrapperProcessor Pro(GetRegTable());
+
+		auto StrIte = Str;
+		std::size_t IteIndex = 0;
+		while (!StrIte.empty())
+		{
+			Pro.Reset();
+			auto Re = Reg::CoreProcessorWithUnaccept(Pro, StrIte);
+			if (std::holds_alternative<Reg::ProcessorAcceptT>(Re))
+			{
+				auto& Accept = std::get<Reg::ProcessorAcceptT>(Re);
+				auto Symbol = SLRX::Symbol::AsTerminal(Accept.Mask);
+				if(!ShouldIgnore(Symbol))
+					Elements.push_back({ Symbol, {IteIndex, IteIndex + Accept.MainCapture.End()} });
+				StrIte = StrIte.substr(Accept.MainCapture.End());
+				IteIndex += Accept.MainCapture.End();
+			}
+			else {
+				auto OutputToken = std::get<Reg::ProcessorUnacceptT>(Re).FailCapture;
+				throw Exception::UnacceptableRegex(OutputToken.Slice(Str));
+			}
+		}
+	}
+
+	template<typename CharT, typename CharTraisT>
+	EbnfT::EbnfT(std::basic_string_view<CharT, CharTraisT> EbnfStr)
+	{
+		EbnfLexer Lexer(EbnfStr);
+		volatile int i = 0;
+	}
 }

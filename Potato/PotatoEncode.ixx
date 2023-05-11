@@ -361,5 +361,19 @@ export namespace Potato::Encode
 			}
 			return Result;
 		}
+
+		template<typename CharTraits, typename AllocatorT = std::allocator<TargetT>>
+		static auto EncodeToString(std::basic_string_view<SourceT, CharTraits> Source, AllocatorT Allocator = {}) -> std::optional<std::basic_string<TargetT, std::char_traits<TargetT>, AllocatorT>>
+		{
+			auto Info = RequireSpaceUnSafe(Source);
+			if (Info)
+			{
+				std::basic_string<TargetT, std::char_traits<TargetT>, AllocatorT> Result{ std::move(Allocator) };
+				Result.resize(Info.TargetSpace);
+				EncodeUnSafe(Source, Result);
+				return Result;
+			}
+			return {};
+		}
 	};
 }

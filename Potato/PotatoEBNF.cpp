@@ -9,14 +9,16 @@ namespace Potato::EBNF
 
 	using namespace Exception;
 
-	static constexpr SLRX::StandardT SmallBrace = 0;
-	static constexpr SLRX::StandardT MiddleBrace = 1;
-	static constexpr SLRX::StandardT BigBrace = 2;
-	static constexpr SLRX::StandardT OrMaskBase = 3;
+	static constexpr std::size_t SmallBrace = 0;
+	static constexpr std::size_t MiddleBrace = 1;
+	static constexpr std::size_t BigBrace = 2;
+	static constexpr std::size_t OrLeft = 3;
+	static constexpr std::size_t OrRight = 4;
+	static constexpr std::size_t MinMask = 5;
 
 	using SLRX::Symbol;
 
-	enum class T : SLRX::StandardT
+	enum class T
 	{
 		Empty = 0,
 		Terminal,
@@ -41,9 +43,9 @@ namespace Potato::EBNF
 		Barrier
 	};
 
-	constexpr Symbol operator*(T sym) { return Symbol::AsTerminal(static_cast<SLRX::StandardT>(sym)); };
+	constexpr Symbol operator*(T sym) { return Symbol::AsTerminal(static_cast<std::size_t>(sym)); };
 
-	enum class NT : SLRX::StandardT
+	enum class NT
 	{
 		Statement,
 		FunctionEnum,
@@ -56,43 +58,46 @@ namespace Potato::EBNF
 		OrStatement,
 	};
 
-	constexpr Symbol operator*(NT sym) { return Symbol::AsNoTerminal(static_cast<SLRX::StandardT>(sym)); };
+	constexpr Symbol operator*(NT sym) { return Symbol::AsNoTerminal(static_cast<std::size_t>(sym)); };
 
-	void AddRegex(Reg::MulityRegCreater& Creator, std::u8string_view Str, T Enum)
-	{
-		Creator.LowPriorityLink(Str, false, {static_cast<SLRX::StandardT>(Enum)});
-	}
-
-	Reg::TableWrapper EbnfStepReg() {
+	Reg::DfaBinaryTableWrapper EbnfLexer::GetRegTable() {
 			static auto List = []() {
-				Reg::MulityRegCreater Creator;
-				AddRegex(Creator, u8R"(%%%%)", T::Barrier);
-				AddRegex(Creator, u8R"([0-9]+)", T::Number);
-				AddRegex(Creator, u8R"([0-9a-zA-Z_\z]+)", T::Terminal);
-				AddRegex(Creator, u8R"(<[0-9a-zA-Z_\z]+>)", T::NoTerminal);
-				AddRegex(Creator, u8R"(:=)", T::Equal);
-				AddRegex(Creator, u8R"(\'([^\s]+)\')", T::Rex);
-				AddRegex(Creator, u8R"(;)", T::Semicolon);
-				AddRegex(Creator, u8R"(:)", T::Colon);
-				AddRegex(Creator, u8R"(\s+)", T::Empty);
-				AddRegex(Creator, u8R"(\$)", T::Start);
-				AddRegex(Creator, u8R"(\|)", T::Or);
-				AddRegex(Creator, u8R"(\[)", T::LM_Brace);
-				AddRegex(Creator, u8R"(\])", T::RM_Brace);
-				AddRegex(Creator, u8R"(\{)", T::LB_Brace);
-				AddRegex(Creator, u8R"(\})", T::RB_Brace);
-				AddRegex(Creator, u8R"(\()", T::LS_Brace);
-				AddRegex(Creator, u8R"(\))", T::RS_Brace);
-				AddRegex(Creator, u8R"(\+\()", T::LeftPriority);
-				AddRegex(Creator, u8R"(\)\+)", T::RightPriority);
-				AddRegex(Creator, u8R"(/\*.*?\*/)", T::Command);
-				AddRegex(Creator, u8R"(//[^\n]*\n)", T::Command);
-				return *Creator.GenerateTableBuffer();
+				Reg::NfaT StartupTable{std::basic_string_view{UR"(%%%%)"}, false, static_cast<std::size_t>(T::Barrier) };
+
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"([0-9]+)"}, false, static_cast<std::size_t>(T::Number) });
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"([0-9a-zA-Z_\z]+)"},false, static_cast<std::size_t>(T::Terminal) });
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(<[0-9a-zA-Z_\z]+>)"},false, static_cast<std::size_t>(T::NoTerminal) });
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(:=)"}, false,static_cast<std::size_t>(T::Equal) });
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\'([^\s]+)\')"}, false,static_cast<std::size_t>(T::Rex) });
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(;)"}, false,static_cast<std::size_t>(T::Semicolon) });
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(:)"}, false,static_cast<std::size_t>(T::Colon) });
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\s+)"}, false,static_cast<std::size_t>(T::Empty) });
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\$)"}, false,static_cast<std::size_t>(T::Start) });
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\|)"}, false,static_cast<std::size_t>(T::Or) });
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\[)"}, false,static_cast<std::size_t>(T::LM_Brace) });
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\])"}, false,static_cast<std::size_t>(T::RM_Brace) });
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\{)"}, false,static_cast<std::size_t>(T::LB_Brace) });
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\})"}, false,static_cast<std::size_t>(T::RB_Brace) });
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\()"}, false, static_cast<std::size_t>(T::LS_Brace) });
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\))"}, false,static_cast<std::size_t>(T::RS_Brace) });
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\+\()"}, false,static_cast<std::size_t>(T::LeftPriority) });
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\)\+)"}, false,static_cast<std::size_t>(T::RightPriority) });
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(/\*.*?\*/)"}, false,static_cast<std::size_t>(T::Command) });
+				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(//[^\n]*\n)"}, false,static_cast<std::size_t>(T::Command) });
+
+				Reg::DfaT FinalTable(Reg::DfaT::FormatE::GreedyHeadMatch, StartupTable);
+				return Reg::DfaBinaryTableWrapper::Create(FinalTable);
 			}();
 
-			return Reg::TableWrapper(List);
+			return Reg::DfaBinaryTableWrapper(List);
 	}
 
+	bool EbnfLexer::ShouldIgnore(SLRX::Symbol InputSymbol)
+	{
+		return InputSymbol.IsTerminal() && InputSymbol.Value == static_cast<std::size_t>(T::Empty);
+	}
+
+	/*
 	std::size_t FindOrAddSymbol(std::u8string_view Source, std::vector<std::u8string>& Output)
 	{
 		auto Ite = std::find_if(Output.begin(), Output.end(), [=](std::u8string const& Ref){
@@ -525,25 +530,6 @@ namespace Potato::EBNF
 								});
 							return std::move(Last1);
 						}
-						/*
-						case 31:
-						{
-							auto Last = Ref[0].Consume<std::vector<std::vector<SLRX::ProductionBuilderElement>>>();
-							auto Sym = SLRX::Symbol::AsNoTerminal(TempNoTerminalCount--);
-							std::size_t Mask = EBNF::OrMaskBase;
-							for (auto& Ite : Last)
-							{
-								Builders.push_back({
-										Sym,
-										std::move(Ite),
-										Mask++
-									});
-							}
-							std::vector<SLRX::ProductionBuilderElement> Re;
-							Re.push_back(Sym);
-							return std::move(Re);
-						}
-						*/
 						case 18:
 							return Ref[0].Consume();
 						case 19:
@@ -1222,6 +1208,7 @@ namespace Potato::EBNF
 		}
 		return {};
 	}
+	*/
 }
 
 namespace Potato::EBNF::Exception
@@ -1257,15 +1244,8 @@ namespace Potato::EBNF::Exception
 					Result.push_back({ NTMap{NTMapping[Ite.Value.Value], Ite.Reduce.ElementCount, Ite.Reduce.Mask} });
 				}
 				else {
-					static constexpr SLRX::StandardT SmallBrace = 0;
-					static constexpr SLRX::StandardT MiddleBrace = 1;
-					static constexpr SLRX::StandardT BigBrace = 2;
-					static constexpr SLRX::StandardT OrLeft = 3;
-					static constexpr SLRX::StandardT OrRight = 4;
-					static constexpr SLRX::StandardT MinMask = 5;
 					switch (Ite.Reduce.Mask)
 					{
-						
 					case SmallBrace:
 						Result.push_back({ NTMap{UR"((...))", 0, 0}});
 						break;
