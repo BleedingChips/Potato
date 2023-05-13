@@ -523,25 +523,6 @@ export namespace Potato::Reg
 		};
 		
 		static void Serilize(Misc::StructedSerilizerWritter<StandardT>& Writer, DfaT const& RefTable);
-		
-		template<typename AllocatorT = std::allocator<StandardT>>
-		static auto Create(DfaT const& RefTable, AllocatorT const& Acclcator= {}) -> std::vector<StandardT, AllocatorT>
-		{
-			Misc::StructedSerilizerWritter<StandardT> Predicted;
-			Serilize(Predicted, RefTable);
-			std::vector<StandardT, AllocatorT> Buffer(Acclcator);
-			Buffer.resize(Predicted.GetWritedSize());
-			auto Span = std::span(Buffer);
-			Misc::StructedSerilizerWritter<StandardT> Writter(Span);
-			Serilize(Writter, RefTable);
-			return Buffer;
-		}
-
-		template<typename CharT, typename CharTraits, typename AllocatorT = std::allocator<StandardT>>
-		static auto Create(DfaT::FormatE Format, std::basic_string_view<CharT, CharTrits> Str, bool IsRaw = false, std::size_t Mask = 0, AllocatorT const& Acclcator = {}) -> std::vector<StandardT, AllocatorT>
-		{
-			return Create(DfaT{ Format, Str, IsRaw, Mask });
-		}
 
 		DfaBinaryTableWrapper(std::span<StandardT> Buffer) : Wrapper(Buffer) {};
 
@@ -552,6 +533,34 @@ export namespace Potato::Reg
 
 		friend struct DfaBinaryTableWrapperProcessor;
 	};
+
+	template<typename AllocatorT>
+	auto CreateDfaBinaryTable(DfaT const& RefTable, AllocatorT Allocator)
+	{
+		using StandardT = DfaBinaryTableWrapper::StandardT;
+		Misc::StructedSerilizerWritter<StandardT> Predicted;
+		DfaBinaryTableWrapper::Serilize(Predicted, RefTable);
+		std::vector<StandardT, AllocatorT> Buffer(std::move(Allocator));
+		Buffer.resize(Predicted.GetWritedSize());
+		auto Span = std::span(Buffer);
+		Misc::StructedSerilizerWritter<StandardT> Writter(Span);
+		DfaBinaryTableWrapper::Serilize(Writter, RefTable);
+		return Buffer;
+	}
+
+	inline auto CreateDfaBinaryTable(DfaT const& RefTable) { return CreateDfaBinaryTable(RefTable, std::allocator<DfaBinaryTableWrapper::StandardT>{}); }
+
+	template<typename CharT, typename CharTraits, typename AllocatorT>
+	auto CreateDfaBinaryTable(DfaT::FormatE Format, std::basic_string_view<CharT, CharTraits> Str, bool IsRaw = false, std::size_t Mask = 0, AllocatorT Allocator = {})
+	{
+		return CreateDfaBinaryTable(DfaT{ Format, Str, IsRaw, Mask }, std::move(Allocator));
+	}
+
+	template<typename CharT, typename CharTraits>
+	auto CreateDfaBinaryTable(DfaT::FormatE Format, std::basic_string_view<CharT, CharTraits> Str, bool IsRaw = false, std::size_t Mask = 0)
+	{
+		return CreateDfaBinaryTable(DfaT{ Format, Str, IsRaw, Mask }, std::allocator<DfaBinaryTableWrapper::StandardT>{});
+	}
 
 	struct DfaBinaryTableWrapperProcessor
 	{
@@ -580,18 +589,28 @@ export namespace Potato::Reg
 	struct MulityRegCreater
 	{
 		template<typename CharT, typename CharTraits>
-		void AppedReg(std::basic_string<CharT, CharTraits> Str, bool IsRaw, std::size_t Mask)
+		void AppendReg(std::basic_string_view<CharT, CharTraits> Str, bool IsRaw, std::size_t Mask)
 		{
 			if (Table.has_value())
 			{
-				Table->Link(NfaT{ Str, IsRaw, Mask});
+				Table->Link(NfaT{Str, IsRaw, Mask});
 			}
 			else {
 				Table.emplace(Str, IsRaw, Mask);
 			}
 		}
+
+		template<typename CharT>
+		void AppendReg(CharT const* Str, bool IsRaw, std::size_t Mask)
+		{
+			return AppendReg(std::basic_string_view<CharT>(Str), IsRaw, Mask);
+		}
+
 		std::optional<DfaT> CreateDfa(DfaT::FormatE Format) const { if (Table.has_value())  return DfaT{ Format, *Table }; return {}; }
-		std::optional<std::vector<DfaBinaryTableWrapper::StandardT>> CreateDfaBinary(DfaT::FormatE Format) const { if (Table.has_value())  return DfaBinaryTableWrapper::Create(DfaT{ Format, *Table }); return {}; }
+
+		template<typename AllocatorT = std::allocator<DfaBinaryTableWrapper::StandardT>>
+		std::optional<std::vector<DfaBinaryTableWrapper::StandardT>> CreateDfaBinary(DfaT::FormatE Format, AllocatorT Allocator = {}) const { if (Table.has_value())  return CreateDfaBinaryTable(DfaT{Format, *Table}, std::move(Allocator)); return {}; }
+	
 	protected:
 		std::optional<NfaT> Table;
 	};

@@ -28,7 +28,7 @@ void TestFormat(std::u8string_view Pattern, std::u8string_view TarStr, const cha
 constexpr std::size_t Fund()
 {
 	FormatWritter<char8_t> Predict;
-	auto K = Format(Predict, std::u8string_view{ u8"abcedc" });
+	auto K = Format(Predict, u8"abcedc");
 	return Predict.GetWritedSize();
 }
 

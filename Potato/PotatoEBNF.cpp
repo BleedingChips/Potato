@@ -18,30 +18,7 @@ namespace Potato::EBNF
 
 	using SLRX::Symbol;
 
-	enum class T
-	{
-		Empty = 0,
-		Terminal,
-		Equal,
-		Rex,
-		NoTerminal,
-		StartSymbol,
-		LB_Brace,
-		RB_Brace,
-		LM_Brace,
-		RM_Brace,
-		LS_Brace,
-		RS_Brace,
-		LeftPriority,
-		RightPriority,
-		Or,
-		Number,
-		Start,
-		Colon,
-		Semicolon,
-		Command,
-		Barrier
-	};
+	using T = EbnfLexerT::T;
 
 	constexpr Symbol operator*(T sym) { return Symbol::AsTerminal(static_cast<std::size_t>(sym)); };
 
@@ -60,41 +37,546 @@ namespace Potato::EBNF
 
 	constexpr Symbol operator*(NT sym) { return Symbol::AsNoTerminal(static_cast<std::size_t>(sym)); };
 
-	Reg::DfaBinaryTableWrapper EbnfLexer::GetRegTable() {
-			static auto List = []() {
-				Reg::NfaT StartupTable{std::basic_string_view{UR"(%%%%)"}, false, static_cast<std::size_t>(T::Barrier) };
+	Reg::DfaBinaryTableWrapper EbnfLexerT::GetRegTable() {
+		static auto List = []() {
 
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"([0-9]+)"}, false, static_cast<std::size_t>(T::Number) });
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"([0-9a-zA-Z_\z]+)"},false, static_cast<std::size_t>(T::Terminal) });
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(<[0-9a-zA-Z_\z]+>)"},false, static_cast<std::size_t>(T::NoTerminal) });
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(:=)"}, false,static_cast<std::size_t>(T::Equal) });
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\'([^\s]+)\')"}, false,static_cast<std::size_t>(T::Rex) });
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(;)"}, false,static_cast<std::size_t>(T::Semicolon) });
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(:)"}, false,static_cast<std::size_t>(T::Colon) });
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\s+)"}, false,static_cast<std::size_t>(T::Empty) });
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\$)"}, false,static_cast<std::size_t>(T::Start) });
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\|)"}, false,static_cast<std::size_t>(T::Or) });
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\[)"}, false,static_cast<std::size_t>(T::LM_Brace) });
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\])"}, false,static_cast<std::size_t>(T::RM_Brace) });
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\{)"}, false,static_cast<std::size_t>(T::LB_Brace) });
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\})"}, false,static_cast<std::size_t>(T::RB_Brace) });
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\()"}, false, static_cast<std::size_t>(T::LS_Brace) });
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\))"}, false,static_cast<std::size_t>(T::RS_Brace) });
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\+\()"}, false,static_cast<std::size_t>(T::LeftPriority) });
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\)\+)"}, false,static_cast<std::size_t>(T::RightPriority) });
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(/\*.*?\*/)"}, false,static_cast<std::size_t>(T::Command) });
-				StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(//[^\n]*\n)"}, false,static_cast<std::size_t>(T::Command) });
+			Reg::NfaT StartupTable{ std::basic_string_view{UR"(%%%%)"}, false, static_cast<std::size_t>(T::Barrier) };
 
-				Reg::DfaT FinalTable(Reg::DfaT::FormatE::GreedyHeadMatch, StartupTable);
-				return Reg::DfaBinaryTableWrapper::Create(FinalTable);
-			}();
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"([0-9]+)"}, false, static_cast<std::size_t>(T::Number) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"([0-9a-zA-Z_\z]+)"},false, static_cast<std::size_t>(T::Terminal) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(<[0-9a-zA-Z_\z]+>)"},false, static_cast<std::size_t>(T::NoTerminal) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(:=)"}, false,static_cast<std::size_t>(T::Equal) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\'([^\s]+)\')"}, false,static_cast<std::size_t>(T::Rex) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(;)"}, false,static_cast<std::size_t>(T::Semicolon) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(:)"}, false,static_cast<std::size_t>(T::Colon) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\r?\n)"}, false,static_cast<std::size_t>(T::Line) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\s+)"}, false,static_cast<std::size_t>(T::Empty) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\$)"}, false,static_cast<std::size_t>(T::Start) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\|)"}, false,static_cast<std::size_t>(T::Or) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\[)"}, false,static_cast<std::size_t>(T::LM_Brace) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\])"}, false,static_cast<std::size_t>(T::RM_Brace) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\{)"}, false,static_cast<std::size_t>(T::LB_Brace) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\})"}, false,static_cast<std::size_t>(T::RB_Brace) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\()"}, false, static_cast<std::size_t>(T::LS_Brace) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\))"}, false,static_cast<std::size_t>(T::RS_Brace) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\+\()"}, false,static_cast<std::size_t>(T::LeftPriority) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\)\+)"}, false,static_cast<std::size_t>(T::RightPriority) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(/\*.*?\*/)"}, false,static_cast<std::size_t>(T::Command) });
+			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(//[^\n]*\n)"}, false,static_cast<std::size_t>(T::Command) });
 
-			return Reg::DfaBinaryTableWrapper(List);
+			Reg::DfaT FinalTable(Reg::DfaT::FormatE::GreedyHeadMatch, StartupTable);
+			return Reg::CreateDfaBinaryTable(FinalTable);
+		}();
+
+		return Reg::DfaBinaryTableWrapper(List);
 	}
 
-	bool EbnfLexer::ShouldIgnore(SLRX::Symbol InputSymbol)
+	SLRX::LRXBinaryTableWrapper EbnfStep1SLRX() {
+		static SLRX::LRXBinaryTable Table(
+			*NT::Statement,
+			{
+				{*NT::Statement, {}, 1},
+				{*NT::Statement, {*NT::Statement, *T::Terminal, *T::Equal, *T::Rex}, 2},
+				{*NT::Statement, {*NT::Statement, *T::Terminal, *T::Equal, *T::Rex, *T::Colon, *T::LM_Brace, *T::Number, *T::RM_Brace}, 3},
+				{*NT::Statement, {*NT::Statement, *T::Start, *T::Equal, *T::Rex}, 4},
+			},
+			{}
+		);
+		return Table.Wrapper;
+	};
+
+	SLRX::LRXBinaryTableWrapper EbnfStep2SLRX() {
+		static SLRX::LRXBinaryTable Table(
+			*NT::Statement,
+			{
+				{*NT::Expression, {*T::Terminal}, 1},
+				{*NT::Expression, {*T::NoTerminal}, 1},
+				{*NT::Expression, {*T::Rex}, 4},
+				{*NT::Expression, {*T::Number}, 5},
+				{*NT::Expression, {*T::Start}, 50},
+
+				{*NT::FunctionEnum, {*T::Colon, *T::LM_Brace, *T::Number, *T::RM_Brace}, 6},
+				{*NT::FunctionEnum, {*T::Colon, *T::LM_Brace, *T::Number, *T::RM_Brace, *T::Start}, 6},
+				{*NT::FunctionEnum, {}, 7},
+
+				{*NT::ExpressionStatement, {*NT::ExpressionStatement, 31, *NT::Expression}, 8},
+				{*NT::ExpressionStatement, {*NT::Expression}, 9},
+
+				{*NT::Expression, {*T::LS_Brace, *NT::ExpressionStatement, *T::RS_Brace}, 10},
+				{*NT::Expression, {*T::LB_Brace, *NT::ExpressionStatement, *T::RB_Brace}, 11},
+				{*NT::Expression, {*T::LM_Brace, *NT::ExpressionStatement, *T::RM_Brace}, 12},
+
+				{*NT::Expression, {*T::LS_Brace, *NT::OrStatement, *T::RS_Brace}, 10},
+				{*NT::Expression, {*T::LB_Brace, *NT::OrStatement, *T::RB_Brace}, 11},
+				{*NT::Expression, {*T::LM_Brace, *NT::OrStatement, *T::RM_Brace}, 12},
+
+				//{*NT::LeftOrStatement, {*NT::LeftOrStatement, *NT::Expression}, 8},
+				//{*NT::LeftOrStatement, {*NT::Expression}, 9},
+				{*NT::RightOrStatement, {*NT::Expression, *NT::RightOrStatement}, 15},
+				{*NT::RightOrStatement, {*NT::Expression}, 9},
+				{*NT::OrStatement, {*NT::ExpressionStatement, *T::Or, *NT::RightOrStatement}, 17},
+				{*NT::OrStatement, {*NT::OrStatement, *T::Or, *NT::RightOrStatement}, 30},
+				//{*NT::ExpressionStatement, {*NT::OrStatement}, 31},
+
+				{*NT::ExpressionList, {*NT::ExpressionStatement}, 18},
+				{*NT::ExpressionList, {*NT::OrStatement}, 18},
+				{*NT::ExpressionList, {}, 19},
+
+				{*NT::Statement, {*NT::Statement, *NT::Statement, 20}, 20},
+				{*NT::Statement, {*T::NoTerminal, *T::Equal, *NT::ExpressionList, *NT::FunctionEnum, *T::Semicolon}, 21},
+				{*NT::Statement, {*T::Equal, *NT::ExpressionList, *NT::FunctionEnum, *T::Semicolon}, 22},
+				{*NT::Statement, {*T::Start, *T::Equal, *T::NoTerminal, *T::Semicolon}, 23},
+				{*NT::Statement, {*T::Start, *T::Equal, *T::NoTerminal, *T::Number, *T::Semicolon}, 23},
+			},
+			{}
+		);
+		return Table.Wrapper;
+	};
+
+	SLRX::LRXBinaryTableWrapper EbnfStep3SLRX() {
+		static SLRX::LRXBinaryTable Table(
+			*NT::Statement,
+			{
+				{*NT::Expression, {*T::Terminal}, 1},
+				{*NT::Expression, {*T::Rex}, 1},
+				{*NT::ExpressionStatement, {*NT::Expression}, 2},
+				{*NT::ExpressionStatement, {*NT::ExpressionStatement, *NT::Expression}, 3},
+				{*NT::Statement, {}},
+				{*NT::Statement, {*NT::Statement, *T::LS_Brace, *NT::ExpressionStatement, *T::RightPriority }, 4},
+				{*NT::Statement, {*NT::Statement, *T::LeftPriority, *NT::ExpressionStatement, *T::RS_Brace }, 5},
+			},
+			{}
+		);
+		return Table.Wrapper;
+	};
+
+
+	void EbnfT::Parsing(
+		EbnfLexerT const& Input,
+		std::vector<RegMappingT>& RegMapping,
+		SLRX::Symbol& OutputStartSymbol,
+		std::vector<SLRX::ProductionBuilder>& Builders,
+		std::vector<SLRX::OpePriority>& OpePriority
+	)
 	{
-		return InputSymbol.IsTerminal() && InputSymbol.Value == static_cast<std::size_t>(T::Empty);
+		auto ElementSpan = std::span(Input.Elements);
+		
+		std::size_t TempNoTerminalCount = ElementSpan.size();
+		std::size_t MaxForwardDetected = 3;
+		std::size_t TokenUsed = 0;
+
+		auto Locate = std::find_if(ElementSpan.begin(), ElementSpan.end(), [](ElementT Ele){
+			return Ele.Symbol == T::Barrier;
+		});
+		auto Step1 = std::span(ElementSpan.begin(), Locate);
+		ElementSpan = std::span(Locate + 1, ElementSpan.end());
+
+		// Step1
+		{
+			SLRX::SymbolProcessor Pro(EbnfStep1SLRX());
+
+			while (!Step1.empty())
+			{
+				auto Cur = *Step1.begin();
+				if (!Pro.Consume(*Cur.Symbol, TokenUsed))
+				{
+					throw BuildInUnacceptableEbnf{ BuildInUnacceptableEbnf::TypeE::WrongEbnfSyntax, TokenUsed };
+				}
+				Step1 = Step1.subspan(1);
+				TokenUsed += 1;
+			}
+			if (!Pro.EndOfFile())
+			{
+				throw BuildInUnacceptableEbnf{ BuildInUnacceptableEbnf::TypeE::WrongEbnfSyntax, TokenUsed };
+			}
+
+			SLRX::ProcessParsingStep(Pro.GetSteps(), [&](SLRX::VariantElement Ele) -> std::any {
+				if (Ele.IsTerminal())
+				{
+					auto TE = Ele.AsTerminal();
+					auto Enum = static_cast<T>(TE.Value.Value);
+					return TE.Shift.TokenIndex;
+				}
+				else {
+					auto NTE = Ele.AsNoTerminal();
+					switch (NTE.Reduce.Mask)
+					{
+					case 4:
+					case 2:
+					{
+						RegMapping.push_back({
+							NTE[1].Consume<std::size_t>(),
+							NTE[3].Consume<std::size_t>(),
+							{}
+						});
+						return {};
+					}
+					case 3:
+					{
+						RegMapping.push_back({
+								NTE[1].Consume<std::size_t>(),
+								NTE[3].Consume<std::size_t>(),
+								NTE[6].Consume<std::size_t>()
+						});
+						return {};
+					}
+					case 1:
+						return {};
+					default:
+						assert(false);
+						return {};
+					}
+				}
+				return {};
+			});
+		}
+
+		Locate = std::find_if(ElementSpan.begin(), ElementSpan.end(), [](ElementT Ele) {
+			return Ele.Symbol == T::Barrier;
+		});
+
+		auto Step2 = std::span(ElementSpan.begin(), Locate);
+
+		if (Step2.empty())
+		{
+			throw BuildInUnacceptableEbnf{ BuildInUnacceptableEbnf::TypeE::WrongEbnfSyntax, TokenUsed };
+		}
+
+		if(Locate == ElementSpan.end())
+			ElementSpan = {};
+		else
+			ElementSpan = std::span(Locate + 1, ElementSpan.end());
+
+		// Step2
+		{
+			
+			std::optional<SLRX::Symbol> LastProductionStartSymbol;
+			std::optional<SLRX::Symbol> StartSymbol;
+
+			SLRX::SymbolProcessor Pro(EbnfStep2SLRX());
+
+			struct FunctionEnmu
+			{
+				std::size_t Mask = 0;
+				bool NeedPredict = false;
+			};
+
+			while (!Step2.empty())
+			{
+				auto& Cur = *Step2.begin();
+				if (!Pro.Consume(*Cur.Symbol, TokenUsed))
+				{
+					throw BuildInUnacceptableEbnf{ BuildInUnacceptableEbnf::TypeE::WrongEbnfSyntax, TokenUsed };
+				}
+				Step2 = Step2.subspan(1);
+				TokenUsed += 1;
+			}
+			if (!Pro.EndOfFile())
+			{
+				throw BuildInUnacceptableEbnf{ BuildInUnacceptableEbnf::TypeE::WrongEbnfSyntax, TokenUsed };
+			}
+
+			std::size_t OrMaskIte = EBNF::MinMask;
+
+			SLRX::ProcessParsingStep(Pro.GetSteps(), [&](SLRX::VariantElement Ele) -> std::any {
+				if (Ele.IsNoTerminal())
+				{
+					auto Ref = Ele.AsNoTerminal();
+					switch (Ref.Reduce.Mask)
+					{
+					case 1:
+					case 4:
+						return SLRX::ProductionBuilderElement{ Ref[0].Consume<SLRX::Symbol>() };
+					case 5:
+						return SLRX::ProductionBuilderElement{ Ref[0].Consume<std::size_t>() };
+					case 50:
+						return SLRX::ProductionBuilderElement{ SLRX::ItSelf{} };
+					case 6:
+					{
+						FunctionEnmu Enum;
+						Enum.Mask = Ref[2].Consume<std::size_t>();
+						if (Ref.Datas.size() >= 5)
+							Enum.NeedPredict = true;
+						return Enum;
+					}
+					case 7:
+					{
+						FunctionEnmu Enum;
+						return Enum;
+					}
+					case 8:
+					{
+						auto Last = Ref[0].Consume<std::vector<SLRX::ProductionBuilderElement>>();
+						Last.push_back(Ref[1].Consume<SLRX::ProductionBuilderElement>());
+						return std::move(Last);
+					}
+					case 9:
+					{
+						std::vector<SLRX::ProductionBuilderElement> Temp;
+						Temp.push_back(Ref[0].Consume<SLRX::ProductionBuilderElement>());
+						return std::move(Temp);
+					}
+					case 10:
+					{
+						auto Exp = Ref[1].Consume<std::vector<SLRX::ProductionBuilderElement>>();
+						auto CurSymbol = SLRX::Symbol::AsNoTerminal(TempNoTerminalCount++);
+						Builders.push_back({
+							CurSymbol,
+							std::move(Exp),
+							EBNF::SmallBrace
+						});
+						return SLRX::ProductionBuilderElement{ CurSymbol };
+					}
+					case 11:
+					{
+						auto Exp = Ref[1].Consume<std::vector<SLRX::ProductionBuilderElement>>();
+						auto CurSymbol = SLRX::Symbol::AsNoTerminal(TempNoTerminalCount++);
+						Exp.insert(Exp.begin(), SLRX::ProductionBuilderElement{ CurSymbol });
+						Builders.push_back({
+							CurSymbol,
+							std::move(Exp),
+							EBNF::BigBrace
+							});
+						Builders.push_back({
+							CurSymbol,
+							{},
+							EBNF::BigBrace
+							});
+						return SLRX::ProductionBuilderElement{ CurSymbol };
+					}
+					case 12:
+					{
+						auto Exp = Ref[1].Consume<std::vector<SLRX::ProductionBuilderElement>>();
+						auto CurSymbol = SLRX::Symbol::AsNoTerminal(TempNoTerminalCount++);
+						Builders.push_back({
+							CurSymbol,
+							std::move(Exp),
+							EBNF::MiddleBrace
+							});
+						Builders.push_back({
+							CurSymbol,
+							{},
+							EBNF::MiddleBrace
+							});
+						return SLRX::ProductionBuilderElement{ CurSymbol };
+					}
+					case 15:
+					{
+						auto Last = Ref[1].Consume<std::vector<SLRX::ProductionBuilderElement>>();
+						Last.push_back(Ref[0].Consume<SLRX::ProductionBuilderElement>());
+						return std::move(Last);
+					}
+					case 17:
+					{
+						auto Last1 = Ref[0].Consume<std::vector<SLRX::ProductionBuilderElement>>();
+						auto Last2 = Ref[2].Consume<std::vector<SLRX::ProductionBuilderElement>>();
+						std::reverse(Last2.begin(), Last2.end());
+						OrMaskIte = EBNF::MinMask;
+
+						Symbol OrSymbol = Symbol::AsNoTerminal(TempNoTerminalCount++);
+
+						Builders.push_back({
+								OrSymbol,
+								std::move(Last1),
+								OrMaskIte++
+							});
+
+						Builders.push_back({
+								OrSymbol,
+								std::move(Last2),
+								OrMaskIte++
+							});
+
+						std::vector<SLRX::ProductionBuilderElement> Temp;
+						Temp.push_back(OrSymbol);
+						return std::move(Temp);
+					}
+					case 30:
+					{
+						auto Last1 = Ref[0].Consume<std::vector<SLRX::ProductionBuilderElement>>();
+						auto Last2 = Ref[2].Consume<std::vector<SLRX::ProductionBuilderElement>>();
+						std::reverse(Last2.begin(), Last2.end());
+						assert(Last1.size() == 0);
+						assert(Last1[0].ProductionValue.IsNoTerminal());
+						Builders.push_back({
+								Last1[0].ProductionValue,
+								std::move(Last2),
+								OrMaskIte++
+							});
+						return std::move(Last1);
+					}
+					case 18:
+						return Ref[0].Consume();
+					case 19:
+						return std::vector<SLRX::ProductionBuilderElement>{};
+					case 20:
+						return {};
+					case 21:
+					{
+						LastProductionStartSymbol = Ref[0].Consume<SLRX::Symbol>();
+						auto List = Ref[2].Consume<std::vector<SLRX::ProductionBuilderElement>>();
+						auto Mask = Ref[3].Consume<FunctionEnmu>();
+						Builders.push_back({
+							*LastProductionStartSymbol,
+							std::move(List),
+							Mask.Mask,
+							Mask.NeedPredict
+							});
+						return {};
+					}
+					case 22:
+					{
+						if (!LastProductionStartSymbol.has_value()) [[unlikely]]
+						{
+							throw BuildInUnacceptableEbnf{ BuildInUnacceptableEbnf::TypeE::UnsetProductionHead, Ref.TokenIndex.Begin() };
+						}
+						auto List = Ref[1].Consume<std::vector<SLRX::ProductionBuilderElement>>();
+						auto Mask = Ref[2].Consume<FunctionEnmu>();
+						Builders.push_back({
+							*LastProductionStartSymbol,
+							std::move(List),
+							Mask.Mask,
+							Mask.NeedPredict
+							});
+						return {};
+					}
+					case 23:
+					{
+						if (StartSymbol.has_value()) [[unlikely]]
+						{
+							throw BuildInUnacceptableEbnf{ BuildInUnacceptableEbnf::TypeE::StartSymbolAreadySet, Ref.TokenIndex.Begin() };
+						}
+						StartSymbol = Ref[2].Consume<SLRX::Symbol>();
+						if (Ref.Datas.size() == 5)
+							MaxForwardDetected = Ref.Datas[3].Consume<std::size_t>();
+						return {};
+					}
+					default:
+						break;
+					}
+				}
+				else
+				{
+					auto Ref = Ele.AsTerminal();
+					T TValue = static_cast<T>(Ref.Value.Value);
+					switch (TValue)
+					{
+					case T::Number:
+					{
+						return Ref.Shift.TokenIndex;
+					}
+					case T::Rex:
+					{
+						RegMapping.push_back({ Ref.Shift.TokenIndex, Ref.Shift.TokenIndex, {} });
+						return SLRX::Symbol::AsTerminal(Ref.Shift.TokenIndex);
+					}
+					case T::Terminal:
+					{
+						return SLRX::Symbol::AsTerminal(Ref.Shift.TokenIndex);
+					}
+					case T::NoTerminal:
+					{
+						return SLRX::Symbol::AsNoTerminal(Ref.Shift.TokenIndex);
+					}
+					default:
+						break;
+					}
+				}
+				return {};
+				}
+				);
+				OutputStartSymbol = *StartSymbol;
+		}
+
+		Locate = std::find_if(ElementSpan.begin(), ElementSpan.end(), [](ElementT Ele) {
+			return Ele.Symbol == T::Barrier;
+		});
+
+		auto Step3 = std::span(ElementSpan.begin(), Locate);
+
+		if (Locate == ElementSpan.end())
+			ElementSpan = {};
+		else
+			ElementSpan = std::span(Locate + 1, ElementSpan.end());
+
+		assert(ElementSpan.empty());
+
+		// Step3
+		{
+			SLRX::SymbolProcessor Pro(EbnfStep3SLRX());
+
+			while (!Step3.empty())
+			{
+				auto& Cur = *Step3.begin();
+				if (!Pro.Consume(*Cur.Symbol, TokenUsed))
+				{
+					throw BuildInUnacceptableEbnf{ BuildInUnacceptableEbnf::TypeE::WrongEbnfSyntax, TokenUsed };
+				}
+				Step3 = Step3.subspan(1);
+				TokenUsed += 1;
+			}
+
+			if (!Pro.EndOfFile())
+			{
+				throw BuildInUnacceptableEbnf{ BuildInUnacceptableEbnf::TypeE::WrongEbnfSyntax, TokenUsed };
+			}
+
+			SLRX::ProcessParsingStep(Pro.GetSteps(), [&](SLRX::VariantElement Ele) -> std::any {
+				if (Ele.IsNoTerminal())
+				{
+					auto NT = Ele.AsNoTerminal();
+					switch (NT.Reduce.Mask)
+					{
+					case 1:
+						return NT[0].Consume();
+					case 2:
+					{
+						std::vector<SLRX::Symbol> Symbols;
+						Symbols.push_back(NT[0].Consume<SLRX::Symbol>());
+						return Symbols;
+					}
+					case 3:
+					{
+						auto Symbols = NT[0].Consume<std::vector<SLRX::Symbol>>();
+						Symbols.push_back(NT[1].Consume<SLRX::Symbol>());
+						return Symbols;
+					}
+					case 4:
+					{
+						auto Symbols = NT[2].Consume<std::vector<SLRX::Symbol>>();
+						OpePriority.push_back({ std::move(Symbols), SLRX::Associativity::Right });
+						return {};
+					}
+					case 5:
+					{
+						auto Symbols = NT[2].Consume<std::vector<SLRX::Symbol>>();
+						OpePriority.push_back({ std::move(Symbols), SLRX::Associativity::Left });
+						return {};
+					}
+					default:
+						return {};
+					}
+				}
+				else {
+					auto TRef = Ele.AsTerminal();
+					T Enum = static_cast<T>(TRef.Value.Value);
+					switch (Enum)
+					{
+					case T::Terminal:
+					case T::Rex:
+					{
+						return Symbol::AsTerminal(TRef.Shift.TokenIndex);
+					}
+					break;
+					default:
+						return {};
+						break;
+					}
+				}
+				return {};
+				}
+			);
+		}
 	}
 
 	/*
@@ -182,84 +664,7 @@ namespace Potato::EBNF
 		return Output;
 	}
 
-	SLRX::TableWrapper EbnfStep1SLRX() {
-		static SLRX::Table Table(
-			*NT::Statement,
-			{
-				{*NT::Statement, {}, 1},
-				{*NT::Statement, {*NT::Statement, *T::Terminal, *T::Equal, *T::Rex}, 2},
-				{*NT::Statement, {*NT::Statement, *T::Terminal, *T::Equal, *T::Rex, *T::Colon, *T::LM_Brace, *T::Number, *T::RM_Brace}, 3},
-				{*NT::Statement, {*NT::Statement, *T::Start, *T::Equal, *T::Rex}, 4},
-			},
-			{}
-		);
-		return Table.Wrapper;
-	};
-
-	SLRX::TableWrapper EbnfStep2SLRX() {
-		static SLRX::Table Table(
-			*NT::Statement,
-			{
-				{*NT::Expression, {*T::Terminal}, 1},
-				{*NT::Expression, {*T::NoTerminal}, 1},
-				{*NT::Expression, {*T::Rex}, 4},
-				{*NT::Expression, {*T::Number}, 5},
-				{*NT::Expression, {*T::Start}, 50},
-
-				{*NT::FunctionEnum, {*T::Colon, *T::LM_Brace, *T::Number, *T::RM_Brace}, 6},
-				{*NT::FunctionEnum, {*T::Colon, *T::LM_Brace, *T::Number, *T::RM_Brace, *T::Start}, 6},
-				{*NT::FunctionEnum, {}, 7},
-
-				{*NT::ExpressionStatement, {*NT::ExpressionStatement, 31, *NT::Expression}, 8},
-				{*NT::ExpressionStatement, {*NT::Expression}, 9},
-
-				{*NT::Expression, {*T::LS_Brace, *NT::ExpressionStatement, *T::RS_Brace}, 10},
-				{*NT::Expression, {*T::LB_Brace, *NT::ExpressionStatement, *T::RB_Brace}, 11},
-				{*NT::Expression, {*T::LM_Brace, *NT::ExpressionStatement, *T::RM_Brace}, 12},
-
-				{*NT::Expression, {*T::LS_Brace, *NT::OrStatement, *T::RS_Brace}, 10},
-				{*NT::Expression, {*T::LB_Brace, *NT::OrStatement, *T::RB_Brace}, 11},
-				{*NT::Expression, {*T::LM_Brace, *NT::OrStatement, *T::RM_Brace}, 12},
-
-				//{*NT::LeftOrStatement, {*NT::LeftOrStatement, *NT::Expression}, 8},
-				//{*NT::LeftOrStatement, {*NT::Expression}, 9},
-				{*NT::RightOrStatement, {*NT::Expression, *NT::RightOrStatement}, 15},
-				{*NT::RightOrStatement, {*NT::Expression}, 9},
-				{*NT::OrStatement, {*NT::ExpressionStatement, *T::Or, *NT::RightOrStatement}, 17},
-				{*NT::OrStatement, {*NT::OrStatement, *T::Or, *NT::RightOrStatement}, 30},
-				//{*NT::ExpressionStatement, {*NT::OrStatement}, 31},
-
-				{*NT::ExpressionList, {*NT::ExpressionStatement}, 18},
-				{*NT::ExpressionList, {*NT::OrStatement}, 18},
-				{*NT::ExpressionList, {}, 19},
-
-				{*NT::Statement, {*NT::Statement, *NT::Statement, 20}, 20},
-				{*NT::Statement, {*T::NoTerminal, *T::Equal, *NT::ExpressionList, *NT::FunctionEnum, *T::Semicolon}, 21},
-				{*NT::Statement, {*T::Equal, *NT::ExpressionList, *NT::FunctionEnum, *T::Semicolon}, 22},
-				{*NT::Statement, {*T::Start, *T::Equal, *T::NoTerminal, *T::Semicolon}, 23},
-				{*NT::Statement, {*T::Start, *T::Equal, *T::NoTerminal, *T::Number, *T::Semicolon}, 23},
-			},
-			{}
-		);
-		return Table.Wrapper;
-	};
-
-	SLRX::TableWrapper EbnfStep3SLRX() {
-		static SLRX::Table Table(
-			*NT::Statement,
-			{
-				{*NT::Expression, {*T::Terminal}, 1},
-				{*NT::Expression, {*T::Rex}, 1},
-				{*NT::ExpressionStatement, {*NT::Expression}, 2},
-				{*NT::ExpressionStatement, {*NT::ExpressionStatement, *NT::Expression}, 3},
-				{*NT::Statement, {}},
-				{*NT::Statement, {*NT::Statement, *T::LS_Brace, *NT::ExpressionStatement, *T::RightPriority }, 4},
-				{*NT::Statement, {*NT::Statement, *T::LeftPriority, *NT::ExpressionStatement, *T::RS_Brace }, 5},
-			},
-			{}
-		);
-		return Table.Wrapper;
-	};
+	
 
 	EBNFX EBNFX::Create(std::u8string_view Str)
 	{

@@ -10,24 +10,59 @@ export import Potato.STD;
 export namespace Potato::EBNF
 {
 	
-	struct EbnfLexer
+	struct EbnfLexerT
 	{
 		
 		template<typename CharT, typename CharTrais>
-		EbnfLexer(std::basic_string_view<CharT, CharTrais> Str);
+		EbnfLexerT(std::basic_string_view<CharT, CharTrais> Str);
 
-		struct Element
+		enum class T
 		{
-			SLRX::Symbol Symbol;
-			Misc::IndexSpan<> TokenIndex;
+			Empty = 0,
+			Terminal,
+			Equal,
+			Rex,
+			NoTerminal,
+			StartSymbol,
+			LB_Brace,
+			RB_Brace,
+			LM_Brace,
+			RM_Brace,
+			LS_Brace,
+			RS_Brace,
+			LeftPriority,
+			RightPriority,
+			Or,
+			Number,
+			Start,
+			Colon,
+			Semicolon,
+			Command,
+			Barrier,
+			Line
 		};
+
+		struct ElementT
+		{
+			T Symbol;
+			Misc::IndexSpan<> TokenIndex;
+			std::size_t Line;
+			std::size_t Row;
+			std::size_t ElementIndex;
+		};
+
+		ElementT& operator[](std::size_t Index) { return Elements[Index]; };
+		ElementT const& operator[](std::size_t Index) const { return Elements[Index]; };
 
 	protected:
 
 		static Reg::DfaBinaryTableWrapper GetRegTable();
-		static bool ShouldIgnore(SLRX::Symbol InputSymbol);
 
-		std::vector<Element> Elements;
+		std::vector<ElementT> Elements;
+		std::size_t Line = 0;
+		std::size_t Row = 0;
+
+		friend struct EbnfT;
 	};
 
 	struct EbnfT
@@ -35,6 +70,35 @@ export namespace Potato::EBNF
 		template<typename CharT, typename CharTraisT>
 		EbnfT(std::basic_string_view<CharT, CharTraisT> EbnfStr);
 
+		EbnfT(EbnfT&&) = default;
+
+		EbnfT() = default;
+
+	protected:
+
+		using ElementT = EbnfLexerT::ElementT;
+
+		struct RegMappingT
+		{
+			std::size_t RegName;
+			std::size_t Reg;
+			std::optional<std::size_t> Mask;
+		};
+
+		void Parsing(
+			EbnfLexerT const& Input,
+			std::vector<RegMappingT>& RegMapping,
+			SLRX::Symbol& StartSymbol,
+			std::vector<SLRX::ProductionBuilder>& Builder,
+			std::vector<SLRX::OpePriority>& OpePriority
+		);
+
+		std::wstring TotalString;
+		std::vector<Misc::IndexSpan<>> TerminalMapping;
+
+		//struct 
+
+		//void Translate(EbnfLexer const& Outout, std::vector<RegMappingT>& OutputMapping, std::vector<SLRXProductionT>& Productions, )
 
 		/*
 		std::vector<std::u8string> MappingTerminalSymbols;
@@ -322,7 +386,7 @@ export namespace Potato::EBNF::Exception
 
 	struct UnacceptableEbnf : public Interface
 	{
-		enum class TypeT
+		enum class TypeE
 		{
 			WrongEbnfLexical,
 			WrongEbnfSyntax,
@@ -338,19 +402,19 @@ export namespace Potato::EBNF::Exception
 			StartSymbolAreadySet,
 			UnfindedStartSymbol,
 		};
-		TypeT Type;
-		std::u8string LastStr;
-		std::size_t TokenIndex;
-		UnacceptableEbnf(TypeT Type, std::u8string_view TotalStr, std::size_t TokenIndex) : Type(Type), TokenIndex(TokenIndex) {
-			LastStr = std::u8string{ TokenIndex < 10 ? TotalStr.substr(0, TokenIndex) : TotalStr.substr(TokenIndex - 10, 10)};
-		}
+		TypeE Type;
+		std::wstring Str;
+		std::size_t Line;
+		std::size_t Row;
+		UnacceptableEbnf(TypeE Type, std::wstring Str, std::size_t Line, std::size_t Row) 
+			: Type(Type), Str(Str), Line(Line), Row(Row) {}
 		UnacceptableEbnf(UnacceptableEbnf const&) = default;
 		virtual char const* what() const override;
 	};
 
 	struct OutofRange : public Interface
 	{
-		enum class TypeT
+		enum class TypeE
 		{
 			TempMaskedEmptyProduction,
 			FromRegex,
@@ -360,9 +424,9 @@ export namespace Potato::EBNF::Exception
 			SymbolCount,
 			TerminalCount,
 		};
-		TypeT Type;
+		TypeE Type;
 		std::size_t Value;
-		OutofRange(TypeT Type, std::size_t TokenIndex) : Type(Type), Value(TokenIndex) {}
+		OutofRange(TypeE Type, std::size_t TokenIndex) : Type(Type), Value(TokenIndex) {}
 		OutofRange(OutofRange const&) = default;
 		virtual char const* what() const override;
 	};
@@ -370,8 +434,16 @@ export namespace Potato::EBNF::Exception
 
 export namespace Potato::EBNF
 {
+
+	struct BuildInUnacceptableEbnf
+	{
+		using TypeE = Exception::UnacceptableEbnf::TypeE;
+		TypeE Type;
+		std::size_t TokenIndex;
+	};
+
 	template<typename CharT, typename CharTrais>
-	EbnfLexer::EbnfLexer(std::basic_string_view<CharT, CharTrais> Str)
+	EbnfLexerT::EbnfLexerT(std::basic_string_view<CharT, CharTrais> Str)
 	{
 		Reg::DfaBinaryTableWrapperProcessor Pro(GetRegTable());
 
@@ -384,11 +456,17 @@ export namespace Potato::EBNF
 			if (std::holds_alternative<Reg::ProcessorAcceptT>(Re))
 			{
 				auto& Accept = std::get<Reg::ProcessorAcceptT>(Re);
-				auto Symbol = SLRX::Symbol::AsTerminal(Accept.Mask);
-				if(!ShouldIgnore(Symbol))
-					Elements.push_back({ Symbol, {IteIndex, IteIndex + Accept.MainCapture.End()} });
+				auto Symbol = static_cast<T>(Accept.Mask);
+
+				if (Symbol == T::Line)
+				{
+					Line += 1;
+					Row = 0;
+				}else if(Symbol != T::Empty)
+					Elements.push_back({ Symbol, {IteIndex, IteIndex + Accept.MainCapture.End()}, Line, Row, Elements.size()});
 				StrIte = StrIte.substr(Accept.MainCapture.End());
 				IteIndex += Accept.MainCapture.End();
+				Row += Accept.MainCapture.End();
 			}
 			else {
 				auto OutputToken = std::get<Reg::ProcessorUnacceptT>(Re).FailCapture;
@@ -397,10 +475,37 @@ export namespace Potato::EBNF
 		}
 	}
 
-	template<typename CharT, typename CharTraisT>
-	EbnfT::EbnfT(std::basic_string_view<CharT, CharTraisT> EbnfStr)
+	template<typename CharT, typename CharTraistT>
+	EbnfT::EbnfT(std::basic_string_view<CharT, CharTraistT> EbnfStr)
 	{
-		EbnfLexer Lexer(EbnfStr);
+		EbnfLexerT Lexer(EbnfStr);
+
+		SLRX::Symbol StartSymbol;
+		std::vector<RegMappingT> RegMapping;
+		std::vector<SLRX::ProductionBuilder> Builder;
+		std::vector<SLRX::OpePriority> OpePriority;
+
+		try {
+			Parsing(Lexer, RegMapping, StartSymbol, Builder, OpePriority);
+		}
+		catch (BuildInUnacceptableEbnf const& Error)
+		{
+			std::basic_string_view<CharT, CharTraistT> ErrorStr;
+			std::size_t Line = Lexer.Line;
+			std::size_t Row = Lexer.Line;
+			if (Error.TokenIndex < Lexer.Elements.size())
+			{
+				auto& Ref = Lexer[Error.TokenIndex];
+				ErrorStr = Ref.TokenIndex.Slice(EbnfStr);
+				Line = Ref.Line;
+				Row = Ref.Row;
+			}
+			
+			throw Exception::UnacceptableEbnf{ Error.Type, *Encode::StrEncoder<CharT, wchar_t>::EncodeToString(ErrorStr), Line, Row };
+		}
+
+		std::map<std::basic_string_view<CharT, CharTraistT>>
+
 		volatile int i = 0;
 	}
 }

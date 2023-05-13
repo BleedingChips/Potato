@@ -21,8 +21,20 @@ export namespace Potato::Format
 		return Scanner<std::remove_cvref_t<TargetT>, CharT>{}.Scan(Pars, TarType);
 	}
 
+	template<typename CharT, typename TargetT>
+	bool DirectScan(CharT const* Pars, TargetT& TarType)
+	{
+		return DirectScan(std::basic_string_view<CharT>{Pars}, TarType);
+	}
+
 	template<typename CharT, typename CharTraits>
 	bool CaptureScan(std::span<Misc::IndexSpan<> const>, std::basic_string_view<CharT, CharTraits> InputStr)
+	{
+		return true;
+	}
+
+	template<typename CharT>
+	bool CaptureScan(std::span<Misc::IndexSpan<> const>, CharT const* InputStr)
 	{
 		return true;
 	}
@@ -33,10 +45,22 @@ export namespace Potato::Format
 		return CaptureIndex.size() >= 1 && DirectScan(CaptureIndex[0].Slice(InputStr), O1) && CaptureScan(CaptureIndex.subspan(1), InputStr, OO...);
 	}
 
+	template<typename CharT, typename CT, typename ...OT>
+	bool CaptureScan(std::span<Misc::IndexSpan<> const> CaptureIndex, CharT const* InputStr, CT& O1, OT& ...OO)
+	{
+		return CaptureScan(CaptureIndex, std::basic_string_view<CharT>(InputStr), O1, OO...);
+	}
+
 	template<typename CharT, typename CharTraits, typename ...OT>
 	bool RegAcceptScan(Reg::ProcessorAcceptT const& Accept, std::basic_string_view<CharT, CharTraits> InputStr,  OT& ...OO)
 	{
 		return CaptureScan(std::span(Accept.Capture), InputStr, OO...);
+	}
+
+	template<typename CharT, typename CharTraits, typename ...OT>
+	bool RegAcceptScan(Reg::ProcessorAcceptT const& Accept, CharT const* InputStr, OT& ...OO)
+	{
+		return RegAcceptScan(Accept, std::basic_string_view<CharT>(InputStr), OO...);
 	}
 
 	template<typename CharT, typename CharTraits, typename ...OT>
