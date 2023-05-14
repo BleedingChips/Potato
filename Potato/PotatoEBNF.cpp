@@ -244,8 +244,10 @@ namespace Potato::EBNF
 
 		if(Locate == ElementSpan.end())
 			ElementSpan = {};
-		else
+		else {
 			ElementSpan = std::span(Locate + 1, ElementSpan.end());
+			TokenUsed += 1;
+		}
 
 		// Step2
 		{
@@ -496,8 +498,11 @@ namespace Potato::EBNF
 
 		if (Locate == ElementSpan.end())
 			ElementSpan = {};
-		else
+		else {
 			ElementSpan = std::span(Locate + 1, ElementSpan.end());
+			TokenUsed += 1;
+		}
+			
 
 		assert(ElementSpan.empty());
 

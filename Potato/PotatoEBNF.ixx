@@ -53,6 +53,7 @@ export namespace Potato::EBNF
 
 		ElementT& operator[](std::size_t Index) { return Elements[Index]; };
 		ElementT const& operator[](std::size_t Index) const { return Elements[Index]; };
+		std::size_t Size() const { return Elements.size(); }
 
 	protected:
 
@@ -504,7 +505,99 @@ export namespace Potato::EBNF
 			throw Exception::UnacceptableEbnf{ Error.Type, *Encode::StrEncoder<CharT, wchar_t>::EncodeToString(ErrorStr), Line, Row };
 		}
 
-		std::map<std::basic_string_view<CharT, CharTraistT>>
+		std::map<std::basic_string_view<CharT, CharTraistT>, std::size_t> FinalRegMapping;
+
+		struct RegT
+		{
+			std::basic_string_view<CharT, CharTraistT> Reg;
+			std::size_t Mask;
+			std::optional<std::size_t> UserMask;
+		};
+
+		std::vector<RegT> Regs;
+
+		auto ReLocateSymbol = [&](SLRX::Symbol& Sym){
+			if (Sym.Value < Lexer.Elements.size())
+			{
+				auto LocateName = Lexer[Sym.Value].TokenIndex.Slice(EbnfStr);
+				auto [Ite2, B] = FinalRegMapping.insert({ LocateName, FinalRegMapping.size() });
+				Sym.Value = Ite2->second;
+				return true;
+			}
+			return false;
+		};
+
+		for (auto Ite : RegMapping)
+		{
+			auto RegName = Lexer[Ite.RegName].TokenIndex.Slice(EbnfStr);
+			auto Reg = Lexer[Ite.Reg].TokenIndex.Slice(EbnfStr);
+			auto [Ite2, B] = FinalRegMapping.insert({RegName, FinalRegMapping.size()});
+			Regs.push_back({
+				Reg,
+				Ite2->second,
+				Ite.Mask
+			});
+		}
+
+		ReLocateSymbol(StartSymbol);
+
+		for (auto& Ite : Builder)
+		{
+
+			ReLocateSymbol(Ite.ProductionValue);
+
+			for (auto& Ite2 : Ite.Element)
+			{
+				switch (Ite2.Type)
+				{
+				case SLRX::ProductionBuilderElement::TypeT::IsValue:
+					ReLocateSymbol(Ite2.ProductionValue);
+					break;
+				case SLRX::ProductionBuilderElement::TypeT::IsMask:
+				{
+					std::size_t RequireMask = 0;
+					Format::DirectScan(
+						Lexer[Ite2.ProductionMask].TokenIndex.Slice(EbnfStr),
+						Ite2.ProductionMask
+					);
+					break;
+				}
+				default:
+					break;
+				}
+			}
+
+			Format::DirectScan(
+				Lexer[Ite.ProductionMask].TokenIndex.Slice(EbnfStr),
+				Ite.ProductionMask
+			);
+		}
+
+		for (auto& Ite : OpePriority)
+		{
+			for (auto& Ite2 : Ite.Symbols)
+			{
+				ReLocateSymbol(Ite2);
+			}
+		}
+
+		auto SecondRelocateSymbol = [&](SLRX::Symbol& Symbol)
+		{
+			if (Symbol.Value >= Lexer.Size())
+			{
+				Symbol.Value = Symbol.Value - Lexer.Size() + FinalRegMapping.size();
+			}
+		};
+
+		for (auto& Ite : Builder)
+		{
+			SecondRelocateSymbol(Ite.ProductionValue);
+			for (auto& Ite2 : Ite.Element)
+			{
+				if(Ite2.Type == SLRX::ProductionBuilderElement::TypeT::IsValue)
+					SecondRelocateSymbol(Ite2.ProductionValue);
+			}
+		}
 
 		volatile int i = 0;
 	}
