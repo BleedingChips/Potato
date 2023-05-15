@@ -242,11 +242,12 @@ namespace Potato::EBNF
 			throw BuildInUnacceptableEbnf{ BuildInUnacceptableEbnf::TypeE::WrongEbnfSyntax, TokenUsed };
 		}
 
+		TokenUsed += 1;
+
 		if(Locate == ElementSpan.end())
 			ElementSpan = {};
 		else {
 			ElementSpan = std::span(Locate + 1, ElementSpan.end());
-			TokenUsed += 1;
 		}
 
 		// Step2
@@ -496,13 +497,14 @@ namespace Potato::EBNF
 
 		auto Step3 = std::span(ElementSpan.begin(), Locate);
 
+		if(!Step3.empty())
+			TokenUsed += 1;
+
 		if (Locate == ElementSpan.end())
 			ElementSpan = {};
 		else {
 			ElementSpan = std::span(Locate + 1, ElementSpan.end());
-			TokenUsed += 1;
 		}
-			
 
 		assert(ElementSpan.empty());
 

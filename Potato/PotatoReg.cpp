@@ -2162,7 +2162,6 @@ namespace Potato::Reg
 		CacheIndex.clear();
 		CacheIndex.resize(Table.GetCacheCounterCount(), 0);
 		auto& NodeRef = Table.Nodes[CurNodeIndex];
-		Accept = NodeRef.Accept;
 		CurMainCapture.reset();
 	}
 
@@ -2282,7 +2281,6 @@ namespace Potato::Reg
 				assert(ToNode.has_value());
 
 				CurNodeIndex = *ToNode;
-				Accept = Table.Nodes[CurNodeIndex].Accept;
 				if (!CurMainCapture.has_value())
 				{
 					CurMainCapture = {TokenIndex, TokenIndex};
@@ -2296,13 +2294,21 @@ namespace Potato::Reg
 		return false;
 	}
 
+	bool DfaProcessor::HasAccept() const { 
+		auto& CurNode = Table.Nodes[CurNodeIndex];
+		return CurNode.Accept.has_value();
+	}
+
+
+
 	std::optional<ProcessorAcceptT> DfaProcessor::GetAccept() const
 	{
-		if (Accept.has_value())
+		auto& CurNode = Table.Nodes[CurNodeIndex];
+		if (CurNode.Accept.has_value())
 		{
 			ProcessorAcceptT NewAccept;
-			NewAccept.Mask = Accept->Mask;
-			for (std::size_t I = Accept->CaptureIndex.Begin(); I + 1 < Accept->CaptureIndex.End(); I += 2)
+			NewAccept.Mask = CurNode.Accept->Mask;
+			for (std::size_t I = CurNode.Accept->CaptureIndex.Begin(); I + 1 < CurNode.Accept->CaptureIndex.End(); I += 2)
 			{
 				NewAccept.Capture.push_back(Misc::IndexSpan<>(CacheIndex[I], CacheIndex[I + 1]));
 			}
@@ -2532,18 +2538,8 @@ namespace Potato::Reg
 
 	void DfaBinaryTableWrapperProcessor::Reset()
 	{
-		Accept.reset();
 		CurMainCapture.reset();
 		CurrentNode = Table.GetStartupNodeIndex();
-		auto Reader = Misc::StructedSerilizerReader(Table.Wrapper);
-		Reader.SetPointer(CurrentNode);
-		auto Node = Reader.ReadObject<DfaBinaryTableWrapper::NodeT>();
-		if (Node->AcceptOffset != 0 || Node->EdgeCount == 0)
-		{
-			Reader.SetPointer(Node->AcceptOffset + CurrentNode);
-			auto TAccept = Reader.ReadObject<DfaBinaryTableWrapper::AcceptT>();
-			Accept = *TAccept;
-		}
 	}
 
 
@@ -2681,14 +2677,7 @@ namespace Potato::Reg
 					{
 						CurrentNode = Solt;
 						Reader.SetPointer(CurrentNode);
-						Accept = {};
 						auto Node = Reader.ReadObject<DfaBinaryTableWrapper::NodeT>();
-						if (Node->AcceptOffset != 0 || Node->EdgeCount == 0)
-						{
-							Reader.SetPointer(Node->AcceptOffset + CurrentNode);
-							auto TAccept = Reader.ReadObject<DfaBinaryTableWrapper::AcceptT>();
-							Accept = *TAccept;
-						}
 						if (!CurMainCapture.has_value())
 						{
 							CurMainCapture = { TokenIndex, TokenIndex };
@@ -2710,13 +2699,27 @@ namespace Potato::Reg
 		return false;
 	}
 
+	bool DfaBinaryTableWrapperProcessor::HasAccept() const { 
+		auto Reader = Misc::StructedSerilizerReader(Table.Wrapper);
+		Reader.SetPointer(CurrentNode);
+		auto Node = Reader.ReadObject<DfaBinaryTableWrapper::NodeT>();
+		return Node->AcceptOffset != 0 || Node->EdgeCount == 0;
+	}
+
 	std::optional<ProcessorAcceptT> DfaBinaryTableWrapperProcessor::GetAccept() const
 	{
-		if (Accept.has_value())
+		auto Reader = Misc::StructedSerilizerReader(Table.Wrapper);
+		Reader.SetPointer(CurrentNode);
+		auto Node = Reader.ReadObject<DfaBinaryTableWrapper::NodeT>();
+		if (Node->AcceptOffset != 0 || Node->EdgeCount == 0)
 		{
+			Reader.SetPointer(Node->AcceptOffset + CurrentNode);
+
+			auto TAccept = Reader.ReadObject<DfaBinaryTableWrapper::AcceptT>();
+
 			ProcessorAcceptT NewAccept;
-			NewAccept.Mask = Accept->Mask;
-			for (std::size_t I = Accept->CaptureIndexBegin; I + 1 < Accept->CaptureIndexEnd; I += 2)
+			NewAccept.Mask = TAccept->Mask;
+			for (std::size_t I = TAccept->CaptureIndexBegin; I + 1 < TAccept->CaptureIndexEnd; I += 2)
 			{
 				NewAccept.Capture.push_back(Misc::IndexSpan<>(CacheIndex[I], CacheIndex[I + 1]));
 			}

@@ -444,7 +444,7 @@ export namespace Potato::Reg
 		bool Consume(char32_t Token, std::size_t TokenIndex);
 		bool EndOfFile(std::size_t TokenIndex) { return Consume(Reg::EndOfFile(), TokenIndex); }
 		void Reset();
-		bool HasAccept() const { return Accept.has_value(); }
+		bool HasAccept() const;
 		std::optional<ProcessorAcceptT> GetAccept() const;
 	
 	public:
@@ -453,7 +453,6 @@ export namespace Potato::Reg
 		std::size_t CurNodeIndex;
 		std::vector<std::size_t> TempResult;
 		std::vector<std::size_t> CacheIndex;
-		std::optional<DfaT::AcceptT> Accept;
 		std::optional<Misc::IndexSpan<>> CurMainCapture;
 		
 		friend struct DfaBinaryTableWrapperProcessor;
@@ -568,14 +567,13 @@ export namespace Potato::Reg
 		bool Consume(char32_t Token, std::size_t TokenIndex);
 		bool EndOfFile(std::size_t TokenIndex) { return Consume(Reg::EndOfFile(), TokenIndex); }
 		void Reset();
-		bool HasAccept() const { return Accept.has_value(); }
+		bool HasAccept() const;
 		std::optional<ProcessorAcceptT> GetAccept() const;
 	protected:
 		DfaBinaryTableWrapper Table;
 		std::size_t CurrentNode;
 		std::vector<std::size_t> TempResult;
 		std::vector<std::size_t> CacheIndex;
-		std::optional<DfaBinaryTableWrapper::AcceptT> Accept;
 		std::optional<Misc::IndexSpan<>> CurMainCapture;
 	};
 

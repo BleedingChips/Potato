@@ -46,8 +46,7 @@ export namespace Potato::EBNF
 		{
 			T Symbol;
 			Misc::IndexSpan<> TokenIndex;
-			std::size_t Line;
-			std::size_t Row;
+			Misc::LineRecorder Line;
 			std::size_t ElementIndex;
 		};
 
@@ -60,8 +59,7 @@ export namespace Potato::EBNF
 		static Reg::DfaBinaryTableWrapper GetRegTable();
 
 		std::vector<ElementT> Elements;
-		std::size_t Line = 0;
-		std::size_t Row = 0;
+		Misc::LineRecorder Line;
 
 		friend struct EbnfT;
 	};
@@ -95,7 +93,7 @@ export namespace Potato::EBNF
 		);
 
 		std::wstring TotalString;
-		std::vector<Misc::IndexSpan<>> TerminalMapping;
+		std::vector<Misc::IndexSpan<>> StringMapping;
 
 		//struct 
 
@@ -405,10 +403,9 @@ export namespace Potato::EBNF::Exception
 		};
 		TypeE Type;
 		std::wstring Str;
-		std::size_t Line;
-		std::size_t Row;
-		UnacceptableEbnf(TypeE Type, std::wstring Str, std::size_t Line, std::size_t Row) 
-			: Type(Type), Str(Str), Line(Line), Row(Row) {}
+		Misc::LineRecorder Line;
+		UnacceptableEbnf(TypeE Type, std::wstring Str, Misc::LineRecorder Line)
+			: Type(Type), Str(Str), Line(Line) {}
 		UnacceptableEbnf(UnacceptableEbnf const&) = default;
 		virtual char const* what() const override;
 	};
@@ -461,13 +458,12 @@ export namespace Potato::EBNF
 
 				if (Symbol == T::Line)
 				{
-					Line += 1;
-					Row = 0;
+					Line.NewLine();
 				}else if(Symbol != T::Empty)
-					Elements.push_back({ Symbol, {IteIndex, IteIndex + Accept.MainCapture.End()}, Line, Row, Elements.size()});
+					Elements.push_back({ Symbol, {IteIndex, IteIndex + Accept.MainCapture.End()}, Line, Elements.size()});
 				StrIte = StrIte.substr(Accept.MainCapture.End());
 				IteIndex += Accept.MainCapture.End();
-				Row += Accept.MainCapture.End();
+				Line.AddCharacter();
 			}
 			else {
 				auto OutputToken = std::get<Reg::ProcessorUnacceptT>(Re).FailCapture;
@@ -481,6 +477,26 @@ export namespace Potato::EBNF
 	{
 		EbnfLexerT Lexer(EbnfStr);
 
+#ifdef _DEBUG
+		{
+			struct Temp
+			{
+				EbnfLexerT::T Type;
+				std::basic_string_view<CharT, CharTraistT> Str;
+			};
+			std::vector<Temp> Tes;
+
+			for (auto& Ite : Lexer.Elements)
+			{
+				Tes.push_back({
+					Ite.Symbol,
+					Ite.TokenIndex.Slice(EbnfStr)
+				});
+			}
+			volatile int i = 0;
+		}
+#endif
+
 		SLRX::Symbol StartSymbol;
 		std::vector<RegMappingT> RegMapping;
 		std::vector<SLRX::ProductionBuilder> Builder;
@@ -492,17 +508,15 @@ export namespace Potato::EBNF
 		catch (BuildInUnacceptableEbnf const& Error)
 		{
 			std::basic_string_view<CharT, CharTraistT> ErrorStr;
-			std::size_t Line = Lexer.Line;
-			std::size_t Row = Lexer.Line;
+			auto Line = Lexer.Line;
 			if (Error.TokenIndex < Lexer.Elements.size())
 			{
 				auto& Ref = Lexer[Error.TokenIndex];
 				ErrorStr = Ref.TokenIndex.Slice(EbnfStr);
 				Line = Ref.Line;
-				Row = Ref.Row;
 			}
 			
-			throw Exception::UnacceptableEbnf{ Error.Type, *Encode::StrEncoder<CharT, wchar_t>::EncodeToString(ErrorStr), Line, Row };
+			throw Exception::UnacceptableEbnf{ Error.Type, *Encode::StrEncoder<CharT, wchar_t>::EncodeToString(ErrorStr), Line };
 		}
 
 		std::map<std::basic_string_view<CharT, CharTraistT>, std::size_t> FinalRegMapping;
@@ -532,11 +546,15 @@ export namespace Potato::EBNF
 			auto RegName = Lexer[Ite.RegName].TokenIndex.Slice(EbnfStr);
 			auto Reg = Lexer[Ite.Reg].TokenIndex.Slice(EbnfStr);
 			auto [Ite2, B] = FinalRegMapping.insert({RegName, FinalRegMapping.size()});
-			Regs.push_back({
-				Reg,
-				Ite2->second,
-				Ite.Mask
-			});
+			if (B)
+			{
+				Regs.push_back({
+					Reg,
+					Ite2->second,
+					Ite.Mask
+					});
+			}
+			
 		}
 
 		ReLocateSymbol(StartSymbol);
@@ -598,6 +616,34 @@ export namespace Potato::EBNF
 					SecondRelocateSymbol(Ite2.ProductionValue);
 			}
 		}
+
+		{
+			std::size_t TotalStringRequireSize = 0;
+
+			for (auto& Ite : FinalRegMapping)
+			{
+				auto Re = Encode::StrEncoder<CharT, wchar_t>::RequireSpaceUnSafe(Ite.first);
+				TotalStringRequireSize += Re.TargetSpace;
+			}
+
+			TotalString.resize(TotalStringRequireSize);
+			StringMapping.resize(FinalRegMapping.size());
+
+			auto OutputSpan = std::span(TotalString);
+
+			std::size_t WritedSize = 0;
+			for (auto& Ite : FinalRegMapping)
+			{
+				auto Re = Encode::StrEncoder<CharT, wchar_t>::EncodeUnSafe(Ite.first, OutputSpan);
+				StringMapping[Ite.second] = Misc::IndexSpan<>{ WritedSize, WritedSize + Re.TargetSpace};
+				OutputSpan = OutputSpan.subspan(Re.TargetSpace);
+				WritedSize += Re.TargetSpace;
+			}
+		}
+
+
+
+		for(auto& Ite : )
 
 		volatile int i = 0;
 	}

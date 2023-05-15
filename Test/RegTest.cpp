@@ -231,7 +231,7 @@ void Test(DfaT::FormatE Format, std::vector<std::u32string_view> Reg, std::u32st
 					throw Error;
 			}
 
-			auto Span = DfaBinaryTableWrapper::Create(RegTable);
+			auto Span = CreateDfaBinaryTable(RegTable);
 
 			{
 				auto Accep = Process(RegTable, SourceStr);
