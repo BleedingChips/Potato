@@ -124,6 +124,7 @@ export namespace Potato::Reg
 			AddCounter,
 			LessCounter,
 			BiggerCounter,
+			RecordAcceptLocation,
 		};
 
 		struct PropertyT
@@ -245,6 +246,7 @@ export namespace Potato::Reg
 		DfaT(FormatE Format, NfaT const& T1);
 		DfaT(DfaT&&) = default;
 		DfaT(DfaT const&) = default;
+		DfaT() = default;
 
 		template<typename CharT, typename CharTraisT>
 		DfaT(FormatE Format, std::basic_string_view<CharT, CharTraisT> Str, bool IsRaw = false, std::size_t Mask = 0);
@@ -314,6 +316,7 @@ export namespace Potato::Reg
 			AddCounter,
 			LessCounter,
 			BiggerCounter,
+			RecordAcceptLocation,
 		};
 
 		struct PropertyT
@@ -453,7 +456,8 @@ export namespace Potato::Reg
 		std::size_t CurNodeIndex;
 		std::vector<std::size_t> TempResult;
 		std::vector<std::size_t> CacheIndex;
-		std::optional<Misc::IndexSpan<>> CurMainCapture;
+		std::optional<std::size_t> StartupTokenIndex;
+		std::size_t AcceptTokenIndex;
 		
 		friend struct DfaBinaryTableWrapperProcessor;
 	};
@@ -574,7 +578,8 @@ export namespace Potato::Reg
 		std::size_t CurrentNode;
 		std::vector<std::size_t> TempResult;
 		std::vector<std::size_t> CacheIndex;
-		std::optional<Misc::IndexSpan<>> CurMainCapture;
+		std::optional<std::size_t> StartupTokenIndex;
+		std::size_t AcceptNodeTokenIndex;
 	};
 
 	template<typename CharT, typename CharTrais>

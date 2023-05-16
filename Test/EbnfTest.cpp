@@ -182,8 +182,9 @@ void TestingEbnf()
 	
 	std::u8string_view EbnfCode1 =
 		u8R"(
-$ := '\s+'
+
 Num := '[1-9][0-9]*' : [1]
+$ := '\s+'
 
 %%%%
 

@@ -707,7 +707,11 @@ namespace Potato::Reg
 
 		{
 			auto Last = AddNode();
-			AddConsume({Re.Out, Last}, EndOfFile(), {});
+			EdgeT Edge;
+			Edge.ToNode = Last;
+			Edge.CharSets = EndOfFile();
+			Edge.Propertys.push_back({ EdgePropertyE::RecordAcceptLocation });
+			Nodes[Re.Out].Edges.push_back(std::move(Edge));
 			Nodes[Last].Accept = AcceptT{Mask, 0};
 		}
 
@@ -1273,6 +1277,8 @@ namespace Potato::Reg
 				auto& EdgeRef = T1.Nodes[Ite].Edges;
 				std::size_t EdgeIndex = 0;
 
+				std::optional<std::size_t> HasAcceptNode;
+
 				for (auto& Ite2 : EdgeRef)
 				{
 
@@ -1347,6 +1353,20 @@ namespace Potato::Reg
 					auto NewCharSets = (Cur.CharSets + Last.CharSets);
 					if (NewCharSets.Size() <= Last.CharSets.Size())
 						Last.CharSets = std::move(NewCharSets);
+				}
+			}
+
+			std::optional<std::size_t> HasAcceptNode;
+
+			if (Format == FormatE::HeadMatch || Format == FormatE::GreedyHeadMatch)
+			{
+				for (auto Ite : Top->first)
+				{
+					if (T1.Nodes[Ite].Accept.has_value())
+					{
+						HasAcceptNode = Ite;
+						break;
+					}
 				}
 			}
 			
@@ -1558,6 +1578,21 @@ namespace Potato::Reg
 					}
 
 					assert(!CacheNode.empty());
+
+					if (HasAcceptNode.has_value())
+					{
+						bool ExistAccept = false;
+						for (auto Ite : CacheNode)
+						{
+							if (T1.Nodes[Ite].Accept.has_value())
+							{
+								ExistAccept = true;
+								break;
+							}
+						}
+						if(!ExistAccept)
+							CacheNode.push_back(*HasAcceptNode);
+					}
 
 					auto [MapIte, Bool] = Mapping.insert({ CacheNode, TempNode.size() });
 
@@ -2050,6 +2085,15 @@ namespace Potato::Reg
 							HasCounter.insert({ FormSolt, ToSolt });
 							break;
 						}
+						case NfaT::EdgePropertyE::RecordAcceptLocation:
+						{
+							NewEdge.Propertys.push_back({
+								PropertyActioE::RecordAcceptLocation,
+								0,
+								0
+							});
+							break;
+						}
 						default:
 							assert(false);
 							break;
@@ -2162,7 +2206,7 @@ namespace Potato::Reg
 		CacheIndex.clear();
 		CacheIndex.resize(Table.GetCacheCounterCount(), 0);
 		auto& NodeRef = Table.Nodes[CurNodeIndex];
-		CurMainCapture.reset();
+		StartupTokenIndex.reset();
 	}
 
 	auto DfaProcessor::Consume(char32_t Token, std::size_t TokenIndex) -> bool
@@ -2219,6 +2263,9 @@ namespace Potato::Reg
 						case DfaT::PropertyActioE::BiggerCounter:
 							if (CacheIndex[Ite2.Solt] < Ite2.Par)
 								DetectReuslt = false;
+							break;
+						case DfaT::PropertyActioE::RecordAcceptLocation:
+							AcceptTokenIndex = TokenIndex;
 							break;
 						default:
 							assert(false);
@@ -2281,12 +2328,9 @@ namespace Potato::Reg
 				assert(ToNode.has_value());
 
 				CurNodeIndex = *ToNode;
-				if (!CurMainCapture.has_value())
+				if (!StartupTokenIndex.has_value())
 				{
-					CurMainCapture = {TokenIndex, TokenIndex};
-				}
-				else {
-					CurMainCapture = { CurMainCapture->Begin(), TokenIndex };
+					StartupTokenIndex = TokenIndex;
 				}
 				return true;
 			}
@@ -2299,8 +2343,6 @@ namespace Potato::Reg
 		return CurNode.Accept.has_value();
 	}
 
-
-
 	std::optional<ProcessorAcceptT> DfaProcessor::GetAccept() const
 	{
 		auto& CurNode = Table.Nodes[CurNodeIndex];
@@ -2312,8 +2354,8 @@ namespace Potato::Reg
 			{
 				NewAccept.Capture.push_back(Misc::IndexSpan<>(CacheIndex[I], CacheIndex[I + 1]));
 			}
-			if (CurMainCapture.has_value())
-				NewAccept.MainCapture = *CurMainCapture;
+			if (StartupTokenIndex.has_value())
+				NewAccept.MainCapture = {*StartupTokenIndex, AcceptTokenIndex};
 			return NewAccept;
 		}
 		return {};
@@ -2435,6 +2477,8 @@ namespace Potato::Reg
 						Writer.WriteObject(Par);
 						break;
 					}
+					case DfaT::PropertyActioE::RecordAcceptLocation:
+						break;
 					default:
 						assert(false);
 						break;
@@ -2538,7 +2582,7 @@ namespace Potato::Reg
 
 	void DfaBinaryTableWrapperProcessor::Reset()
 	{
-		CurMainCapture.reset();
+		StartupTokenIndex.reset();
 		CurrentNode = Table.GetStartupNodeIndex();
 	}
 
@@ -2645,6 +2689,9 @@ namespace Potato::Reg
 							DetectResult = false;
 						break;
 					}
+					case DfaT::PropertyActioE::RecordAcceptLocation:
+						AcceptNodeTokenIndex = TokenIndex;
+						break;
 					default:
 						assert(false);
 						break;
@@ -2678,12 +2725,9 @@ namespace Potato::Reg
 						CurrentNode = Solt;
 						Reader.SetPointer(CurrentNode);
 						auto Node = Reader.ReadObject<DfaBinaryTableWrapper::NodeT>();
-						if (!CurMainCapture.has_value())
+						if (!StartupTokenIndex.has_value())
 						{
-							CurMainCapture = { TokenIndex, TokenIndex };
-						}
-						else {
-							CurMainCapture = { CurMainCapture->Begin(), TokenIndex };
+							StartupTokenIndex = TokenIndex;
 						}
 						return true;
 					}
@@ -2723,8 +2767,8 @@ namespace Potato::Reg
 			{
 				NewAccept.Capture.push_back(Misc::IndexSpan<>(CacheIndex[I], CacheIndex[I + 1]));
 			}
-			if (CurMainCapture.has_value())
-				NewAccept.MainCapture = *CurMainCapture;
+			if (StartupTokenIndex.has_value())
+				NewAccept.MainCapture = {*StartupTokenIndex, AcceptNodeTokenIndex};
 			return NewAccept;
 		}
 		return {};

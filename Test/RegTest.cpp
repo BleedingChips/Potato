@@ -186,6 +186,20 @@ int main()
 		"case2"
 	);
 
+	Test(
+		DfaT::FormatE::GreedyHeadMatch,
+		{
+			U"abcdefgg",
+			U"abcd"
+		},
+		U"abcdefg",
+		1,
+		U"abcd",
+		{
+		},
+		"case3"
+	);
+
 	std::cout << "TestingReg Pass !" << std::endl;
 
 	return 0;

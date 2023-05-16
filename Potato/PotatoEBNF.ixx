@@ -95,6 +95,15 @@ export namespace Potato::EBNF
 		std::wstring TotalString;
 		std::vector<Misc::IndexSpan<>> StringMapping;
 
+		struct RegScriptionT
+		{
+			std::size_t SymbolValue;
+			std::optional<std::size_t> UserMask;
+		};
+		std::vector<RegScriptionT> RegScriptions;
+
+		Reg::DfaT Lecical;
+
 		//struct 
 
 		//void Translate(EbnfLexer const& Outout, std::vector<RegMappingT>& OutputMapping, std::vector<SLRXProductionT>& Productions, )
@@ -526,6 +535,7 @@ export namespace Potato::EBNF
 			std::basic_string_view<CharT, CharTraistT> Reg;
 			std::size_t Mask;
 			std::optional<std::size_t> UserMask;
+			Misc::IndexSpan<> TokenIndex;
 		};
 
 		std::vector<RegT> Regs;
@@ -551,8 +561,9 @@ export namespace Potato::EBNF
 				Regs.push_back({
 					Reg,
 					Ite2->second,
-					Ite.Mask
-					});
+					Ite.Mask,
+					Lexer[Ite.Reg].TokenIndex
+				});
 			}
 			
 		}
@@ -641,9 +652,20 @@ export namespace Potato::EBNF
 			}
 		}
 
+		{
 
+			RegScriptions.resize(Regs.size());
+			Reg::MulityRegCreater Creater;
+			for (std::size_t I = Regs.size(); I > 0; --I)
+			{
+				auto IteIndex = I - 1;
+				auto& Ite = Regs[IteIndex];
+				Creater.AppendReg(Ite.Reg, false, IteIndex);
+				RegScriptions[IteIndex] = { Ite.Mask, Ite.UserMask};
+			}
+		}
 
-		for(auto& Ite : )
+		//for(auto& Ite : )
 
 		volatile int i = 0;
 	}
