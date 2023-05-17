@@ -396,6 +396,7 @@ export namespace Potato::SLRX
 		LRX(LRX&&) = default;
 		LRX& operator=(LRX const&) = default;
 		LRX& operator=(LRX&&) = default;
+		LRX() = default;
 
 		static constexpr std::size_t StartupOffset() { return 1; }
 

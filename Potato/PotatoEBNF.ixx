@@ -88,6 +88,8 @@ export namespace Potato::EBNF
 			EbnfLexerT const& Input,
 			std::vector<RegMappingT>& RegMapping,
 			SLRX::Symbol& StartSymbol,
+			bool& NeedTokenIndexRef,
+			std::size_t& MaxFormatDetect,
 			std::vector<SLRX::ProductionBuilder>& Builder,
 			std::vector<SLRX::OpePriority>& OpePriority
 		);
@@ -100,25 +102,47 @@ export namespace Potato::EBNF
 			std::size_t SymbolValue;
 			std::optional<std::size_t> UserMask;
 		};
+
 		std::vector<RegScriptionT> RegScriptions;
 
-		Reg::DfaT Lecical;
-
-		//struct 
-
-		//void Translate(EbnfLexer const& Outout, std::vector<RegMappingT>& OutputMapping, std::vector<SLRXProductionT>& Productions, )
-
-		/*
-		std::vector<std::u8string> MappingTerminalSymbols;
-		std::vector<std::u8string> MappingNoterminalSymbols;
 		Reg::DfaT Lexical;
 		SLRX::LRX Syntax;
 
-		SLRX::LRX const& GetSyntaxWrapper() const { return Syntax; }
-		Reg::DfaT const& GetLexicalWrapper() const { return Lexical; }
-		std::optional<std::u8string_view> ReadSymbol(SLRX::Symbol Value) const;
-		bool IsNoName(SLRX::Symbol Value) const;
-		*/
+		friend struct EbnfProcessor;
+	};
+
+	struct LexicalElementT
+	{
+		SLRX::Symbol Value;
+		Misc::IndexSpan<> TokenIndex;
+		Misc::LineRecorder Line;
+		EbnfT::RegScriptionT SceiptionT;
+	};
+
+	struct EbnfProcessor
+	{
+		EbnfProcessor(EbnfT const& TableRef, std::size_t StartupTokenIndex = 0)
+			: StartupTokenIndex(StartupTokenIndex), TableRef(TableRef), DfaProcessor(DfaProcessor.Lexical), SymbolProcessor(DfaProcessor.Syntax)
+		{}
+
+		void Reset() {
+			RequireStrTokenIndex = StartupTokenIndex;
+			DfaProcessor.Reset();
+			SymbolProcessor.Reset();
+		}
+
+		bool Consume(char32_t Input, std::size_t NextTokenIndex);
+		std::size_t GetRequireStrTokenIndex() const { return RequireStrTokenIndex; }
+		
+	protected:
+
+		std::vector<LexicalElementT> LexicalElementT;
+		std::size_t StartupTokenIndex = 0;
+		std::size_t RequireStrTokenIndex = 0;
+		EbnfT const& TableRef;
+		Reg::DfaProcessor DfaProcessor;
+		SLRX::SymbolProcessor SymbolProcessor;
+		Misc::LineRecorder Line;
 	};
 
 	/*
@@ -507,12 +531,14 @@ export namespace Potato::EBNF
 #endif
 
 		SLRX::Symbol StartSymbol;
+		std::size_t MaxForwardDetect = 0;
 		std::vector<RegMappingT> RegMapping;
+		bool NeedTokenReference = false;
 		std::vector<SLRX::ProductionBuilder> Builder;
 		std::vector<SLRX::OpePriority> OpePriority;
 
 		try {
-			Parsing(Lexer, RegMapping, StartSymbol, Builder, OpePriority);
+			Parsing(Lexer, RegMapping, StartSymbol, NeedTokenReference, MaxForwardDetect, Builder, OpePriority);
 		}
 		catch (BuildInUnacceptableEbnf const& Error)
 		{
@@ -528,12 +554,17 @@ export namespace Potato::EBNF
 			throw Exception::UnacceptableEbnf{ Error.Type, *Encode::StrEncoder<CharT, wchar_t>::EncodeToString(ErrorStr), Line };
 		}
 
+		if (NeedTokenReference)
+		{
+			Format::DirectScan(Lexer[MaxForwardDetect].TokenIndex.Slice(EbnfStr), MaxForwardDetect);
+		}
+
 		std::map<std::basic_string_view<CharT, CharTraistT>, std::size_t> SymbolMapping;
-		SymbolMapping.insert({ {}, 0 });
 
 		struct RegT
 		{
 			std::basic_string_view<CharT, CharTraistT> Reg;
+			bool IsRaw;
 			std::size_t Mask;
 			std::optional<std::size_t> UserMask;
 			Misc::IndexSpan<> TokenIndex;
@@ -547,7 +578,7 @@ export namespace Potato::EBNF
 			{
 				auto LocateName = Lexer[Sym.Value].TokenIndex.Slice(EbnfStr);
 				auto [Ite2, B] = SymbolMapping.insert({ LocateName, SymbolMapping.size() });
-				Sym.Value = Ite2->second;
+				Sym.Value = Ite2->second + 1;
 				return true;
 			}
 			return false;
@@ -558,26 +589,34 @@ export namespace Potato::EBNF
 		for (auto Ite : RegMapping)
 		{
 			auto RegNameElement = Lexer[Ite.RegName];
-			auto RegName = (RegNameElement.Symbol == EbnfLexerT::T::Start ? 
-				std::basic_string_view<CharT, CharTraistT>{} :
-				RegNameElement.TokenIndex.Slice(EbnfStr)
-			);
 			auto Reg = Lexer[Ite.Reg].TokenIndex.Slice(EbnfStr);
 
-			if (RegNameElement.Symbol == EbnfLexerT::T::Rex)
+			if (RegNameElement.Symbol == EbnfLexerT::T::Start)
 			{
-				auto [II, B] = ExistEge.insert(Reg);
-				if (!B)
-					continue;
+				Regs.push_back({
+					Reg,
+					false,
+					0,
+					{},
+					Lexer[Ite.Reg].TokenIndex
+				});
 			}
+			else {
+				auto RegName = RegNameElement.TokenIndex.Slice(EbnfStr);
+				auto [Ite2, B] = SymbolMapping.insert({ RegName, SymbolMapping.size() });
+				if (RegNameElement.Symbol == EbnfLexerT::T::Rex)
+				{
+					RegName = RegName.substr(1, RegName.size() - 2);
 
-			auto [Ite2, B] = SymbolMapping.insert({RegName, SymbolMapping.size()});
-			Regs.push_back({
-				Reg,
-				Ite2->second,
-				Ite.Mask,
-				Lexer[Ite.Reg].TokenIndex
-			});
+				}
+				Regs.push_back({
+					Reg,
+					RegNameElement.Symbol == EbnfLexerT::T::Rex,
+					Ite2->second + 1,
+					Ite.Mask,
+					Lexer[Ite.Reg].TokenIndex
+				});
+			}
 		}
 
 		ReLocateSymbol(StartSymbol);
@@ -626,7 +665,7 @@ export namespace Potato::EBNF
 		{
 			if (Symbol.Value >= Lexer.Size())
 			{
-				Symbol.Value = Symbol.Value - Lexer.Size() + SymbolMapping.size();
+				Symbol.Value = Symbol.Value - Lexer.Size() + SymbolMapping.size() + 1;
 			}
 		};
 
@@ -665,20 +704,25 @@ export namespace Potato::EBNF
 		}
 
 		{
-
 			RegScriptions.resize(Regs.size());
 			Reg::MulityRegCreater Creater;
 			for (std::size_t I = Regs.size(); I > 0; --I)
 			{
 				auto IteIndex = I - 1;
 				auto& Ite = Regs[IteIndex];
-				Creater.AppendReg(Ite.Reg, false, IteIndex);
+				Creater.AppendReg(Ite.Reg, Ite.IsRaw, IteIndex);
 				RegScriptions[IteIndex] = { Ite.Mask, Ite.UserMask};
 			}
+			Lexical = std::move(*Creater.CreateDfa(Reg::DfaT::FormatE::GreedyHeadMatch));
 		}
 
-		//for(auto& Ite : )
-
-		volatile int i = 0;
+		{
+			Syntax = SLRX::LRX{
+				StartSymbol,
+				std::move(Builder),
+				std::move(OpePriority),
+				MaxForwardDetect
+			};
+		}
 	}
 }

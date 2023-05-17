@@ -247,6 +247,7 @@ export namespace Potato::Reg
 		DfaT(DfaT&&) = default;
 		DfaT(DfaT const&) = default;
 		DfaT() = default;
+		DfaT& operator=(DfaT&&) = default;
 
 		template<typename CharT, typename CharTraisT>
 		DfaT(FormatE Format, std::basic_string_view<CharT, CharTraisT> Str, bool IsRaw = false, std::size_t Mask = 0);

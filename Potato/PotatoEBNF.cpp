@@ -155,6 +155,8 @@ namespace Potato::EBNF
 		EbnfLexerT const& Input,
 		std::vector<RegMappingT>& RegMapping,
 		SLRX::Symbol& OutputStartSymbol,
+		bool& NeedTokenIndexRef,
+		std::size_t& MaxFormatDetect,
 		std::vector<SLRX::ProductionBuilder>& Builders,
 		std::vector<SLRX::OpePriority>& OpePriority
 	)
@@ -162,8 +164,9 @@ namespace Potato::EBNF
 		auto ElementSpan = std::span(Input.Elements);
 		
 		std::size_t TempNoTerminalCount = ElementSpan.size();
-		std::size_t MaxForwardDetected = 3;
 		std::size_t TokenUsed = 0;
+		NeedTokenIndexRef = false;
+		MaxFormatDetect = 3;
 
 		auto Locate = std::find_if(ElementSpan.begin(), ElementSpan.end(), [](ElementT Ele){
 			return Ele.Symbol == T::Barrier;
@@ -451,7 +454,11 @@ namespace Potato::EBNF
 						}
 						StartSymbol = Ref[2].Consume<SLRX::Symbol>();
 						if (Ref.Datas.size() == 5)
-							MaxForwardDetected = Ref.Datas[3].Consume<std::size_t>();
+						{
+							MaxFormatDetect = Ref.Datas[3].Consume<std::size_t>();
+							NeedTokenIndexRef = true;
+						}
+							
 						return {};
 					}
 					default:
@@ -585,6 +592,42 @@ namespace Potato::EBNF
 			);
 		}
 	}
+
+
+	void EbnfProcessor::Reset() {
+		RequireStrTokenIndex = StartupTokenIndex;
+		DfaProcessor.Reset();
+		SymbolProcessor.Reset();
+		Line = {};
+	}
+
+	bool EbnfProcessor::Consume(char32_t Input, std::size_t NextTokenIndex)
+	{
+		if (DfaProcessor.Consume(Input, RequireStrTokenIndex))
+		{
+			RequireStrTokenIndex = NextTokenIndex;
+			return true;
+		}
+		else {
+			auto Accept = DfaProcessor.GetAccept();
+			if (Accept.has_value())
+			{
+				auto& RegMapping = TableRef.RegScriptions[Accept->Mask];
+				if (RegMapping != 0)
+				{
+					auto Mapping = TableRef.RegScriptions[Accept->Mask];
+					LexicalElementT.push_back(
+						SLRX::Symbol::AsTerminal(Accept->Mask),
+						Accept->MainCapture,
+						Line,
+						TableRef.RegScriptions[]
+					);
+				}
+				RequireStrTokenIndex = Accept->MainCapture.End();
+			}
+		}
+	}
+
 
 	/*
 	std::size_t FindOrAddSymbol(std::u8string_view Source, std::vector<std::u8string>& Output)
