@@ -528,7 +528,8 @@ export namespace Potato::EBNF
 			throw Exception::UnacceptableEbnf{ Error.Type, *Encode::StrEncoder<CharT, wchar_t>::EncodeToString(ErrorStr), Line };
 		}
 
-		std::map<std::basic_string_view<CharT, CharTraistT>, std::size_t> FinalRegMapping;
+		std::map<std::basic_string_view<CharT, CharTraistT>, std::size_t> SymbolMapping;
+		SymbolMapping.insert({ {}, 0 });
 
 		struct RegT
 		{
@@ -539,33 +540,44 @@ export namespace Potato::EBNF
 		};
 
 		std::vector<RegT> Regs;
+		Regs.reserve(RegMapping.size());
 
 		auto ReLocateSymbol = [&](SLRX::Symbol& Sym){
 			if (Sym.Value < Lexer.Elements.size())
 			{
 				auto LocateName = Lexer[Sym.Value].TokenIndex.Slice(EbnfStr);
-				auto [Ite2, B] = FinalRegMapping.insert({ LocateName, FinalRegMapping.size() });
+				auto [Ite2, B] = SymbolMapping.insert({ LocateName, SymbolMapping.size() });
 				Sym.Value = Ite2->second;
 				return true;
 			}
 			return false;
 		};
 
+		std::set<std::basic_string_view<CharT, CharTraistT>> ExistEge;
+
 		for (auto Ite : RegMapping)
 		{
-			auto RegName = Lexer[Ite.RegName].TokenIndex.Slice(EbnfStr);
+			auto RegNameElement = Lexer[Ite.RegName];
+			auto RegName = (RegNameElement.Symbol == EbnfLexerT::T::Start ? 
+				std::basic_string_view<CharT, CharTraistT>{} :
+				RegNameElement.TokenIndex.Slice(EbnfStr)
+			);
 			auto Reg = Lexer[Ite.Reg].TokenIndex.Slice(EbnfStr);
-			auto [Ite2, B] = FinalRegMapping.insert({RegName, FinalRegMapping.size()});
-			if (B)
+
+			if (RegNameElement.Symbol == EbnfLexerT::T::Rex)
 			{
-				Regs.push_back({
-					Reg,
-					Ite2->second,
-					Ite.Mask,
-					Lexer[Ite.Reg].TokenIndex
-				});
+				auto [II, B] = ExistEge.insert(Reg);
+				if (!B)
+					continue;
 			}
-			
+
+			auto [Ite2, B] = SymbolMapping.insert({RegName, SymbolMapping.size()});
+			Regs.push_back({
+				Reg,
+				Ite2->second,
+				Ite.Mask,
+				Lexer[Ite.Reg].TokenIndex
+			});
 		}
 
 		ReLocateSymbol(StartSymbol);
@@ -614,7 +626,7 @@ export namespace Potato::EBNF
 		{
 			if (Symbol.Value >= Lexer.Size())
 			{
-				Symbol.Value = Symbol.Value - Lexer.Size() + FinalRegMapping.size();
+				Symbol.Value = Symbol.Value - Lexer.Size() + SymbolMapping.size();
 			}
 		};
 
@@ -631,19 +643,19 @@ export namespace Potato::EBNF
 		{
 			std::size_t TotalStringRequireSize = 0;
 
-			for (auto& Ite : FinalRegMapping)
+			for (auto& Ite : SymbolMapping)
 			{
 				auto Re = Encode::StrEncoder<CharT, wchar_t>::RequireSpaceUnSafe(Ite.first);
 				TotalStringRequireSize += Re.TargetSpace;
 			}
 
 			TotalString.resize(TotalStringRequireSize);
-			StringMapping.resize(FinalRegMapping.size());
+			StringMapping.resize(SymbolMapping.size());
 
 			auto OutputSpan = std::span(TotalString);
 
 			std::size_t WritedSize = 0;
-			for (auto& Ite : FinalRegMapping)
+			for (auto& Ite : SymbolMapping)
 			{
 				auto Re = Encode::StrEncoder<CharT, wchar_t>::EncodeUnSafe(Ite.first, OutputSpan);
 				StringMapping[Ite.second] = Misc::IndexSpan<>{ WritedSize, WritedSize + Re.TargetSpace};
