@@ -102,30 +102,11 @@ void Test(std::u8string_view Table, std::u8string_view InputStr, std::u8string_v
 	try {
 		EbnfT Tab { Table };
 
-		EbnfProcessor Pro(Tab);
+		EbnfLexicalProcessor Pro(Tab);
 
-		char32_t Output;
-		std::span<char32_t> OutputSpan{&Output, 1};
+		auto Re = LexicalProcessor(Pro, InputStr);
 
-		while (true)
-		{
-			auto RequireSize = Pro.GetRequireStrTokenIndex();
-			if (RequireSize >= InputStr.size())
-			{
-				auto FinalResult = Pro.EndOfFile();
-				break;
-			}
-			else {
-				auto P = Potato::Encode::CharEncoder<char8_t, char32_t>::EncodeOnceUnSafe(
-					InputStr.substr(RequireSize),
-					OutputSpan
-				);
-				if (!Pro.Consume(Output, RequireSize + P.SourceSpace))
-				{
-					break;
-				}
-			}
-		}
+		volatile int o = 0;
 		volatile int i = 0;
 
 		/*

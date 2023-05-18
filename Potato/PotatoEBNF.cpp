@@ -594,14 +594,12 @@ namespace Potato::EBNF
 	}
 
 
-	void EbnfProcessor::Reset() {
+	void EbnfLexicalProcessor::Reset() {
 		RequireStrTokenIndex = StartupTokenIndex;
 		DfaProcessor.Reset();
-		SymbolProcessor.Clear();
-		Line = {};
 	}
 
-	bool EbnfProcessor::Consume(char32_t Input, std::size_t NextTokenIndex)
+	bool EbnfLexicalProcessor::Consume(char32_t Input, std::size_t NextTokenIndex)
 	{
 		if (DfaProcessor.Consume(Input, RequireStrTokenIndex))
 		{
@@ -622,15 +620,8 @@ namespace Potato::EBNF
 						RegMapping,
 						Accept->MainCapture
 					});
-					if (!SymbolProcessor.Consume(
-						Symbol,
-						ElementTokenIndex
-					))
-					{
-						return false;
-					}
-					RequireStrTokenIndex = Accept->MainCapture.End();
 				}
+				RequireStrTokenIndex = Accept->MainCapture.End();
 				return true;
 			}
 			return false;

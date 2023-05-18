@@ -108,7 +108,7 @@ export namespace Potato::EBNF
 		Reg::DfaT Lexical;
 		SLRX::LRX Syntax;
 
-		friend struct EbnfProcessor;
+		friend struct EbnfLexicalProcessor;
 		friend struct LexicalElementT;
 	};
 
@@ -118,18 +118,21 @@ export namespace Potato::EBNF
 		Misc::IndexSpan<> TokenIndex;
 	};
 
-	struct EbnfProcessor
+	struct EbnfLexicalProcessor
 	{
-		EbnfProcessor(EbnfT const& TableRef, std::size_t StartupTokenIndex = 0)
-			: StartupTokenIndex(StartupTokenIndex), TableRef(TableRef), DfaProcessor(TableRef.Lexical), SymbolProcessor(TableRef.Syntax)
+		EbnfLexicalProcessor(EbnfT const& TableRef, std::size_t StartupTokenIndex = 0)
+			: StartupTokenIndex(StartupTokenIndex), TableRef(TableRef), DfaProcessor(TableRef.Lexical)
 		{}
 
 		void Reset();
 
 		bool Consume(char32_t Input, std::size_t NextTokenIndex);
-		bool EndOfFile() { return Consume(Reg::EndOfFile(), RequireStrTokenIndex);}
+		bool EndOfFile() { return Consume(Reg::EndOfFile(), RequireStrTokenIndex + 1); }
 		std::size_t GetRequireStrTokenIndex() const { return RequireStrTokenIndex; }
-		
+
+		std::vector<LexicalElementT>& GetElements() { return LexicalElementT; }
+		std::vector<LexicalElementT> const& GetElements() const { return LexicalElementT; }
+
 	protected:
 
 		std::vector<LexicalElementT> LexicalElementT;
@@ -137,13 +140,58 @@ export namespace Potato::EBNF
 		std::size_t RequireStrTokenIndex = 0;
 		EbnfT const& TableRef;
 		Reg::DfaProcessor DfaProcessor;
-		SLRX::SymbolProcessor SymbolProcessor;
-		Misc::LineRecorder Line;
 	};
 
-	/*
-	
+	template<typename CharT, typename CharTraitT>
+	bool LexicalProcessor(EbnfLexicalProcessor& Pro, std::basic_string_view<CharT, CharTraitT> InputStr)
+	{
+		char32_t InputSymbol = 0;
+		std::span<char32_t> OutputSpan{ &InputSymbol, 1 };
 
+		while (true)
+		{
+			auto RequireSize = Pro.GetRequireStrTokenIndex();
+			if (RequireSize == InputStr.size())
+			{
+				if(!Pro.EndOfFile())
+					return false;
+			}
+			else if (RequireSize > InputStr.size())
+			{
+				return true;
+			}
+			else {
+				auto P = Potato::Encode::CharEncoder<char8_t, char32_t>::EncodeOnceUnSafe(
+					InputStr.substr(RequireSize),
+					OutputSpan
+				);
+				if (!Pro.Consume(InputSymbol, RequireSize + P.SourceSpace))
+				{
+					return false;
+				}
+			}
+		}
+	}
+
+	struct EbnfSyntaxProcessor
+	{
+		EbnfSyntaxProcessor(EbnfT const& TableRef)
+			: TableRef(TableRef), DfaProcessor(TableRef.Lexical)
+		{}
+
+		void Reset();
+
+		bool Consume(SLRX::Symbol );
+		bool EndOfFile() { return Consume(Reg::EndOfFile(), RequireStrTokenIndex + 1); }
+
+	protected:
+
+		SLRX::SymbolProcessor SymbolProcessor;
+	};
+
+
+
+	/*
 	struct EBnfBinaryTableWrapper
 	{
 
