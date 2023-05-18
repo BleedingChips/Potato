@@ -2,6 +2,7 @@ import Potato.SLRX;
 
 using namespace Potato::SLRX;
 
+
 enum class Noterminal
 {
 	Exp = 0,
@@ -34,6 +35,7 @@ std::map<Terminal, std::u8string_view> TerminalMapping = {
 	{Terminal::RigheBracket, std::u8string_view{u8"}"}}
 };
 
+/*
 struct StringMaker
 {
 	struct PredictEle
@@ -97,6 +99,7 @@ struct StringMaker
 
 	const char* Error;
 };
+*/
 
 void TestTable(Symbol StartSymbol, std::vector<ProductionBuilder> Builder, std::vector<OpePriority> Ority, std::size_t MaxForwardDetect, std::span<Terminal const> Span, std::u8string_view TarStr, const char* Error)
 {
@@ -108,6 +111,7 @@ void TestTable(Symbol StartSymbol, std::vector<ProductionBuilder> Builder, std::
 			MaxForwardDetect
 		);
 
+		/*
 		SymbolProcessor Pro(Tab);
 
 		auto IteSpan = Span;
@@ -149,6 +153,7 @@ void TestTable(Symbol StartSymbol, std::vector<ProductionBuilder> Builder, std::
 
 		if (Re2 != TarStr)
 			throw Error;
+			*/
 	}
 	catch (Exception::Interface const&)
 	{
@@ -200,8 +205,8 @@ void TestingSLRX()
 			{*Noterminal::Exp, {*Terminal::Num}, 1},
 		},
 		{
-			{{*Terminal::Mul}, Associativity::Left}, 
-			{{*Terminal::Add}, Associativity::Right},
+			{{*Terminal::Mul}, OpePriority::Associativity::Left},
+			{{*Terminal::Add}, OpePriority::Associativity::Right},
 		}, 3,
 		Lists2,
 		u8"((Num)+(((Num)*(Num))+(Num)))",

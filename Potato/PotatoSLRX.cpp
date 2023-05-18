@@ -9,6 +9,7 @@ namespace Potato::SLRX
 
 	using namespace Exception;
 
+	/*
 	TElement::TElement(ParsingStep const& value) : Value(value.Value), Shift(value.Shift) {}
 
 	NTElement::NTElement(ParsingStep const& StepValue, Misc::IndexSpan<> TokenIndex, std::span<DataT> Datas) :
@@ -79,6 +80,7 @@ namespace Potato::SLRX
 		else
 			return {};
 	}
+	*/
 
 	ProductionInfo::ProductionInfo(Symbol StartSymbol, std::vector<ProductionBuilder> ProductionBuilders, std::vector<OpePriority> Priority)
 	{
@@ -148,7 +150,7 @@ namespace Potato::SLRX
 			struct OpePriorityTemp
 			{
 				Symbol Ope;
-				Associativity Asso;
+				OpePriority::Associativity Asso;
 				std::size_t ProductionIndex;
 				Symbol ProductionValue;
 				std::size_t PriorityLevel;
@@ -213,7 +215,7 @@ namespace Potato::SLRX
 									else {
 										switch (Temp->Asso)
 										{
-										case Associativity::Left:
+										case OpePriority::Associativity::Left:
 										{
 											if (Temp->RightExpIndex.has_value())
 											{
@@ -228,7 +230,7 @@ namespace Potato::SLRX
 											}
 											break;
 										}
-										case Associativity::Right:
+										case OpePriority::Associativity::Right:
 										{
 											if (Temp->LeftExpIndex.has_value())
 											{
@@ -1470,6 +1472,7 @@ namespace Potato::SLRX
 		return Re;
 	}
 
+	/*
 	SymbolProcessor::SymbolProcessor(LRXBinaryTableWrapper Wrapper) : Table(Wrapper), StartupOffset(Wrapper.StartupNodeIndex()) {
 		assert(Wrapper); 
 		
@@ -1899,6 +1902,7 @@ namespace Potato::SLRX
 		}
 		return {};
 	}
+	*/
 
 	namespace Exception
 	{

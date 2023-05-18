@@ -7,7 +7,7 @@ export namespace Potato::SLRX
 
 	struct Symbol
 	{
-		enum class ValueType
+		enum class T
 		{
 			TERMINAL = 0,
 			NOTERMIAL,
@@ -16,16 +16,16 @@ export namespace Potato::SLRX
 		};
 
 		constexpr std::strong_ordering operator<=>(Symbol const& Input) const = default;
-		constexpr static Symbol EndOfFile() { return { ValueType::ENDOFFILE, 0 }; }
-		constexpr static Symbol StartSymbol() { return { ValueType::STARTSYMBOL, 0 }; }
-		constexpr static Symbol AsNoTerminal(std::size_t Value) { return { ValueType::NOTERMIAL, Value};  }
-		constexpr static Symbol AsTerminal(std::size_t Value) { return { ValueType::TERMINAL, Value }; }
-		constexpr bool IsTerminal() const { return Type == ValueType::TERMINAL || IsEndOfFile(); }
-		constexpr bool IsNoTerminal() const { return Type == ValueType::NOTERMIAL || IsStartSymbol(); }
-		constexpr bool IsEndOfFile() const { return Type == ValueType::ENDOFFILE; }
-		constexpr bool IsStartSymbol() const { return Type == ValueType::STARTSYMBOL; }
+		constexpr static Symbol EndOfFile() { return { T::ENDOFFILE, 0 }; }
+		constexpr static Symbol StartSymbol() { return { T::STARTSYMBOL, 0 }; }
+		constexpr static Symbol AsNoTerminal(std::size_t Value) { return { T::NOTERMIAL, Value};  }
+		constexpr static Symbol AsTerminal(std::size_t Value) { return { T::TERMINAL, Value }; }
+		constexpr bool IsTerminal() const { return Type == T::TERMINAL || IsEndOfFile(); }
+		constexpr bool IsNoTerminal() const { return Type == T::NOTERMIAL || IsStartSymbol(); }
+		constexpr bool IsEndOfFile() const { return Type == T::ENDOFFILE; }
+		constexpr bool IsStartSymbol() const { return Type == T::STARTSYMBOL; }
 
-		ValueType Type = ValueType::ENDOFFILE;
+		T Type = T::ENDOFFILE;
 		std::size_t Value = 0;
 	};
 
@@ -36,9 +36,9 @@ export namespace Potato::SLRX
 
 		struct ReduceT
 		{
-			std::size_t ProductionIndex =0 ;
+			std::size_t ProductionIndex = 0;
 			std::size_t ElementCount = 0;
-			std::size_t Mask = 0;	
+			std::size_t Mask = 0;
 		};
 
 		struct ShiftT
@@ -55,6 +55,346 @@ export namespace Potato::SLRX
 		constexpr bool IsShift() const { return IsTerminal(); }
 		constexpr bool IsReduce() const { return IsNoTerminal(); }
 	};
+
+	struct OpePriority
+	{
+		enum class Associativity
+		{
+			Left,
+			Right
+		};
+
+		OpePriority(std::vector<Symbol> InitList) : Symbols(std::move(InitList)) {}
+		OpePriority(std::vector<Symbol> InitList, Associativity Asso) : Symbols(std::move(InitList)), Priority(Asso) {}
+		std::vector<Symbol> Symbols;
+		Associativity Priority = Associativity::Left;
+	};
+
+	struct ItSelf {};
+
+	struct ProductionBuilderElement
+	{
+		constexpr ProductionBuilderElement(ProductionBuilderElement const&) = default;
+		constexpr ProductionBuilderElement& operator=(ProductionBuilderElement const&) = default;
+		constexpr ProductionBuilderElement(Symbol Value) : Type(TypeT::IsValue), ProductionValue(Value) {};
+		constexpr ProductionBuilderElement(std::size_t Mask) : Type(TypeT::IsMask), ProductionMask(Mask) {};
+		constexpr ProductionBuilderElement(ItSelf) : Type(TypeT::ItSelf) {};
+
+		enum class TypeT
+		{
+			IsValue,
+			IsMask,
+			ItSelf
+		};
+
+		TypeT Type = TypeT::IsValue;
+		Symbol ProductionValue = Symbol::EndOfFile();
+		std::size_t ProductionMask = 0;
+	};
+
+	struct ProductionBuilder
+	{
+		ProductionBuilder(Symbol ProductionValue, std::vector<ProductionBuilderElement> ProductionElement, std::size_t ProductionMask = 0, bool NeedPredict = false)
+			: ProductionValue(ProductionValue), Element(std::move(ProductionElement)), ProductionMask(ProductionMask), NeedPredict(NeedPredict) {}
+
+		ProductionBuilder(const ProductionBuilder&) = default;
+		ProductionBuilder(ProductionBuilder&&) = default;
+		ProductionBuilder& operator=(const ProductionBuilder&) = default;
+		ProductionBuilder& operator=(ProductionBuilder&&) = default;
+
+		Symbol ProductionValue;
+		std::vector<ProductionBuilderElement> Element;
+		std::size_t ProductionMask = 0;
+		bool NeedPredict = false;
+	};
+
+	struct ProductionInfo
+	{
+
+		ProductionInfo(Symbol StartSymbol, std::vector<ProductionBuilder> ProductionBuilders, std::vector<OpePriority> Priority);
+
+		struct Element
+		{
+			Symbol Symbol;
+			std::vector<std::size_t> AcceptableProductionIndex;
+		};
+
+		struct Production
+		{
+			Symbol Symbol;
+			std::size_t ProductionMask;
+			std::vector<Element> Elements;
+			bool NeedPredict = false;
+		};
+
+		struct SearchElement
+		{
+			std::size_t ProductionIndex;
+			std::size_t ElementIndex;
+			std::strong_ordering operator<=>(SearchElement const& Input) const = default;
+		};
+
+		std::optional<Symbol> GetElementSymbol(std::size_t ProductionIndex, std::size_t ElementIndex) const;
+		std::span<std::size_t const> GetAcceptableProductionIndexs(std::size_t ProductionIndex, std::size_t ElementIndex) const;
+		std::span<std::size_t const> GetAllProductionIndexs(Symbol Input) const;
+		bool IsAcceptableProductionIndex(std::size_t ProductionIndex, std::size_t ElementIndex, std::size_t RequireIndex) const;
+
+		SearchElement GetStartupSearchElements() const;
+		SearchElement GetEndSearchElements() const;
+		void ExpandSearchElements(std::vector<SearchElement>& InoutElements) const;
+		static std::tuple<std::size_t, std::size_t> IntersectionSet(std::span<std::size_t> Source1AndOutout, std::span<std::size_t> Source2);
+
+		std::vector<Production> ProductionDescs;
+		std::map<Symbol, std::vector<std::size_t>> TrackedAcceptableNoTerminalSymbol;
+	};
+
+	struct LR0
+	{
+		struct ShiftEdge
+		{
+			Symbol RequireSymbol;
+			std::size_t ToNode;
+			bool ReverseStorage;
+			std::vector<std::size_t> ProductionIndex;
+		};
+
+		struct Reduce
+		{
+			Symbol ReduceSymbol;
+			ParsingStep::ReduceT Reduce;
+			bool NeedPredict = false;
+			operator ParsingStep () const {
+				ParsingStep New;
+				New.Value = ReduceSymbol;
+				New.Reduce = Reduce;
+				return New;
+			}
+		};
+
+		struct MappedProduction
+		{
+			ProductionInfo::Production Production;
+			std::size_t ProductionIndex;
+			std::vector<std::size_t> DetectedPoint;
+		};
+
+		struct Node
+		{
+			std::size_t ForwardTokenRequire = 0;
+			std::vector<ShiftEdge> Shifts;
+			std::vector<Reduce> Reduces;
+			std::vector<MappedProduction> MappedProduction;
+		};
+
+		std::vector<Node> Nodes;
+
+		bool IsAvailable() const { return !Nodes.empty(); }
+		operator bool() const { return IsAvailable(); }
+
+		static LR0 Create(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority) {
+			return Create(ProductionInfo{ StartSymbol, std::move(Production), std::move(Priority) });
+		}
+		static LR0 Create(ProductionInfo Info);
+
+		LR0(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority)
+			: LR0(Create(StartSymbol, std::move(Production), std::move(Priority))) {}
+		LR0(ProductionInfo Info) : LR0(Create(std::move(Info))) {}
+		LR0(LR0&&) = default;
+		LR0(LR0 const&) = default;
+		LR0() = default;
+		LR0& operator=(LR0 const&) = default;
+		LR0& operator=(LR0&&) = default;
+	private:
+		LR0(std::vector<Node> Nodes) : Nodes(std::move(Nodes)) {}
+	};
+
+	struct LRX
+	{
+
+		struct ReduceTuple
+		{
+			std::size_t LastState;
+			std::size_t TargetState;
+			bool NeedPredict = false;
+		};
+
+		struct ReduceProperty
+		{
+			std::vector<ReduceTuple> Tuples;
+			LR0::Reduce Property;
+		};
+
+		enum class RequireNodeType
+		{
+			SymbolValue,
+			ShiftProperty,
+			NeedPredictShiftProperty,
+			ReduceProperty,
+		};
+
+		struct RequireNode
+		{
+			RequireNodeType Type;
+			Symbol RequireSymbol;
+			std::size_t ReferenceIndex;
+		};
+
+		struct Node
+		{
+			std::vector<std::vector<RequireNode>> RequireNodes;
+			std::vector<ReduceProperty> Reduces;
+			std::vector<LR0::MappedProduction> MappedProduction;
+		};
+
+		std::vector<Node> Nodes;
+
+		static constexpr std::size_t DefaultMaxForwardDetect = 3;
+
+		static LRX Create(LR0 const& Table, std::size_t MaxForwardDetect = DefaultMaxForwardDetect);
+		static LRX Create(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority, std::size_t MaxForwardDetect = DefaultMaxForwardDetect)
+		{
+			return Create(LR0{ StartSymbol, std::move(Production), std::move(Priority) }, MaxForwardDetect);
+		}
+		bool IsAvailable() const { return !Nodes.empty(); }
+		operator bool() const { return IsAvailable(); }
+		LRX(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority, std::size_t MaxForwardDetect = DefaultMaxForwardDetect)
+			: LRX(Create(StartSymbol, std::move(Production), std::move(Priority), MaxForwardDetect)) {}
+		LRX(LR0 const& Table, std::size_t MaxForwardDetect = 3) : LRX(Create(Table, MaxForwardDetect)) {}
+		LRX(LRX const&) = default;
+		LRX(LRX&&) = default;
+		LRX& operator=(LRX const&) = default;
+		LRX& operator=(LRX&&) = default;
+		LRX() = default;
+
+		static constexpr std::size_t StartupOffset() { return 1; }
+
+	private:
+		LRX(std::vector<Node> Nodes) : Nodes(std::move(Nodes)) {}
+	};
+
+	struct LRXBinaryTableWrapper
+	{
+		using StandardT = std::uint32_t;
+
+		using HalfStandardT = std::uint16_t;
+		using HalfHalfStandardT = std::uint8_t;
+
+		static_assert(sizeof(HalfStandardT) * 2 == sizeof(StandardT));
+		static_assert(sizeof(HalfHalfStandardT) * 2 == sizeof(HalfStandardT));
+
+		struct alignas(alignof(StandardT)) ZipHeadT
+		{
+			StandardT NodeCount = 0;
+			StandardT StartupOffset = 0;
+		};
+
+		struct alignas(alignof(StandardT)) ZipNodeT
+		{
+			HalfStandardT RequireNodeDescCount;
+			HalfStandardT ReduceCount;
+		};
+
+		struct alignas(alignof(StandardT)) ZipRequireNodeT
+		{
+			LRX::RequireNodeType Type : 3;
+			StandardT IsEndOfFile : 1;
+			StandardT ToIndexOffset;
+			StandardT Value;
+		};
+
+		struct alignas(alignof(StandardT)) ZipRequireNodeDescT
+		{
+			StandardT RequireNodeCount;
+		};
+
+		struct alignas(alignof(StandardT)) ZipReducePropertyT
+		{
+			HalfStandardT ProductionIndex;
+			HalfStandardT ProductionCount;
+			HalfStandardT ReduceTupleCount;
+			HalfStandardT NeedPredict;
+			StandardT Mask;
+			StandardT NoTerminalValue;
+		};
+
+		struct alignas(alignof(StandardT)) ZipReduceTupleT
+		{
+			StandardT LastState;
+			StandardT ToState;
+			StandardT NeedPredict;
+		};
+
+		static void Serilize(Misc::StructedSerilizerWritter<StandardT>& Writer, LRX const& Ref);
+
+		static std::vector<StandardT> Create(LRX const& Le);
+		static std::vector<StandardT> Create(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority, std::size_t MaxForwardDetect = 3) {
+			return Create(LRX{ StartSymbol, std::move(Production), std::move(Priority), MaxForwardDetect });
+		}
+
+		LRXBinaryTableWrapper(std::span<StandardT const> InputBuffer) : Buffer(InputBuffer) {}
+		LRXBinaryTableWrapper(LRXBinaryTableWrapper const&) = default;
+		LRXBinaryTableWrapper() = default;
+		LRXBinaryTableWrapper& operator=(LRXBinaryTableWrapper const&) = default;
+
+		Misc::StructedSerilizerReader<StandardT const> GetReader() { return Misc::StructedSerilizerReader<StandardT const>(Buffer); }
+
+		operator bool() const { return !Buffer.empty(); }
+		std::size_t NodeCount() const { return Buffer[0]; }
+		std::size_t StartupNodeIndex() const { return Buffer[1]; }
+		//bool StartupNeedPredict() const { return Buffer[2]; }
+		std::size_t TotalBufferSize() const { return Buffer.size(); }
+
+		std::span<StandardT const> Buffer;
+
+	};
+
+
+
+
+	struct ProcessorContextCacheSymbol
+	{
+		Symbol Value;
+		std::size_t TokenIndex;
+		std::any TerminalData;
+	};
+
+	struct CoreProcessorContext
+	{
+
+		struct Element
+		{
+			Symbol Value;
+			Misc::IndexSpan<> TokenIndex;
+			std::any TerminalData;
+		};
+
+		std::vector<Element> CacheSymbols;
+		std::vector<Element> TotalElement;
+	};
+
+
+	template<typename TerminalFunc, typename NoTermnialFunc, typename SuggestFunc>
+	struct FunctionalProcessorContext : public CoreProcessorContext
+	{
+		FunctionalProcessorContext(TerminalFunc TFunc, NoTermnialFunc NTFunc, SuggestFunc SFunc)
+			: TFunc(std::move(TFunc)), NTFunc(std::move(NTFunc)), SFunc(std::move(SFunc)) {}
+
+	public:
+		TerminalFunc TFunc;
+		NoTermnialFunc NTFunc;
+		SuggestFunc SFunc;
+	};
+
+
+
+
+
+
+
+
+
+	/*
+	
 
 	struct ElementData
 	{
@@ -180,305 +520,7 @@ export namespace Potato::SLRX
 	}
 
 
-	enum class Associativity
-	{
-		Left,
-		Right,
-	};
-
-	struct OpePriority
-	{
-		OpePriority(std::vector<Symbol> InitList) : Symbols(std::move(InitList)) {}
-		OpePriority(std::vector<Symbol> InitList, Associativity Asso) : Symbols(std::move(InitList)), Priority(Asso) {}
-		std::vector<Symbol> Symbols;
-		Associativity Priority = Associativity::Left;
-	};
-
-	struct ItSelf {};
-
-	struct ProductionBuilderElement
-	{
-		constexpr ProductionBuilderElement(ProductionBuilderElement const&) = default;
-		constexpr ProductionBuilderElement& operator=(ProductionBuilderElement const&) = default;
-		constexpr ProductionBuilderElement(Symbol Value) : Type(TypeT::IsValue), ProductionValue(Value) {};
-		constexpr ProductionBuilderElement(std::size_t Mask) : Type(TypeT::IsMask), ProductionMask(Mask) {};
-		constexpr ProductionBuilderElement(ItSelf) : Type(TypeT::ItSelf) {};
-
-		enum class TypeT
-		{
-			IsValue,
-			IsMask,
-			ItSelf
-		};
-
-		TypeT Type = TypeT::IsValue;
-		Symbol ProductionValue = Symbol::EndOfFile();
-		std::size_t ProductionMask = 0;
-	};
-
-	struct ProductionBuilder
-	{
-		ProductionBuilder(Symbol ProductionValue, std::vector<ProductionBuilderElement> ProductionElement, std::size_t ProductionMask = 0, bool NeedPredict = false)
-			: ProductionValue(ProductionValue), Element(std::move(ProductionElement)), ProductionMask(ProductionMask), NeedPredict(NeedPredict) {}
-		
-		/*
-		ProductionBuilder(Symbol ProductionValue, StandardT ProductionMask) : ProductionBuilder(ProductionValue, {}, ProductionMask) {}
-		ProductionBuilder(Symbol ProductionValue, std::vector<ProductionBuilderElement> ProductionElement)
-			: ProductionBuilder(ProductionValue, std::move(ProductionElement), 0) {}
-		ProductionBuilder(Symbol ProductionValue)
-			: ProductionBuilder(ProductionValue, {}, 0) {}
-		*/
-
-		ProductionBuilder(const ProductionBuilder&) = default;
-		ProductionBuilder(ProductionBuilder&&) = default;
-		ProductionBuilder& operator=(const ProductionBuilder&) = default;
-		ProductionBuilder& operator=(ProductionBuilder&&) = default;
-
-		Symbol ProductionValue;
-		std::vector<ProductionBuilderElement> Element;
-		std::size_t ProductionMask = 0;
-		bool NeedPredict = false;
-	};
-
-	struct ProductionInfo
-	{
-
-		ProductionInfo(Symbol StartSymbol, std::vector<ProductionBuilder> ProductionBuilders, std::vector<OpePriority> Priority);
-
-		struct Element
-		{
-			Symbol Symbol;
-			std::vector<std::size_t> AcceptableProductionIndex;
-		};
-
-		struct Production
-		{
-			Symbol Symbol;
-			std::size_t ProductionMask;
-			std::vector<Element> Elements;
-			bool NeedPredict = false;
-		};
-
-		struct SearchElement
-		{
-			std::size_t ProductionIndex;
-			std::size_t ElementIndex;
-			std::strong_ordering operator<=>(SearchElement const& Input) const = default;
-		};
-
-		std::optional<Symbol> GetElementSymbol(std::size_t ProductionIndex, std::size_t ElementIndex) const;
-		std::span<std::size_t const> GetAcceptableProductionIndexs(std::size_t ProductionIndex, std::size_t ElementIndex) const;
-		std::span<std::size_t const> GetAllProductionIndexs(Symbol Input) const;
-		bool IsAcceptableProductionIndex(std::size_t ProductionIndex, std::size_t ElementIndex, std::size_t RequireIndex) const;
-
-		SearchElement GetStartupSearchElements() const;
-		SearchElement GetEndSearchElements() const;
-		void ExpandSearchElements(std::vector<SearchElement>& InoutElements) const;
-		static std::tuple<std::size_t, std::size_t> IntersectionSet(std::span<std::size_t> Source1AndOutout,  std::span<std::size_t> Source2);
-
-		std::vector<Production> ProductionDescs;
-		std::map<Symbol, std::vector<std::size_t>> TrackedAcceptableNoTerminalSymbol;
-	};
-
-	struct LR0
-	{
-		struct ShiftEdge
-		{
-			Symbol RequireSymbol;
-			std::size_t ToNode;
-			bool ReverseStorage;
-			std::vector<std::size_t> ProductionIndex;
-		};
-
-		struct Reduce
-		{
-			Symbol ReduceSymbol;
-			ParsingStep::ReduceT Reduce;
-			bool NeedPredict = false;
-			operator ParsingStep () const {
-				ParsingStep New;
-				New.Value = ReduceSymbol;
-				New.Reduce = Reduce;
-				return New;
-			}
-		};
-
-		struct MappedProduction
-		{
-			ProductionInfo::Production Production;
-			std::size_t ProductionIndex;
-			std::vector<std::size_t> DetectedPoint;
-		};
-
-		struct Node
-		{
-			std::size_t ForwardTokenRequire = 0;
-			std::vector<ShiftEdge> Shifts;
-			std::vector<Reduce> Reduces;
-			std::vector<MappedProduction> MappedProduction;
-		};
-
-		std::vector<Node> Nodes;
-
-		bool IsAvailable() const { return !Nodes.empty(); }
-		operator bool () const { return IsAvailable(); }
-
-		static LR0 Create(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority) {
-			return Create(ProductionInfo{StartSymbol, std::move(Production), std::move(Priority)});
-		}
-		static LR0 Create(ProductionInfo Info);
-
-		LR0(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority)
-			: LR0(Create(StartSymbol, std::move(Production), std::move(Priority))) {}
-		LR0(ProductionInfo Info) : LR0(Create(std::move(Info))) {}
-		LR0(LR0&&) = default;
-		LR0(LR0 const&) = default;
-		LR0() = default;
-		LR0& operator=(LR0 const&) = default;
-		LR0& operator=(LR0 &&) = default;
-	private:
-		LR0(std::vector<Node> Nodes) : Nodes(std::move(Nodes)) {}
-	};
-
-	struct LRX
-	{
-
-		struct ReduceTuple
-		{
-			std::size_t LastState;
-			std::size_t TargetState;
-			bool NeedPredict = false;
-		};
-
-		struct ReduceProperty
-		{
-			std::vector<ReduceTuple> Tuples;
-			LR0::Reduce Property;
-		};
-
-		enum class RequireNodeType
-		{
-			SymbolValue,
-			ShiftProperty,
-			NeedPredictShiftProperty,
-			ReduceProperty,
-		};
-
-		struct RequireNode
-		{
-			RequireNodeType Type;
-			Symbol RequireSymbol;
-			std::size_t ReferenceIndex;
-		};
-
-		struct Node
-		{
-			std::vector<std::vector<RequireNode>> RequireNodes;
-			std::vector<ReduceProperty> Reduces;
-			std::vector<LR0::MappedProduction> MappedProduction;
-		};
-
-		std::vector<Node> Nodes;
-
-		static constexpr std::size_t DefaultMaxForwardDetect = 3;
-
-		static LRX Create(LR0 const& Table, std::size_t MaxForwardDetect = DefaultMaxForwardDetect);
-		static LRX Create(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority, std::size_t MaxForwardDetect = DefaultMaxForwardDetect)
-		{
-			return Create(LR0{StartSymbol, std::move(Production), std::move(Priority)}, MaxForwardDetect);
-		}
-		bool IsAvailable() const { return !Nodes.empty(); }
-		operator bool () const { return IsAvailable(); }
-		LRX(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority, std::size_t MaxForwardDetect = DefaultMaxForwardDetect)
-			: LRX(Create(StartSymbol, std::move(Production), std::move(Priority), MaxForwardDetect)) {}
-		LRX(LR0 const& Table, std::size_t MaxForwardDetect = 3) : LRX(Create(Table, MaxForwardDetect)) {}
-		LRX(LRX const&) = default;
-		LRX(LRX&&) = default;
-		LRX& operator=(LRX const&) = default;
-		LRX& operator=(LRX&&) = default;
-		LRX() = default;
-
-		static constexpr std::size_t StartupOffset() { return 1; }
-
-	private:
-		LRX(std::vector<Node> Nodes) : Nodes(std::move(Nodes)) {}
-	};
-
-	struct LRXBinaryTableWrapper
-	{
-		using StandardT = std::uint32_t;
-
-		using HalfStandardT = std::uint16_t;
-		using HalfHalfStandardT = std::uint8_t;
-
-		static_assert(sizeof(HalfStandardT) * 2 == sizeof(StandardT));
-		static_assert(sizeof(HalfHalfStandardT) * 2 == sizeof(HalfStandardT));
-
-		struct alignas(alignof(StandardT)) ZipHeadT
-		{
-			StandardT NodeCount = 0;
-			StandardT StartupOffset = 0;
-		};
-
-		struct alignas(alignof(StandardT)) ZipNodeT
-		{
-			HalfStandardT RequireNodeDescCount;
-			HalfStandardT ReduceCount;
-		};
-
-		struct alignas(alignof(StandardT)) ZipRequireNodeT
-		{
-			LRX::RequireNodeType Type : 3;
-			StandardT IsEndOfFile : 1;
-			StandardT ToIndexOffset;
-			StandardT Value;
-		};
-
-		struct alignas(alignof(StandardT)) ZipRequireNodeDescT
-		{
-			StandardT RequireNodeCount;
-		};
-
-		struct alignas(alignof(StandardT)) ZipReducePropertyT
-		{
-			HalfStandardT ProductionIndex;
-			HalfStandardT ProductionCount;
-			HalfStandardT ReduceTupleCount;
-			HalfStandardT NeedPredict;
-			StandardT Mask;
-			StandardT NoTerminalValue;
-		};
-
-		struct alignas(alignof(StandardT)) ZipReduceTupleT
-		{
-			StandardT LastState;
-			StandardT ToState;
-			StandardT NeedPredict;
-		};
-
-		static void Serilize(Misc::StructedSerilizerWritter<StandardT>& Writer, LRX const& Ref);
-
-		static std::vector<StandardT> Create(LRX const& Le);
-		static std::vector<StandardT> Create(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority, std::size_t MaxForwardDetect = 3) {
-			return Create(LRX{ StartSymbol, std::move(Production), std::move(Priority), MaxForwardDetect });
-		}
-
-		LRXBinaryTableWrapper(std::span<StandardT const> InputBuffer) : Buffer(InputBuffer) {}
-		LRXBinaryTableWrapper(LRXBinaryTableWrapper const&) = default;
-		LRXBinaryTableWrapper() = default;
-		LRXBinaryTableWrapper& operator=(LRXBinaryTableWrapper const&) = default;
-
-		Misc::StructedSerilizerReader<StandardT const> GetReader(){ return Misc::StructedSerilizerReader<StandardT const>(Buffer); }
-
-		operator bool() const { return !Buffer.empty(); }
-		std::size_t NodeCount() const { return Buffer[0]; }
-		std::size_t StartupNodeIndex() const { return Buffer[1]; }
-		//bool StartupNeedPredict() const { return Buffer[2]; }
-		std::size_t TotalBufferSize() const { return Buffer.size(); }
-
-		std::span<StandardT const> Buffer;
-
-	};
+	
 
 	struct SymbolProcessor
 	{
@@ -577,6 +619,16 @@ export namespace Potato::SLRX
 		std::vector<LRXBinaryTableWrapper::StandardT> Datas;
 		LRXBinaryTableWrapper Wrapper;
 	};
+
+	struct StepProcessorContextT
+	{
+		struct TerminalSymbolT
+		{
+			Symbol SymbolValue;
+		};
+	};
+	*/
+
 
 
 	namespace Exception
