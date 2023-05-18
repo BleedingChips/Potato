@@ -597,7 +597,7 @@ namespace Potato::EBNF
 	void EbnfProcessor::Reset() {
 		RequireStrTokenIndex = StartupTokenIndex;
 		DfaProcessor.Reset();
-		SymbolProcessor.Reset();
+		SymbolProcessor.Clear();
 		Line = {};
 	}
 
@@ -612,19 +612,28 @@ namespace Potato::EBNF
 			auto Accept = DfaProcessor.GetAccept();
 			if (Accept.has_value())
 			{
+				DfaProcessor.Reset();
 				auto& RegMapping = TableRef.RegScriptions[Accept->Mask];
-				if (RegMapping != 0)
+				if (RegMapping.SymbolValue != 0)
 				{
-					auto Mapping = TableRef.RegScriptions[Accept->Mask];
-					LexicalElementT.push_back(
-						SLRX::Symbol::AsTerminal(Accept->Mask),
-						Accept->MainCapture,
-						Line,
-						TableRef.RegScriptions[]
-					);
+					auto ElementTokenIndex = LexicalElementT.size();
+					auto Symbol = SLRX::Symbol::AsTerminal(RegMapping.SymbolValue);
+					LexicalElementT.push_back({
+						RegMapping,
+						Accept->MainCapture
+					});
+					if (!SymbolProcessor.Consume(
+						Symbol,
+						ElementTokenIndex
+					))
+					{
+						return false;
+					}
+					RequireStrTokenIndex = Accept->MainCapture.End();
 				}
-				RequireStrTokenIndex = Accept->MainCapture.End();
+				return true;
 			}
+			return false;
 		}
 	}
 

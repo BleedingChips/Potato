@@ -109,29 +109,25 @@ export namespace Potato::EBNF
 		SLRX::LRX Syntax;
 
 		friend struct EbnfProcessor;
+		friend struct LexicalElementT;
 	};
 
 	struct LexicalElementT
 	{
-		SLRX::Symbol Value;
-		Misc::IndexSpan<> TokenIndex;
-		Misc::LineRecorder Line;
 		EbnfT::RegScriptionT SceiptionT;
+		Misc::IndexSpan<> TokenIndex;
 	};
 
 	struct EbnfProcessor
 	{
 		EbnfProcessor(EbnfT const& TableRef, std::size_t StartupTokenIndex = 0)
-			: StartupTokenIndex(StartupTokenIndex), TableRef(TableRef), DfaProcessor(DfaProcessor.Lexical), SymbolProcessor(DfaProcessor.Syntax)
+			: StartupTokenIndex(StartupTokenIndex), TableRef(TableRef), DfaProcessor(TableRef.Lexical), SymbolProcessor(TableRef.Syntax)
 		{}
 
-		void Reset() {
-			RequireStrTokenIndex = StartupTokenIndex;
-			DfaProcessor.Reset();
-			SymbolProcessor.Reset();
-		}
+		void Reset();
 
 		bool Consume(char32_t Input, std::size_t NextTokenIndex);
+		bool EndOfFile() { return Consume(Reg::EndOfFile(), RequireStrTokenIndex);}
 		std::size_t GetRequireStrTokenIndex() const { return RequireStrTokenIndex; }
 		
 	protected:
@@ -590,6 +586,7 @@ export namespace Potato::EBNF
 		{
 			auto RegNameElement = Lexer[Ite.RegName];
 			auto Reg = Lexer[Ite.Reg].TokenIndex.Slice(EbnfStr);
+			Reg = Reg.substr(1, Reg.size() - 2);
 
 			if (RegNameElement.Symbol == EbnfLexerT::T::Start)
 			{
@@ -604,11 +601,6 @@ export namespace Potato::EBNF
 			else {
 				auto RegName = RegNameElement.TokenIndex.Slice(EbnfStr);
 				auto [Ite2, B] = SymbolMapping.insert({ RegName, SymbolMapping.size() });
-				if (RegNameElement.Symbol == EbnfLexerT::T::Rex)
-				{
-					RegName = RegName.substr(1, RegName.size() - 2);
-
-				}
 				Regs.push_back({
 					Reg,
 					RegNameElement.Symbol == EbnfLexerT::T::Rex,

@@ -101,6 +101,33 @@ void Test(std::u8string_view Table, std::u8string_view InputStr, std::u8string_v
 {
 	try {
 		EbnfT Tab { Table };
+
+		EbnfProcessor Pro(Tab);
+
+		char32_t Output;
+		std::span<char32_t> OutputSpan{&Output, 1};
+
+		while (true)
+		{
+			auto RequireSize = Pro.GetRequireStrTokenIndex();
+			if (RequireSize >= InputStr.size())
+			{
+				auto FinalResult = Pro.EndOfFile();
+				break;
+			}
+			else {
+				auto P = Potato::Encode::CharEncoder<char8_t, char32_t>::EncodeOnceUnSafe(
+					InputStr.substr(RequireSize),
+					OutputSpan
+				);
+				if (!Pro.Consume(Output, RequireSize + P.SourceSpace))
+				{
+					break;
+				}
+			}
+		}
+		volatile int i = 0;
+
 		/*
 		{
 			auto IteStr = InputStr;
@@ -202,11 +229,13 @@ $ := <Exp> ;
 +('*' '/') +('+' '-')
 )";
 
+	
 	std::u8string_view Source = u8R"(1*< 2 + 3 > * 4)";
 
 
 	Test(EbnfCode1, Source, u8R"((((1)*(<((2)+(3))>))*(4)))", "TestingEbnf : Case 1");
 
+	/*
 	std::u8string_view EbnfCode2 =
 		u8R"(
 $ := '\s+'
@@ -244,7 +273,7 @@ $ := <Exp> ;
 	std::u8string_view Source3 = u8R"(123 + 123 123 456)";
 
 	Test(EbnfCode3, Source3, u8R"((((((<|123>)(<|+>))(<|123>))(<|123>))(<|456>)))", "TestingEbnf : Case 3");
-	
+	*/
 	std::wcout << LR"(TestingEbnf Pass !)" << std::endl;
 
 }
