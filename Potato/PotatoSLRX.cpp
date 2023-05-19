@@ -97,7 +97,6 @@ namespace Potato::SLRX
 				Desc.Elements.push_back(std::move(EOFElement));
 			}
 			Desc.ProductionMask = 0;
-			Desc.NeedPredict = false;
 			ProductionDescs.push_back(std::move(Desc));
 		}
 
@@ -111,7 +110,6 @@ namespace Potato::SLRX
 			Production Desc;
 			Desc.Symbol = Ite.ProductionValue;
 			Desc.ProductionMask = Ite.ProductionMask;
-			Desc.NeedPredict = Ite.NeedPredict;
 			std::size_t ElementIndex = 0;
 			for (auto& Ite2 : Ite.Element)
 			{
@@ -571,7 +569,7 @@ namespace Potato::SLRX
 					auto ProductionIndex = CurrentState[IndexIte2 - 1].ProductionIndex;
 					auto& ProduceRef = Infos.ProductionDescs[ProductionIndex];
 					TemporaryNode.Reduces.push_back(
-						Reduce{ ProduceRef.Symbol, ProductionIndex, ProduceRef.Elements.size(), ProduceRef.ProductionMask, ProduceRef.NeedPredict }
+						Reduce{ ProduceRef.Symbol, ProductionIndex, ProduceRef.Elements.size(), ProduceRef.ProductionMask }
 					);
 				}
 			}
@@ -765,7 +763,6 @@ namespace Potato::SLRX
 							auto LastState = Top.Node;
 
 							bool Fined = false;
-							bool NeedPredict = false;
 							for (auto& ShiftIte : CurNode.Shifts)
 							{
 								if (Ite.ReduceSymbol == ShiftIte.RequireSymbol)
@@ -776,7 +773,6 @@ namespace Potato::SLRX
 									{
 										Fined = true;
 										Top.Node = ShiftIte.ToNode;
-										NeedPredict = Ite.NeedPredict;
 										break;
 									}
 								}
@@ -1224,61 +1220,6 @@ namespace Potato::SLRX
 				}
 			}
 		}
-
-		std::vector<std::size_t> NodeNeedPredict;
-		NodeNeedPredict.resize(Nodes.size(), 0);
-
-		for (std::size_t I = 0; I < Nodes.size(); ++I)
-		{
-			auto& CRNode = Nodes[I];
-			for (auto& Ite : CRNode.Reduces)
-			{
-				if (Ite.Property.NeedPredict)
-				{
-					NodeNeedPredict[I] = 1;
-					break;
-				}
-			}
-		}
-
-		bool Change = true;
-		while (Change)
-		{
-			Change = false;
-
-			for (std::size_t I = 0; I < Nodes.size(); ++I)
-			{
-				auto& Ite = Nodes[I];
-				for (auto& Ite2 : Ite.RequireNodes)
-				{
-					for (auto& Ite3 : Ite2)
-					{
-						if (Ite3.Type == RequireNodeType::ShiftProperty)
-						{
-							if (NodeNeedPredict[Ite3.ReferenceIndex] == 1)
-							{
-								Ite3.Type = RequireNodeType::NeedPredictShiftProperty;
-								NodeNeedPredict[I] = 1;
-								Change = true;
-							}
-						}
-					}
-				}
-
-				for (auto& Ite2 : Ite.Reduces)
-				{
-					for (auto& Ite3 : Ite2.Tuples)
-					{
-						if (!Ite3.NeedPredict && NodeNeedPredict[Ite3.TargetState] == 1)
-						{
-							Ite3.NeedPredict = true;
-							NodeNeedPredict[I] = 1;
-							Change = true;
-						}
-					}
-				}
-			}
-		}
 		return LRX{std::move(Nodes)};
 	}
 
@@ -1389,7 +1330,6 @@ namespace Potato::SLRX
 				Misc::CrossTypeSetThrow<OutOfRange>(Pro.ProductionIndex, Ite2.Property.Reduce.ProductionIndex, OutOfRange::TypeT::ReduceProperty, Ite2.Property.Reduce.ProductionIndex);
 				Misc::CrossTypeSetThrow<OutOfRange>(Pro.ProductionCount, Ite2.Property.Reduce.ElementCount, OutOfRange::TypeT::ReduceProperty, Ite2.Property.Reduce.ElementCount);
 				Misc::CrossTypeSetThrow<OutOfRange>(Pro.ReduceTupleCount, Ite2.Tuples.size(), OutOfRange::TypeT::ReduceProperty, Ite2.Tuples.size());
-				Pro.NeedPredict = (Ite2.Property.NeedPredict ? 1 : 0);
 				auto ProAdress = Writter.WriteObject(Pro);
 				auto TupleAdress = Writter.NewObjectArray<ZipReduceTupleT>(Ite2.Tuples.size());
 				if (Writter.IsWritting())

@@ -32,7 +32,6 @@ export namespace Potato::SLRX
 	struct ParsingStep
 	{
 		Symbol Value;
-		bool IsPredict = false;
 
 		struct ReduceT
 		{
@@ -50,8 +49,7 @@ export namespace Potato::SLRX
 		ShiftT Shift;
 
 		constexpr bool IsTerminal() const { return Value.IsTerminal(); }
-		constexpr bool IsNoTerminal() const { return !IsPredict && Value.IsNoTerminal(); }
-		constexpr bool IsPredictNoTerminal() const { return IsPredict && Value.IsNoTerminal(); }
+		constexpr bool IsNoTerminal() const { return Value.IsNoTerminal(); }
 		constexpr bool IsShift() const { return IsTerminal(); }
 		constexpr bool IsReduce() const { return IsNoTerminal(); }
 	};
@@ -94,8 +92,8 @@ export namespace Potato::SLRX
 
 	struct ProductionBuilder
 	{
-		ProductionBuilder(Symbol ProductionValue, std::vector<ProductionBuilderElement> ProductionElement, std::size_t ProductionMask = 0, bool NeedPredict = false)
-			: ProductionValue(ProductionValue), Element(std::move(ProductionElement)), ProductionMask(ProductionMask), NeedPredict(NeedPredict) {}
+		ProductionBuilder(Symbol ProductionValue, std::vector<ProductionBuilderElement> ProductionElement, std::size_t ProductionMask = 0)
+			: ProductionValue(ProductionValue), Element(std::move(ProductionElement)), ProductionMask(ProductionMask) {}
 
 		ProductionBuilder(const ProductionBuilder&) = default;
 		ProductionBuilder(ProductionBuilder&&) = default;
@@ -105,7 +103,6 @@ export namespace Potato::SLRX
 		Symbol ProductionValue;
 		std::vector<ProductionBuilderElement> Element;
 		std::size_t ProductionMask = 0;
-		bool NeedPredict = false;
 	};
 
 	struct ProductionInfo
@@ -124,7 +121,6 @@ export namespace Potato::SLRX
 			Symbol Symbol;
 			std::size_t ProductionMask;
 			std::vector<Element> Elements;
-			bool NeedPredict = false;
 		};
 
 		struct SearchElement
@@ -162,7 +158,6 @@ export namespace Potato::SLRX
 		{
 			Symbol ReduceSymbol;
 			ParsingStep::ReduceT Reduce;
-			bool NeedPredict = false;
 			operator ParsingStep () const {
 				ParsingStep New;
 				New.Value = ReduceSymbol;
@@ -312,7 +307,6 @@ export namespace Potato::SLRX
 			HalfStandardT ProductionIndex;
 			HalfStandardT ProductionCount;
 			HalfStandardT ReduceTupleCount;
-			HalfStandardT NeedPredict;
 			StandardT Mask;
 			StandardT NoTerminalValue;
 		};
@@ -348,16 +342,6 @@ export namespace Potato::SLRX
 
 	};
 
-
-
-
-	struct ProcessorContextCacheSymbol
-	{
-		Symbol Value;
-		std::size_t TokenIndex;
-		std::any TerminalData;
-	};
-
 	struct CoreProcessorContext
 	{
 
@@ -370,7 +354,20 @@ export namespace Potato::SLRX
 
 		std::vector<Element> CacheSymbols;
 		std::vector<Element> TotalElement;
+		std::vector<Symbol> SuggestionSymbol;
 	};
+
+	template<typename FuncT> concept TerminalFunction = requires(
+		std::is_invocable_r<std::any, FuncT, void>
+	);
+
+	template<TerminalFunction TF, typename NoTerminalFunc>
+	struct ProcessorCallbackFunction
+	{
+		TerminalFunc TFunc;
+		NoTerminalFunc NTFunc;
+	};
+
 
 
 	template<typename TerminalFunc, typename NoTermnialFunc, typename SuggestFunc>
