@@ -1412,6 +1412,98 @@ namespace Potato::SLRX
 		return Re;
 	}
 
+	std::optional<ReduceElement> CoreProcessor::GetAcceptSymbol();
+
+
+	std::optional<CoreProcessor::ConsumeResult> CoreLRXProcessor::TableConsume(Symbol Value, void(*SuggestFunction)(Symbol, void*), void* AppendData) const
+	{
+		assert(Value.IsTerminal());
+		assert(Table.Nodes.size() > CurrentTopState);
+		assert(*States.rbegin() == CurrentTopState);
+
+		auto& NodeRef = Table.Nodes[CurrentTopState];
+
+		assert(NodeRef.RequireNodes.size() > RequireNode);
+
+		auto& NodeRequireArray = NodeRef.RequireNodes[RequireNode];
+
+		assert(!NodeRequireArray.empty());
+
+		for (auto& Ite : NodeRequireArray)
+		{
+			if (Ite.RequireSymbol == Value)
+			{
+				switch (Ite.Type)
+				{
+				case LRX::RequireNodeType::SymbolValue:
+				{
+					ConsumeResult Re;
+					Re.State = CurrentTopState;
+					Re.RequireNode = Ite.ReferenceIndex;
+					return Re;
+				}
+				case LRX::RequireNodeType::NeedPredictShiftProperty:
+				case LRX::RequireNodeType::ShiftProperty:
+				{
+					ConsumeResult Re;
+					Re.State = Ite.ReferenceIndex;
+					Re.RequireNode = 0;
+					return Re;
+				}
+				case LRX::RequireNodeType::ReduceProperty:
+				{
+					ConsumeResult Re;
+					assert(NodeRef.Reduces.size() > Ite.ReferenceIndex);
+					auto& CurReduceTuple = NodeRef.Reduces[Ite.ReferenceIndex];
+					Re.Reduce = CurReduceTuple.Property;
+					assert(States.size() > Re.Reduce->Reduce.ElementCount);
+					auto RefState = States[States.size() - Re.Reduce->Reduce.ElementCount - 1];
+					auto FindIte = std::find_if(CurReduceTuple.Tuples.begin(), CurReduceTuple.Tuples.end(), [=](LRX::ReduceTuple Tupe) {
+						return Tupe.LastState == RefState;
+						});
+					assert(FindIte != CurReduceTuple.Tuples.end());
+					Re.State = FindIte->TargetState;
+					Re.RequireNode = 0;
+					return Re;
+				}
+				}
+			}
+		}
+
+		if (SuggestFunction != nullptr)
+		{
+			for (auto Ite : NodeRequireArray)
+				(*SuggestFunction)(Ite.RequireSymbol, AppendData);
+		}
+
+		return {};
+	}
+
+	std::optional<CoreProcessor::ReduceResult> CoreLRXProcessor::TryReduce() const
+	{
+		assert(Table.Nodes.size() > CurrentTopState);
+		auto& NodeRef = Table.Nodes[CurrentTopState];
+		if (NodeRef.RequireNodes.empty())
+		{
+			assert(NodeRef.Reduces.size() <= 1);
+			if (NodeRef.Reduces.size() == 1)
+			{
+				auto& Ref = *NodeRef.Reduces.begin();
+				assert(States.size() > Ref.Property.Reduce.ElementCount);
+				auto LastState = States[States.size() - Ref.Property.Reduce.ElementCount - 1];
+				auto FindIte = std::find_if(Ref.Tuples.begin(), Ref.Tuples.end(), [=](LRX::ReduceTuple Tup) {
+					return Tup.LastState == LastState;
+					});
+				assert(FindIte != Ref.Tuples.end());
+				ReduceResult Result;
+				Result.Reduce = Ref.Property;
+				Result.State = FindIte->TargetState;
+				return Result;
+			}
+		}
+		return {};
+	}
+
 	/*
 	SymbolProcessor::SymbolProcessor(LRXBinaryTableWrapper Wrapper) : Table(Wrapper), StartupOffset(Wrapper.StartupNodeIndex()) {
 		assert(Wrapper); 

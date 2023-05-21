@@ -342,53 +342,92 @@ export namespace Potato::SLRX
 
 	};
 
-	struct CoreProcessorContext
+	struct SymbolElement
+	{
+		Symbol Value;
+		Misc::IndexSpan<> TokenIndex;
+	};
+
+	struct ReduceDescription
+	{
+		std::size_t ProductionCount;
+		std::size_t ProductionIndex;
+		std::size_t UserMask;
+	};
+
+	struct ReduceElement
+	{
+		SymbolElement Value;
+		std::optional<ReduceDescription> Reduce;
+		std::any AppendData;
+	};
+
+	struct CoreProcessor
 	{
 
-		struct Element
+		struct ConsumeResult
 		{
-			Symbol Value;
-			Misc::IndexSpan<> TokenIndex;
-			std::any TerminalData;
+			std::size_t State;
+			std::size_t RequireNode;
+			std::optional<LR0::Reduce> Reduce;
 		};
 
-		std::vector<Element> CacheSymbols;
-		std::vector<Element> TotalElement;
-		std::vector<Symbol> SuggestionSymbol;
+		struct ReduceResult
+		{
+			LR0::Reduce Reduce;
+			std::size_t State;
+		};
+
+		std::optional<ReduceElement> GetAcceptSymbol();
+
+	protected:
+
+		std::deque<SymbolElement> CacheSymbols;
+		std::vector<std::size_t> States;
+		std::size_t CurrentTopState;
+		std::size_t RequireNode;
 	};
 
-	template<typename FuncT> concept TerminalFunction = requires(
-		std::is_invocable_r<std::any, FuncT, void>
-	);
-
-	template<TerminalFunction TF, typename NoTerminalFunc>
-	struct ProcessorCallbackFunction
+	struct CoreLRXProcessor : public CoreProcessor
 	{
-		TerminalFunc TFunc;
-		NoTerminalFunc NTFunc;
+		CoreLRXProcessor(LRX const& Table) : Table(Table) {}
+
+	protected:
+
+		std::optional<CoreProcessor::ConsumeResult> TableConsume(Symbol Value, void(*SuggestFunction)(Symbol, void*), void*) const;
+		std::optional<CoreProcessor::ReduceResult> TryReduce() const;
+
+		LRX const& Table;
 	};
 
-
-
-	template<typename TerminalFunc, typename NoTermnialFunc, typename SuggestFunc>
-	struct FunctionalProcessorContext : public CoreProcessorContext
+	template<typename AppendInfo>
+	struct LRXProcessor : CoreLRXProcessor
 	{
-		FunctionalProcessorContext(TerminalFunc TFunc, NoTermnialFunc NTFunc, SuggestFunc SFunc)
-			: TFunc(std::move(TFunc)), NTFunc(std::move(NTFunc)), SFunc(std::move(SFunc)) {}
+		
+		LRXProcessor(LRX const& Table) 
+			: CoreLRXProcessor(Table) {}
 
-	public:
-		TerminalFunc TFunc;
-		NoTermnialFunc NTFunc;
-		SuggestFunc SFunc;
+		LRXProcessor(LRXProcessor const&) = default;
+
+		template<typename Function>
+		requires(
+			std::is_invocable_r_v<std::any, Function, SymbolElement, AppendInfo> &&
+				std::is_invocable_r_v<std::any, Function, SymbolElement, ReduceDescription, std::span<Storage>>
+		)
+		bool Comsume(Symbol SymbolValue, Misc::IndexSpan<> TokenIndex, AppendInfo Info, Function&& Func);
+
+		bool EndOfFile();
 	};
 
 
+	template<typename AppendInfo>
+	bool LRXProcessor::Comsume(Symbol SymbolValue, Misc::IndexSpan<> TokenIndex, AppendInfo Info, Function&& Func)
+	{
+		assert(Value.IsTerminal());
+		assert(*States.rbegin() == CurrentTopState);
 
-
-
-
-
-
+		//auto 
+	}
 
 	/*
 	
