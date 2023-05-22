@@ -355,15 +355,17 @@ export namespace Potato::SLRX
 		std::size_t UserMask;
 	};
 
-	struct ReduceElement
-	{
-		SymbolElement Value;
-		std::optional<ReduceDescription> Reduce;
-		std::any AppendData;
-	};
+	
 
 	struct CoreProcessor
 	{
+		struct Element
+		{
+			std::size_t TableState;
+			SymbolElement Value;
+			std::optional<ReduceDescription> Reduce;
+			std::any AppendData;
+		};
 
 		struct ConsumeResult
 		{
@@ -378,48 +380,83 @@ export namespace Potato::SLRX
 			std::size_t State;
 		};
 
-		std::optional<ReduceElement> GetAcceptSymbol();
+		bool Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, std::any AppendData);
+		//bool EndOfFile();
+
+		//void Clear(std::size_t StartupNode);
 
 	protected:
 
-		std::deque<SymbolElement> CacheSymbols;
-		std::vector<std::size_t> States;
-		std::size_t CurrentTopState;
-		std::size_t RequireNode;
+		//void TryReduce();
+
+		virtual std::optional<ConsumeResult> TableConsume(Symbol Value) const = 0;
+		virtual std::optional<ReduceResult> TableReduce() const = 0;
+		virtual std::any HandleReduce(SymbolElement Value, ReduceDescription Desc, std::span<Element> Elements) = 0;
+
+		std::deque<Element> CacheSymbols;
+		std::vector<Element> States;
+		std::size_t CurrentTopState = 0;
+		std::size_t RequireNode = 0;
 	};
 
 	struct CoreLRXProcessor : public CoreProcessor
 	{
-		CoreLRXProcessor(LRX const& Table) : Table(Table) {}
+		CoreLRXProcessor(LRX const& Table, void(*SuggestFunction)(void* Data, Symbol Value) = nullptr, void* Data = nullptr) 
+			: Table(Table), SuggestFunction(SuggestFunction), FunctionData(Data) {}
 
 	protected:
 
-		std::optional<CoreProcessor::ConsumeResult> TableConsume(Symbol Value, void(*SuggestFunction)(Symbol, void*), void*) const;
-		std::optional<CoreProcessor::ReduceResult> TryReduce() const;
+		virtual std::optional<CoreProcessor::ConsumeResult> TableConsume(Symbol Value) const override;
+		virtual std::optional<CoreProcessor::ReduceResult> TableReduce() const override;
 
 		LRX const& Table;
+		void(*SuggestFunction)(void* Data, Symbol Value);
+		void* FunctionData;
 	};
 
-	template<typename AppendInfo>
+	template<typename AppendInfo, typename TransferFunction>
+		requires(
+			std::is_invocable_r_v<std::any, TransferFunction, SymbolElement, AppendInfo>&&
+			std::is_invocable_r_v<std::any, TransferFunction, SymbolElement, ReduceDescription, std::span<Storage>>
+		)
 	struct LRXProcessor : CoreLRXProcessor
 	{
-		
-		LRXProcessor(LRX const& Table) 
-			: CoreLRXProcessor(Table) {}
+		LRXProcessor(LRX const& Table, TransferFunction TFunc)
+			: CoreLRXProcessor(Table), TFunc(std::move(TFunc)) {}
 
 		LRXProcessor(LRXProcessor const&) = default;
+		LRXProcessor(LRXProcessor&&) = default;
 
-		template<typename Function>
-		requires(
-			std::is_invocable_r_v<std::any, Function, SymbolElement, AppendInfo> &&
-				std::is_invocable_r_v<std::any, Function, SymbolElement, ReduceDescription, std::span<Storage>>
-		)
-		bool Comsume(Symbol SymbolValue, Misc::IndexSpan<> TokenIndex, AppendInfo Info, Function&& Func);
+		bool Comsume(Symbol SymbolValue, Misc::IndexSpan<> TokenIndex, AppendInfo Info)
+		{
+			std::any Data;
+			if (TFunc)
+			{
+				Data = TFunc(SymbolElement{SymbolValue, TokenIndex}, Info);
+			}
+			return CoreLRXProcessor::Consume(SymbolValue, TokenIndex, std::move(Data));
+		}
 
-		bool EndOfFile();
+		bool EndOfFile() {
+			return CoreLRXProcessor::Consume(Symbol::EndOfFile(), {}, {});
+		}
+
+	protected:
+
+		virtual std::any HandleReduce(SymbolElement Value, ReduceDescription Desc, std::span<Element> Elements) override
+		{
+			if (TFunc)
+			{
+				return TFunc(Value, Desc, Elements);
+			}
+			return {};
+		}
+
+		TransferFunction TFunc;
 	};
 
 
+	/*
 	template<typename AppendInfo>
 	bool LRXProcessor::Comsume(Symbol SymbolValue, Misc::IndexSpan<> TokenIndex, AppendInfo Info, Function&& Func)
 	{
@@ -428,6 +465,7 @@ export namespace Potato::SLRX
 
 		//auto 
 	}
+	*/
 
 	/*
 	

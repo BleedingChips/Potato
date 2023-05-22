@@ -1412,10 +1412,164 @@ namespace Potato::SLRX
 		return Re;
 	}
 
-	std::optional<ReduceElement> CoreProcessor::GetAcceptSymbol();
+	bool CoreProcessor::Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, std::any AppendData)
+	{
+		assert(Value.IsTerminal());
+		assert(States.rbegin()->TableState == CurrentTopState);
+
+		std::optional<ConsumeResult> Result = TableConsume(Value);
+
+		if (Result.has_value())
+		{
+			CacheSymbols.push_back(Element{ ConsumeResult->State, {Value, TokenIndex}, {}, std::move(AppendData) });
+			std::size_t SymbolsIndex = 0;
+			while (SymbolsIndex <= CacheSymbols.size())
+			{
+				if (Result->Reduce.has_value())
+				{
+					Misc::IndexSpan<> Cur;
+					auto Productions = std::span(States).subspan(States.size() - Result->Reduce->Reduce.ElementCount);
+					for (auto& Ite : Productions)
+					{
+						if (Ite.Value.TokenIndex.Size() != 0)
+						{
+							if (Cur.Size() == 0)
+							{
+								Cur = Ite.Value.TokenIndex;
+							}
+							else {
+								Cur = Cur.Expand(Ite.Value.TokenIndex);
+							}
+						}
+					}
+
+					SymbolElement SElement{
+						Result->Reduce->ReduceSymbol,
+						Cur,
+					};
+
+					ReduceDescription Desc{
+						Result->Reduce->Reduce.ElementCount,
+						Result->Reduce->Reduce.ProductionIndex,
+						Result->Reduce->Reduce.Mask
+					};
+
+					auto AppendData = HandleReduce(SElement, Desc, Productions);
+
+					States.resize(States.size() - Result->Reduce->Reduce.ElementCount);
+					States.push_back(
+						Element{
+							Result->State,
+							SElement,
+							Desc,
+							std::move(AppendData)
+						}
+					);
+					RequireNode = Result->RequireNode;
+					CurrentTopState = Result->State;
+					SymbolsIndex = 0;
+					TryReduce();
+				}
+				else {
+					if (Result->RequireNode == 0)
+					{
+						auto LastSymbol = std::move(*CacheSymbols.begin());
+						auto LastSymbolValue = LastSymbol.Value;
+						CacheSymbols.pop_front();
+						LastSymbol.TableState = Result->State;
+						States.push_back(std::move(LastSymbol));
+						RequireNode = Result->RequireNode;
+						CurrentTopState = Result->State;
+						SymbolsIndex = 0;
+						if (LastSymbolValue.Value != Symbol::EndOfFile())
+						{
+							TryReduce();
+						}
+						else {
+							assert(CacheSymbols.empty());
+							assert(States.size() == 3);
+						}
+					}
+					else {
+						RequireNode = Result->RequireNode;
+						return true;
+					}
+				}
+				if (!CacheSymbols.empty())
+				{
+					Result = TableConsume(CacheSymbols[SymbolsIndex].Value);
+					++SymbolsIndex;
+					assert(Result.has_value());
+				}
+				else {
+					return true;
+				}
+			}
+			return true;
+		}
+		else {
+			return false;
+		}
+	}
+
+	void CoreProcessor::TryReduce()
+	{
+		if (RequireNode == 0)
+		{
+			while (true)
+			{
+				std::optional<ReduceResult> Re = TableReduce();
+				if (Re.has_value())
+				{
+					Misc::IndexSpan<> Cur;
+					auto Productions = std::span(States).subspan(States.size() - Result->Reduce->Reduce.ElementCount);
+					for (auto& Ite : Productions)
+					{
+						if (Ite.Value.TokenIndex.Size() != 0)
+						{
+							if (Cur.Size() == 0)
+							{
+								Cur = Ite.Value.TokenIndex;
+							}
+							else {
+								Cur = Cur.Expand(Ite.Value.TokenIndex);
+							}
+						}
+					}
+
+					SymbolElement SElement{
+						Result->Reduce->ReduceSymbol,
+						Cur,
+					};
+
+					ReduceDescription Desc{
+						Result->Reduce->Reduce.ElementCount,
+						Result->Reduce->Reduce.ProductionIndex,
+						Result->Reduce->Reduce.Mask
+					};
+
+					auto AppendData = HandleReduce(SElement, Desc, Productions);
+
+					States.resize(States.size() - Result->Reduce->Reduce.ElementCount);
+					States.push_back(
+						Element{
+							Result->State,
+							SElement,
+							Desc,
+							std::move(AppendData)
+						}
+					);
+					CurrentTopState = Re->State;
+				}
+				else {
+					break;
+				}
+			}
+		}
+	}
 
 
-	std::optional<CoreProcessor::ConsumeResult> CoreLRXProcessor::TableConsume(Symbol Value, void(*SuggestFunction)(Symbol, void*), void* AppendData) const
+	std::optional<CoreProcessor::ConsumeResult> CoreLRXProcessor::TableConsume(Symbol Value) const
 	{
 		assert(Value.IsTerminal());
 		assert(Table.Nodes.size() > CurrentTopState);
@@ -1473,13 +1627,13 @@ namespace Potato::SLRX
 		if (SuggestFunction != nullptr)
 		{
 			for (auto Ite : NodeRequireArray)
-				(*SuggestFunction)(Ite.RequireSymbol, AppendData);
+				(*SuggestFunction)(Ite.RequireSymbol, FunctionData);
 		}
 
 		return {};
 	}
 
-	std::optional<CoreProcessor::ReduceResult> CoreLRXProcessor::TryReduce() const
+	std::optional<CoreProcessor::ReduceResult> CoreLRXProcessor::TableReduce() const
 	{
 		assert(Table.Nodes.size() > CurrentTopState);
 		auto& NodeRef = Table.Nodes[CurrentTopState];
@@ -1503,6 +1657,12 @@ namespace Potato::SLRX
 		}
 		return {};
 	}
+
+
+
+
+
+
 
 	/*
 	SymbolProcessor::SymbolProcessor(LRXBinaryTableWrapper Wrapper) : Table(Wrapper), StartupOffset(Wrapper.StartupNodeIndex()) {
