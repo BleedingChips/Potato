@@ -111,7 +111,11 @@ void TestTable(Symbol StartSymbol, std::vector<ProductionBuilder> Builder, std::
 			MaxForwardDetect
 		);
 
-		LRXProcessor<std::size_t>
+		LRXProcessor Pro(
+			Tab,
+			{},
+			{}
+		);
 
 		/*
 		SymbolProcessor Pro(Tab);
