@@ -363,6 +363,18 @@ export namespace Potato::SLRX
 			SymbolElement Value;
 			std::optional<ReduceDescription> Reduce;
 			std::any AppendData;
+
+			template<typename Type>
+			std::remove_reference_t<Type> Consume() { return std::move(std::any_cast<std::add_lvalue_reference_t<Type>>(AppendData)); }
+			std::any Consume() { return std::move(AppendData); }
+			template<typename Type>
+			std::optional<Type> TryConsume() {
+				auto P = std::any_cast<Type>(&AppendData);
+				if (P != nullptr)
+					return std::move(*P);
+				else
+					return std::nullopt;
+			}
 		};
 
 		struct ConsumeResult
@@ -378,38 +390,44 @@ export namespace Potato::SLRX
 			std::size_t State;
 		};
 
+		struct Context
+		{
+			std::deque<Element> CacheSymbols;
+			std::vector<Element> States;
+			std::size_t CurrentTopState = 0;
+			std::size_t RequireNode = 0;
+		};
+
 		bool Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, std::any AppendData);
-		
-
-		CoreProcessor(std::function<std::any(SymbolElement, ReduceDescription, std::span<Element>)> HandleReduce)
-			: HandleReduce(std::move(HandleReduce)) {}
-
-		CoreProcessor(CoreProcessor const&) = default;
-		CoreProcessor(CoreProcessor&&) = default;
-		//bool EndOfFile();
+		std::optional<std::any> EndOfFile();
 
 		//void Clear(std::size_t StartupNode);
 
-	protected:
-
 		void Clear(std::size_t StartupNode = 0);
 
+		CoreProcessor(Context& ProcessorContext) : ProcessorContext(ProcessorContext) {}
+
+	protected:
+
 		void TryReduce();
+
+		virtual std::any HandleReduce(SymbolElement Value, ReduceDescription Desc, std::span<Element> Productions) = 0;
 
 		virtual std::optional<ConsumeResult> TableConsume(Symbol Value) const = 0;
 		virtual std::optional<ReduceResult> TableReduce() const = 0;
 
-		std::deque<Element> CacheSymbols;
-		std::vector<Element> States;
-		std::size_t CurrentTopState = 0;
-		std::size_t RequireNode = 0;
-		std::function<std::any(SymbolElement, ReduceDescription, std::span<Element>)> HandleReduce;
+		Context& ProcessorContext;
 	};
 
-	struct LRXProcessor : protected CoreProcessor
+	using ProcessorContext = CoreProcessor::Context;
+
+	struct LRXCoreProcessor : protected CoreProcessor
 	{
-		LRXProcessor(LRX const& Table, std::function<std::any(SymbolElement, ReduceDescription, std::span<Element>)> HandleFunction, std::function<void(Symbol)> SuggestFunction = {})
-			: CoreProcessor(std::move(HandleFunction)), Table(Table), SuggestFunction(std::move(SuggestFunction))
+
+		using Context = CoreProcessor::Context;
+
+		LRXCoreProcessor(LRX const& Table, Context& ProcessorContext, bool EnableSuggest = false)
+			: CoreProcessor(ProcessorContext), Table(Table), EnableSuggest(EnableSuggest)
 		{
 			Clear(Table.StartupOffset());
 		}
@@ -418,11 +436,74 @@ export namespace Potato::SLRX
 
 		virtual std::optional<CoreProcessor::ConsumeResult> TableConsume(Symbol Value) const override final;
 		virtual std::optional<CoreProcessor::ReduceResult> TableReduce() const override final;
+		
+		virtual void GetSuggest(Symbol Value) const = 0;
 
 		LRX const& Table;
-		
-		std::function<void(Symbol)> SuggestFunction;
+		bool const EnableSuggest;
 	};
+
+	template<typename AppendInfo, typename HandlFunction>
+	struct LRXProcessor : protected LRXCoreProcessor
+	{
+		using Context = CoreProcessor::Context;
+
+
+		LRXProcessor(LRX const& Table, Context& ProcessorContext,  HandlFunction& Function)
+			: LRXCoreProcessor(Table, ProcessorContext, false), Function(Function) {}
+
+		bool Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, AppendInfo const& Info)
+		{
+			auto AppendData = Function(SymbolElement{Value, TokenIndex}, Info);
+			return LRXCoreProcessor::Consume(Value, TokenIndex, std::move(AppendData));
+		}
+
+		virtual void GetSuggest(Symbol Value) const override { }
+
+		std::optional<std::any> EndOfFile() { return LRXCoreProcessor::EndOfFile(); }
+
+		template<typename RequireT>
+		std::optional<RequireT> EndOfFile() {
+			auto Re = LRXCoreProcessor::EndOfFile();
+			if (Re.has_value())
+			{
+				return std::move(std::any_cast<RequireT>(*Re));
+			}
+			return {};
+		}
+	
+	protected:
+
+		virtual std::any HandleReduce(SymbolElement Value, ReduceDescription Desc, std::span<Element> Productions) override {
+			return Function(Value, Desc, Productions);
+		}
+
+		HandlFunction& Function;
+
+	};
+
+	struct LRXBinaryTableCoreProcessor : protected CoreProcessor
+	{
+
+		using Context = CoreProcessor::Context;
+
+		LRXBinaryTableCoreProcessor(LRXBinaryTableWrapper Table, Context& ProcessorContext, bool EnableSuggest = false)
+			: CoreProcessor(ProcessorContext), Table(Table), EnableSuggest(EnableSuggest)
+		{
+			Clear(Table.StartupNodeIndex());
+		}
+
+	protected:
+
+		virtual std::optional<CoreProcessor::ConsumeResult> TableConsume(Symbol Value) const override final;
+		virtual std::optional<CoreProcessor::ReduceResult> TableReduce() const override final;
+
+		virtual void GetSuggest(Symbol Value) const = 0;
+
+		LRXBinaryTableWrapper Table;
+		bool const EnableSuggest;
+	};
+
 
 
 	/*

@@ -101,6 +101,24 @@ struct StringMaker
 };
 */
 
+struct StringMaker
+{
+	std::any operator()(SymbolElement Symbol, std::size_t Index) {
+		return std::u8string(TerminalMapping[static_cast<Terminal>(Symbol.Value.Value)]);
+	}
+
+	std::any operator()(SymbolElement Symbol, ReduceDescription Desc, std::span<CoreProcessor::Element> Production) { 
+		std::u8string TotalBuffer;
+		TotalBuffer += u8'(';
+		for (auto& Ite : Production)
+		{
+			TotalBuffer += Ite.Consume<std::u8string>();
+		}
+		TotalBuffer += u8')';
+		return TotalBuffer;
+	}
+};
+
 void TestTable(Symbol StartSymbol, std::vector<ProductionBuilder> Builder, std::vector<OpePriority> Ority, std::size_t MaxForwardDetect, std::span<Terminal const> Span, std::u8string_view TarStr, const char* Error)
 {
 	try {
@@ -111,11 +129,31 @@ void TestTable(Symbol StartSymbol, std::vector<ProductionBuilder> Builder, std::
 			MaxForwardDetect
 		);
 
-		LRXProcessor Pro(
+		StringMaker Maker;
+
+		ProcessorContext Context;
+
+		LRXProcessor<std::size_t, StringMaker> Pro(
 			Tab,
-			{},
-			{}
+			Context,
+			Maker
 		);
+
+		for (std::size_t I = 0; I < Span.size(); ++I)
+		{
+			if(!Pro.Consume(*Span[I], {I, I + 1}, I))
+				throw Error;
+		}
+
+		auto P = Pro.EndOfFile<std::u8string>();
+
+		if(!P.has_value())
+			throw Error;
+
+		if(*P != TarStr)
+			throw Error;
+
+		volatile int i = 0;
 
 		/*
 		SymbolProcessor Pro(Tab);

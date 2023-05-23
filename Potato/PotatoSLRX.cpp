@@ -1415,20 +1415,20 @@ namespace Potato::SLRX
 	bool CoreProcessor::Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, std::any AppendData)
 	{
 		assert(Value.IsTerminal());
-		assert(States.rbegin()->TableState == CurrentTopState);
+		assert(ProcessorContext.States.rbegin()->TableState == ProcessorContext.CurrentTopState);
 
 		std::optional<ConsumeResult> Result = TableConsume(Value);
 
 		if (Result.has_value())
 		{
-			CacheSymbols.push_back(Element{ Result->State, SymbolElement{Value, TokenIndex}, {}, std::move(AppendData) });
+			ProcessorContext.CacheSymbols.push_back(Element{ Result->State, SymbolElement{Value, TokenIndex}, {}, std::move(AppendData) });
 			std::size_t SymbolsIndex = 0;
-			while (SymbolsIndex <= CacheSymbols.size())
+			while (SymbolsIndex <= ProcessorContext.CacheSymbols.size())
 			{
 				if (Result->Reduce.has_value())
 				{
 					Misc::IndexSpan<> Cur;
-					auto Productions = std::span(States).subspan(States.size() - Result->Reduce->Reduce.ElementCount);
+					auto Productions = std::span(ProcessorContext.States).subspan(ProcessorContext.States.size() - Result->Reduce->Reduce.ElementCount);
 					for (auto& Ite : Productions)
 					{
 						if (Ite.Value.TokenIndex.Size() != 0)
@@ -1456,8 +1456,8 @@ namespace Potato::SLRX
 
 					auto AppendData = HandleReduce(SElement, Desc, Productions);
 
-					States.resize(States.size() - Result->Reduce->Reduce.ElementCount);
-					States.push_back(
+					ProcessorContext.States.resize(ProcessorContext.States.size() - Result->Reduce->Reduce.ElementCount);
+					ProcessorContext.States.push_back(
 						Element{
 							Result->State,
 							SElement,
@@ -1465,39 +1465,39 @@ namespace Potato::SLRX
 							std::move(AppendData)
 						}
 					);
-					RequireNode = Result->RequireNode;
-					CurrentTopState = Result->State;
+					ProcessorContext.RequireNode = Result->RequireNode;
+					ProcessorContext.CurrentTopState = Result->State;
 					SymbolsIndex = 0;
 					TryReduce();
 				}
 				else {
 					if (Result->RequireNode == 0)
 					{
-						auto LastSymbol = std::move(*CacheSymbols.begin());
+						auto LastSymbol = std::move(*ProcessorContext.CacheSymbols.begin());
 						auto LastSymbolValue = LastSymbol.Value;
-						CacheSymbols.pop_front();
+						ProcessorContext.CacheSymbols.pop_front();
 						LastSymbol.TableState = Result->State;
-						States.push_back(std::move(LastSymbol));
-						RequireNode = Result->RequireNode;
-						CurrentTopState = Result->State;
+						ProcessorContext.States.push_back(std::move(LastSymbol));
+						ProcessorContext.RequireNode = Result->RequireNode;
+						ProcessorContext.CurrentTopState = Result->State;
 						SymbolsIndex = 0;
 						if (LastSymbolValue.Value != Symbol::EndOfFile())
 						{
 							TryReduce();
 						}
 						else {
-							assert(CacheSymbols.empty());
-							assert(States.size() == 3);
+							assert(ProcessorContext.CacheSymbols.empty());
+							assert(ProcessorContext.States.size() == 3);
 						}
 					}
 					else {
-						RequireNode = Result->RequireNode;
+						ProcessorContext.RequireNode = Result->RequireNode;
 						return true;
 					}
 				}
-				if (!CacheSymbols.empty())
+				if (!ProcessorContext.CacheSymbols.empty())
 				{
-					Result = TableConsume(CacheSymbols[SymbolsIndex].Value.Value);
+					Result = TableConsume(ProcessorContext.CacheSymbols[SymbolsIndex].Value.Value);
 					++SymbolsIndex;
 					assert(Result.has_value());
 				}
@@ -1514,17 +1514,28 @@ namespace Potato::SLRX
 
 	void CoreProcessor::Clear(std::size_t StartupNode)
 	{
-		CacheSymbols.clear();
-		States.clear();
-		CurrentTopState = StartupNode;
-		States.push_back({CurrentTopState, {}, {}, {}});
-		RequireNode = 0;
+		ProcessorContext.CacheSymbols.clear();
+		ProcessorContext.States.clear();
+		ProcessorContext.CurrentTopState = StartupNode;
+		ProcessorContext.States.push_back({ ProcessorContext.CurrentTopState, {}, {}, {}});
+		ProcessorContext.RequireNode = 0;
 		TryReduce();
+	}
+
+	std::optional<std::any> CoreProcessor::EndOfFile()
+	{
+		auto Re = Consume(Symbol::EndOfFile(), {}, {});
+		if (Re)
+		{
+			assert(ProcessorContext.States.size() == 3);
+			return std::move(ProcessorContext.States[1].AppendData);
+		}
+		return {};
 	}
 
 	void CoreProcessor::TryReduce()
 	{
-		if (RequireNode == 0)
+		if (ProcessorContext.RequireNode == 0)
 		{
 			while (true)
 			{
@@ -1532,7 +1543,7 @@ namespace Potato::SLRX
 				if (Result.has_value())
 				{
 					Misc::IndexSpan<> Cur;
-					auto Productions = std::span(States).subspan(States.size() - Result->Reduce.Reduce.ElementCount);
+					auto Productions = std::span(ProcessorContext.States).subspan(ProcessorContext.States.size() - Result->Reduce.Reduce.ElementCount);
 					for (auto& Ite : Productions)
 					{
 						if (Ite.Value.TokenIndex.Size() != 0)
@@ -1560,8 +1571,8 @@ namespace Potato::SLRX
 
 					auto AppendData = HandleReduce(SElement, Desc, Productions);
 
-					States.resize(States.size() - Result->Reduce.Reduce.ElementCount);
-					States.push_back(
+					ProcessorContext.States.resize(ProcessorContext.States.size() - Result->Reduce.Reduce.ElementCount);
+					ProcessorContext.States.push_back(
 						Element{
 							Result->State,
 							SElement,
@@ -1569,7 +1580,7 @@ namespace Potato::SLRX
 							std::move(AppendData)
 						}
 					);
-					CurrentTopState = Result->State;
+					ProcessorContext.CurrentTopState = Result->State;
 				}
 				else {
 					break;
@@ -1579,17 +1590,17 @@ namespace Potato::SLRX
 	}
 
 
-	std::optional<CoreProcessor::ConsumeResult> LRXProcessor::TableConsume(Symbol Value) const
+	std::optional<CoreProcessor::ConsumeResult> LRXCoreProcessor::TableConsume(Symbol Value) const
 	{
 		assert(Value.IsTerminal());
-		assert(Table.Nodes.size() > CurrentTopState);
-		assert(States.rbegin()->TableState == CurrentTopState);
+		assert(Table.Nodes.size() > ProcessorContext.CurrentTopState);
+		assert(ProcessorContext.States.rbegin()->TableState == ProcessorContext.CurrentTopState);
 
-		auto& NodeRef = Table.Nodes[CurrentTopState];
+		auto& NodeRef = Table.Nodes[ProcessorContext.CurrentTopState];
 
-		assert(NodeRef.RequireNodes.size() > RequireNode);
+		assert(NodeRef.RequireNodes.size() > ProcessorContext.RequireNode);
 
-		auto& NodeRequireArray = NodeRef.RequireNodes[RequireNode];
+		auto& NodeRequireArray = NodeRef.RequireNodes[ProcessorContext.RequireNode];
 
 		assert(!NodeRequireArray.empty());
 
@@ -1602,7 +1613,7 @@ namespace Potato::SLRX
 				case LRX::RequireNodeType::SymbolValue:
 				{
 					ConsumeResult Re;
-					Re.State = CurrentTopState;
+					Re.State = ProcessorContext.CurrentTopState;
 					Re.RequireNode = Ite.ReferenceIndex;
 					return Re;
 				}
@@ -1620,8 +1631,8 @@ namespace Potato::SLRX
 					assert(NodeRef.Reduces.size() > Ite.ReferenceIndex);
 					auto& CurReduceTuple = NodeRef.Reduces[Ite.ReferenceIndex];
 					Re.Reduce = CurReduceTuple.Property;
-					assert(States.size() > Re.Reduce->Reduce.ElementCount);
-					auto RefState = States[States.size() - Re.Reduce->Reduce.ElementCount - 1].TableState;
+					assert(ProcessorContext.States.size() > Re.Reduce->Reduce.ElementCount);
+					auto RefState = ProcessorContext.States[ProcessorContext.States.size() - Re.Reduce->Reduce.ElementCount - 1].TableState;
 					auto FindIte = std::find_if(CurReduceTuple.Tuples.begin(), CurReduceTuple.Tuples.end(), [=](LRX::ReduceTuple Tupe) {
 						return Tupe.LastState == RefState;
 						});
@@ -1634,27 +1645,27 @@ namespace Potato::SLRX
 			}
 		}
 
-		if (SuggestFunction)
+		if (EnableSuggest)
 		{
 			for (auto Ite : NodeRequireArray)
-				SuggestFunction(Ite.RequireSymbol);
+				GetSuggest(Ite.RequireSymbol);
 		}
 
 		return {};
 	}
 
-	std::optional<CoreProcessor::ReduceResult> LRXProcessor::TableReduce() const
+	std::optional<CoreProcessor::ReduceResult> LRXCoreProcessor::TableReduce() const
 	{
-		assert(Table.Nodes.size() > CurrentTopState);
-		auto& NodeRef = Table.Nodes[CurrentTopState];
+		assert(Table.Nodes.size() > ProcessorContext.CurrentTopState);
+		auto& NodeRef = Table.Nodes[ProcessorContext.CurrentTopState];
 		if (NodeRef.RequireNodes.empty())
 		{
 			assert(NodeRef.Reduces.size() <= 1);
 			if (NodeRef.Reduces.size() == 1)
 			{
 				auto& Ref = *NodeRef.Reduces.begin();
-				assert(States.size() > Ref.Property.Reduce.ElementCount);
-				auto LastState = States[States.size() - Ref.Property.Reduce.ElementCount - 1].TableState;
+				assert(ProcessorContext.States.size() > Ref.Property.Reduce.ElementCount);
+				auto LastState = ProcessorContext.States[ProcessorContext.States.size() - Ref.Property.Reduce.ElementCount - 1].TableState;
 				auto FindIte = std::find_if(Ref.Tuples.begin(), Ref.Tuples.end(), [=](LRX::ReduceTuple Tup) {
 					return Tup.LastState == LastState;
 					});
