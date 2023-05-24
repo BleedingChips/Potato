@@ -330,7 +330,7 @@ export namespace Potato::SLRX
 		LRXBinaryTableWrapper() = default;
 		LRXBinaryTableWrapper& operator=(LRXBinaryTableWrapper const&) = default;
 
-		Misc::StructedSerilizerReader<StandardT const> GetReader() { return Misc::StructedSerilizerReader<StandardT const>(Buffer); }
+		Misc::StructedSerilizerReader<StandardT const> GetReader() const { return Misc::StructedSerilizerReader<StandardT const>(Buffer); }
 
 		operator bool() const { return !Buffer.empty(); }
 		std::size_t NodeCount() const { return Buffer[0]; }
@@ -341,6 +341,42 @@ export namespace Potato::SLRX
 		std::span<StandardT const> Buffer;
 
 	};
+
+	struct LRXBinaryTable
+	{
+		LRXBinaryTable(LRXBinaryTable const& Input) : Datas(Input.Datas) { Wrapper = LRXBinaryTableWrapper{ Datas }; }
+		LRXBinaryTable(LRXBinaryTable&& Input) : Datas(std::move(Input.Datas)) { Wrapper = LRXBinaryTableWrapper{ Datas }; Input.Wrapper = {}; }
+		LRXBinaryTable& operator=(LRXBinaryTable const& Input) {
+			Datas = Input.Datas;
+			Wrapper = LRXBinaryTableWrapper{ Datas };
+			return *this;
+		}
+		LRXBinaryTable& operator=(LRXBinaryTable&& Input) noexcept {
+			Datas = std::move(Input.Datas);
+			Wrapper = LRXBinaryTableWrapper{ Datas };
+			return *this;
+		}
+		LRXBinaryTable() = default;
+		LRXBinaryTable(SLRX::LRX const& Table)
+		{
+			Datas = LRXBinaryTableWrapper::Create(Table);
+			Wrapper = LRXBinaryTableWrapper(Datas);
+		}
+		LRXBinaryTable(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority, std::size_t MaxForwardDetected)
+			: LRXBinaryTable(SLRX::LRX{ StartSymbol, std::move(Production), std::move(Priority), MaxForwardDetected })
+		{
+
+		}
+		LRXBinaryTable(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority)
+			: LRXBinaryTable(SLRX::LRX{ StartSymbol, std::move(Production), std::move(Priority) })
+		{
+		}
+		std::size_t NodeCount() const { return Wrapper.NodeCount(); }
+		operator LRXBinaryTableWrapper() const { return Wrapper; }
+		std::vector<LRXBinaryTableWrapper::StandardT> Datas;
+		LRXBinaryTableWrapper Wrapper;
+	};
+
 
 	struct SymbolElement
 	{
@@ -426,7 +462,7 @@ export namespace Potato::SLRX
 
 		using Context = CoreProcessor::Context;
 
-		LRXCoreProcessor(LRX const& Table, Context& ProcessorContext, bool EnableSuggest = false)
+		LRXCoreProcessor(LRX const& Table, Context& ProcessorContext, bool EnableSuggest)
 			: CoreProcessor(ProcessorContext), Table(Table), EnableSuggest(EnableSuggest)
 		{
 			Clear(Table.StartupOffset());
@@ -441,45 +477,6 @@ export namespace Potato::SLRX
 
 		LRX const& Table;
 		bool const EnableSuggest;
-	};
-
-	template<typename AppendInfo, typename HandlFunction>
-	struct LRXProcessor : protected LRXCoreProcessor
-	{
-		using Context = CoreProcessor::Context;
-
-
-		LRXProcessor(LRX const& Table, Context& ProcessorContext,  HandlFunction& Function)
-			: LRXCoreProcessor(Table, ProcessorContext, false), Function(Function) {}
-
-		bool Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, AppendInfo const& Info)
-		{
-			auto AppendData = Function(SymbolElement{Value, TokenIndex}, Info);
-			return LRXCoreProcessor::Consume(Value, TokenIndex, std::move(AppendData));
-		}
-
-		virtual void GetSuggest(Symbol Value) const override { }
-
-		std::optional<std::any> EndOfFile() { return LRXCoreProcessor::EndOfFile(); }
-
-		template<typename RequireT>
-		std::optional<RequireT> EndOfFile() {
-			auto Re = LRXCoreProcessor::EndOfFile();
-			if (Re.has_value())
-			{
-				return std::move(std::any_cast<RequireT>(*Re));
-			}
-			return {};
-		}
-	
-	protected:
-
-		virtual std::any HandleReduce(SymbolElement Value, ReduceDescription Desc, std::span<Element> Productions) override {
-			return Function(Value, Desc, Productions);
-		}
-
-		HandlFunction& Function;
-
 	};
 
 	struct LRXBinaryTableCoreProcessor : protected CoreProcessor
@@ -504,6 +501,70 @@ export namespace Potato::SLRX
 		bool const EnableSuggest;
 	};
 
+	template<typename ProcessorT, typename AppendInfo, typename HandlFunction>
+	requires(
+		(std::is_same_v<ProcessorT, LRX> || std::is_same_v<ProcessorT, LRXBinaryTableWrapper>)
+		&& std::is_invocable_r_v<std::any, HandlFunction, SymbolElement, AppendInfo>
+		&& std::is_invocable_r_v<std::any, HandlFunction, SymbolElement, ReduceDescription, std::span<CoreProcessor::Element>>
+	)
+	struct FunctionalProcessor : protected std::conditional_t<
+		std::is_same_v<ProcessorT, LRX>, LRXCoreProcessor, LRXBinaryTableCoreProcessor
+	>
+	{
+		using BaseT = std::conditional_t<
+			std::is_same_v<ProcessorT, LRX>, LRXCoreProcessor, LRXBinaryTableCoreProcessor
+		>;
+
+		using TableT = std::conditional_t<
+			std::is_same_v<ProcessorT, LRX>, LRX const&, LRXBinaryTableWrapper
+		>;
+
+		using Context = CoreProcessor::Context;
+
+
+		FunctionalProcessor(TableT Table, Context& ProcessorContext,  HandlFunction& Function)
+			: BaseT(Table, ProcessorContext, std::is_invocable_v<HandlFunction, Symbol>), Function(Function) {}
+
+		bool Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, AppendInfo const& Info)
+		{
+			auto AppendData = Function(SymbolElement{Value, TokenIndex}, Info);
+			return BaseT::Consume(Value, TokenIndex, std::move(AppendData));
+		}
+
+		virtual void GetSuggest(Symbol Value) const override { 
+			if constexpr (std::is_invocable_v<HandlFunction, Symbol>)
+			{
+				Function(Value);
+			}
+		}
+
+		std::optional<std::any> EndOfFile() { return LRXCoreProcessor::EndOfFile(); }
+
+		template<typename RequireT>
+		std::optional<RequireT> EndOfFile() {
+			auto Re = BaseT::EndOfFile();
+			if (Re.has_value())
+			{
+				return std::move(std::any_cast<RequireT>(*Re));
+			}
+			return {};
+		}
+	
+	protected:
+
+		virtual std::any HandleReduce(SymbolElement Value, ReduceDescription Desc, std::span<CoreProcessor::Element> Productions) override {
+			return Function(Value, Desc, Productions);
+		}
+
+		HandlFunction& Function;
+
+	};
+
+	template<typename AppendInfoT, typename HandleFunction>
+	using LRXProcessor = FunctionalProcessor<LRX, AppendInfoT, HandleFunction>;
+
+	template<typename AppendInfoT, typename HandleFunction>
+	using LRXBinaryTableProcessor = FunctionalProcessor<LRXBinaryTableWrapper, AppendInfoT, HandleFunction>;
 
 
 	/*
@@ -709,40 +770,7 @@ export namespace Potato::SLRX
 		std::size_t StartupOffset;
 	};
 
-	struct LRXBinaryTable
-	{
-		LRXBinaryTable(LRXBinaryTable const& Input) : Datas(Input.Datas) { Wrapper = LRXBinaryTableWrapper{ Datas }; }
-		LRXBinaryTable(LRXBinaryTable&& Input) : Datas(std::move(Input.Datas)) { Wrapper = LRXBinaryTableWrapper{ Datas }; Input.Wrapper = {}; }
-		LRXBinaryTable& operator=(LRXBinaryTable const& Input) {
-			Datas = Input.Datas;
-			Wrapper = LRXBinaryTableWrapper{ Datas };
-			return *this;
-		}
-		LRXBinaryTable& operator=(LRXBinaryTable&& Input) noexcept {
-			Datas = std::move(Input.Datas);
-			Wrapper = LRXBinaryTableWrapper{ Datas };
-			return *this;
-		}
-		LRXBinaryTable() = default;
-		LRXBinaryTable(SLRX::LRX const& Table)
-		{
-			Datas = LRXBinaryTableWrapper::Create(Table);
-			Wrapper = LRXBinaryTableWrapper(Datas);
-		}
-		LRXBinaryTable(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority, std::size_t MaxForwardDetected)
-			: LRXBinaryTable(SLRX::LRX{ StartSymbol, std::move(Production), std::move(Priority), MaxForwardDetected })
-		{
-			
-		}
-		LRXBinaryTable(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority)
-			: LRXBinaryTable(SLRX::LRX{ StartSymbol, std::move(Production), std::move(Priority) })
-		{
-		}
-		std::size_t NodeCount() const { return Wrapper.NodeCount(); }
-		operator LRXBinaryTableWrapper() const { return Wrapper; }
-		std::vector<LRXBinaryTableWrapper::StandardT> Datas;
-		LRXBinaryTableWrapper Wrapper;
-	};
+	
 
 	struct StepProcessorContextT
 	{

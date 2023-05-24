@@ -1679,9 +1679,128 @@ namespace Potato::SLRX
 		return {};
 	}
 
+	auto LRXBinaryTableCoreProcessor::TableConsume(Symbol Value)  const ->std::optional<ConsumeResult>
+	{
+		assert(Table.TotalBufferSize() > ProcessorContext.CurrentTopState);
+		assert(ProcessorContext.States.rbegin()->TableState == ProcessorContext.CurrentTopState);
 
+		auto Reader = Table.GetReader();
 
+		Reader.SetPointer(ProcessorContext.CurrentTopState);
 
+		auto Node = Reader.ReadObject<LRXBinaryTableWrapper::ZipNodeT>();
+
+		assert(Node->RequireNodeDescCount != 0);
+
+		auto NodeDescReader = Reader.SubReader(ProcessorContext.RequireNode);
+
+		auto Desc = NodeDescReader.ReadObject<LRXBinaryTableWrapper::ZipRequireNodeDescT>();
+
+		assert(Desc->RequireNodeCount != 0);
+
+		auto RequireNodes = NodeDescReader.ReadObjectArray<LRXBinaryTableWrapper::ZipRequireNodeT>(Desc->RequireNodeCount);
+
+		if (Value.IsTerminal())
+		{
+			for (auto& Ite : RequireNodes)
+			{
+				if (Ite.IsEndOfFile && Value.IsEndOfFile() || (!Ite.IsEndOfFile && !Value.IsEndOfFile() && Ite.Value == Value.Value))
+				{
+					switch (Ite.Type)
+					{
+					case LRX::RequireNodeType::SymbolValue:
+					{
+						ConsumeResult Re;
+						Re.State = ProcessorContext.CurrentTopState;
+						Re.RequireNode = Ite.ToIndexOffset;
+						return Re;
+					}
+					case LRX::RequireNodeType::NeedPredictShiftProperty:
+					case LRX::RequireNodeType::ShiftProperty:
+					{
+						ConsumeResult Re;
+						Re.State = Ite.ToIndexOffset;
+						Re.RequireNode = 0;
+						return Re;
+					}
+					case LRX::RequireNodeType::ReduceProperty:
+					{
+						ConsumeResult Re;
+						auto ReducePropertyReader = Reader.SubReader(Ite.ToIndexOffset);
+						auto ReduceP = ReducePropertyReader.ReadObject<LRXBinaryTableWrapper::ZipReducePropertyT>();
+						LR0::Reduce Reduce;
+						Reduce.ReduceSymbol = Symbol::AsNoTerminal(ReduceP->NoTerminalValue);
+						Reduce.Reduce.Mask = ReduceP->Mask;
+						Reduce.Reduce.ProductionIndex = ReduceP->ProductionIndex;
+						Reduce.Reduce.ElementCount = ReduceP->ProductionCount;
+						Re.Reduce = Reduce;
+						assert(ProcessorContext.States.size() > Re.Reduce->Reduce.ElementCount);
+						auto RefState = ProcessorContext.States[ProcessorContext.States.size() - Re.Reduce->Reduce.ElementCount - 1].TableState;
+						auto ReduceTuples = ReducePropertyReader.ReadObjectArray<LRXBinaryTableWrapper::ZipReduceTupleT>(ReduceP->ReduceTupleCount);
+						auto FindIte = std::find_if(ReduceTuples.begin(), ReduceTuples.end(), [=](LRXBinaryTableWrapper::ZipReduceTupleT Tupe) {
+							return Tupe.LastState == RefState;
+							});
+						assert(FindIte != ReduceTuples.end());
+						Re.State = FindIte->ToState;
+						Re.RequireNode = 0;
+						return Re;
+					}
+					}
+				}
+			}
+		}
+
+		if (EnableSuggest)
+		{
+			for (auto Ite : RequireNodes)
+			{
+				if (Ite.IsEndOfFile)
+				{
+					GetSuggest(Symbol::EndOfFile());
+				}
+				else {
+					GetSuggest(Symbol::AsTerminal(Ite.Value));
+				}
+			}
+		}
+
+		return {};
+	}
+
+	auto LRXBinaryTableCoreProcessor::TableReduce() const -> std::optional<ReduceResult>
+	{
+		assert(Table.TotalBufferSize() > ProcessorContext.CurrentTopState);
+		assert(ProcessorContext.States.rbegin()->TableState == ProcessorContext.CurrentTopState);
+		auto NodeReader = Table.GetReader();
+		NodeReader.SetPointer(ProcessorContext.CurrentTopState);
+		auto Node = NodeReader.ReadObject<LRXBinaryTableWrapper::ZipNodeT>();
+		if (Node->RequireNodeDescCount == 0)
+		{
+			assert(Node->ReduceCount <= 1);
+			if (Node->ReduceCount == 1)
+			{
+				auto ReduceP = NodeReader.ReadObject<LRXBinaryTableWrapper::ZipReducePropertyT>();
+				LR0::Reduce Reduce;
+				Reduce.ReduceSymbol = Symbol::AsNoTerminal(ReduceP->NoTerminalValue);
+				Reduce.Reduce.Mask = ReduceP->Mask;
+				Reduce.Reduce.ProductionIndex = ReduceP->ProductionIndex;
+				Reduce.Reduce.ElementCount = ReduceP->ProductionCount;
+				ReduceResult Result;
+				Result.Reduce = Reduce;
+				assert(ProcessorContext.States.size() > Reduce.Reduce.ElementCount);
+				auto RefState = ProcessorContext.States[ProcessorContext.States.size() - Reduce.Reduce.ElementCount - 1].TableState;
+				auto ReduceTuples = NodeReader.ReadObjectArray<LRXBinaryTableWrapper::ZipReduceTupleT>(ReduceP->ReduceTupleCount);
+				auto FindIte = std::find_if(ReduceTuples.begin(), ReduceTuples.end(), [=](LRXBinaryTableWrapper::ZipReduceTupleT Tupe) {
+					return Tupe.LastState == RefState;
+					});
+				assert(FindIte != ReduceTuples.end());
+				Result.State = FindIte->ToState;
+				return Result;
+			}
+
+		}
+		return {};
+	}
 
 
 

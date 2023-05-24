@@ -153,51 +153,28 @@ void TestTable(Symbol StartSymbol, std::vector<ProductionBuilder> Builder, std::
 		if(*P != TarStr)
 			throw Error;
 
-		volatile int i = 0;
-
-		/*
-		SymbolProcessor Pro(Tab);
-
-		auto IteSpan = Span;
-		while (!IteSpan.empty())
-		{
-			auto Top = *IteSpan.begin();
-			if (!Pro.Consume(*Top, Span.size() - IteSpan.size()))
-				throw Error;
-			IteSpan = IteSpan.subspan(1);
-		}
-		if (!Pro.EndOfFile())
-			throw Error;
-
-		StringMaker Maker(Error);
-
-		auto Re = ProcessParsingStepWithOutputType<std::u8string>(Pro.GetSteps(), Maker);
-
-		if (Re != TarStr)
-			throw Error;
-
 		auto Buffer = LRXBinaryTableWrapper::Create(Tab);
 
-		SymbolProcessor Pro3(LRXBinaryTableWrapper{ Buffer });
+		LRXBinaryTableProcessor<std::size_t, StringMaker> Pro2(
+			LRXBinaryTableWrapper{Buffer},
+			Context,
+			Maker
+		);
 
-		IteSpan = Span;
-		while (!IteSpan.empty())
+		for (std::size_t I = 0; I < Span.size(); ++I)
 		{
-			auto Top = *IteSpan.begin();
-			if (!Pro3.Consume(*Top, Span.size() - IteSpan.size()))
+			if (!Pro2.Consume(*Span[I], { I, I + 1 }, I))
 				throw Error;
-			IteSpan = IteSpan.subspan(1);
 		}
-		if (!Pro3.EndOfFile())
+
+		auto P2 = Pro2.EndOfFile<std::u8string>();
+
+		if (!P2.has_value())
 			throw Error;
 
-		StringMaker Maker2(Error);
-
-		auto Re2 = ProcessParsingStepWithOutputType<std::u8string>(Pro3.GetSteps(), Maker2);
-
-		if (Re2 != TarStr)
+		if (*P2 != TarStr)
 			throw Error;
-			*/
+
 	}
 	catch (Exception::Interface const&)
 	{
