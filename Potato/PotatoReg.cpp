@@ -7,233 +7,30 @@ module Potato.Reg;
 namespace Potato::Reg
 {
 
-	IntervalT const& MaxInterval() {
-		static IntervalT Temp{{ 1, MaxChar() }};
-		return Temp;
-	};
-
-	RegLexerT::RegLexerT(bool IsRaw) : 
-		CurrentState(IsRaw ? StateT::Raw : StateT::Normal) {}
-
-	bool RegLexerT::Consume(char32_t InputSymbol, Misc::IndexSpan<> TokenIndex)
-	{
-		if (InputSymbol < MaxChar())
-		{
-			switch (CurrentState)
-			{
-			case StateT::Normal:
-			{
-				switch (InputSymbol)
-				{
-				case U'-':
-					StoragedSymbol.push_back({ ElementEnumT::Min, InputSymbol, TokenIndex });
-					break;
-				case U'[':
-					StoragedSymbol.push_back({ ElementEnumT::BracketsLeft, InputSymbol, TokenIndex });
-					break;
-				case U']':
-					StoragedSymbol.push_back({ ElementEnumT::BracketsRight, InputSymbol, TokenIndex });
-					break;
-				case U'{':
-					StoragedSymbol.push_back({ ElementEnumT::CurlyBracketsLeft, InputSymbol, TokenIndex });
-					break;
-				case U'}':
-					StoragedSymbol.push_back({ ElementEnumT::CurlyBracketsRight, InputSymbol, TokenIndex });
-					break;
-				case U',':
-					StoragedSymbol.push_back({ ElementEnumT::Comma, InputSymbol, TokenIndex });
-					break;
-				case U'(':
-					StoragedSymbol.push_back({ ElementEnumT::ParenthesesLeft, InputSymbol, TokenIndex });
-					break;
-				case U')':
-					StoragedSymbol.push_back({ ElementEnumT::ParenthesesRight, InputSymbol, TokenIndex });
-					break;
-				case U'*':
-					StoragedSymbol.push_back({ ElementEnumT::Mulity, InputSymbol, TokenIndex });
-					break;
-				case U'?':
-					StoragedSymbol.push_back({ ElementEnumT::Question, InputSymbol, TokenIndex });
-					break;
-				case U'.':
-					StoragedSymbol.push_back({ ElementEnumT::CharSet, MaxInterval(), TokenIndex });
-					break;
-				case U'|':
-					StoragedSymbol.push_back({ ElementEnumT::Or, InputSymbol, TokenIndex });
-					break;
-				case U'+':
-					StoragedSymbol.push_back({ ElementEnumT::Add, InputSymbol, TokenIndex });
-					break;
-				case U'^':
-					StoragedSymbol.push_back({ ElementEnumT::Not, InputSymbol, TokenIndex });
-					break;
-				case U':':
-					StoragedSymbol.push_back({ ElementEnumT::Colon, InputSymbol, TokenIndex });
-					break;
-				case U'\\':
-					CurrentState = StateT::Transfer;
-					RecordSymbol = InputSymbol;
-					break;
-				default:
-					if (InputSymbol >= U'0' && InputSymbol <= U'9')
-						StoragedSymbol.push_back({ ElementEnumT::Num, InputSymbol, TokenIndex });
-					else
-						StoragedSymbol.push_back({ ElementEnumT::SingleChar, InputSymbol, TokenIndex });
-					break;
-				}
-				break;
-			}
-			case StateT::Transfer:
-			{
-				switch (InputSymbol)
-				{
-				case U'd':
-					StoragedSymbol.push_back({ ElementEnumT::CharSet, {{U'0', U'9' + 1}}, TokenIndex });
-					CurrentState = StateT::Normal;
-					break;
-				case U'D':
-				{
-					IntervalT Tem{ {{1, U'0'}, {U'9' + 1, MaxChar()} } };
-					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(Tem), TokenIndex });
-					CurrentState = StateT::Normal;
-					break;
-				}
-				case U'f':
-					StoragedSymbol.push_back({ ElementEnumT::SingleChar, U'\f', TokenIndex });
-					CurrentState = StateT::Normal;
-					break;
-				case U'n':
-					StoragedSymbol.push_back({ ElementEnumT::SingleChar, U'\n', TokenIndex });
-					CurrentState = StateT::Normal;
-					break;
-				case U'r':
-					StoragedSymbol.push_back({ ElementEnumT::SingleChar, U'\r', TokenIndex });
-					CurrentState = StateT::Normal;
-					break;
-				case U't':
-					StoragedSymbol.push_back({ ElementEnumT::SingleChar, U'\t', TokenIndex });
-					CurrentState = StateT::Normal;
-					break;
-				case U'v':
-					StoragedSymbol.push_back({ ElementEnumT::SingleChar, U'\v', TokenIndex });
-					CurrentState = StateT::Normal;
-					break;
-				case U's':
-				{
-					IntervalT tem({{ 1, 33 },{127, 128} });
-					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(tem), TokenIndex });
-					CurrentState = StateT::Normal;
-					break;
-				}
-				case U'S':
-				{
-					IntervalT tem({{33, 127}, {128, MaxChar()} });
-					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(tem), TokenIndex });
-					CurrentState = StateT::Normal;
-					break;
-				}
-				case U'w':
-				{
-					IntervalT tem({{ U'A', U'Z' + 1 },{ U'_'}, { U'a', U'z' + 1 }});
-					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(tem), TokenIndex });
-					CurrentState = StateT::Normal;
-					break;
-				}
-				case U'W':
-				{
-					IntervalT tem({{ U'A', U'Z' + 1 },{ U'_'}, { U'a', U'z' + 1 } });
-					StoragedSymbol.push_back({ ElementEnumT::CharSet, MaxInterval() - tem, TokenIndex});
-					CurrentState = StateT::Normal;
-					break;
-				}
-				case U'z':
-				{
-					IntervalT tem({{ 256, MaxChar() }});
-					StoragedSymbol.push_back({ ElementEnumT::CharSet, std::move(tem), TokenIndex });
-					CurrentState = StateT::Normal;
-					break;
-				}
-				case U'u':
-				{
-					CurrentState = StateT::Number;
-					NumberChar = 0;
-					Number = 0;
-					NumberIsBig = false;
-					break;
-				}
-				case U'U':
-				{
-					CurrentState = StateT::Number;
-					NumberChar = 0;
-					Number = 0;
-					NumberIsBig = true;
-					break;
-				}
-				default:
-					StoragedSymbol.push_back({ ElementEnumT::SingleChar, InputSymbol, TokenIndex });
-					CurrentState = StateT::Normal;
-					break;
-				}
-				break;
-			}
-			case StateT::Number:
-			{
-				Number += 1;
-				if (InputSymbol >= U'0' && InputSymbol <= U'9')
-				{
-					NumberChar *= 16;
-					NumberChar += InputSymbol - U'0';
-				}
-				else if (InputSymbol >= U'a' && InputSymbol <= U'f')
-				{
-					NumberChar *= 16;
-					NumberChar += InputSymbol - U'a' + 10;
-				}
-				else if (InputSymbol >= U'A' && InputSymbol <= U'F')
-				{
-					NumberChar *= 16;
-					NumberChar += InputSymbol - U'A' + 10;
-				}
-				else {
-					return false;
-				}
-				if ((Number == 4 && !NumberIsBig) || (NumberIsBig && Number == 6))
-				{
-					StoragedSymbol.push_back({ ElementEnumT::SingleChar, NumberChar, TokenIndex });
-					CurrentState = StateT::Normal;
-				}
-				break;
-			}
-			case StateT::Raw:
-				StoragedSymbol.push_back({ ElementEnumT::SingleChar, InputSymbol, TokenIndex });
-				break;
-			default:
-				assert(false);
-			}
-			return true;
-		}
-		else {
-			return false;
-		}
-	}
-
-	bool RegLexerT::EndOfFile()
-	{
-		if (CurrentState == StateT::Normal || CurrentState == StateT::Raw)
-		{
-			CurrentState = StateT::Done;
-			return true;
-		}
-		else
-			return false;
-	}
-
-	
 	using namespace Exception;
 
 	using SLRX::Symbol;
 
-	using T = RegLexerT::ElementEnumT;
+	enum class T
+	{
+		SingleChar = 0, // µ¥×Ö·û
+		CharSet, // ¶à×Ö·û
+		Min, // -
+		BracketsLeft, //[
+		BracketsRight, // ]
+		ParenthesesLeft, //(
+		ParenthesesRight, //)
+		CurlyBracketsLeft, //{
+		CurlyBracketsRight, //}
+		Num, // 0 - 1
+		Comma, // ,
+		Mulity, //*
+		Question, // ?
+		Or, // |
+		Add, // +
+		Not, // ^
+		Colon, // :
+	};
 
 	constexpr Symbol operator*(T Input) { return Symbol::AsTerminal(static_cast<std::size_t>(Input)); };
 
@@ -252,6 +49,10 @@ namespace Potato::Reg
 
 	constexpr Symbol operator*(NT Input) { return Symbol::AsNoTerminal(static_cast<std::size_t>(Input)); };
 
+	Interval const& MaxInterval() {
+		static Interval Temp{{ 1, MaxChar() }};
+		return Temp;
+	};
 
 	const SLRX::LRXBinaryTableWrapper RexSLRXWrapper()
 	{
@@ -359,7 +160,396 @@ namespace Potato::Reg
 
 	}
 
-	bool NfaT::EdgeT::HasCapture() const
+	Nfa::BuilderT::BuilderT(std::size_t Mask, bool IsRaw) :
+		CurrentState(IsRaw ? StateT::Raw : StateT::Normal), Mask(Mask), Processor(RexSLRXWrapper(), Context, *this) 
+	{
+		auto Top = AddNode();
+		assert(Top == 0);
+	}
+
+	bool Nfa::BuilderT::InsertSymbol(SLRX::Symbol SymbolValue, Interval CharsValue, Misc::IndexSpan<> TokenIndex)
+	{
+		return Processor.Consume(SymbolValue, TokenIndex, CharsValue);
+	}
+
+	bool Nfa::BuilderT::Consume(char32_t InputSymbol, Misc::IndexSpan<> TokenIndex)
+	{
+		if (InputSymbol < MaxChar())
+		{
+			switch (CurrentState)
+			{
+			case StateT::Normal:
+			{
+				switch (InputSymbol)
+				{
+				case U'-':
+					return InsertSymbol(*T::Min, InputSymbol, TokenIndex);
+				case U'[':
+					return InsertSymbol(*T::BracketsLeft, InputSymbol, TokenIndex);
+				case U']':
+					return InsertSymbol(*T::BracketsRight, InputSymbol, TokenIndex);
+				case U'{':
+					return InsertSymbol(*T::CurlyBracketsLeft, InputSymbol, TokenIndex);
+				case U'}':
+					return InsertSymbol(*T::CurlyBracketsRight, InputSymbol, TokenIndex);
+				case U',':
+					return InsertSymbol(*T::Comma, InputSymbol, TokenIndex);
+				case U'(':
+					return InsertSymbol(*T::ParenthesesLeft, InputSymbol, TokenIndex);
+				case U')':
+					return InsertSymbol(*T::ParenthesesRight, InputSymbol, TokenIndex);
+				case U'*':
+					return InsertSymbol(*T::Mulity, InputSymbol, TokenIndex);
+				case U'?':
+					return InsertSymbol(*T::Question, InputSymbol, TokenIndex);
+				case U'.':
+					return InsertSymbol(*T::CharSet, MaxInterval(), TokenIndex);
+				case U'|':
+					return InsertSymbol(*T::Or, InputSymbol, TokenIndex);
+				case U'+':
+					return InsertSymbol(*T::Add, InputSymbol, TokenIndex);
+				case U'^':
+					return InsertSymbol(*T::Not, InputSymbol, TokenIndex);
+				case U':':
+					return InsertSymbol(*T::Colon, InputSymbol, TokenIndex);
+				case U'\\':
+					CurrentState = StateT::Transfer;
+					RecordSymbol = InputSymbol;
+				default:
+					if (InputSymbol >= U'0' && InputSymbol <= U'9')
+						return InsertSymbol(*T::Num, InputSymbol, TokenIndex);
+					else
+						return InsertSymbol(*T::SingleChar, InputSymbol, TokenIndex);
+					break;
+				}
+				break;
+			}
+			case StateT::Transfer:
+			{
+				switch (InputSymbol)
+				{
+				case U'd':
+					CurrentState = StateT::Normal;
+					return InsertSymbol(*T::CharSet, {{U'0', U'9' + 1}}, TokenIndex);
+				case U'D':
+				{
+					CurrentState = StateT::Normal;
+					Interval Tem{ {{1, U'0'}, {U'9' + 1, MaxChar()} } };
+					return InsertSymbol(*T::CharSet, std::move(Tem), TokenIndex);
+				}
+				case U'f':
+					CurrentState = StateT::Normal;
+					return InsertSymbol(*T::SingleChar, U'\f', TokenIndex);
+				case U'n':
+					CurrentState = StateT::Normal;
+					return InsertSymbol(*T::SingleChar, U'\n', TokenIndex);
+				case U'r':
+					CurrentState = StateT::Normal;
+					return InsertSymbol(*T::SingleChar, U'\r', TokenIndex);
+				case U't':
+					CurrentState = StateT::Normal;
+					return InsertSymbol(*T::SingleChar, U'\t', TokenIndex);
+				case U'v':
+					CurrentState = StateT::Normal;
+					return InsertSymbol(*T::SingleChar, U'\v', TokenIndex);
+				case U's':
+				{
+					CurrentState = StateT::Normal;
+					Interval tem({{ 1, 33 },{127, 128} });
+					return InsertSymbol(*T::CharSet, std::move(tem), TokenIndex);
+				}
+				case U'S':
+				{
+					CurrentState = StateT::Normal;
+					Interval tem({{33, 127}, {128, MaxChar()} });
+					return InsertSymbol(*T::CharSet, std::move(tem), TokenIndex);
+				}
+				case U'w':
+				{
+					CurrentState = StateT::Normal;
+					Interval tem({{ U'A', U'Z' + 1 },{ U'_'}, { U'a', U'z' + 1 }});
+					return InsertSymbol(*T::CharSet, std::move(tem), TokenIndex);
+				}
+				case U'W':
+				{
+					CurrentState = StateT::Normal;
+					Interval tem({{ U'A', U'Z' + 1 },{ U'_'}, { U'a', U'z' + 1 } });
+					return InsertSymbol(*T::CharSet, MaxInterval() - tem, TokenIndex);
+				}
+				case U'z':
+				{
+					CurrentState = StateT::Normal;
+					Interval tem({{ 256, MaxChar() }});
+					return InsertSymbol(*T::CharSet, std::move(tem), TokenIndex);
+				}
+				case U'u':
+				{
+					CurrentState = StateT::Number;
+					NumberChar = 0;
+					Number = 0;
+					NumberIsBig = false;
+					break;
+				}
+				case U'U':
+				{
+					CurrentState = StateT::Number;
+					NumberChar = 0;
+					Number = 0;
+					NumberIsBig = true;
+					break;
+				}
+				default:
+					CurrentState = StateT::Normal;
+					return InsertSymbol(*T::SingleChar, InputSymbol, TokenIndex);
+				}
+				break;
+			}
+			case StateT::Number:
+			{
+				Number += 1;
+				if (InputSymbol >= U'0' && InputSymbol <= U'9')
+				{
+					NumberChar *= 16;
+					NumberChar += InputSymbol - U'0';
+				}
+				else if (InputSymbol >= U'a' && InputSymbol <= U'f')
+				{
+					NumberChar *= 16;
+					NumberChar += InputSymbol - U'a' + 10;
+				}
+				else if (InputSymbol >= U'A' && InputSymbol <= U'F')
+				{
+					NumberChar *= 16;
+					NumberChar += InputSymbol - U'A' + 10;
+				}
+				else {
+					return false;
+				}
+				if ((Number == 4 && !NumberIsBig) || (NumberIsBig && Number == 6))
+				{
+					CurrentState = StateT::Normal;
+					return InsertSymbol(*T::SingleChar, NumberChar, TokenIndex);
+				}
+				break;
+			}
+			case StateT::Raw:
+				return InsertSymbol(*T::SingleChar, InputSymbol, TokenIndex);
+			default:
+				assert(false);
+			}
+			return true;
+		}
+		else {
+			return false;
+		}
+	}
+
+	bool Nfa::BuilderT::EndOfFile()
+	{
+		if (CurrentState == StateT::Normal || CurrentState == StateT::Raw)
+		{
+			CurrentState = StateT::Done;
+			if (Processor.EndOfFile())
+			{
+				auto Re = Processor.GetData<NodeSetT>();
+				auto Top = 0;
+				{
+					EdgeT Tem;
+					Tem.ToNode = Re.In;
+					Nodes[Top].Edges.push_back(Tem);
+				}
+
+				{
+					auto Last = AddNode();
+					EdgeT Edge;
+					Edge.ToNode = Last;
+					Edge.CharSets = EndOfFile();
+					Edge.Propertys.push_back({ EdgePropertyE::RecordAcceptLocation });
+					Nodes[Re.Out].Edges.push_back(std::move(Edge));
+					Nodes[Last].Accept = AcceptT{ Mask, 0 };
+				}
+
+				auto TargetNode = std::move(Nodes);
+				Nodes.clear();
+
+				{
+					std::map<std::size_t, std::size_t> NodeMapping;
+
+					std::vector<decltype(NodeMapping)::const_iterator> SearchingStack;
+
+					{
+						auto CT = AddNode();
+						auto [Ite, B] = NodeMapping.insert({ 0, CT });
+						SearchingStack.push_back(Ite);
+					}
+
+					std::vector<std::size_t> StateStack;
+					std::vector<PropertyT> Pros;
+
+					struct StackRecord
+					{
+						std::size_t StateSize;
+						std::size_t PropertySize;
+						std::size_t EdgeSize;
+						std::optional<Misc::IndexSpan<>> TokenIndex;
+					};
+
+					std::vector<StackRecord> RecordStack;
+
+
+					while (!SearchingStack.empty())
+					{
+						auto Top = *SearchingStack.rbegin();
+						SearchingStack.pop_back();
+
+						StateStack.clear();
+						Pros.clear();
+						RecordStack.clear();
+						StateStack.push_back(Top->first);
+						std::optional<Misc::IndexSpan<>> LastRecordTokenIndex;
+						RecordStack.push_back({ 1, 0, 0, LastRecordTokenIndex });
+
+						while (!RecordStack.empty())
+						{
+							auto TopRecord = *RecordStack.rbegin();
+							RecordStack.pop_back();
+							StateStack.resize(TopRecord.StateSize);
+							Pros.resize(TopRecord.PropertySize);
+							LastRecordTokenIndex = TopRecord.TokenIndex;
+							auto& CurNode = TargetNode[*StateStack.rbegin()];
+							if (TopRecord.EdgeSize < CurNode.Edges.size())
+							{
+
+								auto& CurEdge = CurNode.Edges[TopRecord.EdgeSize];
+								RecordStack.push_back({ TopRecord.StateSize, TopRecord.PropertySize, TopRecord.EdgeSize + 1, LastRecordTokenIndex });
+
+								if (LastRecordTokenIndex.has_value())
+								{
+									LastRecordTokenIndex = LastRecordTokenIndex->Expand(CurEdge.TokenIndex);
+								}
+								else {
+									LastRecordTokenIndex = CurEdge.TokenIndex;
+								}
+
+								Pros.insert(Pros.end(), CurEdge.Propertys.begin(), CurEdge.Propertys.end());
+								if (CurEdge.IsEpsilonEdge())
+								{
+									auto SameStateStackIte = std::find(StateStack.begin(), StateStack.end(), CurEdge.ToNode);
+									if (SameStateStackIte != StateStack.end())
+									{
+										StateStack.push_back(CurEdge.ToNode);
+										auto ErrorTokenIndex = CollectTokenIndexFromNodePath(
+											std::span(TargetNode),
+											CurEdge.TokenIndex,
+											std::span(StateStack).subspan(std::distance(StateStack.begin(), SameStateStackIte))
+										);
+										throw UnaccaptableRegexTokenIndex{
+											UnaccaptableRegexTokenIndex::TypeT::BadRegex,
+											ErrorTokenIndex };
+									}
+									StateStack.push_back(CurEdge.ToNode);
+
+									RecordStack.push_back({
+										StateStack.size(),
+										Pros.size(),
+										0,
+										LastRecordTokenIndex
+										});
+								}
+								else {
+									StateStack.push_back(CurEdge.ToNode);
+									std::size_t FinnalToNode = 0;
+									auto [MIte, B] = NodeMapping.insert({ CurEdge.ToNode, FinnalToNode });
+									auto Sets = CurEdge.CharSets;
+									if (B)
+									{
+										FinnalToNode = AddNode();
+
+										{
+											auto& RefToNode = TargetNode[CurEdge.ToNode];
+											if (RefToNode.Accept.has_value())
+											{
+												Nodes[FinnalToNode].Accept = RefToNode.Accept;
+											}
+										}
+
+										MIte->second = FinnalToNode;
+										//if(Sets.Size() != 0)
+										SearchingStack.push_back(MIte);
+									}
+									else {
+										FinnalToNode = MIte->second;
+									}
+
+									auto& CurEdges = Nodes[Top->second].Edges;
+
+									for (auto& Ite : CurEdges)
+									{
+										if (Ite.ToNode == FinnalToNode)
+										{
+											throw
+												UnaccaptableRegexTokenIndex{
+													UnaccaptableRegexTokenIndex::TypeT::BadRegex,
+													CurEdge.TokenIndex
+											};
+										}
+									}
+
+									Nodes[Top->second].Edges.push_back({
+											Pros,
+											FinnalToNode,
+											std::move(Sets),
+											(LastRecordTokenIndex.has_value() ? *LastRecordTokenIndex : Misc::IndexSpan<>{0, 0}),
+											CurEdge.MaskIndex
+										}
+									);
+								}
+							}
+						}
+					}
+
+					bool Change = true;
+					while (Change)
+					{
+						Change = false;
+						for (std::size_t I1 = 0; I1 < Nodes.size(); ++I1)
+						{
+							for (std::size_t I2 = I1 + 1; I2 < Nodes.size(); )
+							{
+								auto& N1 = Nodes[I1];
+								auto& N2 = Nodes[I2];
+								if (N1 == N2)
+								{
+									for (auto& Ite3 : Nodes)
+									{
+										if (Ite3.CurIndex > N2.CurIndex)
+											--Ite3.CurIndex;
+										for (auto& Ite4 : Ite3.Edges)
+										{
+											if (Ite4.ToNode == N2.CurIndex)
+												Ite4.ToNode = N1.CurIndex;
+											else if (Ite4.ToNode > N2.CurIndex)
+												--Ite4.ToNode;
+										}
+									}
+									Nodes.erase(Nodes.begin() + I2);
+									Change = true;
+								}
+								else {
+									++I2;
+								}
+							}
+						}
+					}
+				}
+			}
+			return true;
+		}
+		return false;
+	}
+
+
+	bool Nfa::EdgeT::HasCapture() const
 	{
 		for (auto& Ite : Propertys)
 		{
@@ -370,7 +560,7 @@ namespace Potato::Reg
 		}
 		return false;
 	}
-	bool NfaT::EdgeT::HasCounter() const
+	bool Nfa::EdgeT::HasCounter() const
 	{
 		for (auto& Ite : Propertys)
 		{
@@ -388,7 +578,7 @@ namespace Potato::Reg
 
 	}
 
-	std::size_t NfaT::AddNode()
+	std::size_t Nfa::BuilderT::AddNode()
 	{
 		NodeT Node;
 		auto OldSize = Nodes.size();
@@ -397,29 +587,16 @@ namespace Potato::Reg
 		return OldSize;
 	}
 
-	Misc::IndexSpan<> Translate(Misc::IndexSpan<> TokenIndex, std::span<RegLexerT::ElementT const> Tokens)
-	{
-		Misc::IndexSpan<> Result;
-		for (auto Index = TokenIndex.Begin() + 1; Index < TokenIndex.End(); ++Index)
-		{
-			if(Result.End() == 0)
-				Result = Tokens[Index].Token;
-			else
-				Result = Result.Expand(Tokens[Index].Token);
-		}
-		return Result;
-	}
-
-	void NfaT::AddConsume(NodeSetT Set, IntervalT Chars, ContentT Content)
+	void Nfa::BuilderT::AddConsume(NodeSetT Set, Interval Chars, Misc::IndexSpan<> TokenIndex)
 	{
 		EdgeT Edge;
 		Edge.ToNode = Set.Out;
 		Edge.CharSets = std::move(Chars);
-		Edge.TokenIndex = Translate(Content.TokenIndex, Content.Tokens);
+		Edge.TokenIndex = TokenIndex;
 		Nodes[Set.In].Edges.push_back(std::move(Edge));
 	}
 
-	Misc::IndexSpan<> NfaT::CollectTokenIndexFromNodePath(std::span<NodeT const> NodeView, Misc::IndexSpan<> Default, std::span<std::size_t const> NodeStateView)
+	Misc::IndexSpan<> Nfa::CollectTokenIndexFromNodePath(std::span<NodeT const> NodeView, Misc::IndexSpan<> Default, std::span<std::size_t const> NodeStateView)
 	{
 		for (auto Ite1 = NodeStateView.begin(); Ite1 != NodeStateView.end(); ++Ite1)
 		{
@@ -439,7 +616,230 @@ namespace Potato::Reg
 		}
 		return Default;
 	}
+
+	std::any Nfa::BuilderT::operator()(SLRX::SymbolElement Value, Interval Chars)
+	{
+		if (Value.Value == *T::ParenthesesLeft)
+		{
+			return CaptureCount++;
+		}
+		else if (Value.Value == *T::CurlyBracketsLeft)
+		{
+			return CounterCount++;
+		}
+		return Chars;
+	}
+
+	std::any Nfa::BuilderT::operator()(SLRX::SymbolElement Value, SLRX::ReduceDescription Desc, std::span<SLRX::CoreProcessor::Element> Elements)
+	{
+		switch (Desc.UserMask)
+		{
+		case 40:
+			return Elements[0].Consume();
+		case 60:
+		case 41:
+		{
+			return Elements[0].Consume<Interval>();
+		}
+		case 42:
+		{
+			auto Cur = Elements[0].Consume<Interval>();
+			auto Cur2 = Elements[2].Consume<Interval>();
+			return Interval{ Cur[0].Expand(Cur2[0]) };
+		}
+		case 1:
+			return Elements[0].Consume();
+		case 3:
+		{
+			auto T1 = Elements[0].Consume<Interval>();
+			auto T2 = Elements[1].Consume<Interval>();
+			return T1 + T2;
+		}
+		case 61:
+		{
+			auto T1 = Elements[0].Consume<Interval>();
+			auto T2 = Elements[1].Consume<Interval>();
+			return T1 + T2;
+		}
+		case 62:
+		{
+			auto T1 = Elements[1].Consume<Interval>();
+			auto T2 = Elements[0].Consume<Interval>();
+			return T1 + T2;
+		}
+		case 63:
+		{
+			return Elements[0].Consume();
+		}
+		case 4:
+		{
+			auto T1 = AddNode();
+			auto T2 = AddNode();
+			NodeSetT Set{ T1, T2 };
+			AddConsume(Set, Elements[1].Consume<Interval>(), Value.TokenIndex);
+			return Set;
+		}
+		case 5:
+		{
+			auto Tar = Elements[2].Consume<Interval>();
+			auto P = MaxInterval() - Tar;
+			auto T1 = AddNode();
+			auto T2 = AddNode();
+			NodeSetT Set{ T1, T2 };
+			AddConsume(Set, P, Value.TokenIndex);
+			return Set;
+		}
+		case 6:
+		{
+			return Elements[3].Consume();
+		}
+		case 7:
+		{
+			auto InDex = Elements[0].Consume<std::size_t>();
+			NodeSetT Last = Elements[1].Consume<NodeSetT>();
+			return AddCapture(Last, Value.TokenIndex, InDex);
+		}
+		case 8:
+		{
+			NodeSetT Last1 = Elements[0].Consume<NodeSetT>();
+			NodeSetT Last2 = Elements[2].Consume<NodeSetT>();
+			auto T1 = AddNode();
+			auto T2 = AddNode();
+			AddConsume({ T1, Last1.In }, {}, Value.TokenIndex);
+			AddConsume({ T1, Last2.In }, {}, Value.TokenIndex);
+			AddConsume({ Last1.Out, T2 }, {}, Value.TokenIndex);
+			AddConsume({ Last2.Out, T2 }, {}, Value.TokenIndex);
+			return NodeSetT{ T1, T2 };
+		}
+		case 9:
+		{
+			auto T1 = AddNode();
+			auto T2 = AddNode();
+			auto Tar = Elements[0].Consume<Interval>();
+			NodeSetT Set{ T1, T2 };
+			AddConsume({ T1, T2 }, std::move(Tar), Value.TokenIndex);
+			return Set;
+		}
+		case 50:
+		{
+			auto T1 = AddNode();
+			auto T2 = AddNode();
+			NodeSetT Set{ T1, T2 };
+			AddConsume(Set, Elements[0].Consume<Interval>(), Value.TokenIndex);
+			return Set;
+		}
+		case 10:
+		{
+			return Elements[0].Consume();
+		}
+		case 11:
+		{
+			auto Last1 = Elements[0].Consume<NodeSetT>();
+			auto Last2 = Elements[1].Consume<NodeSetT>();
+			NodeSetT Set{ Last1.Out, Last2.In };
+			AddConsume(Set, {}, Value.TokenIndex);
+			return NodeSetT{ Last1.In, Last2.Out };
+		}
+		case 12:
+		{
+			auto T1 = AddNode();
+			auto T2 = AddNode();
+			auto Last1 = Elements[0].Consume<NodeSetT>();
+			AddConsume({ T1, Last1.In }, {}, Value.TokenIndex);
+			AddConsume({ T1, T2 }, {}, Value.TokenIndex);
+			AddConsume({ Last1.Out, Last1.In }, {}, Value.TokenIndex);
+			AddConsume({ Last1.Out, T2 }, {}, Value.TokenIndex);
+			return NodeSetT{ T1, T2 };
+		}
+		case 13:
+		{
+			auto T1 = AddNode();
+			auto T2 = AddNode();
+			auto Last1 = Elements[0].Consume<NodeSetT>();
+			AddConsume({ T1, Last1.In }, {}, Value.TokenIndex);
+			AddConsume({ Last1.Out, Last1.In }, {}, Value.TokenIndex);
+			AddConsume({ Last1.Out, T2 }, {}, Value.TokenIndex);
+			return NodeSetT{ T1, T2 };
+		}
+		case 14:
+		{
+			auto T1 = AddNode();
+			auto T2 = AddNode();
+			auto Last1 = Elements[0].Consume<NodeSetT>();
+			AddConsume({ T1, T2 }, {}, Value.TokenIndex);
+			AddConsume({ T1, Last1.In }, {}, Value.TokenIndex);
+			AddConsume({ Last1.Out, T2 }, {}, Value.TokenIndex);
+			AddConsume({ Last1.Out, Last1.In }, {}, Value.TokenIndex);
+			return NodeSetT{ T1, T2 };
+		}
+		case 15:
+		{
+			auto T1 = AddNode();
+			auto T2 = AddNode();
+			auto Last1 = Elements[0].Consume<NodeSetT>();
+			AddConsume({ T1, Last1.In }, {}, Value.TokenIndex);
+			AddConsume({ Last1.Out, T2 }, {}, Value.TokenIndex);
+			AddConsume({ Last1.Out, Last1.In }, {}, Value.TokenIndex);
+			return NodeSetT{ T1, T2 };
+		}
+		case 16:
+		{
+			auto T1 = AddNode();
+			auto T2 = AddNode();
+			auto Last1 = Elements[0].Consume<NodeSetT>();
+			AddConsume({ T1, Last1.In }, {}, Value.TokenIndex);
+			AddConsume({ Last1.Out, T2 }, {}, Value.TokenIndex);
+			AddConsume({ T1, T2 }, {}, Value.TokenIndex);
+			return NodeSetT{ T1, T2 };
+		}
+		case 17:
+		{
+			auto T1 = AddNode();
+			auto T2 = AddNode();
+			auto Last1 = Elements[0].Consume<NodeSetT>();
+			AddConsume({ T1, T2 }, {}, Value.TokenIndex);
+			AddConsume({ T1, Last1.In }, {}, Value.TokenIndex);
+			AddConsume({ Last1.Out, T2 }, {}, Value.TokenIndex);
+			return NodeSetT{ T1, T2 };
+		}
+		case 18:
+		{
+			char32_t Te = Elements[0].Consume<Interval>()[0].Start;
+			std::size_t Count = Te - U'0';
+			return Count;
+		}
+		case 19:
+		{
+			auto Te = Elements[0].Consume<std::size_t>();
+			Te *= 10;
+			auto Te2 = Elements[1].Consume<Interval>()[0].Start;
+			Te += Te2 - U'0';
+			return Te;
+		}
+		case 20: // {num}
+			return AddCounter(Elements[0].Consume<NodeSetT>(), Elements[2].Consume<std::size_t>(), {}, true, Value.TokenIndex, Elements[0].Consume<std::size_t>());
+		case 25: // {,N}?
+			return AddCounter(Elements[0].Consume<NodeSetT>(), {}, Elements[3].Consume<std::size_t>(), false, Value.TokenIndex, Elements[0].Consume<std::size_t>());
+		case 21: // {,N}
+			return AddCounter(Elements[0].Consume<NodeSetT>(), {}, Elements[3].Consume<std::size_t>(), true, Value.TokenIndex, Elements[0].Consume<std::size_t>());
+		case 26: // {N,} ?
+			return AddCounter(Elements[0].Consume<NodeSetT>(), Elements[2].Consume<std::size_t>(), {}, false, Value.TokenIndex, Elements[0].Consume<std::size_t>());
+		case 22: // {N,}
+			return AddCounter(Elements[0].Consume<NodeSetT>(), Elements[2].Consume<std::size_t>(), {}, true, Value.TokenIndex, Elements[0].Consume<std::size_t>());
+		case 27: // {N, N} ?
+			return AddCounter(Elements[0].Consume<NodeSetT>(), Elements[2].Consume<std::size_t>(), Elements[4].Consume<std::size_t>(), false, Value.TokenIndex, Elements[1].Consume<std::size_t>());
+		case 23: // {N, N}
+			return AddCounter(Elements[0].Consume<NodeSetT>(), Elements[2].Consume<std::size_t>(), Elements[4].Consume<std::size_t>(), true, Value.TokenIndex, Elements[1].Consume<std::size_t>());
+		default:
+			assert(false);
+			break;
+		}
+		return {};
+	}
+
+
 	
+	/*
 	NfaT::NfaT(RegLexerT const& Lexer, std::size_t Mask)
 	{
 		auto InputSpan = Lexer.GetSpan();
@@ -889,20 +1289,19 @@ namespace Potato::Reg
 			}
 		}
 	}
+	*/
 
-	auto NfaT::AddCapture(NodeSetT Inside, ContentT Content, std::size_t CaptureIndex) -> NodeSetT
+	auto Nfa::BuilderT::AddCapture(NodeSetT Inside, Misc::IndexSpan<> TokenIndex, std::size_t CaptureIndex) -> NodeSetT
 	{
 		auto T1 = AddNode();
 		auto T2 = AddNode();
-
-		auto Tk = Translate(Content.TokenIndex, Content.Tokens);
 
 		EdgeT Ege;
 		Ege.Propertys.push_back(
 			{ EdgePropertyE::CaptureBegin, CaptureIndex, 0}
 		);
 		Ege.ToNode = Inside.In;
-		Ege.TokenIndex = Tk;
+		Ege.TokenIndex = TokenIndex;
 
 		Nodes[T1].Edges.push_back(Ege);
 
@@ -912,16 +1311,15 @@ namespace Potato::Reg
 			{ EdgePropertyE::CaptureEnd, CaptureIndex, 0 }
 		);
 		Ege2.ToNode = T2;
-		Ege2.TokenIndex = Tk;
+		Ege2.TokenIndex = TokenIndex;
 
 		Nodes[Inside.Out].Edges.push_back(Ege2);
 
 		return {T1, T2};
 	}
 
-	auto NfaT::AddCounter(NodeSetT Inside, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool Greedy, ContentT Content, std::size_t CounterIndex) -> NodeSetT
+	auto Nfa::BuilderT::AddCounter(NodeSetT Inside, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool Greedy, Misc::IndexSpan<> TokenIndex, std::size_t CounterIndex) -> NodeSetT
 	{
-		auto Tk = Translate(Content.TokenIndex, Content.Tokens);
 		assert(static_cast<bool>(Min) || static_cast<bool>(Max));
 		auto T1 = AddNode();
 		auto T2 = AddNode();
@@ -947,14 +1345,14 @@ namespace Potato::Reg
 				{ EdgePropertyE::OneCounter, CounterIndex, 0 }
 			);
 			Ege.ToNode = Inside.In;
-			Ege.TokenIndex = Tk;
+			Ege.TokenIndex = TokenIndex;
 			Ref.Edges.push_back(std::move(Ege));
 
 			if (IMin == 0)
 			{
 				EdgeT Ege2;
 				Ege2.ToNode = T2;
-				Ege2.TokenIndex = Tk;
+				Ege2.TokenIndex = TokenIndex;
 				Ref.Edges.push_back(std::move(Ege2));
 			}
 
@@ -965,7 +1363,7 @@ namespace Potato::Reg
 		{
 			EdgeT Ege;
 			Ege.ToNode = Inside.In;
-			Ege.TokenIndex = Tk;
+			Ege.TokenIndex = TokenIndex;
 			if (IMax != 0)
 			{
 				Ege.Propertys.push_back(
@@ -977,7 +1375,7 @@ namespace Potato::Reg
 			);
 			EdgeT Ege2;
 			Ege2.ToNode = T2;
-			Ege2.TokenIndex = Tk;
+			Ege2.TokenIndex = TokenIndex;
 			if (IMin != 0)
 			{
 				Ege2.Propertys.push_back(
@@ -1007,7 +1405,7 @@ namespace Potato::Reg
 		return {T1, T2};
 	}
 
-	void NfaT::Link(NfaT const& Input)
+	void Nfa::Link(Nfa const& Input)
 	{
 		assert(Input.Nodes.size() >= 1);
 		Nodes.reserve(Nodes.size() + Input.Nodes.size() - 1);
@@ -1165,7 +1563,7 @@ namespace Potato::Reg
 		}
 	};
 
-	DfaT::DfaT(FormatE Format, NfaT const& T1)
+	Dfa::Dfa(FormatE Format, Nfa const& T1)
 		: Format(Format)
 	{
 
@@ -1187,15 +1585,15 @@ namespace Potato::Reg
 					{
 						switch (Ite.Type)
 						{
-						case NfaT::EdgePropertyE::CaptureBegin:
-						case NfaT::EdgePropertyE::CaptureEnd:
+						case Nfa::EdgePropertyE::CaptureBegin:
+						case Nfa::EdgePropertyE::CaptureEnd:
 							Property.HasCapture = true;
 							break;
-						case NfaT::EdgePropertyE::OneCounter:
-						case NfaT::EdgePropertyE::AddCounter:
+						case Nfa::EdgePropertyE::OneCounter:
+						case Nfa::EdgePropertyE::AddCounter:
 							Property.HasCounter = true;
 							break;
-						case NfaT::EdgePropertyE::LessCounter:
+						case Nfa::EdgePropertyE::LessCounter:
 						{
 							if (Property.Ranges.empty() || Property.Ranges.rbegin()->Index != Ite.Index)
 							{
@@ -1212,7 +1610,7 @@ namespace Potato::Reg
 							Property.HasCounter = true;
 							break;
 						}
-						case NfaT::EdgePropertyE::BiggerCounter:
+						case Nfa::EdgePropertyE::BiggerCounter:
 						{
 							if (Property.Ranges.empty() || Property.Ranges.rbegin()->Index != Ite.Index)
 							{
@@ -1295,7 +1693,7 @@ namespace Potato::Reg
 						&& Key->second.ToAccept
 					)
 					{
-						TempCharSets = IntervalT{
+						TempCharSets = Interval{
 							{1, MaxChar()},
 							{EndOfFile(), EndOfFile() + 1}
 						};
@@ -1703,7 +2101,7 @@ namespace Potato::Reg
 									{
 										switch (Ite4.Type)
 										{
-										case NfaT::EdgePropertyE::CaptureBegin:
+										case Nfa::EdgePropertyE::CaptureBegin:
 										{
 											ActionIndexT Index{
 												ActionIndexT::CategoryE::CaptureBegin, Ite4.Index, Edge.MaskIndex
@@ -1712,7 +2110,7 @@ namespace Potato::Reg
 											SearchStackT.push_back({Index, NfaEdgeProperty.ToNode });
 											break;
 										}
-										case NfaT::EdgePropertyE::CaptureEnd:
+										case Nfa::EdgePropertyE::CaptureEnd:
 										{
 											ActionIndexT Index{
 												ActionIndexT::CategoryE::CaptureEnd, Ite4.Index, Edge.MaskIndex
@@ -1721,10 +2119,10 @@ namespace Potato::Reg
 											SearchStackT.push_back({ Index, NfaEdgeProperty.ToNode });
 											break;
 										}
-										case NfaT::EdgePropertyE::OneCounter:
-										case NfaT::EdgePropertyE::AddCounter:
-										case NfaT::EdgePropertyE::LessCounter:
-										case NfaT::EdgePropertyE::BiggerCounter:
+										case Nfa::EdgePropertyE::OneCounter:
+										case Nfa::EdgePropertyE::AddCounter:
+										case Nfa::EdgePropertyE::LessCounter:
+										case Nfa::EdgePropertyE::BiggerCounter:
 										{
 											ActionIndexT Index{
 												ActionIndexT::CategoryE::Counter, Ite4.Index, Edge.MaskIndex
@@ -1944,7 +2342,7 @@ namespace Potato::Reg
 						{
 							switch (Ite3.Type)
 							{
-							case NfaT::EdgePropertyE::CaptureBegin:
+							case Nfa::EdgePropertyE::CaptureBegin:
 							{
 								ActionIndexT Index{
 									ActionIndexT::CategoryE::CaptureBegin,
@@ -1954,7 +2352,7 @@ namespace Potato::Reg
 								OverwritedCapture.insert(LocateActionIndex(Index, Edge.ToNode));
 								break;
 							}
-							case NfaT::EdgePropertyE::CaptureEnd:
+							case Nfa::EdgePropertyE::CaptureEnd:
 							{
 								ActionIndexT Index{
 									ActionIndexT::CategoryE::CaptureEnd,
@@ -1998,7 +2396,7 @@ namespace Potato::Reg
 					{
 						switch (Ite3.Type)
 						{
-						case NfaT::EdgePropertyE::CaptureBegin:
+						case Nfa::EdgePropertyE::CaptureBegin:
 						{
 							ActionIndexT Index{
 								ActionIndexT::CategoryE::CaptureBegin,
@@ -2012,7 +2410,7 @@ namespace Potato::Reg
 
 							break;
 						}
-						case NfaT::EdgePropertyE::CaptureEnd:
+						case Nfa::EdgePropertyE::CaptureEnd:
 						{
 							ActionIndexT Index{
 								ActionIndexT::CategoryE::CaptureEnd,
@@ -2025,7 +2423,7 @@ namespace Potato::Reg
 							});
 							break;
 						}
-						case NfaT::EdgePropertyE::OneCounter:
+						case Nfa::EdgePropertyE::OneCounter:
 						{
 							ActionIndexT Index{
 								ActionIndexT::CategoryE::Counter,
@@ -2038,7 +2436,7 @@ namespace Potato::Reg
 							});
 							break;
 						}
-						case NfaT::EdgePropertyE::AddCounter:
+						case Nfa::EdgePropertyE::AddCounter:
 						{
 							ActionIndexT Index{
 								ActionIndexT::CategoryE::Counter,
@@ -2051,7 +2449,7 @@ namespace Potato::Reg
 							});
 							break;
 						}
-						case NfaT::EdgePropertyE::LessCounter:
+						case Nfa::EdgePropertyE::LessCounter:
 						{
 							ActionIndexT Index{
 								ActionIndexT::CategoryE::Counter,
@@ -2068,7 +2466,7 @@ namespace Potato::Reg
 							HasCounter.insert({ FormSolt, ToSolt });
 							break;
 						}
-						case NfaT::EdgePropertyE::BiggerCounter:
+						case Nfa::EdgePropertyE::BiggerCounter:
 						{
 							ActionIndexT Index{
 								ActionIndexT::CategoryE::Counter,
@@ -2085,7 +2483,7 @@ namespace Potato::Reg
 							HasCounter.insert({ FormSolt, ToSolt });
 							break;
 						}
-						case NfaT::EdgePropertyE::RecordAcceptLocation:
+						case Nfa::EdgePropertyE::RecordAcceptLocation:
 						{
 							NewEdge.Propertys.push_back({
 								PropertyActioE::RecordAcceptLocation,
@@ -2194,7 +2592,7 @@ namespace Potato::Reg
 		}
 	}
 
-	DfaProcessor::DfaProcessor(DfaT const& Table)
+	DfaProcessor::DfaProcessor(Dfa const& Table)
 		: Table(Table), CurNodeIndex(Table.GetStartupNodeIndex())
 	{
 		CacheIndex.resize(Table.GetCacheCounterCount());
@@ -2225,46 +2623,46 @@ namespace Potato::Reg
 					{
 						switch (Ite2.Action)
 						{
-						case DfaT::PropertyActioE::CopyValue:
+						case Dfa::PropertyActioE::CopyValue:
 							CacheIndex[Ite2.Par] = CacheIndex[Ite2.Solt];
 							break;
-						case DfaT::PropertyActioE::RecordLocation:
+						case Dfa::PropertyActioE::RecordLocation:
 							CacheIndex[Ite2.Solt] = TokenIndex;
 							break;
-						case DfaT::PropertyActioE::NewContext:
+						case Dfa::PropertyActioE::NewContext:
 							
 							break;
-						case DfaT::PropertyActioE::ConstraintsTrueTrue:
+						case Dfa::PropertyActioE::ConstraintsTrueTrue:
 							if(TempResult[Ite2.Solt])
 								DetectReuslt = true;
 							break;
-						case DfaT::PropertyActioE::ConstraintsFalseFalse:
+						case Dfa::PropertyActioE::ConstraintsFalseFalse:
 							if (!TempResult[Ite2.Solt])
 								DetectReuslt = false;
 							break;
-						case DfaT::PropertyActioE::ConstraintsFalseTrue:
+						case Dfa::PropertyActioE::ConstraintsFalseTrue:
 							if (!TempResult[Ite2.Solt])
 								DetectReuslt = true;
 							break;
-						case DfaT::PropertyActioE::ConstraintsTrueFalse:
+						case Dfa::PropertyActioE::ConstraintsTrueFalse:
 							if (TempResult[Ite2.Solt])
 								DetectReuslt = false;
 							break;
-						case DfaT::PropertyActioE::OneCounter:
+						case Dfa::PropertyActioE::OneCounter:
 							CacheIndex[Ite2.Solt] = 1;
 							break;
-						case DfaT::PropertyActioE::AddCounter:
+						case Dfa::PropertyActioE::AddCounter:
 							CacheIndex[Ite2.Solt] += 1;
 							break;
-						case DfaT::PropertyActioE::LessCounter:
+						case Dfa::PropertyActioE::LessCounter:
 							if(CacheIndex[Ite2.Solt] > Ite2.Par)
 								DetectReuslt = false;
 							break;
-						case DfaT::PropertyActioE::BiggerCounter:
+						case Dfa::PropertyActioE::BiggerCounter:
 							if (CacheIndex[Ite2.Solt] < Ite2.Par)
 								DetectReuslt = false;
 							break;
-						case DfaT::PropertyActioE::RecordAcceptLocation:
+						case Dfa::PropertyActioE::RecordAcceptLocation:
 							AcceptTokenIndex = TokenIndex;
 							break;
 						default:
@@ -2272,7 +2670,7 @@ namespace Potato::Reg
 							break;
 						}
 					}
-					if (Ite2.Action == DfaT::PropertyActioE::NewContext)
+					if (Ite2.Action == Dfa::PropertyActioE::NewContext)
 					{
 						TempResult.push_back(DetectReuslt ? 1 : 0);
 						DetectReuslt = true;
@@ -2293,12 +2691,12 @@ namespace Potato::Reg
 					{
 						switch (Cond.PassCommand)
 						{
-						case DfaT::ConditionT::CommandE::Next:
+						case Dfa::ConditionT::CommandE::Next:
 							NextIte = Cond.Pass;
 							break;
-						case DfaT::ConditionT::CommandE::Fail:
+						case Dfa::ConditionT::CommandE::Fail:
 							return false;
-						case DfaT::ConditionT::CommandE::ToNode:
+						case Dfa::ConditionT::CommandE::ToNode:
 							ToNode = Cond.Pass;
 							break;
 						default:
@@ -2310,12 +2708,12 @@ namespace Potato::Reg
 					{
 						switch (Cond.UnpassCommand)
 						{
-						case DfaT::ConditionT::CommandE::Next:
+						case Dfa::ConditionT::CommandE::Next:
 							NextIte = Cond.Unpass;
 							break;
-						case DfaT::ConditionT::CommandE::Fail:
+						case Dfa::ConditionT::CommandE::Fail:
 							return false;
-						case DfaT::ConditionT::CommandE::ToNode:
+						case Dfa::ConditionT::CommandE::ToNode:
 							ToNode = Cond.Unpass;
 							break;
 						default:
@@ -2343,12 +2741,12 @@ namespace Potato::Reg
 		return CurNode.Accept.has_value();
 	}
 
-	std::optional<ProcessorAcceptT> DfaProcessor::GetAccept() const
+	std::optional<ProcessorAccept> DfaProcessor::GetAccept() const
 	{
 		auto& CurNode = Table.Nodes[CurNodeIndex];
 		if (CurNode.Accept.has_value())
 		{
-			ProcessorAcceptT NewAccept;
+			ProcessorAccept NewAccept;
 			NewAccept.Mask = CurNode.Accept->Mask;
 			for (std::size_t I = CurNode.Accept->CaptureIndex.Begin(); I + 1 < CurNode.Accept->CaptureIndex.End(); I += 2)
 			{
@@ -2361,7 +2759,7 @@ namespace Potato::Reg
 		return {};
 	}
 
-	void DfaBinaryTableWrapper::Serilize(Misc::StructedSerilizerWritter<StandardT>& Writer, DfaT const& RefTable)
+	void DfaBinaryTableWrapper::Serilize(Misc::StructedSerilizerWritter<StandardT>& Writer, Dfa const& RefTable)
 	{
 		using WriterT = Misc::StructedSerilizerWritter<StandardT>;
 		using namespace Potato::Reg::Exception;
@@ -2438,11 +2836,11 @@ namespace Potato::Reg
 				}
 				for (auto& Ite2 : CurEdge.Propertys)
 				{
-					static_assert(sizeof(DfaT::PropertyActioE) <= sizeof(StandardT));
+					static_assert(sizeof(Dfa::PropertyActioE) <= sizeof(StandardT));
 					Writer.WriteObject(static_cast<StandardT>(Ite2.Action));
 					switch (Ite2.Action)
 					{
-					case DfaT::PropertyActioE::CopyValue:
+					case Dfa::PropertyActioE::CopyValue:
 					{
 						StandardT Par1 = 0;
 						Misc::CrossTypeSetThrow<RegexOutOfRange>(Par1, Ite2.Solt, RegexOutOfRange::TypeT::Solt, Ite2.Solt);
@@ -2451,23 +2849,23 @@ namespace Potato::Reg
 						Writer.WriteObject(Par1);
 						break;
 					}
-					case DfaT::PropertyActioE::NewContext:
+					case Dfa::PropertyActioE::NewContext:
 						break;
-					case DfaT::PropertyActioE::ConstraintsTrueTrue:
-					case DfaT::PropertyActioE::ConstraintsFalseFalse:
-					case DfaT::PropertyActioE::ConstraintsFalseTrue:
-					case DfaT::PropertyActioE::ConstraintsTrueFalse:
-					case DfaT::PropertyActioE::OneCounter:
-					case DfaT::PropertyActioE::AddCounter:
-					case DfaT::PropertyActioE::RecordLocation:
+					case Dfa::PropertyActioE::ConstraintsTrueTrue:
+					case Dfa::PropertyActioE::ConstraintsFalseFalse:
+					case Dfa::PropertyActioE::ConstraintsFalseTrue:
+					case Dfa::PropertyActioE::ConstraintsTrueFalse:
+					case Dfa::PropertyActioE::OneCounter:
+					case Dfa::PropertyActioE::AddCounter:
+					case Dfa::PropertyActioE::RecordLocation:
 					{
 						StandardT Par1 = 0;
 						Misc::CrossTypeSetThrow<RegexOutOfRange>(Par1, Ite2.Solt, RegexOutOfRange::TypeT::Solt, Ite2.Solt);
 						Writer.WriteObject(Par1);
 						break;
 					}
-					case DfaT::PropertyActioE::LessCounter:
-					case DfaT::PropertyActioE::BiggerCounter:
+					case Dfa::PropertyActioE::LessCounter:
+					case Dfa::PropertyActioE::BiggerCounter:
 					{
 						StandardT Solt = 0;
 						Misc::CrossTypeSetThrow<RegexOutOfRange>(Solt, Ite2.Solt, RegexOutOfRange::TypeT::Solt, Ite2.Solt);
@@ -2477,7 +2875,7 @@ namespace Potato::Reg
 						Writer.WriteObject(Par);
 						break;
 					}
-					case DfaT::PropertyActioE::RecordAcceptLocation:
+					case Dfa::PropertyActioE::RecordAcceptLocation:
 						break;
 					default:
 						assert(false);
@@ -2499,14 +2897,14 @@ namespace Potato::Reg
 					{
 						Reader->SetPointer(ConditionAdress);
 						auto Last = Reader->ReadObject<ConditionT>();
-						if (Ite2.PassCommand == DfaT::ConditionT::CommandE::ToNode)
+						if (Ite2.PassCommand == Dfa::ConditionT::CommandE::ToNode)
 						{
 							ConditionReference.push_back({ConditionAdress, Ite2.Pass});
 						}
 						else {
 							Misc::CrossTypeSetThrow<RegexOutOfRange>(Last->Pass, Ite2.Pass, RegexOutOfRange::TypeT::Solt, Ite2.Pass);
 						}
-						if (Ite2.UnpassCommand == DfaT::ConditionT::CommandE::ToNode)
+						if (Ite2.UnpassCommand == Dfa::ConditionT::CommandE::ToNode)
 						{
 							ConditionReference.push_back({ ConditionAdress, Ite2.Unpass });
 						}
@@ -2550,11 +2948,11 @@ namespace Potato::Reg
 			{
 				Reader->SetPointer(Ite.Adress);
 				auto Condi = Reader->ReadObject<ConditionT>();
-				if (Condi->PassCommand == static_cast<HalfStandardT>(DfaT::ConditionT::CommandE::ToNode) && Condi->Pass == 0)
+				if (Condi->PassCommand == static_cast<HalfStandardT>(Dfa::ConditionT::CommandE::ToNode) && Condi->Pass == 0)
 				{
 					Condi->Pass = NodeIndexOffset[Ite.RefCount];
 				}
-				else if (Condi->UnpassCommand == static_cast<HalfStandardT>(DfaT::ConditionT::CommandE::ToNode) && Condi->Unpass == 0)
+				else if (Condi->UnpassCommand == static_cast<HalfStandardT>(Dfa::ConditionT::CommandE::ToNode) && Condi->Unpass == 0)
 				{
 					Condi->Unpass = NodeIndexOffset[Ite.RefCount];
 				}
@@ -2596,7 +2994,7 @@ namespace Potato::Reg
 		for (std::size_t I = 0; I < ECount; ++I)
 		{
 			auto Pro = Reader.ReadObject<DfaBinaryTableWrapper::CharSetPropertyT>();
-			auto IntervalSpan = Reader.ReadObjectArray<IntervalT::ElementT>(Pro->CharCount);
+			auto IntervalSpan = Reader.ReadObjectArray<Interval::ElementT>(Pro->CharCount);
 			if (Misc::IntervalWrapperT<char32_t>::IsInclude(IntervalSpan, Token))
 			{
 				Reader.SetPointer(CurrentNode + Pro->EdgeOffset);
@@ -2607,10 +3005,10 @@ namespace Potato::Reg
 				bool DetectResult = true;
 				for (std::size_t I2 = 0; I2 < ECount; ++I2)
 				{
-					auto Action = static_cast<DfaT::PropertyActioE>(*Reader.ReadObject<DfaBinaryTableWrapper::StandardT>());
+					auto Action = static_cast<Dfa::PropertyActioE>(*Reader.ReadObject<DfaBinaryTableWrapper::StandardT>());
 					switch (Action)
 					{
-					case DfaT::PropertyActioE::CopyValue:
+					case Dfa::PropertyActioE::CopyValue:
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
 						auto P2 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
@@ -2618,62 +3016,62 @@ namespace Potato::Reg
 							CacheIndex[P2] = CacheIndex[P1];
 						break;
 					}
-					case DfaT::PropertyActioE::RecordLocation:
+					case Dfa::PropertyActioE::RecordLocation:
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
 						if(DetectResult)
 							CacheIndex[P1] = TokenIndex;
 						break;
 					}
-					case DfaT::PropertyActioE::NewContext:
+					case Dfa::PropertyActioE::NewContext:
 					{
 						TempResult.push_back(DetectResult ? 1 : 0);
 						DetectResult = true;
 						break;
 					}
-					case DfaT::PropertyActioE::ConstraintsTrueTrue:
+					case Dfa::PropertyActioE::ConstraintsTrueTrue:
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
 						if (DetectResult && TempResult[P1])
 							DetectResult = true;
 						break;
 					}
-					case DfaT::PropertyActioE::ConstraintsFalseFalse:
+					case Dfa::PropertyActioE::ConstraintsFalseFalse:
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
 						if (DetectResult && !TempResult[P1])
 							DetectResult = false;
 						break;
 					}
-					case DfaT::PropertyActioE::ConstraintsFalseTrue:
+					case Dfa::PropertyActioE::ConstraintsFalseTrue:
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
 						if (DetectResult && !TempResult[P1])
 							DetectResult = true;
 						break;
 					}
-					case DfaT::PropertyActioE::ConstraintsTrueFalse:
+					case Dfa::PropertyActioE::ConstraintsTrueFalse:
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
 						if (DetectResult && TempResult[P1])
 							DetectResult = false;
 						break;
 					}
-					case DfaT::PropertyActioE::OneCounter:
+					case Dfa::PropertyActioE::OneCounter:
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
 						if (DetectResult)
 							CacheIndex[P1] = 1;
 						break;
 					}
-					case DfaT::PropertyActioE::AddCounter:
+					case Dfa::PropertyActioE::AddCounter:
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
 						if (DetectResult)
 							CacheIndex[P1] += 1;
 						break;
 					}
-					case DfaT::PropertyActioE::LessCounter:
+					case Dfa::PropertyActioE::LessCounter:
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
 						auto P2 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
@@ -2681,7 +3079,7 @@ namespace Potato::Reg
 							DetectResult = false;
 						break;
 					}
-					case DfaT::PropertyActioE::BiggerCounter:
+					case Dfa::PropertyActioE::BiggerCounter:
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
 						auto P2 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
@@ -2689,7 +3087,7 @@ namespace Potato::Reg
 							DetectResult = false;
 						break;
 					}
-					case DfaT::PropertyActioE::RecordAcceptLocation:
+					case Dfa::PropertyActioE::RecordAcceptLocation:
 						AcceptNodeTokenIndex = TokenIndex;
 						break;
 					default:
@@ -2704,23 +3102,23 @@ namespace Potato::Reg
 				for (auto Ite : TempResult)
 				{
 					auto CurCondition = ConditionSpan[LastCondition];
-					auto TarCommand = DfaT::ConditionT::CommandE::Fail;
+					auto TarCommand = Dfa::ConditionT::CommandE::Fail;
 					std::size_t Solt = 0;
 					if (Ite == 1)
 					{
-						TarCommand = static_cast<DfaT::ConditionT::CommandE>(CurCondition.PassCommand);
+						TarCommand = static_cast<Dfa::ConditionT::CommandE>(CurCondition.PassCommand);
 						Solt = CurCondition.Pass;
 					}
 					else {
-						TarCommand = static_cast<DfaT::ConditionT::CommandE>(CurCondition.UnpassCommand);
+						TarCommand = static_cast<Dfa::ConditionT::CommandE>(CurCondition.UnpassCommand);
 						Solt = CurCondition.Unpass;
 					}
 					switch (TarCommand)
 					{
-					case DfaT::ConditionT::CommandE::Next:
+					case Dfa::ConditionT::CommandE::Next:
 						LastCondition = Solt;
 						break;
-					case DfaT::ConditionT::CommandE::ToNode:
+					case Dfa::ConditionT::CommandE::ToNode:
 					{
 						CurrentNode = Solt;
 						Reader.SetPointer(CurrentNode);
@@ -2731,7 +3129,7 @@ namespace Potato::Reg
 						}
 						return true;
 					}
-					case DfaT::ConditionT::CommandE::Fail:
+					case Dfa::ConditionT::CommandE::Fail:
 						return false;
 					default:
 						assert(false);
@@ -2750,7 +3148,7 @@ namespace Potato::Reg
 		return Node->AcceptOffset != 0 || Node->EdgeCount == 0;
 	}
 
-	std::optional<ProcessorAcceptT> DfaBinaryTableWrapperProcessor::GetAccept() const
+	std::optional<ProcessorAccept> DfaBinaryTableWrapperProcessor::GetAccept() const
 	{
 		auto Reader = Misc::StructedSerilizerReader(Table.Wrapper);
 		Reader.SetPointer(CurrentNode);
@@ -2761,7 +3159,7 @@ namespace Potato::Reg
 
 			auto TAccept = Reader.ReadObject<DfaBinaryTableWrapper::AcceptT>();
 
-			ProcessorAcceptT NewAccept;
+			ProcessorAccept NewAccept;
 			NewAccept.Mask = TAccept->Mask;
 			for (std::size_t I = TAccept->CaptureIndexBegin; I + 1 < TAccept->CaptureIndexEnd; I += 2)
 			{

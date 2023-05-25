@@ -1522,15 +1522,21 @@ namespace Potato::SLRX
 		TryReduce();
 	}
 
-	std::optional<std::any> CoreProcessor::EndOfFile()
+	bool CoreProcessor::EndOfFile()
 	{
 		auto Re = Consume(Symbol::EndOfFile(), {}, {});
 		if (Re)
 		{
 			assert(ProcessorContext.States.size() == 3);
-			return std::move(ProcessorContext.States[1].AppendData);
+			return true;
 		}
-		return {};
+		return false;
+	}
+
+	std::any& CoreProcessor::GetDataRaw()
+	{
+		assert(ProcessorContext.States.size() == 3);
+		return ProcessorContext.States[1].AppendData;
 	}
 
 	void CoreProcessor::TryReduce()

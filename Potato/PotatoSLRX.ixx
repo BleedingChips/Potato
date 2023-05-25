@@ -435,7 +435,14 @@ export namespace Potato::SLRX
 		};
 
 		bool Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, std::any AppendData);
-		std::optional<std::any> EndOfFile();
+		bool EndOfFile();
+
+		std::any& GetDataRaw();
+
+		template<typename RequrieT>
+		RequrieT GetData() {
+			return std::any_cast<RequrieT>(std::move(GetDataRaw()));
+		}
 
 		//void Clear(std::size_t StartupNode);
 
@@ -465,8 +472,9 @@ export namespace Potato::SLRX
 		LRXCoreProcessor(LRX const& Table, Context& ProcessorContext, bool EnableSuggest)
 			: CoreProcessor(ProcessorContext), Table(Table), EnableSuggest(EnableSuggest)
 		{
-			Clear(Table.StartupOffset());
 		}
+
+		void Clear() { CoreProcessor::Clear(Table.StartupOffset()); }
 
 	protected:
 
@@ -486,9 +494,9 @@ export namespace Potato::SLRX
 
 		LRXBinaryTableCoreProcessor(LRXBinaryTableWrapper Table, Context& ProcessorContext, bool EnableSuggest = false)
 			: CoreProcessor(ProcessorContext), Table(Table), EnableSuggest(EnableSuggest)
-		{
-			Clear(Table.StartupNodeIndex());
-		}
+		{}
+
+		void Clear() { CoreProcessor::Clear(Table.StartupNodeIndex()); }
 
 	protected:
 
@@ -523,7 +531,9 @@ export namespace Potato::SLRX
 
 
 		FunctionalProcessor(TableT Table, Context& ProcessorContext,  HandlFunction& Function)
-			: BaseT(Table, ProcessorContext, std::is_invocable_v<HandlFunction, Symbol>), Function(Function) {}
+			: BaseT(Table, ProcessorContext, std::is_invocable_v<HandlFunction, Symbol>), Function(Function) {
+			BaseT::Clear();
+		}
 
 		bool Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, AppendInfo const& Info)
 		{
@@ -538,17 +548,12 @@ export namespace Potato::SLRX
 			}
 		}
 
-		std::optional<std::any> EndOfFile() { return LRXCoreProcessor::EndOfFile(); }
+		bool EndOfFile() { return BaseT::EndOfFile(); }
 
-		template<typename RequireT>
-		std::optional<RequireT> EndOfFile() {
-			auto Re = BaseT::EndOfFile();
-			if (Re.has_value())
-			{
-				return std::move(std::any_cast<RequireT>(*Re));
-			}
-			return {};
-		}
+		std::any& GetDataRaw() { return BaseT::GetDataRaw(); }
+
+		template<typename RequrieT>
+		RequrieT GetData() { return this->BaseT::GetData<RequrieT>(); }
 	
 	protected:
 

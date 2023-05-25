@@ -149,14 +149,14 @@ void TestingReg()
 }
 */
 
-void Test(DfaT::FormatE Format, std::vector<std::u32string_view> Reg, std::u32string_view SourceStr, std::size_t TargetMask, std::u32string_view MainCapture, std::vector<std::u32string_view> RequireCapture, const char* Error);
+void Test(Dfa::FormatE Format, std::vector<std::u32string_view> Reg, std::u32string_view SourceStr, std::size_t TargetMask, std::u32string_view MainCapture, std::vector<std::u32string_view> RequireCapture, const char* Error);
 
 
 int main()
 {
 	
 	Test(
-		DfaT::FormatE::HeadMatch,
+		Dfa::FormatE::HeadMatch,
 		{
 			U"a(a+?)a",
 			U"(a{1,16})(b{0,8})"
@@ -171,7 +171,7 @@ int main()
 	);
 
 	Test(
-		DfaT::FormatE::GreedyHeadMatch,
+		Dfa::FormatE::GreedyHeadMatch,
 		{
 			U"a(a+?)a",
 			U"(a{1,16})(b{0,8})"
@@ -186,8 +186,9 @@ int main()
 		"case2"
 	);
 
+
 	Test(
-		DfaT::FormatE::GreedyHeadMatch,
+		Dfa::FormatE::GreedyHeadMatch,
 		{
 			U"abcdefgg",
 			U"abcd"
@@ -206,17 +207,17 @@ int main()
 }
 
 
-void Test(DfaT::FormatE Format, std::vector<std::u32string_view> Reg, std::u32string_view SourceStr, std::size_t TargetMask, std::u32string_view MainCapture, std::vector<std::u32string_view> RequireCapture, const char* Error)
+void Test(Dfa::FormatE Format, std::vector<std::u32string_view> Reg, std::u32string_view SourceStr, std::size_t TargetMask, std::u32string_view MainCapture, std::vector<std::u32string_view> RequireCapture, const char* Error)
 {
 	if (!Reg.empty())
 	{
 		try {
-			NfaT NfaReg(Reg[0], false, 0);
+			Nfa NfaReg(Reg[0], false, 0);
 			for (std::size_t I = 1; I < Reg.size(); ++I)
 			{
-				NfaReg.Link(NfaT{ Reg[I], false, I });
+				NfaReg.Link(Nfa{ Reg[I], false, I });
 			}
-			DfaT RegTable(Format, NfaReg);
+			Dfa RegTable(Format, NfaReg);
 
 			{
 				auto Accep = Process(RegTable, SourceStr);

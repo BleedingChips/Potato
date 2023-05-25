@@ -145,12 +145,12 @@ void TestTable(Symbol StartSymbol, std::vector<ProductionBuilder> Builder, std::
 				throw Error;
 		}
 
-		auto P = Pro.EndOfFile<std::u8string>();
-
-		if(!P.has_value())
+		if(!Pro.EndOfFile())
 			throw Error;
 
-		if(*P != TarStr)
+		auto P = Pro.GetData<std::u8string>();
+
+		if(P != TarStr)
 			throw Error;
 
 		auto Buffer = LRXBinaryTableWrapper::Create(Tab);
@@ -167,12 +167,12 @@ void TestTable(Symbol StartSymbol, std::vector<ProductionBuilder> Builder, std::
 				throw Error;
 		}
 
-		auto P2 = Pro2.EndOfFile<std::u8string>();
-
-		if (!P2.has_value())
+		if(!Pro2.EndOfFile())
 			throw Error;
 
-		if (*P2 != TarStr)
+		auto P2 = Pro2.GetData<std::u8string>();
+
+		if (P2 != TarStr)
 			throw Error;
 
 	}
@@ -190,19 +190,17 @@ void TestingSLRX()
 	std::vector<Terminal> Lists2 = { Terminal::Num, Terminal::Add, Terminal::Num, Terminal::Mul, Terminal::Num, Terminal::Add, Terminal::Num };
 	std::vector<Terminal> Lists3 = { Terminal::Num, Terminal::Num, Terminal::Num, Terminal::Num, Terminal::Num, Terminal::Num };
 
-	/*
 	TestTable(
 		*Noterminal::Exp,
 		{
-				{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Num}, 2, true},
-				{*Noterminal::Exp, {}, 1, true},
+				{*Noterminal::Exp, {*Noterminal::Exp, *Terminal::Num}, 2},
+				{*Noterminal::Exp, {}, 1},
 		},
 		{}, 3,
 		Lists,
-		u8"&(&(&(&(&(&()Num)Num)Num)Num)Num)",
+		u8"(((((()Num)Num)Num)Num)Num)",
 		"TestingSLRX : Case 1"
 	);
-	*/
 
 	TestTable(
 		*Noterminal::Exp,

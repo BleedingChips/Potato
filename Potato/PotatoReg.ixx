@@ -9,93 +9,28 @@ export import Potato.STD;
 export namespace Potato::Reg
 {
 
-	using IntervalT = Misc::IntervalT<char32_t>;
+	using Interval = Misc::IntervalT<char32_t>;
 
 	inline constexpr char32_t MaxChar() { return 0x110000; };
 	inline constexpr char32_t EndOfFile() { return 0; }
 
-	struct RegLexerT
-	{
-		
-		enum class ElementEnumT
-		{
-			SingleChar = 0, // µ¥×Ö·û
-			CharSet, // ¶à×Ö·û
-			Min, // -
-			BracketsLeft, //[
-			BracketsRight, // ]
-			ParenthesesLeft, //(
-			ParenthesesRight, //)
-			CurlyBracketsLeft, //{
-			CurlyBracketsRight, //}
-			Num, // 0 - 1
-			Comma, // ,
-			Mulity, //*
-			Question, // ?
-			Or, // |
-			Add, // +
-			Not, // ^
-			Colon, // :
-		};
-
-		struct ElementT
-		{
-			ElementEnumT Value;
-			IntervalT Chars;
-			Misc::IndexSpan<> Token;
-		};
-
-		std::span<ElementT const> GetSpan() const { return std::span(StoragedSymbol); }
-
-		bool Consume(char32_t InfoutSymbol, Misc::IndexSpan<> TokenIndex);
-		bool EndOfFile();
-
-		RegLexerT(bool IsRaw = false);
-		RegLexerT(RegLexerT&&) = default;
-
-		template<typename CharT, typename CharTraiT>
-		static RegLexerT Create(std::basic_string_view<CharT, CharTraiT> Str, bool IsRaw = false);
-
-	protected:
-
-		enum class StateT
-		{
-			Normal,
-			Transfer,
-			BigNumber,
-			Number,
-			Done,
-			Raw,
-		};
-
-		StateT CurrentState;
-		std::size_t Number = 0;
-		char32_t NumberChar = 0;
-		bool NumberIsBig = false;
-		char32_t RecordSymbol = 0;
-		std::size_t RecordTokenIndex = 0;
-		std::size_t TokenIndexIte = 0;
-		std::vector<ElementT> StoragedSymbol;
-	};
-
-	struct NfaT
+	struct Nfa
 	{
 		
 		template<typename CharT, typename CharTraiT>
-		NfaT(std::basic_string_view<CharT, CharTraiT> Str, bool IsRaw = false, std::size_t Mask = 0);
+		Nfa(std::basic_string_view<CharT, CharTraiT> Str, bool IsRaw = false, std::size_t Mask = 0);
 		
 		template<typename CharT>
-		NfaT(CharT const* Str, bool IsRaw = false, std::size_t Mask = 0) : NfaT(std::basic_string_view<CharT>{Str}, IsRaw, Mask) {}
+		Nfa(CharT const* Str, bool IsRaw = false, std::size_t Mask = 0) : Nfa(std::basic_string_view<CharT>{Str}, IsRaw, Mask) {}
 
-		NfaT(NfaT const&) = default;
-		NfaT(NfaT&&) = default;
+		Nfa(Nfa const&) = default;
+		Nfa(Nfa&&) = default;
 
-		void Link(NfaT const&);
+		void Link(Nfa const&);
 
 	protected:
 
-		NfaT(RegLexerT const& Lexer, std::size_t Mask = 0);
-		NfaT() = default;
+		Nfa() = default;
 
 		
 		struct NodeSetT
@@ -103,18 +38,6 @@ export namespace Potato::Reg
 			std::size_t In;
 			std::size_t Out;
 		};
-
-		std::size_t AddNode();
-
-		struct ContentT
-		{
-			Misc::IndexSpan<> TokenIndex;
-			std::span<RegLexerT::ElementT const> Tokens;
-		};
-
-		void AddConsume(NodeSetT Set, IntervalT Chars, ContentT Content);
-		NodeSetT AddCapture(NodeSetT Inside, ContentT Content, std::size_t CaptureIndex);
-		NodeSetT AddCounter(NodeSetT Inside, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool Greedy, ContentT Content, std::size_t CaptureIndex);
 
 		enum class EdgePropertyE
 		{
@@ -139,7 +62,7 @@ export namespace Potato::Reg
 		{
 			std::vector<PropertyT> Propertys;
 			std::size_t ToNode;
-			IntervalT CharSets;
+			Interval CharSets;
 			Misc::IndexSpan<> TokenIndex;
 			std::size_t MaskIndex = 0;
 			bool IsEpsilonEdge() const { return CharSets.Size() == 0; }
@@ -171,10 +94,62 @@ export namespace Potato::Reg
 
 		static Misc::IndexSpan<> CollectTokenIndexFromNodePath(std::span<NodeT const> NodeView, Misc::IndexSpan<> Default, std::span<std::size_t const> NodeStateView);
 
+		struct BuilderT
+		{
+
+			BuilderT(std::size_t Mask = 0, bool IsRaw = false);
+
+			template<typename CharT, typename CharTraiT>
+			static auto Create(std::basic_string_view<CharT, CharTraiT> Str, bool IsRaw = false, std::size_t Mask = 0)
+				->std::vector<NodeT>;
+
+			bool Consume(char32_t InputSymbol, Misc::IndexSpan<> TokenIndex);
+			bool EndOfFile();
+
+			std::any operator()(SLRX::SymbolElement Value, Interval Chars);
+			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceDescription Desc, std::span<SLRX::CoreProcessor::Element> Elements);
+
+		protected:
+
+			std::size_t AddNode();
+			void AddConsume(NodeSetT Set, Interval Chars, Misc::IndexSpan<> TokenIndex);
+			NodeSetT AddCapture(NodeSetT Inside, Misc::IndexSpan<> TokenIndex, std::size_t CaptureIndex);
+			NodeSetT AddCounter(NodeSetT Inside, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool Greedy, Misc::IndexSpan<> TokenIndex, std::size_t CaptureIndex);
+			bool InsertSymbol(SLRX::Symbol SymbolValue, char32_t CharValue, Misc::IndexSpan<> TokenIndex) {
+				return InsertSymbol(SymbolValue, Interval{ CharValue }, TokenIndex);
+			}
+			bool InsertSymbol(SLRX::Symbol SymbolValue, Interval CharsValue, Misc::IndexSpan<> TokenIndex);
+			
+			enum class StateT
+			{
+				Normal,
+				Transfer,
+				BigNumber,
+				Number,
+				Done,
+				Raw,
+			};
+
+			StateT CurrentState;
+			std::size_t Number = 0;
+			std::size_t Mask = 0;
+			char32_t NumberChar = 0;
+			bool NumberIsBig = false;
+			char32_t RecordSymbol = 0;
+			std::size_t RecordTokenIndex = 0;
+			std::size_t TokenIndexIte = 0;
+			std::vector<NodeT> Nodes;
+			SLRX::LRXBinaryTableCoreProcessor::Context Context;
+			std::size_t CaptureCount = 0;
+			std::size_t CounterCount = 0;
+			SLRX::LRXBinaryTableProcessor<Interval, BuilderT> Processor;
+		};
+
+
 		std::vector<NodeT> Nodes;
 		std::size_t MaskIndex = 1;
 
-		friend struct DfaT;
+		friend struct Dfa;
 	};
 
 	struct NfaEdgeKeyT
@@ -233,7 +208,7 @@ export namespace Potato::Reg
 
 	};
 
-	struct DfaT
+	struct Dfa
 	{
 
 		enum class FormatE
@@ -243,18 +218,18 @@ export namespace Potato::Reg
 			GreedyHeadMatch,
 		};
 
-		DfaT(FormatE Format, NfaT const& T1);
-		DfaT(DfaT&&) = default;
-		DfaT(DfaT const&) = default;
-		DfaT() = default;
-		DfaT& operator=(DfaT&&) = default;
+		Dfa(FormatE Format, Nfa const& T1);
+		Dfa(Dfa&&) = default;
+		Dfa(Dfa const&) = default;
+		Dfa() = default;
+		Dfa& operator=(Dfa&&) = default;
 
 		template<typename CharT, typename CharTraisT>
-		DfaT(FormatE Format, std::basic_string_view<CharT, CharTraisT> Str, bool IsRaw = false, std::size_t Mask = 0);
+		Dfa(FormatE Format, std::basic_string_view<CharT, CharTraisT> Str, bool IsRaw = false, std::size_t Mask = 0);
 		
 		template<typename CharT>
-		DfaT(FormatE Format, CharT const* Str, bool IsRaw = false, std::size_t Mask = 0)
-			: DfaT(Format, Str, IsRaw, Mask) {}
+		Dfa(FormatE Format, CharT const* Str, bool IsRaw = false, std::size_t Mask = 0)
+			: Dfa(Format, Str, IsRaw, Mask) {}
 
 
 		std::size_t GetStartupNodeIndex() const { return 0; }
@@ -292,7 +267,7 @@ export namespace Potato::Reg
 
 		struct TempEdgeT
 		{
-			IntervalT CharSets;
+			Interval CharSets;
 			std::vector<TempPropertyT> Propertys;
 			std::vector<TempToNodeT> ToNode;
 		};
@@ -301,7 +276,7 @@ export namespace Potato::Reg
 		{
 			std::vector<TempEdgeT> TempEdge;
 			std::vector<std::size_t> OriginalToNode;
-			std::optional<NfaT::AcceptT> Accept;
+			std::optional<Nfa::AcceptT> Accept;
 		};
 
 		enum class PropertyActioE
@@ -343,7 +318,7 @@ export namespace Potato::Reg
 
 		struct EdgeT
 		{
-			IntervalT CharSets;
+			Interval CharSets;
 			std::vector<PropertyT> Propertys;
 			std::vector<ConditionT> Conditions;
 		};
@@ -369,20 +344,20 @@ export namespace Potato::Reg
 		friend struct DfaBinaryTableWrapperProcessor;
 	};
 
-	struct ProcessorAcceptT
+	struct ProcessorAccept
 	{
 		std::size_t Mask;
 		std::vector<Misc::IndexSpan<>> Capture;
 		Misc::IndexSpan<> MainCapture;
 	};
 
-	struct ProcessorUnacceptT
+	struct ProcessorUnaccept
 	{
 		Misc::IndexSpan<> FailCapture;
 	};
 
 	template<typename ProcessorT, typename CharT, typename CharTraidT>
-	std::variant<ProcessorAcceptT, ProcessorUnacceptT> CoreProcessorWithUnaccept(ProcessorT& Pro, std::basic_string_view<CharT, CharTraidT> Str)
+	std::variant<ProcessorAccept, ProcessorUnaccept> CoreProcessorWithUnaccept(ProcessorT& Pro, std::basic_string_view<CharT, CharTraidT> Str)
 	{
 		char32_t TemBuffer = 0;
 		std::span<char32_t> OutputSpan{ &TemBuffer, 1 };
@@ -416,44 +391,44 @@ export namespace Potato::Reg
 		if(Accept.has_value())
 			return std::move(*Accept);
 		else
-			return ProcessorUnacceptT{{0, TokeIndex} };
+			return ProcessorUnaccept{{0, TokeIndex} };
 	}
 
 	template<typename ProcessorT, typename CharT>
-	std::variant<ProcessorAcceptT, ProcessorUnacceptT> CoreProcessorWithUnaccept(ProcessorT& Pro, CharT const* Str)
+	std::variant<ProcessorAccept, ProcessorUnaccept> CoreProcessorWithUnaccept(ProcessorT& Pro, CharT const* Str)
 	{
 		return CoreProcessorWithUnaccept(Pro, std::basic_string_view<CharT>(Str));
 	}
 
 	template<typename ProcessorT, typename CharT, typename CharTraidT>
-	std::optional<ProcessorAcceptT> CoreProcessor(ProcessorT& Pro, std::basic_string_view<CharT, CharTraidT> Str)
+	std::optional<ProcessorAccept> CoreProcessor(ProcessorT& Pro, std::basic_string_view<CharT, CharTraidT> Str)
 	{
 		auto Re = CoreProcessorWithUnaccept(Pro, Str);
-		if(std::holds_alternative<ProcessorAcceptT>(Re))
-			return std::move(std::get<ProcessorAcceptT>(Re));
+		if(std::holds_alternative<ProcessorAccept>(Re))
+			return std::move(std::get<ProcessorAccept>(Re));
 		return {};
 	}
 
 	template<typename ProcessorT, typename CharT>
-	std::optional<ProcessorAcceptT> CoreProcessor(ProcessorT& Pro, CharT const* Str)
+	std::optional<ProcessorAccept> CoreProcessor(ProcessorT& Pro, CharT const* Str)
 	{
 		return CoreProcessor(Pro, std::basic_string_view<CharT>(Str));
 	}
 
 	struct DfaProcessor
 	{
-		DfaProcessor(DfaT const& Table);
+		DfaProcessor(Dfa const& Table);
 		DfaProcessor(DfaProcessor const&) = default;
 
 		bool Consume(char32_t Token, std::size_t TokenIndex);
 		bool EndOfFile(std::size_t TokenIndex) { return Consume(Reg::EndOfFile(), TokenIndex); }
 		void Reset();
 		bool HasAccept() const;
-		std::optional<ProcessorAcceptT> GetAccept() const;
+		std::optional<ProcessorAccept> GetAccept() const;
 	
 	public:
 		
-		DfaT const& Table;
+		Dfa const& Table;
 		std::size_t CurNodeIndex;
 		std::vector<std::size_t> TempResult;
 		std::vector<std::size_t> CacheIndex;
@@ -464,14 +439,14 @@ export namespace Potato::Reg
 	};
 
 	template<typename CharT, typename CharTrais>
-	std::optional<ProcessorAcceptT> Process(DfaT const& Table, std::basic_string_view<CharT, CharTrais> Str)
+	std::optional<ProcessorAccept> Process(Dfa const& Table, std::basic_string_view<CharT, CharTrais> Str)
 	{
 		DfaProcessor Processor{ Table };
 		return CoreProcessor(Processor, Str);
 	}
 
 	template<typename CharT>
-	std::optional<ProcessorAcceptT> Process(DfaT const& Table, CharT const* Str)
+	std::optional<ProcessorAccept> Process(Dfa const& Table, CharT const* Str)
 	{
 		return Process(Table, std::basic_string_view<CharT>(Str));
 	}
@@ -513,7 +488,7 @@ export namespace Potato::Reg
 
 		struct HeadT
 		{
-			DfaT::FormatE Format;
+			Dfa::FormatE Format;
 			StandardT StartupNodeIndex = 0;
 			StandardT NodeCount = 0;
 			StandardT CacheSolt = 0;
@@ -526,7 +501,7 @@ export namespace Potato::Reg
 			HalfStandardT CaptureIndexEnd = 0;
 		};
 		
-		static void Serilize(Misc::StructedSerilizerWritter<StandardT>& Writer, DfaT const& RefTable);
+		static void Serilize(Misc::StructedSerilizerWritter<StandardT>& Writer, Dfa const& RefTable);
 
 		DfaBinaryTableWrapper(std::span<StandardT> Buffer) : Wrapper(Buffer) {};
 
@@ -539,7 +514,7 @@ export namespace Potato::Reg
 	};
 
 	template<typename AllocatorT>
-	auto CreateDfaBinaryTable(DfaT const& RefTable, AllocatorT Allocator)
+	auto CreateDfaBinaryTable(Dfa const& RefTable, AllocatorT Allocator)
 	{
 		using StandardT = DfaBinaryTableWrapper::StandardT;
 		Misc::StructedSerilizerWritter<StandardT> Predicted;
@@ -552,18 +527,18 @@ export namespace Potato::Reg
 		return Buffer;
 	}
 
-	inline auto CreateDfaBinaryTable(DfaT const& RefTable) { return CreateDfaBinaryTable(RefTable, std::allocator<DfaBinaryTableWrapper::StandardT>{}); }
+	inline auto CreateDfaBinaryTable(Dfa const& RefTable) { return CreateDfaBinaryTable(RefTable, std::allocator<DfaBinaryTableWrapper::StandardT>{}); }
 
 	template<typename CharT, typename CharTraits, typename AllocatorT>
-	auto CreateDfaBinaryTable(DfaT::FormatE Format, std::basic_string_view<CharT, CharTraits> Str, bool IsRaw = false, std::size_t Mask = 0, AllocatorT Allocator = {})
+	auto CreateDfaBinaryTable(Dfa::FormatE Format, std::basic_string_view<CharT, CharTraits> Str, bool IsRaw = false, std::size_t Mask = 0, AllocatorT Allocator = {})
 	{
-		return CreateDfaBinaryTable(DfaT{ Format, Str, IsRaw, Mask }, std::move(Allocator));
+		return CreateDfaBinaryTable(Dfa{ Format, Str, IsRaw, Mask }, std::move(Allocator));
 	}
 
 	template<typename CharT, typename CharTraits>
-	auto CreateDfaBinaryTable(DfaT::FormatE Format, std::basic_string_view<CharT, CharTraits> Str, bool IsRaw = false, std::size_t Mask = 0)
+	auto CreateDfaBinaryTable(Dfa::FormatE Format, std::basic_string_view<CharT, CharTraits> Str, bool IsRaw = false, std::size_t Mask = 0)
 	{
-		return CreateDfaBinaryTable(DfaT{ Format, Str, IsRaw, Mask }, std::allocator<DfaBinaryTableWrapper::StandardT>{});
+		return CreateDfaBinaryTable(Dfa{ Format, Str, IsRaw, Mask }, std::allocator<DfaBinaryTableWrapper::StandardT>{});
 	}
 
 	struct DfaBinaryTableWrapperProcessor
@@ -573,7 +548,7 @@ export namespace Potato::Reg
 		bool EndOfFile(std::size_t TokenIndex) { return Consume(Reg::EndOfFile(), TokenIndex); }
 		void Reset();
 		bool HasAccept() const;
-		std::optional<ProcessorAcceptT> GetAccept() const;
+		std::optional<ProcessorAccept> GetAccept() const;
 	protected:
 		DfaBinaryTableWrapper Table;
 		std::size_t CurrentNode;
@@ -584,7 +559,7 @@ export namespace Potato::Reg
 	};
 
 	template<typename CharT, typename CharTrais>
-	std::optional<ProcessorAcceptT> Process(DfaBinaryTableWrapper const& Table, std::basic_string_view<CharT, CharTrais> Str)
+	std::optional<ProcessorAccept> Process(DfaBinaryTableWrapper const& Table, std::basic_string_view<CharT, CharTrais> Str)
 	{
 		DfaBinaryTableWrapperProcessor Processor{ Table };
 		return RegCoreProcessor(Processor, Str);
@@ -597,7 +572,7 @@ export namespace Potato::Reg
 		{
 			if (Table.has_value())
 			{
-				Table->Link(NfaT{Str, IsRaw, Mask});
+				Table->Link(Nfa{Str, IsRaw, Mask});
 			}
 			else {
 				Table.emplace(Str, IsRaw, Mask);
@@ -610,13 +585,13 @@ export namespace Potato::Reg
 			return AppendReg(std::basic_string_view<CharT>(Str), IsRaw, Mask);
 		}
 
-		std::optional<DfaT> CreateDfa(DfaT::FormatE Format) const { if (Table.has_value())  return DfaT{ Format, *Table }; return {}; }
+		std::optional<Dfa> CreateDfa(Dfa::FormatE Format) const { if (Table.has_value())  return Dfa{ Format, *Table }; return {}; }
 
 		template<typename AllocatorT = std::allocator<DfaBinaryTableWrapper::StandardT>>
-		std::optional<std::vector<DfaBinaryTableWrapper::StandardT>> CreateDfaBinary(DfaT::FormatE Format, AllocatorT Allocator = {}) const { if (Table.has_value())  return CreateDfaBinaryTable(DfaT{Format, *Table}, std::move(Allocator)); return {}; }
+		std::optional<std::vector<DfaBinaryTableWrapper::StandardT>> CreateDfaBinary(Dfa::FormatE Format, AllocatorT Allocator = {}) const { if (Table.has_value())  return CreateDfaBinaryTable(Dfa{Format, *Table}, std::move(Allocator)); return {}; }
 	
 	protected:
-		std::optional<NfaT> Table;
+		std::optional<Nfa> Table;
 	};
 
 	export namespace Exception
@@ -693,10 +668,13 @@ export namespace Potato::Reg
 	}
 
 	template<typename CharT, typename CharTraiT>
-	RegLexerT RegLexerT::Create(std::basic_string_view<CharT, CharTraiT> Str, bool IsRaw)
+	auto Nfa::BuilderT::Create(std::basic_string_view<CharT, CharTraiT> Str, bool IsRaw, std::size_t Mask)
+		-> std::vector<NodeT>
 	{
 		using namespace Exception;
-		RegLexerT Lex(IsRaw);
+
+		BuilderT Lex(Mask, IsRaw);
+
 		using EncodeT = Encode::CharEncoder<CharT, char32_t>;
 		using EncodeT = Encode::CharEncoder<CharT, char32_t>;
 
@@ -716,20 +694,20 @@ export namespace Potato::Reg
 		}
 		if (!Lex.EndOfFile())
 			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {Str.size(), Str.size()} };
-		return Lex;
+		return Lex.Nodes;
 	}
 
 	template<typename CharT, typename CharTraiT>
-	NfaT::NfaT(std::basic_string_view<CharT, CharTraiT> Str, bool IsRaw, std::size_t Mask)
-		try : NfaT(RegLexerT::Create(Str, IsRaw), Mask) {}
+	Nfa::Nfa(std::basic_string_view<CharT, CharTraiT> Str, bool IsRaw, std::size_t Mask)
+		try : Nodes(BuilderT::Create(Str, IsRaw, Mask)) {}
 	catch (Exception::UnaccaptableRegexTokenIndex const& EIndex)
 	{
 		throw Exception::UnaccaptableRegex{ EIndex.Type, Str, EIndex.BadIndex };
 	}
 
 	template<typename CharT, typename CharTraisT>
-	DfaT::DfaT(FormatE Format, std::basic_string_view<CharT, CharTraisT> Str, bool IsRaw, std::size_t Mask)
-		try : DfaT(Format, NfaT{ Str, IsRaw, Mask }) {}
+	Dfa::Dfa(FormatE Format, std::basic_string_view<CharT, CharTraisT> Str, bool IsRaw, std::size_t Mask)
+		try : Dfa(Format, Nfa{ Str, IsRaw, Mask }) {}
 	catch (Exception::UnaccaptableRegexTokenIndex const& EIndex)
 	{
 		throw Exception::UnaccaptableRegex{ EIndex.Type, Str, EIndex.BadIndex };
