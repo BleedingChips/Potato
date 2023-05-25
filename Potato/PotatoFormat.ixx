@@ -52,13 +52,13 @@ export namespace Potato::Format
 	}
 
 	template<typename CharT, typename CharTraits, typename ...OT>
-	bool RegAcceptScan(Reg::ProcessorAcceptT const& Accept, std::basic_string_view<CharT, CharTraits> InputStr,  OT& ...OO)
+	bool RegAcceptScan(Reg::ProcessorAccept const& Accept, std::basic_string_view<CharT, CharTraits> InputStr,  OT& ...OO)
 	{
 		return CaptureScan(std::span(Accept.Capture), InputStr, OO...);
 	}
 
 	template<typename CharT, typename CharTraits, typename ...OT>
-	bool RegAcceptScan(Reg::ProcessorAcceptT const& Accept, CharT const* InputStr, OT& ...OO)
+	bool RegAcceptScan(Reg::ProcessorAccept const& Accept, CharT const* InputStr, OT& ...OO)
 	{
 		return RegAcceptScan(Accept, std::basic_string_view<CharT>(InputStr), OO...);
 	}
@@ -84,7 +84,7 @@ export namespace Potato::Format
 	template<typename CharT1, typename CharTT1, typename CharT2, typename CharTT2, typename ...OT>
 	bool MatchScan(std::basic_string_view<CharT1, CharTT1> Regex, std::basic_string_view<CharT2, CharTT2> Source, OT&... OO)
 	{
-		Reg::DfaT Table(Reg::DfaT::FormatE::Match, Regex, false, 0);
+		Reg::Dfa Table(Reg::Dfa::FormatE::Match, Regex, false, 0);
 		Reg::DfaProcessor Processor(Table);
 		return ProcessorScan(Processor, Source, OO...);
 	}
@@ -92,7 +92,7 @@ export namespace Potato::Format
 	template<typename CharT1, typename CharTT1, typename CharT2, typename CharTT2, typename ...OT>
 	bool HeadMatchScan(std::basic_string_view<CharT1, CharTT1> Regex, std::basic_string_view<CharT2, CharTT2> Source, OT&... OO)
 	{
-		Reg::DfaT Table(Reg::DfaT::FormatE::HeadMatch, Regex, false, 0);
+		Reg::Dfa Table(Reg::Dfa::FormatE::HeadMatch, Regex, false, 0);
 		Reg::DfaProcessor Processor(Table);
 		return ProcessorScan(Processor, Source, OO...);
 	}
@@ -329,6 +329,12 @@ export namespace Potato::Format
 			Formatter = Last;
 		}
 		return true;
+	}
+
+	template<typename CharT, typename ...OType>
+	constexpr bool Format(FormatWritter<CharT>& Writter, CharT const* Formatter, OType&& ...OT)
+	{
+		return Format(Writter, std::basic_string_view<CharT>{Formatter}, std::forward<OType>(OT)...);
 	}
 
 	template<typename CharT, typename CharTrais, typename ...OType>

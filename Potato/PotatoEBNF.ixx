@@ -10,6 +10,48 @@ export import Potato.STD;
 export namespace Potato::EBNF
 {
 	
+	struct EbnfBuiler
+	{
+
+		EbnfBuiler(std::size_t StartupTokenIndex);
+
+		struct RegMapT
+		{
+			Misc::IndexSpan<> RegName;
+			Misc::IndexSpan<> Reg;
+			std::optional<Misc::IndexSpan<>> UserMask;
+			bool IgnoreReg = false;
+		};
+
+		std::vector<RegMapT> RegMappings;
+		std::optional<Misc::IndexSpan<>> StartSymbol;
+		std::optional<Misc::IndexSpan<>> MaxForwardDetect;
+		
+		struct BuilderT
+		{
+
+		};
+
+		std::vector<BuilderT> Builder;
+
+		struct OpePriorityT
+		{
+
+		};
+
+		std::vector<OpePriorityT> OpePriority;
+
+		std::size_t LastTokenIndex = 0;
+	};
+
+
+
+
+
+
+
+
+	/*
 	struct EbnfLexerT
 	{
 		
@@ -188,6 +230,7 @@ export namespace Potato::EBNF
 
 		SLRX::SymbolProcessor SymbolProcessor;
 	};
+	*/
 
 
 
