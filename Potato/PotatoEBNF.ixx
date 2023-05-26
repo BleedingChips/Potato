@@ -13,33 +13,74 @@ export namespace Potato::EBNF
 	struct EbnfBuiler
 	{
 
+
 		EbnfBuiler(std::size_t StartupTokenIndex);
+
+		std::size_t GetRequireTokenIndex() const;
+		bool Consume(char32_t InputValue, std::size_t LastTokenIndex);
+		bool EndOfFile();
+
+	protected:
+
+		enum RegTypeE
+		{
+			Terminal,
+			Empty,
+			Reg,
+		};
 
 		struct RegMapT
 		{
 			Misc::IndexSpan<> RegName;
+			RegTypeE RegNameType = RegTypeE::Normal;
 			Misc::IndexSpan<> Reg;
 			std::optional<Misc::IndexSpan<>> UserMask;
-			bool IgnoreReg = false;
 		};
 
 		std::vector<RegMapT> RegMappings;
 		std::optional<Misc::IndexSpan<>> StartSymbol;
 		std::optional<Misc::IndexSpan<>> MaxForwardDetect;
-		
+
+		enum class ElementTypeE
+		{
+			Mask,
+			Value,
+			Self,
+			Temporary
+		};
+
+		struct ElementT
+		{
+			ElementTypeE ElementType = ElementTypeE::Value;
+			Misc::IndexSpan<> Value;
+		};
+
 		struct BuilderT
 		{
-
+			Misc::IndexSpan<> StartSymbol;
+			std::vector<ElementT> Productions;
+			std::optional<Misc::IndexSpan<>> UserMask;
 		};
 
 		std::vector<BuilderT> Builder;
 
-		struct OpePriorityT
+		struct OpePriority
 		{
-
+			SLRX::OpePriority::Associativity Associativity;
+			std::vector<Misc::IndexSpan<>> Ope;
 		};
 
-		std::vector<OpePriorityT> OpePriority;
+		std::vector<OpePriority> Ope;
+
+		enum StateE
+		{
+			Idea,
+			Step1,
+			Step2,
+			Step3
+		};
+
+		StateE Idea;
 
 		std::size_t LastTokenIndex = 0;
 	};
@@ -552,7 +593,7 @@ export namespace Potato::EBNF::Exception
 
 export namespace Potato::EBNF
 {
-
+	/*
 	struct BuildInUnacceptableEbnf
 	{
 		using TypeE = Exception::UnacceptableEbnf::TypeE;
@@ -808,4 +849,5 @@ export namespace Potato::EBNF
 			};
 		}
 	}
+	*/
 }

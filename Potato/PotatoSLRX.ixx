@@ -509,6 +509,8 @@ export namespace Potato::SLRX
 		bool const EnableSuggest;
 	};
 
+	struct IgnoreClear {};
+
 	template<typename ProcessorT, typename AppendInfo, typename HandlFunction>
 	requires(
 		(std::is_same_v<ProcessorT, LRX> || std::is_same_v<ProcessorT, LRXBinaryTableWrapper>)
@@ -535,6 +537,10 @@ export namespace Potato::SLRX
 			BaseT::Clear();
 		}
 
+		FunctionalProcessor(IgnoreClear, TableT Table, Context& ProcessorContext, HandlFunction& Function)
+			: BaseT(Table, ProcessorContext, std::is_invocable_v<HandlFunction, Symbol>), Function(Function) {
+		}
+
 		bool Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, AppendInfo const& Info)
 		{
 			auto AppendData = Function(SymbolElement{Value, TokenIndex}, Info);
@@ -554,6 +560,8 @@ export namespace Potato::SLRX
 
 		template<typename RequrieT>
 		RequrieT GetData() { return this->BaseT::GetData<RequrieT>(); }
+
+		void Clear() { return BaseT::Clear(); }
 	
 	protected:
 
