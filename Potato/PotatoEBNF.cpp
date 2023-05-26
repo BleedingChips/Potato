@@ -18,7 +18,31 @@ namespace Potato::EBNF
 
 	using SLRX::Symbol;
 
-	using T = EbnfLexerT::T;
+	enum class T
+	{
+		Empty = 0,
+		Terminal,
+		Equal,
+		Rex,
+		NoTerminal,
+		StartSymbol,
+		LB_Brace,
+		RB_Brace,
+		LM_Brace,
+		RM_Brace,
+		LS_Brace,
+		RS_Brace,
+		LeftPriority,
+		RightPriority,
+		Or,
+		Number,
+		Start,
+		Colon,
+		Semicolon,
+		Command,
+		Barrier,
+		Line
+	};
 
 	constexpr Symbol operator*(T sym) { return Symbol::AsTerminal(static_cast<std::size_t>(sym)); };
 
@@ -37,7 +61,7 @@ namespace Potato::EBNF
 
 	constexpr Symbol operator*(NT sym) { return Symbol::AsNoTerminal(static_cast<std::size_t>(sym)); };
 
-	Reg::DfaBinaryTableWrapper EbnfLexerT::GetRegTable() {
+	Reg::DfaBinaryTableWrapper GetRegTable() {
 		static auto List = []() {
 
 			Reg::NfaT StartupTable{ std::basic_string_view{UR"(%%%%)"}, false, static_cast<std::size_t>(T::Barrier) };
@@ -150,7 +174,29 @@ namespace Potato::EBNF
 		return Table.Wrapper;
 	};
 
+	EbnfBuiler::EbnfBuiler(std::size_t StartupTokenIndex)
+		: RequireTokenIndex(StartupTokenIndex), LastSymbolToken(StartupTokenIndex), Processor(GetRegTable())
+	{
+	}
 
+	bool EbnfBuiler::Consume(char32_t InputValue, std::size_t NextTokenIndex)
+	{
+		if (Processor.Consume(InputValue, RequireTokenIndex))
+		{
+			++RequireTokenIndex;
+			return true;
+		}
+		else {
+			auto Accept = Processor.GetAccept();
+			if (Accept.has_value())
+			{
+				volatile int i = 0;
+			}
+		}
+	}
+
+
+	/*
 	void EbnfT::Parsing(
 		EbnfLexerT const& Input,
 		std::vector<RegMappingT>& RegMapping,
@@ -591,7 +637,7 @@ namespace Potato::EBNF
 				}
 			);
 		}
-	}
+	}*/
 
 
 	void EbnfLexicalProcessor::Reset() {

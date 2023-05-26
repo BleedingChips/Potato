@@ -13,12 +13,11 @@ export namespace Potato::EBNF
 	struct EbnfBuiler
 	{
 
-
 		EbnfBuiler(std::size_t StartupTokenIndex);
 
 		std::size_t GetRequireTokenIndex() const;
-		bool Consume(char32_t InputValue, std::size_t LastTokenIndex);
-		bool EndOfFile();
+		bool Consume(char32_t InputValue, std::size_t NextTokenIndex);
+		bool EndOfFile(std::size_t NextTokenIndex);
 
 	protected:
 
@@ -80,12 +79,73 @@ export namespace Potato::EBNF
 			Step3
 		};
 
-		StateE Idea;
+		StateE State = StateE::Idea;
 
-		std::size_t LastTokenIndex = 0;
+		std::size_t RequireTokenIndex = 0;
+		std::size_t LastSymbolToken = 0;
+		Reg::NfaBinaryTableProcessor Processor;
+		SLRX::CoreProxeccor::Context Context;
+	
+		struct BuilderStep1
+		{
+			EbnfBuiler& Ref;
+
+			std::any operator()(SLRX::SymbolElement Value, Misc::IndexSpan<> TokenIndex);
+			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceDescription Desc, std::span<SLRX::Element> Element)
+		};
 	};
 
 
+
+	struct Ebnf
+	{
+		template<typename CharT, typename CharTraisT>
+		Ebnf(std::basic_string_view<CharT, CharTraisT> EbnfStr);
+
+		Ebnf(Ebnf&&) = default;
+
+		Ebnf() = default;
+
+	protected:
+
+		/*
+		using ElementT = EbnfLexerT::ElementT;
+
+		struct RegMappingT
+		{
+			std::size_t RegName;
+			std::size_t Reg;
+			std::optional<std::size_t> Mask;
+		};
+
+		void Parsing(
+			EbnfLexerT const& Input,
+			std::vector<RegMappingT>& RegMapping,
+			SLRX::Symbol& StartSymbol,
+			bool& NeedTokenIndexRef,
+			std::size_t& MaxFormatDetect,
+			std::vector<SLRX::ProductionBuilder>& Builder,
+			std::vector<SLRX::OpePriority>& OpePriority
+		);
+
+		std::wstring TotalString;
+		std::vector<Misc::IndexSpan<>> StringMapping;
+
+		struct RegScriptionT
+		{
+			std::size_t SymbolValue;
+			std::optional<std::size_t> UserMask;
+		};
+
+		std::vector<RegScriptionT> RegScriptions;
+
+		Reg::DfaT Lexical;
+		SLRX::LRX Syntax;
+
+		friend struct EbnfLexicalProcessor;
+		friend struct LexicalElementT;
+		*/
+	};
 
 
 
@@ -147,53 +207,7 @@ export namespace Potato::EBNF
 		friend struct EbnfT;
 	};
 
-	struct EbnfT
-	{
-		template<typename CharT, typename CharTraisT>
-		EbnfT(std::basic_string_view<CharT, CharTraisT> EbnfStr);
-
-		EbnfT(EbnfT&&) = default;
-
-		EbnfT() = default;
-
-	protected:
-
-		using ElementT = EbnfLexerT::ElementT;
-
-		struct RegMappingT
-		{
-			std::size_t RegName;
-			std::size_t Reg;
-			std::optional<std::size_t> Mask;
-		};
-
-		void Parsing(
-			EbnfLexerT const& Input,
-			std::vector<RegMappingT>& RegMapping,
-			SLRX::Symbol& StartSymbol,
-			bool& NeedTokenIndexRef,
-			std::size_t& MaxFormatDetect,
-			std::vector<SLRX::ProductionBuilder>& Builder,
-			std::vector<SLRX::OpePriority>& OpePriority
-		);
-
-		std::wstring TotalString;
-		std::vector<Misc::IndexSpan<>> StringMapping;
-
-		struct RegScriptionT
-		{
-			std::size_t SymbolValue;
-			std::optional<std::size_t> UserMask;
-		};
-
-		std::vector<RegScriptionT> RegScriptions;
-
-		Reg::DfaT Lexical;
-		SLRX::LRX Syntax;
-
-		friend struct EbnfLexicalProcessor;
-		friend struct LexicalElementT;
-	};
+	
 
 	struct LexicalElementT
 	{
@@ -593,6 +607,48 @@ export namespace Potato::EBNF::Exception
 
 export namespace Potato::EBNF
 {
+
+	template<typename CharT, typename CharTraisT>
+	Ebnf::Ebnf(std::basic_string_view<CharT, CharTraisT> EbnfStr)
+	{
+		try {
+			EbnfBuiler Builder{ 0 };
+			std::size_t Index = 0;
+			char32_t InputValue = 0;
+			std::span<char32_t> OutputBuffer{&Buffer, 1};
+			while (true)
+			{
+				auto RequireSize = Builder.GetRequireTokenIndex();
+
+				if (RequireSize < EbnfStr.size())
+				{
+					auto InputSpan = EbnfStr.subspan(RequireSize);
+					auto EncodeInfo = StrEncode::CharEncoder<CharT, char32_t>::EncodeOnceUnSafe(InputSpan, OutputBuffer);
+					auto TokenIndex = Misc::IndexSpan<>{ RequireSize, RequireSize + EncodeInfo.SourceSpace };
+					if (!Builder.Consume(InputValue, TokenIndex))
+					{
+						throw Exception::UnacceptableRegex(TokenIndex.Slice(EbnfStr));
+					}
+				}else if (RequireSize == EbnfStr.size())
+				{
+					if(!Builder.EndOfFile(RequireSize + 1))
+						throw Exception::UnacceptableRegex(L"EndOfFile");
+				}
+				else {
+					break;
+				}
+			}
+
+			volatile int i = 0;
+		}
+		catch (...)
+		{
+			throw;
+		}
+		
+	}
+
+
 	/*
 	struct BuildInUnacceptableEbnf
 	{
