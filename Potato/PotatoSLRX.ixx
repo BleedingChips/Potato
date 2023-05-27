@@ -333,8 +333,8 @@ export namespace Potato::SLRX
 		Misc::StructedSerilizerReader<StandardT const> GetReader() const { return Misc::StructedSerilizerReader<StandardT const>(Buffer); }
 
 		operator bool() const { return !Buffer.empty(); }
-		std::size_t NodeCount() const { return Buffer[0]; }
-		std::size_t StartupNodeIndex() const { return Buffer[1]; }
+		std::size_t NodeCount() const { return reinterpret_cast<ZipHeadT const*>(Buffer.data())->NodeCount; }
+		std::size_t StartupNodeIndex() const { return reinterpret_cast<ZipHeadT const*>(Buffer.data())->StartupOffset; }
 		//bool StartupNeedPredict() const { return Buffer[2]; }
 		std::size_t TotalBufferSize() const { return Buffer.size(); }
 

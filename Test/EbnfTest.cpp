@@ -100,11 +100,7 @@ struct StringMaker
 void Test(std::u8string_view Table, std::u8string_view InputStr, std::u8string_view TargetReg, const char* Error)
 {
 	try {
-		EbnfT Tab { Table };
-
-		EbnfLexicalProcessor Pro(Tab);
-
-		auto Re = LexicalProcessor(Pro, InputStr);
+		Ebnf Tab { Table };
 
 		volatile int o = 0;
 		volatile int i = 0;

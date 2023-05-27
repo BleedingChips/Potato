@@ -64,31 +64,31 @@ namespace Potato::EBNF
 	Reg::DfaBinaryTableWrapper GetRegTable() {
 		static auto List = []() {
 
-			Reg::NfaT StartupTable{ std::basic_string_view{UR"(%%%%)"}, false, static_cast<std::size_t>(T::Barrier) };
+			Reg::Nfa StartupTable{ std::basic_string_view{UR"(%%%%)"}, false, static_cast<std::size_t>(T::Barrier) };
 
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"([0-9]+)"}, false, static_cast<std::size_t>(T::Number) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"([0-9a-zA-Z_\z]+)"},false, static_cast<std::size_t>(T::Terminal) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(<[0-9a-zA-Z_\z]+>)"},false, static_cast<std::size_t>(T::NoTerminal) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(:=)"}, false,static_cast<std::size_t>(T::Equal) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\'([^\s]+)\')"}, false,static_cast<std::size_t>(T::Rex) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(;)"}, false,static_cast<std::size_t>(T::Semicolon) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(:)"}, false,static_cast<std::size_t>(T::Colon) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\r?\n)"}, false,static_cast<std::size_t>(T::Line) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\s+)"}, false,static_cast<std::size_t>(T::Empty) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\$)"}, false,static_cast<std::size_t>(T::Start) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\|)"}, false,static_cast<std::size_t>(T::Or) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\[)"}, false,static_cast<std::size_t>(T::LM_Brace) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\])"}, false,static_cast<std::size_t>(T::RM_Brace) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\{)"}, false,static_cast<std::size_t>(T::LB_Brace) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\})"}, false,static_cast<std::size_t>(T::RB_Brace) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\()"}, false, static_cast<std::size_t>(T::LS_Brace) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\))"}, false,static_cast<std::size_t>(T::RS_Brace) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\+\()"}, false,static_cast<std::size_t>(T::LeftPriority) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(\)\+)"}, false,static_cast<std::size_t>(T::RightPriority) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(/\*.*?\*/)"}, false,static_cast<std::size_t>(T::Command) });
-			StartupTable.Link(Reg::NfaT{ std::basic_string_view{UR"(//[^\n]*\n)"}, false,static_cast<std::size_t>(T::Command) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"([0-9]+)"}, false, static_cast<std::size_t>(T::Number) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"([0-9a-zA-Z_\z]+)"},false, static_cast<std::size_t>(T::Terminal) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(<[0-9a-zA-Z_\z]+>)"},false, static_cast<std::size_t>(T::NoTerminal) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(:=)"}, false,static_cast<std::size_t>(T::Equal) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\'([^\s]+)\')"}, false,static_cast<std::size_t>(T::Rex) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(;)"}, false,static_cast<std::size_t>(T::Semicolon) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(:)"}, false,static_cast<std::size_t>(T::Colon) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\r?\n)"}, false,static_cast<std::size_t>(T::Line) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\s+)"}, false,static_cast<std::size_t>(T::Empty) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\$)"}, false,static_cast<std::size_t>(T::Start) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\|)"}, false,static_cast<std::size_t>(T::Or) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\[)"}, false,static_cast<std::size_t>(T::LM_Brace) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\])"}, false,static_cast<std::size_t>(T::RM_Brace) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\{)"}, false,static_cast<std::size_t>(T::LB_Brace) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\})"}, false,static_cast<std::size_t>(T::RB_Brace) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\()"}, false, static_cast<std::size_t>(T::LS_Brace) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\))"}, false,static_cast<std::size_t>(T::RS_Brace) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\+\()"}, false,static_cast<std::size_t>(T::LeftPriority) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\)\+)"}, false,static_cast<std::size_t>(T::RightPriority) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(/\*.*?\*/)"}, false,static_cast<std::size_t>(T::Command) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(//[^\n]*\n)"}, false,static_cast<std::size_t>(T::Command) });
 
-			Reg::DfaT FinalTable(Reg::DfaT::FormatE::GreedyHeadMatch, StartupTable);
+			Reg::Dfa FinalTable(Reg::Dfa::FormatE::GreedyHeadMatch, StartupTable);
 			return Reg::CreateDfaBinaryTable(FinalTable);
 		}();
 
@@ -179,20 +179,46 @@ namespace Potato::EBNF
 	{
 	}
 
+	std::vector<T> List;
+
 	bool EbnfBuiler::Consume(char32_t InputValue, std::size_t NextTokenIndex)
 	{
 		if (Processor.Consume(InputValue, RequireTokenIndex))
 		{
-			++RequireTokenIndex;
+			RequireTokenIndex = NextTokenIndex;
 			return true;
 		}
 		else {
 			auto Accept = Processor.GetAccept();
 			if (Accept.has_value())
 			{
+				List.push_back(static_cast<T>(Accept->Mask));
+				Processor.Reset();
 				volatile int i = 0;
+
+				LastSymbolToken = Accept->MainCapture.End();
+				RequireTokenIndex = LastSymbolToken;
+				return true;
+			}
+			return false;
+		}
+	}
+
+	bool EbnfBuiler::EndOfFile()
+	{
+		if (Processor.Consume(EndOfFile(), RequireTokenIndex))
+		{
+			RequireTokenIndex = RequireTokenIndex + 1;
+			auto Accept = Processor.GetAccept();
+			if (Accept.has_value())
+			{
+				LastSymbolToken = Accept->MainCapture.End();
+				RequireTokenIndex = LastSymbolToken;
+				Processor.Reset();
+				return true;
 			}
 		}
+		return false;
 	}
 
 
@@ -639,7 +665,7 @@ namespace Potato::EBNF
 		}
 	}*/
 
-
+	/*
 	void EbnfLexicalProcessor::Reset() {
 		RequireStrTokenIndex = StartupTokenIndex;
 		DfaProcessor.Reset();
@@ -673,6 +699,7 @@ namespace Potato::EBNF
 			return false;
 		}
 	}
+	*/
 
 
 	/*

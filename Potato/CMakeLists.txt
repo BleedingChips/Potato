@@ -7,7 +7,7 @@ add_library(PotatoModule STATIC
 	"PotatoReg.cpp"
 	"PotatoSLRX.cpp"
 	"PotatoEncode.cpp"
-	"PotatoEBNF.cpp"
+	#"PotatoEBNF.cpp"
 	"PotatoDocument.cpp"
 )
 
@@ -26,7 +26,7 @@ target_sources(
 		"PotatoReg.ixx"
 		"PotatoFormat.ixx"
 		"PotatoEncode.ixx"
-		"PotatoEBNF.ixx"
+		#"PotatoEBNF.ixx"
 		"PotatoDocument.ixx"
 		"PotatoAllocator.ixx"
 )

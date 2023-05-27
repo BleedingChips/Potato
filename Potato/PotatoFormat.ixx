@@ -28,21 +28,15 @@ export namespace Potato::Format
 	}
 
 	template<typename CharT, typename CharTraits>
-	bool CaptureScan(std::span<Misc::IndexSpan<> const>, std::basic_string_view<CharT, CharTraits> InputStr)
-	{
-		return true;
-	}
-
-	template<typename CharT>
-	bool CaptureScan(std::span<Misc::IndexSpan<> const>, CharT const* InputStr)
+	bool CaptureScan(std::span<std::size_t const>, std::basic_string_view<CharT, CharTraits> InputStr)
 	{
 		return true;
 	}
 
 	template<typename CharT, typename CharTraits, typename CT, typename ...OT>
-	bool CaptureScan(std::span<Misc::IndexSpan<> const> CaptureIndex, std::basic_string_view<CharT, CharTraits> InputStr, CT& O1, OT& ...OO)
+	bool CaptureScan(std::span<std::size_t const> CaptureIndex, std::basic_string_view<CharT, CharTraits> InputStr, CT& O1, OT& ...OO)
 	{
-		return CaptureIndex.size() >= 1 && DirectScan(CaptureIndex[0].Slice(InputStr), O1) && CaptureScan(CaptureIndex.subspan(1), InputStr, OO...);
+		return CaptureIndex.size() >= 2 && DirectScan(Misc::IndexSpan<>{CaptureIndex[0], CaptureIndex[1]}.Slice(InputStr), O1) && CaptureScan(CaptureIndex.subspan(2), InputStr, OO...);
 	}
 
 	template<typename CharT, typename CT, typename ...OT>
@@ -52,13 +46,13 @@ export namespace Potato::Format
 	}
 
 	template<typename CharT, typename CharTraits, typename ...OT>
-	bool RegAcceptScan(Reg::ProcessorAccept const& Accept, std::basic_string_view<CharT, CharTraits> InputStr,  OT& ...OO)
+	bool RegAcceptScan(Reg::ProcessorAcceptRef Accept, std::basic_string_view<CharT, CharTraits> InputStr,  OT& ...OO)
 	{
-		return CaptureScan(std::span(Accept.Capture), InputStr, OO...);
+		return Accept && CaptureScan(Accept.Capture, InputStr, OO...);
 	}
 
 	template<typename CharT, typename CharTraits, typename ...OT>
-	bool RegAcceptScan(Reg::ProcessorAccept const& Accept, CharT const* InputStr, OT& ...OO)
+	bool RegAcceptScan(Reg::ProcessorAcceptRef Accept, CharT const* InputStr, OT& ...OO)
 	{
 		return RegAcceptScan(Accept, std::basic_string_view<CharT>(InputStr), OO...);
 	}
@@ -66,19 +60,15 @@ export namespace Potato::Format
 	template<typename CharT, typename CharTraits, typename ...OT>
 	bool ProcessorScan(Reg::DfaProcessor& Processor, std::basic_string_view<CharT, CharTraits> Str, OT& ...OO)
 	{
-		auto Accept = Reg::CoreProcessor(Processor, Str);
-		if (Accept.has_value())
-			return RegAcceptScan(*Accept, Str, OO...);
-		return false;
+		auto Accept = Reg::CoreProcess(Processor, Str);
+		return RegAcceptScan(Accept, Str, OO...);
 	}
 
 	template<typename CharT, typename CharTraits, typename ...OT>
-	bool ProcessorScan(Reg::DfaBinaryTableWrapperProcessor& Processor, std::basic_string_view<CharT, CharTraits> Str, OT& ...OO)
+	bool ProcessorScan(Reg::DfaBinaryTableProcessor& Processor, std::basic_string_view<CharT, CharTraits> Str, OT& ...OO)
 	{
-		auto Accept = Reg::CoreProcessor(Processor, Str);
-		if (Accept.has_value())
-			return RegAcceptScan(*Accept, Str, OO...);
-		return false;
+		auto Accept = Reg::CoreProcess(Processor, Str);
+		return RegAcceptScan(Accept, Str, OO...);
 	}
 
 	template<typename CharT1, typename CharTT1, typename CharT2, typename CharTT2, typename ...OT>

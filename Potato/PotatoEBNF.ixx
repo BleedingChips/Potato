@@ -15,9 +15,9 @@ export namespace Potato::EBNF
 
 		EbnfBuiler(std::size_t StartupTokenIndex);
 
-		std::size_t GetRequireTokenIndex() const;
+		std::size_t GetRequireTokenIndex() const { return RequireTokenIndex; }
 		bool Consume(char32_t InputValue, std::size_t NextTokenIndex);
-		bool EndOfFile(std::size_t NextTokenIndex);
+		bool EndOfFile();
 
 	protected:
 
@@ -31,7 +31,7 @@ export namespace Potato::EBNF
 		struct RegMapT
 		{
 			Misc::IndexSpan<> RegName;
-			RegTypeE RegNameType = RegTypeE::Normal;
+			RegTypeE RegNameType = RegTypeE::Terminal;
 			Misc::IndexSpan<> Reg;
 			std::optional<Misc::IndexSpan<>> UserMask;
 		};
@@ -83,15 +83,15 @@ export namespace Potato::EBNF
 
 		std::size_t RequireTokenIndex = 0;
 		std::size_t LastSymbolToken = 0;
-		Reg::NfaBinaryTableProcessor Processor;
-		SLRX::CoreProxeccor::Context Context;
+		Reg::DfaBinaryTableWrapperProcessor Processor;
+		SLRX::CoreProcessor::Context Context;
 	
 		struct BuilderStep1
 		{
 			EbnfBuiler& Ref;
 
 			std::any operator()(SLRX::SymbolElement Value, Misc::IndexSpan<> TokenIndex);
-			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceDescription Desc, std::span<SLRX::Element> Element)
+			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceDescription Desc, std::span<SLRX::CoreProcessor::Element> Element);
 		};
 	};
 
@@ -615,24 +615,24 @@ export namespace Potato::EBNF
 			EbnfBuiler Builder{ 0 };
 			std::size_t Index = 0;
 			char32_t InputValue = 0;
-			std::span<char32_t> OutputBuffer{&Buffer, 1};
+			std::span<char32_t> OutputBuffer{&InputValue, 1};
 			while (true)
 			{
 				auto RequireSize = Builder.GetRequireTokenIndex();
 
 				if (RequireSize < EbnfStr.size())
 				{
-					auto InputSpan = EbnfStr.subspan(RequireSize);
-					auto EncodeInfo = StrEncode::CharEncoder<CharT, char32_t>::EncodeOnceUnSafe(InputSpan, OutputBuffer);
+					auto InputSpan = EbnfStr.substr(RequireSize);
+					auto EncodeInfo = Encode::CharEncoder<CharT, char32_t>::EncodeOnceUnSafe(InputSpan, OutputBuffer);
 					auto TokenIndex = Misc::IndexSpan<>{ RequireSize, RequireSize + EncodeInfo.SourceSpace };
-					if (!Builder.Consume(InputValue, TokenIndex))
+					if (!Builder.Consume(InputValue, TokenIndex.End()))
 					{
 						throw Exception::UnacceptableRegex(TokenIndex.Slice(EbnfStr));
 					}
 				}else if (RequireSize == EbnfStr.size())
 				{
-					if(!Builder.EndOfFile(RequireSize + 1))
-						throw Exception::UnacceptableRegex(L"EndOfFile");
+					if(!Builder.EndOfFile())
+						throw Exception::UnacceptableRegex(std::wstring_view{L"EndOfFile"});
 				}
 				else {
 					break;

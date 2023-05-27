@@ -234,6 +234,7 @@ export namespace Potato::Reg
 
 		std::size_t GetStartupNodeIndex() const { return 0; }
 		std::size_t GetCacheCounterCount() const { return CacheRecordCount; }
+		std::size_t GetTempResultCount() const { return ResultCount; }
 	
 	protected:
 
@@ -336,28 +337,30 @@ export namespace Potato::Reg
 		};
 
 		FormatE Format;
-		std::size_t CacheRecordCount;
+		std::size_t CacheRecordCount = 0;
+		std::size_t ResultCount = 0;
 		std::vector<NodeT> Nodes;
 		
 		friend struct DfaProcessor;
 		friend struct DfaBinaryTableWrapper;
-		friend struct DfaBinaryTableWrapperProcessor;
+		friend struct DfaBinaryTableProcessor;
 	};
 
-	struct ProcessorAccept
+	struct ProcessorAcceptRef
 	{
-		std::size_t Mask;
-		std::vector<Misc::IndexSpan<>> Capture;
+		std::optional<std::size_t> Mask;
+		std::span<std::size_t const> Capture;
 		Misc::IndexSpan<> MainCapture;
-	};
 
-	struct ProcessorUnaccept
-	{
-		Misc::IndexSpan<> FailCapture;
+		std::size_t GetMask() const { return *Mask; }
+		std::size_t GetCaptureSize() const { return Capture.size() / 2; }
+		Misc::IndexSpan<> GetCapture(std::size_t Index) const { return {Capture[Index * 2], Capture[Index * 2 + 1]}; }
+		Misc::IndexSpan<> operator[](std::size_t Index) const { return GetCapture(Index); }
+		operator bool() const { return Mask.has_value(); }
 	};
 
 	template<typename ProcessorT, typename CharT, typename CharTraidT>
-	std::variant<ProcessorAccept, ProcessorUnaccept> CoreProcessorWithUnaccept(ProcessorT& Pro, std::basic_string_view<CharT, CharTraidT> Str)
+	ProcessorAcceptRef CoreProcess(ProcessorT& Pro, std::basic_string_view<CharT, CharTraidT> Str)
 	{
 		char32_t TemBuffer = 0;
 		std::span<char32_t> OutputSpan{ &TemBuffer, 1 };
@@ -386,34 +389,44 @@ export namespace Potato::Reg
 		if (NeedEndOfFile)
 			Pro.EndOfFile(TokeIndex);
 
-		auto Accept = Pro.GetAccept();
-
-		if(Accept.has_value())
-			return std::move(*Accept);
-		else
-			return ProcessorUnaccept{{0, TokeIndex} };
+		return Pro.GetAccept();
 	}
 
 	template<typename ProcessorT, typename CharT>
-	std::variant<ProcessorAccept, ProcessorUnaccept> CoreProcessorWithUnaccept(ProcessorT& Pro, CharT const* Str)
+	ProcessorAcceptRef CoreProcess(ProcessorT& Pro, CharT const* Str)
 	{
-		return CoreProcessorWithUnaccept(Pro, std::basic_string_view<CharT>(Str));
+		return CoreProcess(Pro, std::basic_string_view<CharT>(Str));
 	}
 
-	template<typename ProcessorT, typename CharT, typename CharTraidT>
-	std::optional<ProcessorAccept> CoreProcessor(ProcessorT& Pro, std::basic_string_view<CharT, CharTraidT> Str)
+	struct TokenIndexRecorder
 	{
-		auto Re = CoreProcessorWithUnaccept(Pro, Str);
-		if(std::holds_alternative<ProcessorAccept>(Re))
-			return std::move(std::get<ProcessorAccept>(Re));
-		return {};
-	}
+		std::optional<std::size_t> StaryupTokenIndex;
+		std::size_t AcceptTokenIndex;
+		std::size_t TotalTokenIndex;
 
-	template<typename ProcessorT, typename CharT>
-	std::optional<ProcessorAccept> CoreProcessor(ProcessorT& Pro, CharT const* Str)
-	{
-		return CoreProcessor(Pro, std::basic_string_view<CharT>(Str));
-	}
+		void Clear(){ StaryupTokenIndex.reset(); }
+		void RecordConsume(std::size_t Index) { 
+			if(!StaryupTokenIndex.has_value())
+				StaryupTokenIndex = Index; 
+			TotalTokenIndex = Index; 
+		}
+		void Accept(std::size_t Index)
+		{
+			AcceptTokenIndex = Index;
+		}
+		Misc::IndexSpan<> GetAcceptCapture(bool IsAccept) const 
+		{
+			if (StaryupTokenIndex.has_value())
+			{
+				if (IsAccept)
+				{
+					return {*StaryupTokenIndex, AcceptTokenIndex };
+				}else
+					return { *StaryupTokenIndex, TotalTokenIndex };
+			}
+			return {};
+		}
+	};
 
 	struct DfaProcessor
 	{
@@ -422,9 +435,9 @@ export namespace Potato::Reg
 
 		bool Consume(char32_t Token, std::size_t TokenIndex);
 		bool EndOfFile(std::size_t TokenIndex) { return Consume(Reg::EndOfFile(), TokenIndex); }
-		void Reset();
+		void Clear();
 		bool HasAccept() const;
-		std::optional<ProcessorAccept> GetAccept() const;
+		ProcessorAcceptRef GetAccept() const;
 	
 	public:
 		
@@ -432,23 +445,23 @@ export namespace Potato::Reg
 		std::size_t CurNodeIndex;
 		std::vector<std::size_t> TempResult;
 		std::vector<std::size_t> CacheIndex;
-		std::optional<std::size_t> StartupTokenIndex;
-		std::size_t AcceptTokenIndex;
+		TokenIndexRecorder Record;
 		
-		friend struct DfaBinaryTableWrapperProcessor;
+		friend struct DfaBinaryTableProcessor;
 	};
 
-	template<typename CharT, typename CharTrais>
-	std::optional<ProcessorAccept> Process(Dfa const& Table, std::basic_string_view<CharT, CharTrais> Str)
+
+	template<typename CharT, typename CharTrais, typename Func>
+	void Process(Dfa const& Table, std::basic_string_view<CharT, CharTrais> Str, Func&& Fun)
 	{
 		DfaProcessor Processor{ Table };
-		return CoreProcessor(Processor, Str);
+		Fun(CoreProcess(Processor, Str));
 	}
 
-	template<typename CharT>
-	std::optional<ProcessorAccept> Process(Dfa const& Table, CharT const* Str)
+	template<typename CharT, typename Func>
+	void Process(Dfa const& Table, CharT const* Str, Func&& Fun)
 	{
-		return Process(Table, std::basic_string_view<CharT>(Str));
+		Process(Table, std::basic_string_view<CharT>(Str), std::forward<Func>(Fun));
 	}
 
 	struct DfaBinaryTableWrapper
@@ -458,7 +471,7 @@ export namespace Potato::Reg
 
 		std::size_t GetStartupNodeIndex() const { return reinterpret_cast<HeadT const*>(Wrapper.data())->StartupNodeIndex; }
 		std::size_t GetCacheCounterCount() const { return reinterpret_cast<HeadT const*>(Wrapper.data())->CacheSolt; }
-
+		std::size_t GetTempResultCount() const { return reinterpret_cast<HeadT const*>(Wrapper.data())->TempResult; }
 
 		struct NodeT
 		{
@@ -492,6 +505,7 @@ export namespace Potato::Reg
 			StandardT StartupNodeIndex = 0;
 			StandardT NodeCount = 0;
 			StandardT CacheSolt = 0;
+			StandardT TempResult = 0;
 		};
 
 		struct AcceptT
@@ -510,7 +524,7 @@ export namespace Potato::Reg
 		
 		std::span<StandardT> Wrapper;
 
-		friend struct DfaBinaryTableWrapperProcessor;
+		friend struct DfaBinaryTableProcessor;
 	};
 
 	template<typename AllocatorT>
@@ -541,28 +555,27 @@ export namespace Potato::Reg
 		return CreateDfaBinaryTable(Dfa{ Format, Str, IsRaw, Mask }, std::allocator<DfaBinaryTableWrapper::StandardT>{});
 	}
 
-	struct DfaBinaryTableWrapperProcessor
+	struct DfaBinaryTableProcessor
 	{
-		DfaBinaryTableWrapperProcessor(DfaBinaryTableWrapper Table);
+		DfaBinaryTableProcessor(DfaBinaryTableWrapper Table);
 		bool Consume(char32_t Token, std::size_t TokenIndex);
 		bool EndOfFile(std::size_t TokenIndex) { return Consume(Reg::EndOfFile(), TokenIndex); }
-		void Reset();
+		void Clear();
 		bool HasAccept() const;
-		std::optional<ProcessorAccept> GetAccept() const;
+		ProcessorAcceptRef GetAccept() const;
 	protected:
 		DfaBinaryTableWrapper Table;
 		std::size_t CurrentNode;
 		std::vector<std::size_t> TempResult;
 		std::vector<std::size_t> CacheIndex;
-		std::optional<std::size_t> StartupTokenIndex;
-		std::size_t AcceptNodeTokenIndex;
+		TokenIndexRecorder Record;
 	};
 
-	template<typename CharT, typename CharTrais>
-	std::optional<ProcessorAccept> Process(DfaBinaryTableWrapper const& Table, std::basic_string_view<CharT, CharTrais> Str)
+	template<typename CharT, typename CharTrais, typename Func>
+	void Process(DfaBinaryTableWrapper const& Table, std::basic_string_view<CharT, CharTrais> Str, Func&& Fun)
 	{
-		DfaBinaryTableWrapperProcessor Processor{ Table };
-		return RegCoreProcessor(Processor, Str);
+		DfaBinaryTableProcessor Processor{ Table };
+		Fun(CoreProcess(Processor, Str));
 	}
 
 	struct MulityRegCreater

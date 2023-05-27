@@ -154,7 +154,6 @@ void Test(Dfa::FormatE Format, std::vector<std::u32string_view> Reg, std::u32str
 
 int main()
 {
-	
 	Test(
 		Dfa::FormatE::HeadMatch,
 		{
@@ -220,59 +219,63 @@ void Test(Dfa::FormatE Format, std::vector<std::u32string_view> Reg, std::u32str
 			Dfa RegTable(Format, NfaReg);
 
 			{
-				auto Accep = Process(RegTable, SourceStr);
-				if (Accep.has_value())
-				{
-					if (Accep->Mask != TargetMask)
+				Process(RegTable, SourceStr, [&](ProcessorAcceptRef Accept){
+					if (Accept)
 					{
-						throw Error;
-					}
-					auto MainCaptureStr = Accep->MainCapture.Slice(SourceStr);
-					if (MainCaptureStr != MainCapture)
-					{
-						throw Error;
-					}
-					if (RequireCapture.size() != Accep->Capture.size())
-					{
-						throw Error;
-					}
-					for (std::size_t I = 0; I < RequireCapture.size(); ++I)
-					{
-						if (Accep->Capture[I].Slice(SourceStr) != RequireCapture[I])
+						if (Accept.GetMask() != TargetMask)
+						{
 							throw Error;
+						}
+						auto MainCaptureStr = Accept.MainCapture.Slice(SourceStr);
+						if (MainCaptureStr != MainCapture)
+						{
+							throw Error;
+						}
+						if (RequireCapture.size() != Accept.GetCaptureSize())
+						{
+							throw Error;
+						}
+						for (std::size_t I = 0; I < RequireCapture.size(); ++I)
+						{
+							if (Accept.GetCapture(I).Slice(SourceStr) != RequireCapture[I])
+								throw Error;
+						}
 					}
-				}
-				else
-					throw Error;
+					else
+						throw Error;
+				});
+				
 			}
 
 			auto Span = CreateDfaBinaryTable(RegTable);
 
 			{
-				auto Accep = Process(RegTable, SourceStr);
-				if (Accep.has_value())
-				{
-					if (Accep->Mask != TargetMask)
+				Process(RegTable, SourceStr, [&](ProcessorAcceptRef Accept){
+					if (Accept)
 					{
-						throw Error;
-					}
-					auto MainCaptureStr = Accep->MainCapture.Slice(SourceStr);
-					if (MainCaptureStr != MainCapture)
-					{
-						throw Error;
-					}
-					if (RequireCapture.size() != Accep->Capture.size())
-					{
-						throw Error;
-					}
-					for (std::size_t I = 0; I < RequireCapture.size(); ++I)
-					{
-						if (Accep->Capture[I].Slice(SourceStr) != RequireCapture[I])
+						if (Accept.GetMask() != TargetMask)
+						{
 							throw Error;
+						}
+						auto MainCaptureStr = Accept.MainCapture.Slice(SourceStr);
+						if (MainCaptureStr != MainCapture)
+						{
+							throw Error;
+						}
+						if (RequireCapture.size() != Accept.GetCaptureSize())
+						{
+							throw Error;
+						}
+						for (std::size_t I = 0; I < RequireCapture.size(); ++I)
+						{
+							if (Accept[I].Slice(SourceStr) != RequireCapture[I])
+								throw Error;
+						}
 					}
-				}
-				else
-					throw Error;
+					else
+						throw Error;
+				});
+				
 			}
 			
 		}
