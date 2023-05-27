@@ -215,6 +215,7 @@ namespace Potato::Reg
 				case U'\\':
 					CurrentState = StateT::Transfer;
 					RecordSymbol = InputSymbol;
+					return true;
 				default:
 					if (InputSymbol >= U'0' && InputSymbol <= U'9')
 						return InsertSymbol(*T::Num, InputSymbol, TokenIndex);

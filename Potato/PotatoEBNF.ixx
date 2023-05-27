@@ -21,6 +21,9 @@ export namespace Potato::EBNF
 
 	protected:
 
+		bool AddSymbol(SLRX::Symbol Symbol, Misc::IndexSpan<> TokenIndex);
+		bool AddEndOfFile();
+
 		enum RegTypeE
 		{
 			Terminal,
@@ -73,25 +76,40 @@ export namespace Potato::EBNF
 
 		enum StateE
 		{
-			Idea,
 			Step1,
 			Step2,
 			Step3
 		};
 
-		StateE State = StateE::Idea;
+		StateE State = StateE::Step1;
 
 		std::size_t RequireTokenIndex = 0;
 		std::size_t LastSymbolToken = 0;
-		Reg::DfaBinaryTableWrapperProcessor Processor;
+		Reg::DfaBinaryTableProcessor Processor;
 		SLRX::CoreProcessor::Context Context;
 	
 		struct BuilderStep1
 		{
 			EbnfBuiler& Ref;
 
-			std::any operator()(SLRX::SymbolElement Value, Misc::IndexSpan<> TokenIndex);
+			std::any operator()(SLRX::SymbolElement Value, std::size_t Index);
 			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceDescription Desc, std::span<SLRX::CoreProcessor::Element> Element);
+		};
+
+		struct BuilderStep2
+		{
+			EbnfBuiler& Ref;
+
+			std::any operator()(SLRX::SymbolElement Value, std::size_t Index) { return {}; }
+			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceDescription Desc, std::span<SLRX::CoreProcessor::Element> Element) { return {}; }
+		};
+
+		struct BuilderStep3
+		{
+			EbnfBuiler& Ref;
+
+			std::any operator()(SLRX::SymbolElement Value, std::size_t Index) { return {}; }
+			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceDescription Desc, std::span<SLRX::CoreProcessor::Element> Element) { return {}; }
 		};
 	};
 
