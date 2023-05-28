@@ -407,6 +407,7 @@ namespace Potato::EBNF
 		default:
 			break;
 		}
+		return {};
 	}
 
 	std::any EbnfBuiler::BuilderStep3::operator()(SLRX::SymbolElement Value, std::size_t Index) { return {}; }

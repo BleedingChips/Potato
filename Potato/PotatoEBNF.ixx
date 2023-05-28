@@ -1,5 +1,7 @@
 module;
 
+#include <cassert>
+
 export module Potato.EBNF;
 
 export import Potato.Reg;
@@ -114,6 +116,8 @@ export namespace Potato::EBNF
 			std::any operator()(SLRX::SymbolElement Value, std::size_t Index) { return {}; }
 			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pro) { return {}; }
 		};
+
+		friend struct Ebnf;
 	};
 
 
@@ -128,6 +132,26 @@ export namespace Potato::EBNF
 		Ebnf() = default;
 
 	protected:
+
+		std::wstring TotalString;
+
+		struct SymbolMapT
+		{
+			Misc::IndexSpan<> StrIndex;
+		};
+
+		std::vector<SymbolMapT> SymbolMap;
+
+		struct RegMapT
+		{
+			std::size_t MapSymbolValue;
+			std::optional<std::size_t> UserMask;
+		};
+
+		std::vector<RegMapT> RegMap;
+
+		Reg::Dfa Lexical;
+		SLRX::LRX Syntax;
 
 		/*
 		using ElementT = EbnfLexerT::ElementT;
@@ -599,9 +623,8 @@ export namespace Potato::EBNF::Exception
 		};
 		TypeE Type;
 		std::wstring Str;
-		Misc::LineRecorder Line;
-		UnacceptableEbnf(TypeE Type, std::wstring Str, Misc::LineRecorder Line)
-			: Type(Type), Str(Str), Line(Line) {}
+		UnacceptableEbnf(TypeE Type, std::wstring Str)
+			: Type(Type), Str(Str) {}
 		UnacceptableEbnf(UnacceptableEbnf const&) = default;
 		virtual char const* what() const override;
 	};
@@ -667,10 +690,115 @@ export namespace Potato::EBNF
 					break;
 				}
 			}
+			
+			Reg::MulityRegCreater Gen;
+			std::map<std::basic_string_view<CharT, CharTraisT>, std::size_t> Mapping;
+			Mapping.insert({{}, Mapping.size()});
+
+			for (std::size_t I = Builder.RegMappings.size(); I > 0; --I)
+			{
+				auto& Ite = Builder.RegMappings[I - 1];
+				switch (Ite.RegNameType)
+				{
+				case EbnfBuiler::RegTypeE::Reg:
+				{
+					auto [IIte, B] = Mapping.insert({ Ite.RegName.Slice(EbnfStr), Mapping.size()});
+					if (B)
+					{
+						auto RegStr = Ite.Reg.SubIndex(1, Ite.Reg.Size() - 2).Slice(EbnfStr);
+						Gen.AppendReg(RegStr, true, RegMap.size());
+						RegMap.push_back({ IIte->second, {} });
+					}
+					break;
+				}
+				case EbnfBuiler::RegTypeE::Terminal:
+				{
+					auto [IIte, B] = Mapping.insert({ Ite.RegName.Slice(EbnfStr), Mapping.size() });
+					auto RegStr = Ite.Reg.SubIndex(1, Ite.Reg.Size() - 2).Slice(EbnfStr);
+					std::size_t UserMask = 0;
+					if (Ite.UserMask.has_value())
+					{
+						Format::DirectScan(Ite.UserMask->Slice(EbnfStr), UserMask);
+					}
+					Gen.AppendReg(RegStr, true, RegMap.size());
+					RegMap.push_back({ IIte->second, UserMask });
+					break;
+				}
+				}
+			}
+
+			auto InsertElement = [&](EbnfBuiler::ElementT Ele){
+				if (Ele.ElementType == EbnfBuiler::ElementTypeE::Value)
+				{
+					Mapping.insert(
+						{Ele.Value.Slice(EbnfStr), Mapping.size()}
+					);
+				}
+			};
+
+			assert(Builder.StartSymbol.has_value());
+
+			InsertElement(*Builder.StartSymbol);
+
+			for (auto& Ite : Builder.Builder)
+			{
+				InsertElement(Ite.StartSymbol);
+				for (auto& Ite2 : Ite.Productions)
+				{
+					InsertElement(Ite2);
+				}
+			}
+
+			for (auto& Ite : Builder.OpePriority)
+			{
+				for (auto& Ite2 : Ite.Ope)
+				{
+					InsertElement(Ite2);
+				}
+			}
+
+			std::size_t RquireSize = 0;
+
+			for (auto& Ite : Mapping)
+			{
+				RquireSize += Encode::StrEncoder<CharT, wchar_t>::RequireSpaceUnSafe(Ite.first).TargetSpace;
+			}
+
+			TotalString.resize(RquireSize);
+			SymbolMap.resize(Mapping.size());
+			std::size_t Writed = 0;
+			for (auto& Ite : Mapping)
+			{
+				auto W = Encode::StrEncoder<CharT, wchar_t>::EncodeUnSafe(Ite.first, std::span(TotalString).subspan(Writed)).TargetSpace;
+				SymbolMap[Ite.second].StrIndex = { Writed, Writed + W};
+				Writed = Writed + W;
+			}
+
+			Lexical = *Gen.CreateDfa(Reg::Dfa::FormatE::GreedyHeadMatch);
+
+			SLRX::Symbol StartSymbol;
+			
+			auto Find = Mapping.find(
+				Builder.StartSymbol->Value.Slice(EbnfStr)
+			);
+
+			StartSymbol = SLRX::Symbol::AsNoTerminal(Find->second);
+
+			std::size_t MaxFormatDetext = 3;
+
+			if (Builder.MaxForwardDetect.has_value())
+			{
+				Format::DirectScan(Builder.MaxForwardDetect->Value.Slice(EbnfStr), MaxFormatDetext);
+			}
+
+
+
+			volatile int o = 0;
 		}
-		catch (...)
+		catch (BuildInUnacceptableEbnf Bnf)
 		{
-			throw;
+			auto Str = *Encode::StrEncoder<CharT, wchar_t>::EncodeToString(Bnf.TokenIndex.Slice(EbnfStr));
+			throw Exception::UnacceptableEbnf{Bnf.Type, std::move(Str)};
 		}
 		
 	}
