@@ -12,10 +12,10 @@ export import Potato.STD;
 export namespace Potato::EBNF
 {
 	
-	struct EbnfBuiler
+	struct EbnfBuilder
 	{
 
-		EbnfBuiler(std::size_t StartupTokenIndex);
+		EbnfBuilder(std::size_t StartupTokenIndex);
 
 		std::size_t GetRequireTokenIndex() const { return RequireTokenIndex; }
 		bool Consume(char32_t InputValue, std::size_t NextTokenIndex);
@@ -44,14 +44,15 @@ export namespace Potato::EBNF
 		enum class ElementTypeE
 		{
 			Mask,
-			Value,
+			Terminal,
+			NoTerminal,
 			Self,
 			Temporary
 		};
 
 		struct ElementT
 		{
-			ElementTypeE ElementType = ElementTypeE::Value;
+			ElementTypeE ElementType = ElementTypeE::Terminal;
 			Misc::IndexSpan<> Value;
 		};
 
@@ -95,7 +96,7 @@ export namespace Potato::EBNF
 	
 		struct BuilderStep1
 		{
-			EbnfBuiler& Ref;
+			EbnfBuilder& Ref;
 
 			std::any operator()(SLRX::SymbolElement Value, std::size_t Index);
 			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pro);
@@ -103,7 +104,7 @@ export namespace Potato::EBNF
 
 		struct BuilderStep2
 		{
-			EbnfBuiler& Ref;
+			EbnfBuilder& Ref;
 
 			std::any operator()(SLRX::SymbolElement Value, std::size_t Index);
 			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pro) { return {}; }
@@ -111,7 +112,7 @@ export namespace Potato::EBNF
 
 		struct BuilderStep3
 		{
-			EbnfBuiler& Ref;
+			EbnfBuilder& Ref;
 
 			std::any operator()(SLRX::SymbolElement Value, std::size_t Index) { return {}; }
 			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pro) { return {}; }
@@ -663,7 +664,7 @@ export namespace Potato::EBNF
 	Ebnf::Ebnf(std::basic_string_view<CharT, CharTraisT> EbnfStr)
 	{
 		try {
-			EbnfBuiler Builder{ 0 };
+			EbnfBuilder Builder{ 0 };
 			std::size_t Index = 0;
 			char32_t InputValue = 0;
 			std::span<char32_t> OutputBuffer{&InputValue, 1};
@@ -700,7 +701,7 @@ export namespace Potato::EBNF
 				auto& Ite = Builder.RegMappings[I - 1];
 				switch (Ite.RegNameType)
 				{
-				case EbnfBuiler::RegTypeE::Reg:
+				case EbnfBuilder::RegTypeE::Reg:
 				{
 					auto [IIte, B] = Mapping.insert({ Ite.RegName.Slice(EbnfStr), Mapping.size()});
 					if (B)
@@ -711,7 +712,7 @@ export namespace Potato::EBNF
 					}
 					break;
 				}
-				case EbnfBuiler::RegTypeE::Terminal:
+				case EbnfBuilder::RegTypeE::Terminal:
 				{
 					auto [IIte, B] = Mapping.insert({ Ite.RegName.Slice(EbnfStr), Mapping.size() });
 					auto RegStr = Ite.Reg.SubIndex(1, Ite.Reg.Size() - 2).Slice(EbnfStr);
@@ -727,8 +728,8 @@ export namespace Potato::EBNF
 				}
 			}
 
-			auto InsertElement = [&](EbnfBuiler::ElementT Ele){
-				if (Ele.ElementType == EbnfBuiler::ElementTypeE::Value)
+			auto InsertElement = [&](EbnfBuilder::ElementT Ele){
+				if (Ele.ElementType == EbnfBuilder::ElementTypeE::Terminal || Ele.ElementType == EbnfBuilder::ElementTypeE::NoTerminal)
 				{
 					Mapping.insert(
 						{Ele.Value.Slice(EbnfStr), Mapping.size()}
@@ -784,16 +785,103 @@ export namespace Potato::EBNF
 
 			StartSymbol = SLRX::Symbol::AsNoTerminal(Find->second);
 
-			std::size_t MaxFormatDetext = 3;
+			std::size_t MaxForwardDetect = 3;
 
 			if (Builder.MaxForwardDetect.has_value())
 			{
-				Format::DirectScan(Builder.MaxForwardDetect->Value.Slice(EbnfStr), MaxFormatDetext);
+				Format::DirectScan(Builder.MaxForwardDetect->Value.Slice(EbnfStr), MaxForwardDetect);
 			}
 
+			std::vector<SLRX::ProductionBuilder> PBuilder;
 
+			for (auto& Ite : Builder.Builder)
+			{
+				SLRX::Symbol StartSymbol;
+				std::vector<SLRX::ProductionBuilderElement> Element;
+				std::size_t ProdutionMask = 0;
+				if (Ite.StartSymbol.ElementType == EbnfBuilder::ElementTypeE::Temporary)
+				{
+					StartSymbol = SLRX::Symbol::AsNoTerminal(Ite.StartSymbol.Value.Begin() + Mapping.size());
+				}
+				else {
+					StartSymbol = SLRX::Symbol::AsNoTerminal(Mapping.find(Ite.StartSymbol.Value.Slice(EbnfStr))->second);
+				}
+				Element.reserve(Ite.Productions.size());
+				for (auto& Ite2 : Ite.Productions)
+				{
+					switch (Ite2.ElementType)
+					{
+					case EbnfBuilder::ElementTypeE::Mask:
+					{
+						std::size_t Mask = 0;
+						auto Str = Ite2.Value.Slice(EbnfStr);
+						Format::DirectScan(Ite2.Value.Slice(EbnfStr), Mask);
+						Element.push_back(SLRX::ProductionBuilderElement{Mask});
+						break;
+					}
+					case EbnfBuilder::ElementTypeE::Terminal:
+					{
+						auto Str = Ite2.Value.Slice(EbnfStr);
+						auto RSymbol = SLRX::Symbol::AsTerminal(
+							Mapping.find(Str)->second
+						);
+						Element.push_back(SLRX::ProductionBuilderElement{ RSymbol });
+						break;
+					}
+					case EbnfBuilder::ElementTypeE::NoTerminal:
+					{
+						auto Str = Ite2.Value.Slice(EbnfStr);
+						auto RSymbol = SLRX::Symbol::AsNoTerminal(
+							Mapping.find(Str)->second
+						);
+						Element.push_back(SLRX::ProductionBuilderElement{ RSymbol });
+						break;
+					}
+					case EbnfBuilder::ElementTypeE::Self:
+					{
+						Element.push_back(SLRX::ProductionBuilderElement{ SLRX::ItSelf{} });
+						break;
+					}
+					case EbnfBuilder::ElementTypeE::Temporary:
+					{
+						auto RSymbol = SLRX::Symbol::AsNoTerminal(
+							Ite2.Value.Begin() + Mapping.size()
+						);
+						Element.push_back(SLRX::ProductionBuilderElement{ RSymbol });
+						break;
+					}
+					default:
+						assert(false);
+						break;
+					}
+				}
+				if (Ite.UserMask.Size() != 0)
+				{
+					auto Str = Ite.UserMask.Slice(EbnfStr);
+					Format::DirectScan(Str, ProdutionMask);
+				}
+				PBuilder.push_back({StartSymbol, std::move(Element), ProdutionMask });
+			}
 
-			volatile int o = 0;
+			std::vector<SLRX::OpePriority> OpePriority;
+
+			for (auto& Ite : Builder.OpePriority)
+			{
+				std::vector<SLRX::Symbol> Symbols;
+				Symbols.reserve(Ite.Ope.size());
+				for (auto& Ite2 : Ite.Ope)
+				{
+					auto Str = Ite2.Value.Slice(EbnfStr);
+					Symbols.push_back(
+						SLRX::Symbol::AsTerminal(
+							Mapping.find(Str)->second
+						)
+					);
+				}
+				OpePriority.push_back({std::move(Symbols), Ite.Associativity });
+			}
+
+			Syntax = SLRX::LRX::Create(StartSymbol, std::move(PBuilder), std::move(OpePriority), MaxForwardDetect);
 		}
 		catch (BuildInUnacceptableEbnf Bnf)
 		{

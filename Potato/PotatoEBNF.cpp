@@ -114,7 +114,7 @@ namespace Potato::EBNF
 			*NT::Statement,
 			{
 				{*NT::Expression, {*T::Terminal}, 1},
-				{*NT::Expression, {*T::NoTerminal}, 1},
+				{*NT::Expression, {*T::NoTerminal}, 2},
 				{*NT::Expression, {*T::Rex}, 4},
 				{*NT::Expression, {*T::Number}, 5},
 				{*NT::Expression, {*T::Start}, 50},
@@ -174,12 +174,12 @@ namespace Potato::EBNF
 		return Table.Wrapper;
 	};
 
-	std::any EbnfBuiler::BuilderStep1::operator()(SLRX::SymbolElement Value, std::size_t Index)
+	std::any EbnfBuilder::BuilderStep1::operator()(SLRX::SymbolElement Value, std::size_t Index)
 	{
 		return {};
 	}
 
-	std::any EbnfBuiler::BuilderStep1::operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pros)
+	std::any EbnfBuilder::BuilderStep1::operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pros)
 	{
 		switch (Pros.UserMask)
 		{
@@ -213,7 +213,7 @@ namespace Potato::EBNF
 		return {};
 	}
 
-	std::any EbnfBuiler::BuilderStep2::operator()(SLRX::SymbolElement Value, std::size_t Index)
+	std::any EbnfBuilder::BuilderStep2::operator()(SLRX::SymbolElement Value, std::size_t Index)
 	{
 		T TValue = static_cast<T>(Value.Value.Value);
 		if (TValue == T::Rex)
@@ -228,13 +228,15 @@ namespace Potato::EBNF
 		return {};
 	}
 
-	std::any EbnfBuiler::BuilderStep2::operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pros)
+	std::any EbnfBuilder::BuilderStep2::operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pros)
 	{
 		switch (Pros.UserMask)
 		{
 		case 1:
 		case 4:
-			return ElementT{ ElementTypeE::Value, Pros[0].Value.TokenIndex };
+			return ElementT{ ElementTypeE::Terminal, Pros[0].Value.TokenIndex };
+		case 2:
+			return ElementT{ ElementTypeE::NoTerminal, Pros[0].Value.TokenIndex };
 		case 5:
 			return ElementT{ ElementTypeE::Mask, Pros[0].Value.TokenIndex };
 		case 50:
@@ -365,7 +367,7 @@ namespace Potato::EBNF
 			return {};
 		case 21:
 		{
-			Ref.LastProductionStartSymbol = ElementT{ ElementTypeE::Value, Pros[0].Value.TokenIndex };
+			Ref.LastProductionStartSymbol = ElementT{ ElementTypeE::NoTerminal, Pros[0].Value.TokenIndex };
 			auto List = Pros[2].Consume<std::vector<ElementT>>();
 			auto Mask = Pros[3].Consume<Misc::IndexSpan<>>();
 			Ref.Builder.push_back({
@@ -396,7 +398,7 @@ namespace Potato::EBNF
 			{
 				throw BuildInUnacceptableEbnf{ BuildInUnacceptableEbnf::TypeE::StartSymbolAreadySet, Value.TokenIndex };
 			}
-			Ref.StartSymbol = ElementT{ ElementTypeE::Value, Pros[2].Value.TokenIndex};
+			Ref.StartSymbol = ElementT{ ElementTypeE::NoTerminal, Pros[2].Value.TokenIndex};
 			if (Pros.GetElementCount() == 5)
 			{
 				Ref.MaxForwardDetect = ElementT{ ElementTypeE::Mask, Pros[3].Value.TokenIndex };
@@ -410,14 +412,14 @@ namespace Potato::EBNF
 		return {};
 	}
 
-	std::any EbnfBuiler::BuilderStep3::operator()(SLRX::SymbolElement Value, std::size_t Index) { return {}; }
+	std::any EbnfBuilder::BuilderStep3::operator()(SLRX::SymbolElement Value, std::size_t Index) { return {}; }
 
-	std::any EbnfBuiler::BuilderStep3::operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pros)
+	std::any EbnfBuilder::BuilderStep3::operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pros)
 	{
 		switch (Pros.UserMask)
 		{
 		case 1:
-			return ElementT{ ElementTypeE::Value, Pros[0].Value.TokenIndex };
+			return ElementT{ ElementTypeE::Terminal, Pros[0].Value.TokenIndex };
 		case 2:
 		{
 			std::vector<ElementT> Symbols;
@@ -448,14 +450,14 @@ namespace Potato::EBNF
 	}
 
 
-	EbnfBuiler::EbnfBuiler(std::size_t StartupTokenIndex)
+	EbnfBuilder::EbnfBuilder(std::size_t StartupTokenIndex)
 		: RequireTokenIndex(StartupTokenIndex), LastSymbolToken(StartupTokenIndex), Processor(GetRegTable())
 	{
 		BuilderStep1 Step1{*this};
 		SLRX::LRXBinaryTableProcessor<std::size_t, BuilderStep1> Pro{ EbnfStep1SLRX(), Context, Step1 };
 	}
 
-	bool EbnfBuiler::Consume(char32_t InputValue, std::size_t NextTokenIndex)
+	bool EbnfBuilder::Consume(char32_t InputValue, std::size_t NextTokenIndex)
 	{
 		if (Processor.Consume(InputValue, RequireTokenIndex))
 		{
@@ -485,7 +487,7 @@ namespace Potato::EBNF
 		}
 	}
 
-	bool EbnfBuiler::EndOfFile()
+	bool EbnfBuilder::EndOfFile()
 	{
 		auto Re = Processor.EndOfFile(RequireTokenIndex);
 		auto Accept = Processor.GetAccept();
@@ -528,7 +530,7 @@ namespace Potato::EBNF
 		return false;
 	}
 
-	bool EbnfBuiler::AddEndOfFile()
+	bool EbnfBuilder::AddEndOfFile()
 	{
 		switch (State)
 		{
@@ -552,7 +554,7 @@ namespace Potato::EBNF
 		}
 	}
 
-	bool EbnfBuiler::AddSymbol(SLRX::Symbol Symbol, Misc::IndexSpan<> TokenIndex)
+	bool EbnfBuilder::AddSymbol(SLRX::Symbol Symbol, Misc::IndexSpan<> TokenIndex)
 	{
 		if(Symbol == *T::Empty)
 			return true;
