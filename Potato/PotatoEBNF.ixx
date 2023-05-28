@@ -39,10 +39,6 @@ export namespace Potato::EBNF
 			std::optional<Misc::IndexSpan<>> UserMask;
 		};
 
-		std::vector<RegMapT> RegMappings;
-		std::optional<Misc::IndexSpan<>> StartSymbol;
-		std::optional<Misc::IndexSpan<>> MaxForwardDetect;
-
 		enum class ElementTypeE
 		{
 			Mask,
@@ -57,22 +53,26 @@ export namespace Potato::EBNF
 			Misc::IndexSpan<> Value;
 		};
 
+		std::vector<RegMapT> RegMappings;
+		std::optional<ElementT> StartSymbol;
+		std::optional<ElementT> MaxForwardDetect;
+
 		struct BuilderT
 		{
-			Misc::IndexSpan<> StartSymbol;
+			ElementT StartSymbol;
 			std::vector<ElementT> Productions;
-			std::optional<Misc::IndexSpan<>> UserMask;
+			Misc::IndexSpan<> UserMask;
 		};
 
 		std::vector<BuilderT> Builder;
 
 		struct OpePriority
 		{
+			std::vector<ElementT> Ope;
 			SLRX::OpePriority::Associativity Associativity;
-			std::vector<Misc::IndexSpan<>> Ope;
 		};
 
-		std::vector<OpePriority> Ope;
+		std::vector<OpePriority> OpePriority;
 
 		enum StateE
 		{
@@ -87,21 +87,24 @@ export namespace Potato::EBNF
 		std::size_t LastSymbolToken = 0;
 		Reg::DfaBinaryTableProcessor Processor;
 		SLRX::CoreProcessor::Context Context;
+		std::size_t TerminalProductionIndex = 0;
+		std::optional<ElementT> LastProductionStartSymbol;
+		std::size_t OrMaskIte = 0;
 	
 		struct BuilderStep1
 		{
 			EbnfBuiler& Ref;
 
 			std::any operator()(SLRX::SymbolElement Value, std::size_t Index);
-			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceDescription Desc, std::span<SLRX::CoreProcessor::Element> Element);
+			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pro);
 		};
 
 		struct BuilderStep2
 		{
 			EbnfBuiler& Ref;
 
-			std::any operator()(SLRX::SymbolElement Value, std::size_t Index) { return {}; }
-			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceDescription Desc, std::span<SLRX::CoreProcessor::Element> Element) { return {}; }
+			std::any operator()(SLRX::SymbolElement Value, std::size_t Index);
+			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pro) { return {}; }
 		};
 
 		struct BuilderStep3
@@ -109,7 +112,7 @@ export namespace Potato::EBNF
 			EbnfBuiler& Ref;
 
 			std::any operator()(SLRX::SymbolElement Value, std::size_t Index) { return {}; }
-			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceDescription Desc, std::span<SLRX::CoreProcessor::Element> Element) { return {}; }
+			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pro) { return {}; }
 		};
 	};
 
@@ -626,6 +629,13 @@ export namespace Potato::EBNF::Exception
 export namespace Potato::EBNF
 {
 
+	struct BuildInUnacceptableEbnf
+	{
+		using TypeE = Exception::UnacceptableEbnf::TypeE;
+		TypeE Type;
+		Misc::IndexSpan<> TokenIndex;
+	};
+
 	template<typename CharT, typename CharTraisT>
 	Ebnf::Ebnf(std::basic_string_view<CharT, CharTraisT> EbnfStr)
 	{
@@ -643,6 +653,7 @@ export namespace Potato::EBNF
 					auto InputSpan = EbnfStr.substr(RequireSize);
 					auto EncodeInfo = Encode::CharEncoder<CharT, char32_t>::EncodeOnceUnSafe(InputSpan, OutputBuffer);
 					auto TokenIndex = Misc::IndexSpan<>{ RequireSize, RequireSize + EncodeInfo.SourceSpace };
+
 					if (!Builder.Consume(InputValue, TokenIndex.End()))
 					{
 						throw Exception::UnacceptableRegex(TokenIndex.Slice(EbnfStr));
@@ -656,8 +667,6 @@ export namespace Potato::EBNF
 					break;
 				}
 			}
-
-			volatile int i = 0;
 		}
 		catch (...)
 		{

@@ -120,7 +120,7 @@ namespace Potato::EBNF
 				{*NT::Expression, {*T::Start}, 50},
 
 				{*NT::FunctionEnum, {*T::Colon, *T::LM_Brace, *T::Number, *T::RM_Brace}, 6},
-				{*NT::FunctionEnum, {*T::Colon, *T::LM_Brace, *T::Number, *T::RM_Brace, *T::Start}, 6},
+				//{*NT::FunctionEnum, {*T::Colon, *T::LM_Brace, *T::Number, *T::RM_Brace, *T::Start}, 6},
 				{*NT::FunctionEnum, {}, 7},
 
 				{*NT::ExpressionStatement, {*NT::ExpressionStatement, 31, *NT::Expression}, 8},
@@ -176,20 +176,20 @@ namespace Potato::EBNF
 
 	std::any EbnfBuiler::BuilderStep1::operator()(SLRX::SymbolElement Value, std::size_t Index)
 	{
-		return Value.TokenIndex;
+		return {};
 	}
 
-	std::any EbnfBuiler::BuilderStep1::operator()(SLRX::SymbolElement Value, SLRX::ReduceDescription Desc, std::span<SLRX::CoreProcessor::Element> Element)
+	std::any EbnfBuiler::BuilderStep1::operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pros)
 	{
-		switch (Desc.UserMask)
+		switch (Pros.UserMask)
 		{
 		case 4:
 		case 2:
 		{
 			Ref.RegMappings.push_back({
-				Element[1].Consume<Misc::IndexSpan<>>(),
-				(Desc.UserMask == 4 ? RegTypeE::Empty : RegTypeE::Terminal),
-				Element[3].Consume<Misc::IndexSpan<>>(),
+				Pros[1].Value.TokenIndex,
+				(Pros.UserMask == 4 ? RegTypeE::Empty : RegTypeE::Terminal),
+				Pros[3].Value.TokenIndex,
 				{}
 				});
 			return {};
@@ -197,10 +197,10 @@ namespace Potato::EBNF
 		case 3:
 		{
 			Ref.RegMappings.push_back({
-					Element[1].Consume<Misc::IndexSpan<>>(),
+					Pros[1].Value.TokenIndex,
 					RegTypeE::Terminal,
-					Element[3].Consume<Misc::IndexSpan<>>(),
-					Element[6].Consume<Misc::IndexSpan<>>()
+					Pros[3].Value.TokenIndex,
+					Pros[6].Value.TokenIndex
 				});
 			return {};
 		}
@@ -213,7 +213,238 @@ namespace Potato::EBNF
 		return {};
 	}
 
+	std::any EbnfBuiler::BuilderStep2::operator()(SLRX::SymbolElement Value, std::size_t Index)
+	{
+		T TValue = static_cast<T>(Value.Value.Value);
+		if (TValue == T::Rex)
+		{
+			Ref.RegMappings.push_back({
+				Value.TokenIndex,
+				RegTypeE::Reg,
+				Value.TokenIndex,
+				{}
+			});
+		}
+		return {};
+	}
 
+	std::any EbnfBuiler::BuilderStep2::operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pros)
+	{
+		switch (Pros.UserMask)
+		{
+		case 1:
+		case 4:
+			return ElementT{ ElementTypeE::Value, Pros[0].Value.TokenIndex };
+		case 5:
+			return ElementT{ ElementTypeE::Mask, Pros[0].Value.TokenIndex };
+		case 50:
+			return ElementT{ ElementTypeE::Self, {} };
+		case 6:
+		{
+			return Pros[2].Value.TokenIndex;
+		}
+		case 7:
+		{
+			return Misc::IndexSpan<>{};
+		}
+		case 8:
+		{
+			auto Last = Pros[0].Consume<std::vector<ElementT>>();
+			Last.push_back(Pros[1].Consume<ElementT>());
+			return std::move(Last);
+		}
+		case 9:
+		{
+			std::vector<ElementT> Temp;
+			Temp.push_back(Pros[0].Consume<ElementT>());
+			return std::move(Temp);
+		}
+		case 10:
+		{
+			auto Exp = Pros[1].Consume<std::vector<ElementT>>();
+			auto CurSymbol = ElementT{ ElementTypeE::Temporary, {Ref.TerminalProductionIndex, Ref.TerminalProductionIndex} };
+			++Ref.TerminalProductionIndex;
+			Ref.Builder.push_back({
+				CurSymbol,
+				std::move(Exp),
+				{EBNF::SmallBrace, EBNF::SmallBrace}
+			});
+			return CurSymbol;
+		}
+		case 11:
+		{
+			auto Exp = Pros[1].Consume<std::vector<ElementT>>();
+			auto CurSymbol = ElementT{ ElementTypeE::Temporary, {Ref.TerminalProductionIndex, Ref.TerminalProductionIndex} };
+			++Ref.TerminalProductionIndex;
+			Exp.insert(Exp.begin(), CurSymbol);
+			Ref.Builder.push_back({
+				CurSymbol,
+				std::move(Exp),
+				{EBNF::BigBrace, EBNF::BigBrace}
+				});
+			Ref.Builder.push_back({
+				CurSymbol,
+				{},
+				{EBNF::BigBrace, EBNF::BigBrace}
+				});
+			return CurSymbol;
+		}
+		case 12:
+		{
+			auto Exp = Pros[1].Consume<std::vector<ElementT>>();
+			auto CurSymbol = ElementT{ ElementTypeE::Temporary, {Ref.TerminalProductionIndex, Ref.TerminalProductionIndex} };
+			++Ref.TerminalProductionIndex;
+			Ref.Builder.push_back({
+				CurSymbol,
+				std::move(Exp),
+				{EBNF::MiddleBrace, EBNF::MiddleBrace}
+			});
+			Ref.Builder.push_back({
+				CurSymbol,
+				{},
+				{EBNF::MiddleBrace, EBNF::MiddleBrace}
+			});
+			return CurSymbol;
+		}
+		case 15:
+		{
+			auto Last = Pros[1].Consume<std::vector<ElementT>>();
+			Last.push_back(Pros[0].Consume<ElementT>());
+			return std::move(Last);
+		}
+		case 17:
+		{
+			auto Last1 = Pros[0].Consume<std::vector<ElementT>>();
+			auto Last2 = Pros[2].Consume<std::vector<ElementT>>();
+			std::reverse(Last2.begin(), Last2.end());
+			Ref.OrMaskIte = EBNF::MinMask;
+
+			auto OrSymbol = ElementT{ ElementTypeE::Temporary, {Ref.TerminalProductionIndex, Ref.TerminalProductionIndex} };
+			++Ref.TerminalProductionIndex;
+
+			Ref.Builder.push_back({
+					OrSymbol,
+					std::move(Last1),
+					{Ref.OrMaskIte, Ref.OrMaskIte}
+				});
+
+			++Ref.OrMaskIte;
+
+			Ref.Builder.push_back({
+					OrSymbol,
+					std::move(Last2),
+					{Ref.OrMaskIte, Ref.OrMaskIte}
+				});
+
+			++Ref.OrMaskIte;
+
+			std::vector<ElementT> Temp;
+			Temp.push_back(OrSymbol);
+			return std::move(Temp);
+		}
+		case 30:
+		{
+			auto Last1 = Pros[0].Consume<std::vector<ElementT>>();
+			auto Last2 = Pros[2].Consume<std::vector<ElementT>>();
+			std::reverse(Last2.begin(), Last2.end());
+			assert(Last1.size() == 0);
+			//assert(Last1[0].ProductionValue.IsNoTerminal());
+			Ref.Builder.push_back({
+					Last1[0],
+					std::move(Last2),
+					{Ref.OrMaskIte, Ref.OrMaskIte}
+				});
+			++Ref.OrMaskIte;
+			return std::move(Last1);
+		}
+		case 18:
+			return Pros[0].Consume();
+		case 19:
+			return std::vector<ElementT>{};
+		case 20:
+			return {};
+		case 21:
+		{
+			Ref.LastProductionStartSymbol = ElementT{ ElementTypeE::Value, Pros[0].Value.TokenIndex };
+			auto List = Pros[2].Consume<std::vector<ElementT>>();
+			auto Mask = Pros[3].Consume<Misc::IndexSpan<>>();
+			Ref.Builder.push_back({
+				*Ref.LastProductionStartSymbol,
+				std::move(List),
+				Mask
+			});
+			return {};
+		}
+		case 22:
+		{
+			if (!Ref.LastProductionStartSymbol.has_value()) [[unlikely]]
+			{
+				throw BuildInUnacceptableEbnf{ BuildInUnacceptableEbnf::TypeE::UnsetProductionHead, Value.TokenIndex };
+			}
+			auto List = Pros[1].Consume<std::vector<ElementT>>();
+			auto Mask = Pros[2].Consume<Misc::IndexSpan<>>();
+			Ref.Builder.push_back({
+				*Ref.LastProductionStartSymbol,
+				std::move(List),
+				Mask
+			});
+			return {};
+		}
+		case 23:
+		{
+			if (Ref.StartSymbol.has_value()) [[unlikely]]
+			{
+				throw BuildInUnacceptableEbnf{ BuildInUnacceptableEbnf::TypeE::StartSymbolAreadySet, Value.TokenIndex };
+			}
+			Ref.StartSymbol = ElementT{ ElementTypeE::Value, Pros[2].Value.TokenIndex};
+			if (Pros.GetElementCount() == 5)
+			{
+				Ref.MaxForwardDetect = ElementT{ ElementTypeE::Mask, Pros[3].Value.TokenIndex };
+			}
+
+			return {};
+		}
+		default:
+			break;
+		}
+	}
+
+	std::any EbnfBuiler::BuilderStep3::operator()(SLRX::SymbolElement Value, std::size_t Index) { return {}; }
+
+	std::any EbnfBuiler::BuilderStep3::operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pros)
+	{
+		switch (Pros.UserMask)
+		{
+		case 1:
+			return ElementT{ ElementTypeE::Value, Pros[0].Value.TokenIndex };
+		case 2:
+		{
+			std::vector<ElementT> Symbols;
+			Symbols.push_back(Pros[0].Consume<ElementT>());
+			return Symbols;
+		}
+		case 3:
+		{
+			auto Symbols = Pros[0].Consume<std::vector<ElementT>>();
+			Symbols.push_back(Pros[1].Consume<ElementT>());
+			return Symbols;
+		}
+		case 4:
+		{
+			auto Symbols = Pros[2].Consume<std::vector<ElementT>>();
+			Ref.OpePriority.push_back({ std::move(Symbols), SLRX::OpePriority::Associativity::Right });
+			return {};
+		}
+		case 5:
+		{
+			auto Symbols = Pros[2].Consume<std::vector<ElementT>>();
+			Ref.OpePriority.push_back({ std::move(Symbols), SLRX::OpePriority::Associativity::Left });
+			return {};
+		}
+		default:
+			return {};
+		}
+	}
 
 
 	EbnfBuiler::EbnfBuiler(std::size_t StartupTokenIndex)

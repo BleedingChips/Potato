@@ -1348,7 +1348,7 @@ namespace Potato::SLRX
 
 		if (Result.has_value())
 		{
-			ProcessorContext.CacheSymbols.push_back(Element{ Result->State, SymbolElement{Value, TokenIndex}, {}, std::move(AppendData) });
+			ProcessorContext.CacheSymbols.push_back(ProcessElement{ Result->State, SymbolElement{Value, TokenIndex}, {}, std::move(AppendData) });
 			std::size_t SymbolsIndex = 0;
 			while (SymbolsIndex <= ProcessorContext.CacheSymbols.size())
 			{
@@ -1381,11 +1381,16 @@ namespace Potato::SLRX
 						Result->Reduce->Reduce.Mask
 					};
 
-					auto AppendData = HandleReduce(SElement, Desc, Productions);
+					ReduceProduction Pro{
+						Desc,
+						Productions
+					};
+
+					auto AppendData = HandleReduce(SElement, Pro);
 
 					ProcessorContext.States.resize(ProcessorContext.States.size() - Result->Reduce->Reduce.ElementCount);
 					ProcessorContext.States.push_back(
-						Element{
+						ProcessElement{
 							Result->State,
 							SElement,
 							Desc,
@@ -1502,11 +1507,16 @@ namespace Potato::SLRX
 						Result->Reduce.Reduce.Mask
 					};
 
-					auto AppendData = HandleReduce(SElement, Desc, Productions);
+					ReduceProduction Pro{
+						Desc,
+						Productions
+					};
+
+					auto AppendData = HandleReduce(SElement, Pro);
 
 					ProcessorContext.States.resize(ProcessorContext.States.size() - Result->Reduce.Reduce.ElementCount);
 					ProcessorContext.States.push_back(
-						Element{
+						ProcessElement{
 							Result->State,
 							SElement,
 							Desc,

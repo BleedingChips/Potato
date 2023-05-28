@@ -631,58 +631,58 @@ namespace Potato::Reg
 		return Chars;
 	}
 
-	std::any Nfa::BuilderT::operator()(SLRX::SymbolElement Value, SLRX::ReduceDescription Desc, std::span<SLRX::CoreProcessor::Element> Elements)
+	std::any Nfa::BuilderT::operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pros)
 	{
-		switch (Desc.UserMask)
+		switch (Pros.UserMask)
 		{
 		case 40:
-			return Elements[0].Consume();
+			return Pros[0].Consume();
 		case 60:
 		case 41:
 		{
-			return Elements[0].Consume<Interval>();
+			return Pros[0].Consume<Interval>();
 		}
 		case 42:
 		{
-			auto Cur = Elements[0].Consume<Interval>();
-			auto Cur2 = Elements[2].Consume<Interval>();
+			auto Cur = Pros[0].Consume<Interval>();
+			auto Cur2 = Pros[2].Consume<Interval>();
 			return Interval{ Cur[0].Expand(Cur2[0]) };
 		}
 		case 1:
-			return Elements[0].Consume();
+			return Pros[0].Consume();
 		case 3:
 		{
-			auto T1 = Elements[0].Consume<Interval>();
-			auto T2 = Elements[1].Consume<Interval>();
+			auto T1 = Pros[0].Consume<Interval>();
+			auto T2 = Pros[1].Consume<Interval>();
 			return T1 + T2;
 		}
 		case 61:
 		{
-			auto T1 = Elements[0].Consume<Interval>();
-			auto T2 = Elements[1].Consume<Interval>();
+			auto T1 = Pros[0].Consume<Interval>();
+			auto T2 = Pros[1].Consume<Interval>();
 			return T1 + T2;
 		}
 		case 62:
 		{
-			auto T1 = Elements[1].Consume<Interval>();
-			auto T2 = Elements[0].Consume<Interval>();
+			auto T1 = Pros[1].Consume<Interval>();
+			auto T2 = Pros[0].Consume<Interval>();
 			return T1 + T2;
 		}
 		case 63:
 		{
-			return Elements[0].Consume();
+			return Pros[0].Consume();
 		}
 		case 4:
 		{
 			auto T1 = AddNode();
 			auto T2 = AddNode();
 			NodeSetT Set{ T1, T2 };
-			AddConsume(Set, Elements[1].Consume<Interval>(), Value.TokenIndex);
+			AddConsume(Set, Pros[1].Consume<Interval>(), Value.TokenIndex);
 			return Set;
 		}
 		case 5:
 		{
-			auto Tar = Elements[2].Consume<Interval>();
+			auto Tar = Pros[2].Consume<Interval>();
 			auto P = MaxInterval() - Tar;
 			auto T1 = AddNode();
 			auto T2 = AddNode();
@@ -692,18 +692,18 @@ namespace Potato::Reg
 		}
 		case 6:
 		{
-			return Elements[3].Consume();
+			return Pros[3].Consume();
 		}
 		case 7:
 		{
-			auto InDex = Elements[0].Consume<std::size_t>();
-			NodeSetT Last = Elements[1].Consume<NodeSetT>();
+			auto InDex = Pros[0].Consume<std::size_t>();
+			NodeSetT Last = Pros[1].Consume<NodeSetT>();
 			return AddCapture(Last, Value.TokenIndex, InDex);
 		}
 		case 8:
 		{
-			NodeSetT Last1 = Elements[0].Consume<NodeSetT>();
-			NodeSetT Last2 = Elements[2].Consume<NodeSetT>();
+			NodeSetT Last1 = Pros[0].Consume<NodeSetT>();
+			NodeSetT Last2 = Pros[2].Consume<NodeSetT>();
 			auto T1 = AddNode();
 			auto T2 = AddNode();
 			AddConsume({ T1, Last1.In }, {}, Value.TokenIndex);
@@ -716,7 +716,7 @@ namespace Potato::Reg
 		{
 			auto T1 = AddNode();
 			auto T2 = AddNode();
-			auto Tar = Elements[0].Consume<Interval>();
+			auto Tar = Pros[0].Consume<Interval>();
 			NodeSetT Set{ T1, T2 };
 			AddConsume({ T1, T2 }, std::move(Tar), Value.TokenIndex);
 			return Set;
@@ -726,17 +726,17 @@ namespace Potato::Reg
 			auto T1 = AddNode();
 			auto T2 = AddNode();
 			NodeSetT Set{ T1, T2 };
-			AddConsume(Set, Elements[0].Consume<Interval>(), Value.TokenIndex);
+			AddConsume(Set, Pros[0].Consume<Interval>(), Value.TokenIndex);
 			return Set;
 		}
 		case 10:
 		{
-			return Elements[0].Consume();
+			return Pros[0].Consume();
 		}
 		case 11:
 		{
-			auto Last1 = Elements[0].Consume<NodeSetT>();
-			auto Last2 = Elements[1].Consume<NodeSetT>();
+			auto Last1 = Pros[0].Consume<NodeSetT>();
+			auto Last2 = Pros[1].Consume<NodeSetT>();
 			NodeSetT Set{ Last1.Out, Last2.In };
 			AddConsume(Set, {}, Value.TokenIndex);
 			return NodeSetT{ Last1.In, Last2.Out };
@@ -745,7 +745,7 @@ namespace Potato::Reg
 		{
 			auto T1 = AddNode();
 			auto T2 = AddNode();
-			auto Last1 = Elements[0].Consume<NodeSetT>();
+			auto Last1 = Pros[0].Consume<NodeSetT>();
 			AddConsume({ T1, Last1.In }, {}, Value.TokenIndex);
 			AddConsume({ T1, T2 }, {}, Value.TokenIndex);
 			AddConsume({ Last1.Out, Last1.In }, {}, Value.TokenIndex);
@@ -756,7 +756,7 @@ namespace Potato::Reg
 		{
 			auto T1 = AddNode();
 			auto T2 = AddNode();
-			auto Last1 = Elements[0].Consume<NodeSetT>();
+			auto Last1 = Pros[0].Consume<NodeSetT>();
 			AddConsume({ T1, Last1.In }, {}, Value.TokenIndex);
 			AddConsume({ Last1.Out, Last1.In }, {}, Value.TokenIndex);
 			AddConsume({ Last1.Out, T2 }, {}, Value.TokenIndex);
@@ -766,7 +766,7 @@ namespace Potato::Reg
 		{
 			auto T1 = AddNode();
 			auto T2 = AddNode();
-			auto Last1 = Elements[0].Consume<NodeSetT>();
+			auto Last1 = Pros[0].Consume<NodeSetT>();
 			AddConsume({ T1, T2 }, {}, Value.TokenIndex);
 			AddConsume({ T1, Last1.In }, {}, Value.TokenIndex);
 			AddConsume({ Last1.Out, T2 }, {}, Value.TokenIndex);
@@ -777,7 +777,7 @@ namespace Potato::Reg
 		{
 			auto T1 = AddNode();
 			auto T2 = AddNode();
-			auto Last1 = Elements[0].Consume<NodeSetT>();
+			auto Last1 = Pros[0].Consume<NodeSetT>();
 			AddConsume({ T1, Last1.In }, {}, Value.TokenIndex);
 			AddConsume({ Last1.Out, T2 }, {}, Value.TokenIndex);
 			AddConsume({ Last1.Out, Last1.In }, {}, Value.TokenIndex);
@@ -787,7 +787,7 @@ namespace Potato::Reg
 		{
 			auto T1 = AddNode();
 			auto T2 = AddNode();
-			auto Last1 = Elements[0].Consume<NodeSetT>();
+			auto Last1 = Pros[0].Consume<NodeSetT>();
 			AddConsume({ T1, Last1.In }, {}, Value.TokenIndex);
 			AddConsume({ Last1.Out, T2 }, {}, Value.TokenIndex);
 			AddConsume({ T1, T2 }, {}, Value.TokenIndex);
@@ -797,7 +797,7 @@ namespace Potato::Reg
 		{
 			auto T1 = AddNode();
 			auto T2 = AddNode();
-			auto Last1 = Elements[0].Consume<NodeSetT>();
+			auto Last1 = Pros[0].Consume<NodeSetT>();
 			AddConsume({ T1, T2 }, {}, Value.TokenIndex);
 			AddConsume({ T1, Last1.In }, {}, Value.TokenIndex);
 			AddConsume({ Last1.Out, T2 }, {}, Value.TokenIndex);
@@ -805,32 +805,32 @@ namespace Potato::Reg
 		}
 		case 18:
 		{
-			char32_t Te = Elements[0].Consume<Interval>()[0].Start;
+			char32_t Te = Pros[0].Consume<Interval>()[0].Start;
 			std::size_t Count = Te - U'0';
 			return Count;
 		}
 		case 19:
 		{
-			auto Te = Elements[0].Consume<std::size_t>();
+			auto Te = Pros[0].Consume<std::size_t>();
 			Te *= 10;
-			auto Te2 = Elements[1].Consume<Interval>()[0].Start;
+			auto Te2 = Pros[1].Consume<Interval>()[0].Start;
 			Te += Te2 - U'0';
 			return Te;
 		}
 		case 20: // {num}
-			return AddCounter(Elements[0].Consume<NodeSetT>(), Elements[2].Consume<std::size_t>(), {}, true, Value.TokenIndex, Elements[0].Consume<std::size_t>());
+			return AddCounter(Pros[0].Consume<NodeSetT>(), Pros[2].Consume<std::size_t>(), {}, true, Value.TokenIndex, Pros[0].Consume<std::size_t>());
 		case 25: // {,N}?
-			return AddCounter(Elements[0].Consume<NodeSetT>(), {}, Elements[3].Consume<std::size_t>(), false, Value.TokenIndex, Elements[0].Consume<std::size_t>());
+			return AddCounter(Pros[0].Consume<NodeSetT>(), {}, Pros[3].Consume<std::size_t>(), false, Value.TokenIndex, Pros[0].Consume<std::size_t>());
 		case 21: // {,N}
-			return AddCounter(Elements[0].Consume<NodeSetT>(), {}, Elements[3].Consume<std::size_t>(), true, Value.TokenIndex, Elements[0].Consume<std::size_t>());
+			return AddCounter(Pros[0].Consume<NodeSetT>(), {}, Pros[3].Consume<std::size_t>(), true, Value.TokenIndex, Pros[0].Consume<std::size_t>());
 		case 26: // {N,} ?
-			return AddCounter(Elements[0].Consume<NodeSetT>(), Elements[2].Consume<std::size_t>(), {}, false, Value.TokenIndex, Elements[0].Consume<std::size_t>());
+			return AddCounter(Pros[0].Consume<NodeSetT>(), Pros[2].Consume<std::size_t>(), {}, false, Value.TokenIndex, Pros[0].Consume<std::size_t>());
 		case 22: // {N,}
-			return AddCounter(Elements[0].Consume<NodeSetT>(), Elements[2].Consume<std::size_t>(), {}, true, Value.TokenIndex, Elements[0].Consume<std::size_t>());
+			return AddCounter(Pros[0].Consume<NodeSetT>(), Pros[2].Consume<std::size_t>(), {}, true, Value.TokenIndex, Pros[0].Consume<std::size_t>());
 		case 27: // {N, N} ?
-			return AddCounter(Elements[0].Consume<NodeSetT>(), Elements[2].Consume<std::size_t>(), Elements[4].Consume<std::size_t>(), false, Value.TokenIndex, Elements[1].Consume<std::size_t>());
+			return AddCounter(Pros[0].Consume<NodeSetT>(), Pros[2].Consume<std::size_t>(), Pros[4].Consume<std::size_t>(), false, Value.TokenIndex, Pros[1].Consume<std::size_t>());
 		case 23: // {N, N}
-			return AddCounter(Elements[0].Consume<NodeSetT>(), Elements[2].Consume<std::size_t>(), Elements[4].Consume<std::size_t>(), true, Value.TokenIndex, Elements[1].Consume<std::size_t>());
+			return AddCounter(Pros[0].Consume<NodeSetT>(), Pros[2].Consume<std::size_t>(), Pros[4].Consume<std::size_t>(), true, Value.TokenIndex, Pros[1].Consume<std::size_t>());
 		default:
 			assert(false);
 			break;

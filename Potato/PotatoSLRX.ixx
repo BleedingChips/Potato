@@ -389,29 +389,38 @@ export namespace Potato::SLRX
 		std::size_t ProductionCount;
 		std::size_t ProductionIndex;
 		std::size_t UserMask;
+		
+	};
+
+	struct ProcessElement
+	{
+		std::size_t TableState;
+		SymbolElement Value;
+		std::optional<ReduceDescription> Reduce;
+		std::any AppendData;
+
+		template<typename Type>
+		std::remove_reference_t<Type> Consume() { return std::move(std::any_cast<std::add_lvalue_reference_t<Type>>(AppendData)); }
+		std::any Consume() { return std::move(AppendData); }
+		template<typename Type>
+		std::optional<Type> TryConsume() {
+			auto P = std::any_cast<Type>(&AppendData);
+			if (P != nullptr)
+				return std::move(*P);
+			else
+				return std::nullopt;
+		}
+	};
+
+	struct ReduceProduction : public ReduceDescription
+	{
+		std::span<ProcessElement> Elements;
+		ProcessElement& operator[](std::size_t Index) { return Elements[Index]; }
+		std::size_t GetElementCount() const { return Elements.size(); }
 	};
 
 	struct CoreProcessor
 	{
-		struct Element
-		{
-			std::size_t TableState;
-			SymbolElement Value;
-			std::optional<ReduceDescription> Reduce;
-			std::any AppendData;
-
-			template<typename Type>
-			std::remove_reference_t<Type> Consume() { return std::move(std::any_cast<std::add_lvalue_reference_t<Type>>(AppendData)); }
-			std::any Consume() { return std::move(AppendData); }
-			template<typename Type>
-			std::optional<Type> TryConsume() {
-				auto P = std::any_cast<Type>(&AppendData);
-				if (P != nullptr)
-					return std::move(*P);
-				else
-					return std::nullopt;
-			}
-		};
 
 		struct ConsumeResult
 		{
@@ -428,8 +437,8 @@ export namespace Potato::SLRX
 
 		struct Context
 		{
-			std::deque<Element> CacheSymbols;
-			std::vector<Element> States;
+			std::deque<ProcessElement> CacheSymbols;
+			std::vector<ProcessElement> States;
 			std::size_t CurrentTopState = 0;
 			std::size_t RequireNode = 0;
 		};
@@ -454,7 +463,7 @@ export namespace Potato::SLRX
 
 		void TryReduce();
 
-		virtual std::any HandleReduce(SymbolElement Value, ReduceDescription Desc, std::span<Element> Productions) = 0;
+		virtual std::any HandleReduce(SymbolElement Value, ReduceProduction Desc) = 0;
 
 		virtual std::optional<ConsumeResult> TableConsume(Symbol Value) const = 0;
 		virtual std::optional<ReduceResult> TableReduce() const = 0;
@@ -515,7 +524,7 @@ export namespace Potato::SLRX
 	requires(
 		(std::is_same_v<ProcessorT, LRX> || std::is_same_v<ProcessorT, LRXBinaryTableWrapper>)
 		&& std::is_invocable_r_v<std::any, HandlFunction, SymbolElement, AppendInfo>
-		&& std::is_invocable_r_v<std::any, HandlFunction, SymbolElement, ReduceDescription, std::span<CoreProcessor::Element>>
+		&& std::is_invocable_r_v<std::any, HandlFunction, SymbolElement, ReduceProduction>
 	)
 	struct FunctionalProcessor : protected std::conditional_t<
 		std::is_same_v<ProcessorT, LRX>, LRXCoreProcessor, LRXBinaryTableCoreProcessor
@@ -565,8 +574,8 @@ export namespace Potato::SLRX
 	
 	protected:
 
-		virtual std::any HandleReduce(SymbolElement Value, ReduceDescription Desc, std::span<CoreProcessor::Element> Productions) override {
-			return Function(Value, Desc, Productions);
+		virtual std::any HandleReduce(SymbolElement Value, ReduceProduction Productions) override {
+			return Function(Value, Productions);
 		}
 
 		HandlFunction& Function;

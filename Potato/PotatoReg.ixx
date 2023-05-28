@@ -107,7 +107,7 @@ export namespace Potato::Reg
 			bool EndOfFile();
 
 			std::any operator()(SLRX::SymbolElement Value, Interval Chars);
-			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceDescription Desc, std::span<SLRX::CoreProcessor::Element> Elements);
+			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Productions);
 
 		protected:
 
