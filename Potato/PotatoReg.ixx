@@ -310,6 +310,7 @@ export namespace Potato::Reg
 				Next,
 				ToNode,
 				Fail,
+				ToAcceptNode
 			};
 			CommandE PassCommand = CommandE::Fail;
 			CommandE UnpassCommand = CommandE::Fail;

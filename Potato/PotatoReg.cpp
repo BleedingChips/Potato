@@ -2139,6 +2139,21 @@ namespace Potato::Reg
 
 			Nodes.push_back(std::move(NewNode));
 		}
+
+		for (auto& Ite : Nodes)
+		{
+			for (auto& Ite2 : Ite.Edges)
+			{
+				for (auto& Ite3 : Ite2.Conditions)
+				{
+					if(Ite3.PassCommand == ConditionT::CommandE::ToNode && Nodes[Ite3.Pass].Edges.empty())
+						Ite3.PassCommand = ConditionT::CommandE::ToAcceptNode;
+					if (Ite3.UnpassCommand == ConditionT::CommandE::ToNode && Nodes[Ite3.Unpass].Edges.empty())
+						Ite3.UnpassCommand = ConditionT::CommandE::ToAcceptNode;
+				}
+			}
+		}
+
 	}
 
 	DfaProcessor::DfaProcessor(Dfa const& Table)
@@ -2232,7 +2247,7 @@ namespace Potato::Reg
 				std::size_t NextIte = 0;
 				std::optional<std::size_t> ToNode;
 				assert(!Ite.Conditions.empty());
-
+				bool ToAcceptNode = false;
 				for (auto Ite2 : TempResult)
 				{
 					assert(!ToNode.has_value());
@@ -2248,6 +2263,10 @@ namespace Potato::Reg
 							return false;
 						case Dfa::ConditionT::CommandE::ToNode:
 							ToNode = Cond.Pass;
+							break;
+						case Dfa::ConditionT::CommandE::ToAcceptNode:
+							ToNode = Cond.Pass;
+							ToAcceptNode = true;
 							break;
 						default:
 							assert(false);
@@ -2277,7 +2296,7 @@ namespace Potato::Reg
 
 				CurNodeIndex = *ToNode;
 				Record.RecordConsume(TokenIndex);
-				return true;
+				return !ToAcceptNode;
 			}
 		}
 		return false;
@@ -2444,14 +2463,14 @@ namespace Potato::Reg
 					{
 						Reader->SetPointer(ConditionAdress);
 						auto Last = Reader->ReadObject<ConditionT>();
-						if (Ite2.PassCommand == Dfa::ConditionT::CommandE::ToNode)
+						if (Ite2.PassCommand == Dfa::ConditionT::CommandE::ToNode || Ite2.PassCommand == Dfa::ConditionT::CommandE::ToAcceptNode)
 						{
 							ConditionReference.push_back({ConditionAdress, Ite2.Pass});
 						}
 						else {
 							Misc::CrossTypeSetThrow<RegexOutOfRange>(Last->Pass, Ite2.Pass, RegexOutOfRange::TypeT::Solt, Ite2.Pass);
 						}
-						if (Ite2.UnpassCommand == Dfa::ConditionT::CommandE::ToNode)
+						if (Ite2.UnpassCommand == Dfa::ConditionT::CommandE::ToNode || Ite2.UnpassCommand == Dfa::ConditionT::CommandE::ToAcceptNode)
 						{
 							ConditionReference.push_back({ ConditionAdress, Ite2.Unpass });
 						}
@@ -2495,11 +2514,17 @@ namespace Potato::Reg
 			{
 				Reader->SetPointer(Ite.Adress);
 				auto Condi = Reader->ReadObject<ConditionT>();
-				if (Condi->PassCommand == static_cast<HalfStandardT>(Dfa::ConditionT::CommandE::ToNode) && Condi->Pass == 0)
+				if (
+					(Condi->PassCommand == static_cast<HalfStandardT>(Dfa::ConditionT::CommandE::ToNode)
+					|| Condi->PassCommand == static_cast<HalfStandardT>(Dfa::ConditionT::CommandE::ToAcceptNode))
+					&& Condi->Pass == 0)
 				{
 					Condi->Pass = NodeIndexOffset[Ite.RefCount];
 				}
-				else if (Condi->UnpassCommand == static_cast<HalfStandardT>(Dfa::ConditionT::CommandE::ToNode) && Condi->Unpass == 0)
+				else if (
+					(Condi->UnpassCommand == static_cast<HalfStandardT>(Dfa::ConditionT::CommandE::ToNode)
+					|| Condi->UnpassCommand == static_cast<HalfStandardT>(Dfa::ConditionT::CommandE::ToAcceptNode)
+					) && Condi->Unpass == 0)
 				{
 					Condi->Unpass = NodeIndexOffset[Ite.RefCount];
 				}
@@ -2673,6 +2698,12 @@ namespace Potato::Reg
 						CurrentNode = Solt;
 						Record.RecordConsume(TokenIndex);
 						return true;
+					}
+					case Dfa::ConditionT::CommandE::ToAcceptNode:
+					{
+						CurrentNode = Solt;
+						Record.RecordConsume(TokenIndex);
+						return false;
 					}
 					case Dfa::ConditionT::CommandE::Fail:
 						return false;
