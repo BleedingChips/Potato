@@ -1348,7 +1348,7 @@ namespace Potato::SLRX
 
 		if (Result.has_value())
 		{
-			ProcessorContext.CacheSymbols.push_back(ProcessElement{ Result->State, SymbolElement{Value, TokenIndex}, {}, std::move(AppendData) });
+			ProcessorContext.CacheSymbols.push_back(ProcessElement{ Result->State, SymbolInfo{Value, TokenIndex}, {}, std::move(AppendData) });
 			std::size_t SymbolsIndex = 0;
 			while (SymbolsIndex <= ProcessorContext.CacheSymbols.size())
 			{
@@ -1370,12 +1370,12 @@ namespace Potato::SLRX
 						}
 					}
 
-					SymbolElement SElement{
+					SymbolInfo SElement{
 						Result->Reduce->ReduceSymbol,
 						Cur,
 					};
 
-					ReduceDescription Desc{
+					ReduceInfo Desc{
 						Result->Reduce->Reduce.ElementCount,
 						Result->Reduce->Reduce.ProductionIndex,
 						Result->Reduce->Reduce.Mask
@@ -1496,12 +1496,12 @@ namespace Potato::SLRX
 						}
 					}
 
-					SymbolElement SElement{
+					SymbolInfo SElement{
 						Result->Reduce.ReduceSymbol,
 						Cur,
 					};
 
-					ReduceDescription Desc{
+					ReduceInfo Desc{
 						Result->Reduce.Reduce.ElementCount,
 						Result->Reduce.Reduce.ProductionIndex,
 						Result->Reduce.Reduce.Mask

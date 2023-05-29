@@ -98,24 +98,24 @@ export namespace Potato::EBNF
 		{
 			EbnfBuilder& Ref;
 
-			std::any operator()(SLRX::SymbolElement Value, std::size_t Index);
-			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pro);
+			std::any operator()(SLRX::SymbolInfo Value, std::size_t Index);
+			std::any operator()(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pro);
 		};
 
 		struct BuilderStep2
 		{
 			EbnfBuilder& Ref;
 
-			std::any operator()(SLRX::SymbolElement Value, std::size_t Index);
-			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pro) { return {}; }
+			std::any operator()(SLRX::SymbolInfo Value, std::size_t Index);
+			std::any operator()(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pro) { return {}; }
 		};
 
 		struct BuilderStep3
 		{
 			EbnfBuilder& Ref;
 
-			std::any operator()(SLRX::SymbolElement Value, std::size_t Index) { return {}; }
-			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pro) { return {}; }
+			std::any operator()(SLRX::SymbolInfo Value, std::size_t Index) { return {}; }
+			std::any operator()(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pro) { return {}; }
 		};
 
 		friend struct Ebnf;
@@ -153,47 +153,60 @@ export namespace Potato::EBNF
 
 		Reg::Dfa Lexical;
 		SLRX::LRX Syntax;
-
-		/*
-		using ElementT = EbnfLexerT::ElementT;
-
-		struct RegMappingT
-		{
-			std::size_t RegName;
-			std::size_t Reg;
-			std::optional<std::size_t> Mask;
-		};
-
-		void Parsing(
-			EbnfLexerT const& Input,
-			std::vector<RegMappingT>& RegMapping,
-			SLRX::Symbol& StartSymbol,
-			bool& NeedTokenIndexRef,
-			std::size_t& MaxFormatDetect,
-			std::vector<SLRX::ProductionBuilder>& Builder,
-			std::vector<SLRX::OpePriority>& OpePriority
-		);
-
-		std::wstring TotalString;
-		std::vector<Misc::IndexSpan<>> StringMapping;
-
-		struct RegScriptionT
-		{
-			std::size_t SymbolValue;
-			std::optional<std::size_t> UserMask;
-		};
-
-		std::vector<RegScriptionT> RegScriptions;
-
-		Reg::DfaT Lexical;
-		SLRX::LRX Syntax;
-
-		friend struct EbnfLexicalProcessor;
-		friend struct LexicalElementT;
-		*/
 	};
 
 
+	struct SymbolInfo
+	{
+		std::wstring_view SymbolName;
+		Misc::IndexSpan<> TokenIndex;
+	};
+
+	struct ReduceProduction
+	{
+		struct Element : public SymbolInfo 
+		{
+			std::any AppendData;
+
+			template<typename Type>
+			std::remove_reference_t<Type> Consume() { return std::move(std::any_cast<std::add_lvalue_reference_t<Type>>(AppendData)); }
+			std::any Consume() { return std::move(AppendData); }
+			template<typename Type>
+			std::optional<Type> TryConsume() {
+				auto P = std::any_cast<Type>(&AppendData);
+				if (P != nullptr)
+					return std::move(*P);
+				else
+					return std::nullopt;
+			}
+		};
+		std::span<Element> Elements;
+		std::size_t GetProduction
+	};
+
+
+	struct CoreEbnfProcessor
+	{
+		CoreEbnfProcessor(std::size_t StartupTokenIndex)
+			: StartupTokenIndex(StartupTokenIndex) {}
+
+	protected:
+		std::size_t StartupTokenIndex;
+		std::size_t RequireTokenIndex;
+	};
+
+
+	template<typename AppendInfo, typename Function>
+	requires(
+		std::is_invocable_r_v<std::any, Function, SymbolInfo, AppendInfo>
+		&& std::is_invocable_r_v<std::any, Function, SymbolInfo, ReduceProduction>
+	)
+	struct EbnfProcessor : CoreEbnfProcessor
+	{
+		Ebnf const& Table;
+		Reg::DfaProcessor Lexical;
+		SLRX::LRXProcessor<> Syntax;
+	};
 
 
 

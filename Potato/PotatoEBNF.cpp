@@ -174,12 +174,12 @@ namespace Potato::EBNF
 		return Table.Wrapper;
 	};
 
-	std::any EbnfBuilder::BuilderStep1::operator()(SLRX::SymbolElement Value, std::size_t Index)
+	std::any EbnfBuilder::BuilderStep1::operator()(SLRX::SymbolInfo Value, std::size_t Index)
 	{
 		return {};
 	}
 
-	std::any EbnfBuilder::BuilderStep1::operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pros)
+	std::any EbnfBuilder::BuilderStep1::operator()(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pros)
 	{
 		switch (Pros.UserMask)
 		{
@@ -213,7 +213,7 @@ namespace Potato::EBNF
 		return {};
 	}
 
-	std::any EbnfBuilder::BuilderStep2::operator()(SLRX::SymbolElement Value, std::size_t Index)
+	std::any EbnfBuilder::BuilderStep2::operator()(SLRX::SymbolInfo Value, std::size_t Index)
 	{
 		T TValue = static_cast<T>(Value.Value.Value);
 		if (TValue == T::Rex)
@@ -228,7 +228,7 @@ namespace Potato::EBNF
 		return {};
 	}
 
-	std::any EbnfBuilder::BuilderStep2::operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pros)
+	std::any EbnfBuilder::BuilderStep2::operator()(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pros)
 	{
 		switch (Pros.UserMask)
 		{
@@ -412,9 +412,9 @@ namespace Potato::EBNF
 		return {};
 	}
 
-	std::any EbnfBuilder::BuilderStep3::operator()(SLRX::SymbolElement Value, std::size_t Index) { return {}; }
+	std::any EbnfBuilder::BuilderStep3::operator()(SLRX::SymbolInfo Value, std::size_t Index) { return {}; }
 
-	std::any EbnfBuilder::BuilderStep3::operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pros)
+	std::any EbnfBuilder::BuilderStep3::operator()(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pros)
 	{
 		switch (Pros.UserMask)
 		{

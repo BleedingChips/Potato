@@ -378,25 +378,24 @@ export namespace Potato::SLRX
 	};
 
 
-	struct SymbolElement
+	struct SymbolInfo
 	{
 		Symbol Value;
 		Misc::IndexSpan<> TokenIndex;
 	};
 
-	struct ReduceDescription
+	struct ReduceInfo
 	{
 		std::size_t ProductionCount;
 		std::size_t ProductionIndex;
 		std::size_t UserMask;
-		
 	};
 
 	struct ProcessElement
 	{
 		std::size_t TableState;
-		SymbolElement Value;
-		std::optional<ReduceDescription> Reduce;
+		SymbolInfo Value;
+		std::optional<ReduceInfo> Reduce;
 		std::any AppendData;
 
 		template<typename Type>
@@ -412,7 +411,7 @@ export namespace Potato::SLRX
 		}
 	};
 
-	struct ReduceProduction : public ReduceDescription
+	struct ReduceProduction : public ReduceInfo
 	{
 		std::span<ProcessElement> Elements;
 		ProcessElement& operator[](std::size_t Index) { return Elements[Index]; }
@@ -463,7 +462,7 @@ export namespace Potato::SLRX
 
 		void TryReduce();
 
-		virtual std::any HandleReduce(SymbolElement Value, ReduceProduction Desc) = 0;
+		virtual std::any HandleReduce(SymbolInfo Value, ReduceProduction Desc) = 0;
 
 		virtual std::optional<ConsumeResult> TableConsume(Symbol Value) const = 0;
 		virtual std::optional<ReduceResult> TableReduce() const = 0;
@@ -523,8 +522,8 @@ export namespace Potato::SLRX
 	template<typename ProcessorT, typename AppendInfo, typename HandlFunction>
 	requires(
 		(std::is_same_v<ProcessorT, LRX> || std::is_same_v<ProcessorT, LRXBinaryTableWrapper>)
-		&& std::is_invocable_r_v<std::any, HandlFunction, SymbolElement, AppendInfo>
-		&& std::is_invocable_r_v<std::any, HandlFunction, SymbolElement, ReduceProduction>
+		&& std::is_invocable_r_v<std::any, HandlFunction, SymbolInfo, AppendInfo>
+		&& std::is_invocable_r_v<std::any, HandlFunction, SymbolInfo, ReduceProduction>
 	)
 	struct FunctionalProcessor : protected std::conditional_t<
 		std::is_same_v<ProcessorT, LRX>, LRXCoreProcessor, LRXBinaryTableCoreProcessor
@@ -552,7 +551,7 @@ export namespace Potato::SLRX
 
 		bool Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, AppendInfo const& Info)
 		{
-			auto AppendData = Function(SymbolElement{Value, TokenIndex}, Info);
+			auto AppendData = Function(SymbolInfo{Value, TokenIndex}, Info);
 			return BaseT::Consume(Value, TokenIndex, std::move(AppendData));
 		}
 
@@ -574,7 +573,7 @@ export namespace Potato::SLRX
 	
 	protected:
 
-		virtual std::any HandleReduce(SymbolElement Value, ReduceProduction Productions) override {
+		virtual std::any HandleReduce(SymbolInfo Value, ReduceProduction Productions) override {
 			return Function(Value, Productions);
 		}
 

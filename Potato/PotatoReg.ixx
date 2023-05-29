@@ -106,8 +106,8 @@ export namespace Potato::Reg
 			bool Consume(char32_t InputSymbol, Misc::IndexSpan<> TokenIndex);
 			bool EndOfFile();
 
-			std::any operator()(SLRX::SymbolElement Value, Interval Chars);
-			std::any operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Productions);
+			std::any operator()(SLRX::SymbolInfo Value, Interval Chars);
+			std::any operator()(SLRX::SymbolInfo Value, SLRX::ReduceProduction Productions);
 
 		protected:
 

@@ -618,7 +618,7 @@ namespace Potato::Reg
 		return Default;
 	}
 
-	std::any Nfa::BuilderT::operator()(SLRX::SymbolElement Value, Interval Chars)
+	std::any Nfa::BuilderT::operator()(SLRX::SymbolInfo Value, Interval Chars)
 	{
 		if (Value.Value == *T::ParenthesesLeft)
 		{
@@ -631,7 +631,7 @@ namespace Potato::Reg
 		return Chars;
 	}
 
-	std::any Nfa::BuilderT::operator()(SLRX::SymbolElement Value, SLRX::ReduceProduction Pros)
+	std::any Nfa::BuilderT::operator()(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pros)
 	{
 		switch (Pros.UserMask)
 		{
