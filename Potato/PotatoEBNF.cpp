@@ -601,8 +601,6 @@ namespace Potato::EBNF
 				return false;
 			}
 			auto Re = Pro.Consume(Symbol, TokenIndex, 2);
-			if(!Re)
-				volatile int i = 0;
 			return Re;
 		}
 		}
@@ -623,7 +621,7 @@ namespace Potato::EBNF
 			{
 				auto Ter = SLRX::Symbol::AsTerminal(Accept.GetMask());
 				auto TokenIndex = Accept.MainCapture;
-				if (SyntaxConsume(Ter, TokenIndex))
+				if (Accept.GetMask() == 0 || SyntaxConsume(Ter, TokenIndex))
 				{
 					LastSymbolToken = TokenIndex.End();
 					RequireTokenIndex = LastSymbolToken;

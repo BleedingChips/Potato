@@ -104,11 +104,29 @@ void Test(std::u8string_view Table, std::u8string_view InputStr, std::u8string_v
 
 		struct Action
 		{
-			std::any operator()(SymbolInfo Info) { return {}; }
-			std::any operator()(SymbolInfo Info, ReduceProduction Reduce) { return {}; }
-		}Ace;
+			std::u8string_view Ref;
+			std::any operator()(SymbolInfo Info) {
+				std::u8string Name = std::u8string{Info.TokenIndex.Slice(Ref)};
+				return Name; 
+			}
+			std::any operator()(SymbolInfo Info, ReduceProduction Reduce) { 
+				std::u8string TotalString;
+
+				TotalString+= u8"(";
+				for (std::size_t I = 0; I < Reduce.Size(); ++I)
+				{
+					TotalString += Reduce[I].Consume<std::u8string>();
+				}
+				TotalString += u8")";
+
+				return TotalString; }
+		}Ace{ InputStr };
 
 		EbnfProcessor<Action> Pro(Tab, Ace);
+
+		Process(Pro, InputStr);
+
+		auto P = Pro.GetData<std::u8string>();
 
 		volatile int o = 0;
 		volatile int i = 0;

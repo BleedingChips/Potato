@@ -135,6 +135,11 @@ export namespace Potato::EBNF
 		Reg::Dfa const& GetLexical() const { return Lexical; }
 		SLRX::LRX const& GetSyntax() const { return Syntax; }
 
+
+		RegInfoT GetRgeInfo(std::size_t Index) const { return RegMap[Index]; }
+		std::wstring_view GetRegName(std::size_t Index) const { return SymbolMap[Index].StrIndex.slice(std::wstring_view{ TotalString }); };
+		bool IsTemporaryNoTerminal(SLRX::Symbol Value) const { return Value.IsNoTerminal() && Value.Value >= SymbolMap.size(); }
+
 	protected:
 
 		std::wstring TotalString;
@@ -146,13 +151,13 @@ export namespace Potato::EBNF
 
 		std::vector<SymbolMapT> SymbolMap;
 
-		struct RegMapT
+		struct RegInfoT
 		{
 			std::size_t MapSymbolValue;
 			std::optional<std::size_t> UserMask;
 		};
 
-		std::vector<RegMapT> RegMap;
+		std::vector<RegInfoT> RegMap;
 
 		Reg::Dfa Lexical;
 		SLRX::LRX Syntax;
@@ -169,6 +174,8 @@ export namespace Potato::EBNF
 	{
 		std::wstring_view SymbolName;
 		Misc::IndexSpan<> TokenIndex;
+		bool IsTerminal = false;
+		std::optional<std::size_t> UserMask;
 	};
 
 	struct ReduceProduction
@@ -190,7 +197,7 @@ export namespace Potato::EBNF
 			}
 		};
 		std::span<Element> Elements;
-		std::size_t GetProductionCount() const { return Elements.size(); }
+		std::size_t Size() const { return Elements.size(); }
 		Element& GetProduction(std::size_t Input) { return Elements[Input]; }
 		Element& operator[](std::size_t Index) { return GetProduction(Index); }
 	};
@@ -255,14 +262,19 @@ export namespace Potato::EBNF
 		std::size_t GetRequireTokenIndex() const { return CoreProcessor::GetRequireTokenIndex(); }
 		bool Consume(char32_t Value, std::size_t NextTokenIndex)
 		{
-			return CoreProcessor::Clear();
+			return CoreProcessor::Consume(Value, NextTokenIndex);
 		}
 		bool EndOfFile() {
 			return CoreProcessor::EndOfFile();
 		}
 
+		template<typename RequireT>
+		RequireT GetData() { return SyntaxProcessor.GetData<RequireT>(); }
+
 		std::any operator()(SLRX::SymbolInfo Value, std::size_t Index) {
-			return {};
+			auto Info = Table.GetRegInfo(Value.Value.Value);
+			SymbolInfo Info{ Table.GetSymbolName(Info.MapSymbolValue), Value.TokenIndex, false, Info.UserMask };
+			return Func(Info);
 		}
 		std::any operator()(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pro) {
 			return {};
@@ -295,8 +307,6 @@ export namespace Potato::EBNF
 			return SyntaxProcessor.EndOfFile();
 		}
 
-		
-
 		Function& Func;
 		RefTableT Table;
 		std::vector<ReduceProduction> TempReduceProdutions;
@@ -312,11 +322,42 @@ export namespace Potato::EBNF
 			SLRX::LRXProcessor<std::size_t, TemplateProcessor>,
 			SLRX::LRXBinaryTableProcessor<std::size_t, TemplateProcessor>
 		> SyntaxProcessor;
+
 	};
 
 	template<typename Function>
 	using EbnfProcessor = TemplateProcessor<Ebnf, Function>;
 
+
+	template<typename ProcessorT, typename CharT, typename CharTrais>
+	bool Process(ProcessorT& Pro, std::basic_string_view<CharT, CharTrais> InputStr)
+	{
+		char32_t InputValue = 0;
+		std::span<char32_t> OutputBuffer{ &InputValue, 1 };
+		while (true)
+		{
+			auto RequireSize = Pro.GetRequireTokenIndex();
+
+			if (RequireSize < InputStr.size())
+			{
+				auto InputSpan = InputStr.substr(RequireSize);
+				auto EncodeInfo = Encode::CharEncoder<CharT, char32_t>::EncodeOnceUnSafe(InputSpan, OutputBuffer);
+				auto TokenIndex = Misc::IndexSpan<>{ RequireSize, RequireSize + EncodeInfo.SourceSpace };
+
+				if (!Pro.Consume(InputValue, TokenIndex.End()))
+					return false;
+			}
+			else if (RequireSize == InputStr.size())
+			{
+				if (!Pro.EndOfFile())
+					return false;
+			}
+			else {
+				break;
+			}
+		}
+		return false;
+	}
 
 
 	/*
@@ -842,7 +883,7 @@ export namespace Potato::EBNF
 					{
 						Format::DirectScan(Ite.UserMask->Slice(EbnfStr), UserMask);
 					}
-					Gen.AppendReg(RegStr, true, RegMap.size());
+					Gen.AppendReg(RegStr, false, RegMap.size());
 					RegMap.push_back({ IIte->second, UserMask });
 					break;
 				}
