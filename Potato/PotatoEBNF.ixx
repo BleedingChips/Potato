@@ -132,6 +132,9 @@ export namespace Potato::EBNF
 
 		Ebnf() = default;
 
+		Reg::Dfa const& GetLexical() const { return Lexical; }
+		SLRX::LRX const& GetSyntax() const { return Syntax; }
+
 	protected:
 
 		std::wstring TotalString;
@@ -153,6 +156,12 @@ export namespace Potato::EBNF
 
 		Reg::Dfa Lexical;
 		SLRX::LRX Syntax;
+
+	};
+
+	struct EbnfBinaryTabelWrapper
+	{
+
 	};
 
 
@@ -181,33 +190,132 @@ export namespace Potato::EBNF
 			}
 		};
 		std::span<Element> Elements;
-		std::size_t GetProduction
+		std::size_t GetProductionCount() const { return Elements.size(); }
+		Element& GetProduction(std::size_t Input) { return Elements[Input]; }
+		Element& operator[](std::size_t Index) { return GetProduction(Index); }
 	};
 
-
-	struct CoreEbnfProcessor
+	struct CoreProcessor
 	{
-		CoreEbnfProcessor(std::size_t StartupTokenIndex)
-			: StartupTokenIndex(StartupTokenIndex) {}
+		CoreProcessor(std::size_t StartupTokenIndex)
+			: StartupTokenIndex(StartupTokenIndex), RequireTokenIndex(StartupTokenIndex), LastSymbolToken(StartupTokenIndex) {}
+	
+		std::size_t GetRequireTokenIndex() const { return RequireTokenIndex; }
+
+		bool Consume(char32_t TokenIndex, std::size_t NextTokenIndex);
+		bool EndOfFile();
+		void Clear() {
+			RequireTokenIndex = StartupTokenIndex;
+			LastSymbolToken = LastSymbolToken;
+		}
 
 	protected:
+		
+		virtual bool LexicalConsume(char32_t Input, std::size_t CTokenIndex) = 0;
+		virtual Reg::ProcessorAcceptRef LexicalGetAccept() const = 0;
+		virtual bool LexicalEndOfFile(std::size_t TokenIndex) = 0;
+		virtual void LexicalClear() = 0;
+		virtual bool SyntaxConsume(SLRX::Symbol Symbol, Misc::IndexSpan<> TokenIndex) = 0;
+		virtual bool SyntaxEndOfFile() = 0;
+
 		std::size_t StartupTokenIndex;
 		std::size_t RequireTokenIndex;
+		std::size_t LastSymbolToken;
 	};
 
 
-	template<typename AppendInfo, typename Function>
-	requires(
-		std::is_invocable_r_v<std::any, Function, SymbolInfo, AppendInfo>
-		&& std::is_invocable_r_v<std::any, Function, SymbolInfo, ReduceProduction>
-	)
-	struct EbnfProcessor : CoreEbnfProcessor
+
+	template<typename TableT, typename Function>
+		requires(
+			(std::is_same_v<TableT, Ebnf> || std::is_same_v<TableT, EbnfBinaryTabelWrapper>)
+			&& std::is_invocable_r_v<std::any, Function, SymbolInfo>
+			&& std::is_invocable_r_v<std::any, Function, SymbolInfo, ReduceProduction>
+		)
+	struct TemplateProcessor : protected CoreProcessor
 	{
-		Ebnf const& Table;
-		Reg::DfaProcessor Lexical;
-		SLRX::LRXProcessor<> Syntax;
+
+		static constexpr bool IsEbnf = std::is_same_v<TableT, Ebnf>;
+	
+		using RefTableT = std::conditional_t<IsEbnf, Ebnf const&, EbnfBinaryTabelWrapper>;
+
+		TemplateProcessor(RefTableT Table, Function& Func, std::size_t StartupTokenIndex = 0)
+				: CoreProcessor(StartupTokenIndex), Func(Func), 
+				Table(Table), LexicalProcessor(Table.GetLexical()), SyntaxProcessor(SLRX::IgnoreClear{}, Table.GetSyntax(), Context, *this)
+		{
+			SyntaxProcessor.Clear();
+		}
+
+		void Clear()
+		{
+			CoreProcessor::Clear();
+			LexicalProcessor.Clear();
+			SyntaxProcessor.Clear();
+		}
+
+		std::size_t GetRequireTokenIndex() const { return CoreProcessor::GetRequireTokenIndex(); }
+		bool Consume(char32_t Value, std::size_t NextTokenIndex)
+		{
+			return CoreProcessor::Clear();
+		}
+		bool EndOfFile() {
+			return CoreProcessor::EndOfFile();
+		}
+
+		std::any operator()(SLRX::SymbolInfo Value, std::size_t Index) {
+			return {};
+		}
+		std::any operator()(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pro) {
+			return {};
+		}
+
+	protected:
+
+		bool LexicalConsume(char32_t Input, std::size_t CTokenIndex) override
+		{
+			return LexicalProcessor.Consume(Input, CTokenIndex);
+		}
+
+		Reg::ProcessorAcceptRef LexicalGetAccept() const override {
+			return LexicalProcessor.GetAccept();
+		}
+
+		bool LexicalEndOfFile(std::size_t TokenIndex) override  {
+			return LexicalProcessor.EndOfFile(TokenIndex);
+		}
+
+		void LexicalClear()override {
+			LexicalProcessor.Clear();
+		}
+
+		bool SyntaxConsume(SLRX::Symbol Symbol, Misc::IndexSpan<> TokenIndex) override
+		{
+			return SyntaxProcessor.Consume(Symbol, TokenIndex, 0);
+		}
+		bool SyntaxEndOfFile()override {
+			return SyntaxProcessor.EndOfFile();
+		}
+
+		
+
+		Function& Func;
+		RefTableT Table;
+		std::vector<ReduceProduction> TempReduceProdutions;
+
+		std::conditional_t<IsEbnf, 
+			Reg::DfaProcessor, 
+			Reg::DfaBinaryTableProcessor
+		> LexicalProcessor;
+
+		SLRX::CoreProcessor::Context Context;
+
+		std::conditional_t<IsEbnf, 
+			SLRX::LRXProcessor<std::size_t, TemplateProcessor>,
+			SLRX::LRXBinaryTableProcessor<std::size_t, TemplateProcessor>
+		> SyntaxProcessor;
 	};
 
+	template<typename Function>
+	using EbnfProcessor = TemplateProcessor<Ebnf, Function>;
 
 
 

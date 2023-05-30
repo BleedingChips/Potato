@@ -102,6 +102,14 @@ void Test(std::u8string_view Table, std::u8string_view InputStr, std::u8string_v
 	try {
 		Ebnf Tab { Table };
 
+		struct Action
+		{
+			std::any operator()(SymbolInfo Info) { return {}; }
+			std::any operator()(SymbolInfo Info, ReduceProduction Reduce) { return {}; }
+		}Ace;
+
+		EbnfProcessor<Action> Pro(Tab, Ace);
+
 		volatile int o = 0;
 		volatile int i = 0;
 

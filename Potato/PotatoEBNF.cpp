@@ -610,6 +610,84 @@ namespace Potato::EBNF
 	}
 
 
+	bool CoreProcessor::Consume(char32_t TokenIndex, std::size_t NextTokenIndex)
+	{
+		if (LexicalConsume(TokenIndex, RequireTokenIndex))
+		{
+			RequireTokenIndex = NextTokenIndex;
+			return true;
+		}
+		else {
+			auto Accept = LexicalGetAccept();
+			if (Accept)
+			{
+				auto Ter = SLRX::Symbol::AsTerminal(Accept.GetMask());
+				auto TokenIndex = Accept.MainCapture;
+				if (SyntaxConsume(Ter, TokenIndex))
+				{
+					LastSymbolToken = TokenIndex.End();
+					RequireTokenIndex = LastSymbolToken;
+					LexicalClear();
+					return true;
+				}
+				else {
+					RequireTokenIndex = LastSymbolToken;
+					LexicalClear();
+					return false;
+				}
+			}
+			return false;
+		}
+	}
+
+	bool CoreProcessor::EndOfFile()
+	{
+		auto Re = LexicalEndOfFile(RequireTokenIndex);
+		auto Accept = LexicalGetAccept();
+
+		if (Accept)
+		{
+			auto Symbol = SLRX::Symbol::AsTerminal(Accept.GetMask());
+			auto TokenIndex = Accept.MainCapture;
+
+			if (SyntaxConsume(Symbol, TokenIndex))
+			{
+				if (RequireTokenIndex == TokenIndex.End())
+				{
+					if (SyntaxEndOfFile())
+					{
+						RequireTokenIndex = RequireTokenIndex + 1;
+						LastSymbolToken = TokenIndex.End();
+						LexicalClear();
+						return true;
+					}
+					else {
+						RequireTokenIndex = LastSymbolToken;
+						LexicalClear();
+						return false;
+					}
+				}
+				else {
+					LastSymbolToken = TokenIndex.End();
+					RequireTokenIndex = LastSymbolToken;
+					LexicalClear();
+					return true;
+				}
+			}
+			else {
+				RequireTokenIndex = LastSymbolToken;
+				LexicalClear();
+				return false;
+			}
+		}
+		return false;
+	}
+
+
+
+
+
+
 	/*
 	void EbnfT::Parsing(
 		EbnfLexerT const& Input,
