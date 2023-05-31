@@ -418,7 +418,7 @@ export namespace Potato::SLRX
 		std::size_t GetElementCount() const { return Elements.size(); }
 	};
 
-	struct CoreProcessor
+	struct CoreLRXProcessor
 	{
 
 		struct ConsumeResult
@@ -434,16 +434,18 @@ export namespace Potato::SLRX
 			std::size_t State;
 		};
 
-		struct Context
+		struct OperatorT
 		{
-			std::deque<ProcessElement> CacheSymbols;
-			std::vector<ProcessElement> States;
-			std::size_t CurrentTopState = 0;
-			std::size_t RequireNode = 0;
+			virtual std::any HandleReduce(SymbolInfo Value, ReduceProduction Desc) = 0;
+			virtual std::optional<ConsumeResult> TableConsume(Symbol Value) = 0;
+			virtual std::optional<ReduceResult> TableReduce() = 0;
+			virtual void GetSuggestion() = 0;
+			virtual void Clear(LRXProcessor& Processor) = 0;
+			bool EnableSuggestion = false;
 		};
 
-		bool Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, std::any AppendData);
-		bool EndOfFile();
+		bool Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, std::any AppendData, OperatorT& Ope);
+		bool EndOfFile(OperatorT& Ope);
 
 		std::any& GetDataRaw();
 
@@ -454,30 +456,22 @@ export namespace Potato::SLRX
 
 		//void Clear(std::size_t StartupNode);
 
-		void Clear(std::size_t StartupNode = 0);
-
-		CoreProcessor(Context& ProcessorContext) : ProcessorContext(ProcessorContext) {}
+		void Clear(OperatorT& Ope);
 
 	protected:
 
 		void TryReduce();
 
-		virtual std::any HandleReduce(SymbolInfo Value, ReduceProduction Desc) = 0;
-
-		virtual std::optional<ConsumeResult> TableConsume(Symbol Value) const = 0;
-		virtual std::optional<ReduceResult> TableReduce() const = 0;
-
-		Context& ProcessorContext;
+		std::deque<ProcessElement> CacheSymbols;
+		std::vector<ProcessElement> States;
+		std::size_t CurrentTopState = 0;
+		std::size_t RequireNode = 0;
 	};
 
-	using ProcessorContext = CoreProcessor::Context;
-
-	struct LRXCoreProcessor : protected CoreProcessor
+	struct LRXOperator : public LRXProcessor::OperatorT
 	{
 
-		using Context = CoreProcessor::Context;
-
-		LRXCoreProcessor(LRX const& Table, Context& ProcessorContext, bool EnableSuggest)
+		LRXOperator(LRX const& Table)
 			: CoreProcessor(ProcessorContext), Table(Table), EnableSuggest(EnableSuggest)
 		{
 		}
