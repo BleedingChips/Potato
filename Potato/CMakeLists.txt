@@ -4,10 +4,10 @@ ENABLE_CPP_MODULE()
 
 add_library(PotatoModule STATIC 
 	"PotatoIR.cpp"
-	#"PotatoReg.cpp"
+	"PotatoReg.cpp"
 	"PotatoSLRX.cpp"
 	"PotatoEncode.cpp"
-	#"PotatoEBNF.cpp"
+	"PotatoEBNF.cpp"
 	"PotatoDocument.cpp"
 )
 
@@ -23,10 +23,10 @@ target_sources(
 		"PotatoInterval.ixx"
 		"PotatoIR.ixx"
 		"PotatoSLRX.ixx"
-		#"PotatoReg.ixx"
-		#"PotatoFormat.ixx"
+		"PotatoReg.ixx"
+		"PotatoFormat.ixx"
 		"PotatoEncode.ixx"
-		#"PotatoEBNF.ixx"
+		"PotatoEBNF.ixx"
 		"PotatoDocument.ixx"
 		"PotatoAllocator.ixx"
 )

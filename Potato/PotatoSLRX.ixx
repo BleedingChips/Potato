@@ -203,7 +203,117 @@ export namespace Potato::SLRX
 		LR0(std::vector<Node> Nodes) : Nodes(std::move(Nodes)) {}
 	};
 
-	struct LRX
+
+	struct SymbolInfo
+	{
+		Symbol Value;
+		Misc::IndexSpan<> TokenIndex;
+	};
+
+	struct ReduceInfo
+	{
+		std::size_t ProductionCount;
+		std::size_t ProductionIndex;
+		std::size_t UserMask;
+	};
+
+	struct ProcessElement
+	{
+		std::size_t TableState;
+		SymbolInfo Value;
+		std::optional<ReduceInfo> Reduce;
+		std::any AppendData;
+
+		template<typename Type>
+		std::remove_reference_t<Type> Consume() { return std::move(std::any_cast<std::add_lvalue_reference_t<Type>>(AppendData)); }
+		std::any Consume() { return std::move(AppendData); }
+		template<typename Type>
+		std::optional<Type> TryConsume() {
+			auto P = std::any_cast<Type>(&AppendData);
+			if (P != nullptr)
+				return std::move(*P);
+			else
+				return std::nullopt;
+		}
+	};
+
+	struct ReduceProduction : public ReduceInfo
+	{
+		std::span<ProcessElement> Elements;
+		ProcessElement& operator[](std::size_t Index) { return Elements[Index]; }
+		std::size_t Size() const { return Elements.size(); }
+	};
+
+
+	struct LRXCoreProcessor
+	{
+
+		struct ConsumeResult
+		{
+			std::size_t State;
+			std::size_t RequireNode;
+			std::optional<LR0::Reduce> Reduce;
+		};
+
+		struct ReduceResult
+		{
+			LR0::Reduce Reduce;
+			std::size_t State;
+		};
+
+		struct ClearInfo
+		{
+			std::size_t StartupTokenIndex;
+		};
+
+		struct CurrentStateInfo
+		{
+			std::size_t CurrentTopState;
+			std::size_t RequireNode;
+			std::span<ProcessElement> States;
+		};
+
+		struct OperatorT
+		{
+			bool EnableSuggestSymbol = false;
+			virtual std::any HandleReduce(SymbolInfo Value, ReduceProduction Desc) = 0;
+			
+			virtual void GetSuggestSymbol(Symbol Value) {};
+		};
+
+		struct TableWrapperT
+		{
+			virtual std::optional<ConsumeResult> TableConsume(Symbol Value, CurrentStateInfo const& Info, OperatorT& Ope) const = 0;
+			virtual std::optional<ReduceResult> TableReduce(CurrentStateInfo const& Info) const = 0;
+			virtual ClearInfo GetClearInfo() const = 0;
+		};
+
+		bool Consume(TableWrapperT const& Wrapper, OperatorT& Ope, Symbol Value, Misc::IndexSpan<> TokenIndex, std::any AppendInfo);
+		bool EndOfFile(TableWrapperT const& Wrapper, OperatorT& Ope);
+
+		std::any& GetDataRaw();
+
+		template<typename RequrieT>
+		RequrieT GetData() {
+			return std::any_cast<RequrieT>(std::move(GetDataRaw()));
+		}
+
+		void Clear(TableWrapperT const& Wrapper, OperatorT& Ope);
+
+	protected:
+
+		void TryReduce(TableWrapperT const& Wrapper, OperatorT& Ope);
+
+		std::deque<ProcessElement> CacheSymbols;
+		std::vector<ProcessElement> States;
+		std::size_t CurrentTopState = 0;
+		std::size_t RequireNode = 0;
+	};
+
+	using ProcessorOperator = LRXCoreProcessor::OperatorT;
+
+
+	struct LRX : public LRXCoreProcessor::TableWrapperT
 	{
 
 		struct ReduceTuple
@@ -264,10 +374,15 @@ export namespace Potato::SLRX
 		static constexpr std::size_t StartupOffset() { return 1; }
 
 	private:
+
+		virtual std::optional<LRXCoreProcessor::ConsumeResult> TableConsume(Symbol Value, LRXCoreProcessor::CurrentStateInfo const& Info, LRXCoreProcessor::OperatorT& Ope) const override;
+		virtual std::optional<LRXCoreProcessor::ReduceResult> TableReduce(LRXCoreProcessor::CurrentStateInfo const& Info) const override;
+		virtual LRXCoreProcessor::ClearInfo GetClearInfo() const override;
+
 		LRX(std::vector<Node> Nodes) : Nodes(std::move(Nodes)) {}
 	};
 
-	struct LRXBinaryTableWrapper
+	struct LRXBinaryTableWrapper : public LRXCoreProcessor::TableWrapperT
 	{
 		using StandardT = std::uint32_t;
 
@@ -330,6 +445,10 @@ export namespace Potato::SLRX
 		LRXBinaryTableWrapper() = default;
 		LRXBinaryTableWrapper& operator=(LRXBinaryTableWrapper const&) = default;
 
+		virtual std::optional<LRXCoreProcessor::ConsumeResult> TableConsume(Symbol Value, LRXCoreProcessor::CurrentStateInfo const& Info, LRXCoreProcessor::OperatorT& Ope) const override;
+		virtual std::optional<LRXCoreProcessor::ReduceResult> TableReduce(LRXCoreProcessor::CurrentStateInfo const& Info) const override;
+		virtual LRXCoreProcessor::ClearInfo GetClearInfo() const override;
+
 		Misc::StructedSerilizerReader<StandardT const> GetReader() const { return Misc::StructedSerilizerReader<StandardT const>(Buffer); }
 
 		operator bool() const { return !Buffer.empty(); }
@@ -378,208 +497,7 @@ export namespace Potato::SLRX
 	};
 
 
-	struct SymbolInfo
-	{
-		Symbol Value;
-		Misc::IndexSpan<> TokenIndex;
-	};
 
-	struct ReduceInfo
-	{
-		std::size_t ProductionCount;
-		std::size_t ProductionIndex;
-		std::size_t UserMask;
-	};
-
-	struct ProcessElement
-	{
-		std::size_t TableState;
-		SymbolInfo Value;
-		std::optional<ReduceInfo> Reduce;
-		std::any AppendData;
-
-		template<typename Type>
-		std::remove_reference_t<Type> Consume() { return std::move(std::any_cast<std::add_lvalue_reference_t<Type>>(AppendData)); }
-		std::any Consume() { return std::move(AppendData); }
-		template<typename Type>
-		std::optional<Type> TryConsume() {
-			auto P = std::any_cast<Type>(&AppendData);
-			if (P != nullptr)
-				return std::move(*P);
-			else
-				return std::nullopt;
-		}
-	};
-
-	struct ReduceProduction : public ReduceInfo
-	{
-		std::span<ProcessElement> Elements;
-		ProcessElement& operator[](std::size_t Index) { return Elements[Index]; }
-		std::size_t GetElementCount() const { return Elements.size(); }
-	};
-
-	struct CoreLRXProcessor
-	{
-
-		struct ConsumeResult
-		{
-			std::size_t State;
-			std::size_t RequireNode;
-			std::optional<LR0::Reduce> Reduce;
-		};
-
-		struct ReduceResult
-		{
-			LR0::Reduce Reduce;
-			std::size_t State;
-		};
-
-		struct OperatorT
-		{
-			virtual std::any HandleReduce(SymbolInfo Value, ReduceProduction Desc) = 0;
-			virtual std::optional<ConsumeResult> TableConsume(Symbol Value) = 0;
-			virtual std::optional<ReduceResult> TableReduce() = 0;
-			virtual void GetSuggestion() = 0;
-			virtual void Clear(LRXProcessor& Processor) = 0;
-			bool EnableSuggestion = false;
-		};
-
-		bool Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, std::any AppendData, OperatorT& Ope);
-		bool EndOfFile(OperatorT& Ope);
-
-		std::any& GetDataRaw();
-
-		template<typename RequrieT>
-		RequrieT GetData() {
-			return std::any_cast<RequrieT>(std::move(GetDataRaw()));
-		}
-
-		//void Clear(std::size_t StartupNode);
-
-		void Clear(OperatorT& Ope);
-
-	protected:
-
-		void TryReduce();
-
-		std::deque<ProcessElement> CacheSymbols;
-		std::vector<ProcessElement> States;
-		std::size_t CurrentTopState = 0;
-		std::size_t RequireNode = 0;
-	};
-
-	struct LRXOperator : public LRXProcessor::OperatorT
-	{
-
-		LRXOperator(LRX const& Table)
-			: CoreProcessor(ProcessorContext), Table(Table), EnableSuggest(EnableSuggest)
-		{
-		}
-
-		void Clear() { CoreProcessor::Clear(Table.StartupOffset()); }
-
-	protected:
-
-		virtual std::optional<CoreProcessor::ConsumeResult> TableConsume(Symbol Value) const override final;
-		virtual std::optional<CoreProcessor::ReduceResult> TableReduce() const override final;
-		
-		virtual void GetSuggest(Symbol Value) const = 0;
-
-		LRX const& Table;
-		bool const EnableSuggest;
-	};
-
-	struct LRXBinaryTableCoreProcessor : protected CoreProcessor
-	{
-
-		using Context = CoreProcessor::Context;
-
-		LRXBinaryTableCoreProcessor(LRXBinaryTableWrapper Table, Context& ProcessorContext, bool EnableSuggest = false)
-			: CoreProcessor(ProcessorContext), Table(Table), EnableSuggest(EnableSuggest)
-		{}
-
-		void Clear() { CoreProcessor::Clear(Table.StartupNodeIndex()); }
-
-	protected:
-
-		virtual std::optional<CoreProcessor::ConsumeResult> TableConsume(Symbol Value) const override final;
-		virtual std::optional<CoreProcessor::ReduceResult> TableReduce() const override final;
-
-		virtual void GetSuggest(Symbol Value) const = 0;
-
-		LRXBinaryTableWrapper Table;
-		bool const EnableSuggest;
-	};
-
-	struct IgnoreClear {};
-
-	template<typename ProcessorT, typename AppendInfo, typename HandlFunction>
-	requires(
-		(std::is_same_v<ProcessorT, LRX> || std::is_same_v<ProcessorT, LRXBinaryTableWrapper>)
-		&& std::is_invocable_r_v<std::any, HandlFunction, SymbolInfo, AppendInfo>
-		&& std::is_invocable_r_v<std::any, HandlFunction, SymbolInfo, ReduceProduction>
-	)
-	struct FunctionalProcessor : protected std::conditional_t<
-		std::is_same_v<ProcessorT, LRX>, LRXCoreProcessor, LRXBinaryTableCoreProcessor
-	>
-	{
-		using BaseT = std::conditional_t<
-			std::is_same_v<ProcessorT, LRX>, LRXCoreProcessor, LRXBinaryTableCoreProcessor
-		>;
-
-		using TableT = std::conditional_t<
-			std::is_same_v<ProcessorT, LRX>, LRX const&, LRXBinaryTableWrapper
-		>;
-
-		using Context = CoreProcessor::Context;
-
-
-		FunctionalProcessor(TableT Table, Context& ProcessorContext,  HandlFunction& Function)
-			: BaseT(Table, ProcessorContext, std::is_invocable_v<HandlFunction, Symbol>), Function(Function) {
-			BaseT::Clear();
-		}
-
-		FunctionalProcessor(IgnoreClear, TableT Table, Context& ProcessorContext, HandlFunction& Function)
-			: BaseT(Table, ProcessorContext, std::is_invocable_v<HandlFunction, Symbol>), Function(Function) {
-		}
-
-		bool Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, AppendInfo const& Info)
-		{
-			auto AppendData = Function(SymbolInfo{Value, TokenIndex}, Info);
-			return BaseT::Consume(Value, TokenIndex, std::move(AppendData));
-		}
-
-		virtual void GetSuggest(Symbol Value) const override { 
-			if constexpr (std::is_invocable_v<HandlFunction, Symbol>)
-			{
-				Function(Value);
-			}
-		}
-
-		bool EndOfFile() { return BaseT::EndOfFile(); }
-
-		std::any& GetDataRaw() { return BaseT::GetDataRaw(); }
-
-		template<typename RequrieT>
-		RequrieT GetData() { return this->BaseT::GetData<RequrieT>(); }
-
-		void Clear() { return BaseT::Clear(); }
-	
-	protected:
-
-		virtual std::any HandleReduce(SymbolInfo Value, ReduceProduction Productions) override {
-			return Function(Value, Productions);
-		}
-
-		HandlFunction& Function;
-
-	};
-
-	template<typename AppendInfoT, typename HandleFunction>
-	using LRXProcessor = FunctionalProcessor<LRX, AppendInfoT, HandleFunction>;
-
-	template<typename AppendInfoT, typename HandleFunction>
-	using LRXBinaryTableProcessor = FunctionalProcessor<LRXBinaryTableWrapper, AppendInfoT, HandleFunction>;
 
 
 	/*

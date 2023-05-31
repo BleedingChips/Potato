@@ -94,7 +94,7 @@ export namespace Potato::Reg
 
 		static Misc::IndexSpan<> CollectTokenIndexFromNodePath(std::span<NodeT const> NodeView, Misc::IndexSpan<> Default, std::span<std::size_t const> NodeStateView);
 
-		struct BuilderT
+		struct BuilderT : public SLRX::ProcessorOperator
 		{
 
 			BuilderT(std::size_t Mask = 0, bool IsRaw = false);
@@ -106,8 +106,8 @@ export namespace Potato::Reg
 			bool Consume(char32_t InputSymbol, Misc::IndexSpan<> TokenIndex);
 			bool EndOfFile();
 
-			std::any operator()(SLRX::SymbolInfo Value, Interval Chars);
-			std::any operator()(SLRX::SymbolInfo Value, SLRX::ReduceProduction Productions);
+			std::any HandleSymbol(SLRX::SymbolInfo Value, Interval Chars);
+			std::any HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Productions);
 
 		protected:
 
@@ -139,10 +139,9 @@ export namespace Potato::Reg
 			std::size_t RecordTokenIndex = 0;
 			std::size_t TokenIndexIte = 0;
 			std::vector<NodeT> Nodes;
-			SLRX::LRXBinaryTableCoreProcessor::Context Context;
+			SLRX::LRXCoreProcessor Processor;
 			std::size_t CaptureCount = 0;
 			std::size_t CounterCount = 0;
-			SLRX::LRXBinaryTableProcessor<Interval, BuilderT> Processor;
 		};
 
 

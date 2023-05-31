@@ -174,12 +174,12 @@ namespace Potato::EBNF
 		return Table.Wrapper;
 	};
 
-	std::any EbnfBuilder::BuilderStep1::operator()(SLRX::SymbolInfo Value, std::size_t Index)
+	std::any EbnfBuilder::BuilderStep1::HandleSymbol(SLRX::SymbolInfo Value)
 	{
 		return {};
 	}
 
-	std::any EbnfBuilder::BuilderStep1::operator()(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pros)
+	std::any EbnfBuilder::BuilderStep1::HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pros)
 	{
 		switch (Pros.UserMask)
 		{
@@ -213,7 +213,7 @@ namespace Potato::EBNF
 		return {};
 	}
 
-	std::any EbnfBuilder::BuilderStep2::operator()(SLRX::SymbolInfo Value, std::size_t Index)
+	std::any EbnfBuilder::BuilderStep2::HandleSymbol(SLRX::SymbolInfo Value)
 	{
 		T TValue = static_cast<T>(Value.Value.Value);
 		if (TValue == T::Rex)
@@ -228,7 +228,7 @@ namespace Potato::EBNF
 		return {};
 	}
 
-	std::any EbnfBuilder::BuilderStep2::operator()(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pros)
+	std::any EbnfBuilder::BuilderStep2::HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pros)
 	{
 		switch (Pros.UserMask)
 		{
@@ -399,7 +399,7 @@ namespace Potato::EBNF
 				throw BuildInUnacceptableEbnf{ BuildInUnacceptableEbnf::TypeE::StartSymbolAreadySet, Value.TokenIndex };
 			}
 			Ref.StartSymbol = ElementT{ ElementTypeE::NoTerminal, Pros[2].Value.TokenIndex};
-			if (Pros.GetElementCount() == 5)
+			if (Pros.Size() == 5)
 			{
 				Ref.MaxForwardDetect = ElementT{ ElementTypeE::Mask, Pros[3].Value.TokenIndex };
 			}
@@ -412,9 +412,7 @@ namespace Potato::EBNF
 		return {};
 	}
 
-	std::any EbnfBuilder::BuilderStep3::operator()(SLRX::SymbolInfo Value, std::size_t Index) { return {}; }
-
-	std::any EbnfBuilder::BuilderStep3::operator()(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pros)
+	std::any EbnfBuilder::BuilderStep3::HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pros)
 	{
 		switch (Pros.UserMask)
 		{
@@ -454,7 +452,7 @@ namespace Potato::EBNF
 		: RequireTokenIndex(StartupTokenIndex), LastSymbolToken(StartupTokenIndex), Processor(GetRegTable())
 	{
 		BuilderStep1 Step1{*this};
-		SLRX::LRXBinaryTableProcessor<std::size_t, BuilderStep1> Pro{ EbnfStep1SLRX(), Context, Step1 };
+		LRXProcessor.Clear(EbnfStep1SLRX(), Step1);
 	}
 
 	bool EbnfBuilder::Consume(char32_t InputValue, std::size_t NextTokenIndex)
@@ -539,14 +537,12 @@ namespace Potato::EBNF
 		case StateE::Step2:
 		{
 			BuilderStep2 Step2{ *this };
-			SLRX::LRXBinaryTableProcessor<std::size_t, BuilderStep2> Pro(SLRX::IgnoreClear{}, EbnfStep2SLRX(), Context, Step2);
-			return Pro.EndOfFile();
+			return LRXProcessor.EndOfFile(EbnfStep2SLRX(), Step2);
 		}
 		case StateE::Step3:
 		{
 			BuilderStep3 Step3{ *this };
-			SLRX::LRXBinaryTableProcessor<std::size_t, BuilderStep3> Pro(SLRX::IgnoreClear{}, EbnfStep3SLRX(), Context, Step3);
-			return Pro.EndOfFile();
+			return LRXProcessor.EndOfFile(EbnfStep3SLRX(), Step3);
 		}
 		default:
 			assert(false);
@@ -563,44 +559,41 @@ namespace Potato::EBNF
 		case StateE::Step1:
 		{
 			BuilderStep1 Step1{*this};
-			SLRX::LRXBinaryTableProcessor<std::size_t, BuilderStep1> Pro(SLRX::IgnoreClear{}, EbnfStep1SLRX(), Context, Step1);
 			if (Symbol == *T::Barrier)
 			{
-				if(!Pro.EndOfFile())
+				if(!LRXProcessor.EndOfFile(EbnfStep1SLRX(), Step1))
 					return false;
 				BuilderStep2 Step2{ *this };
-				SLRX::LRXBinaryTableProcessor<std::size_t, BuilderStep2> Pro2(EbnfStep2SLRX(), Context, Step2);
+				LRXProcessor.Clear(EbnfStep2SLRX(), Step2);
 				State = StateE::Step2;
 				return true;
 			}
 			else {
-				return Pro.Consume(Symbol, TokenIndex, 0);
+				return LRXProcessor.Consume(EbnfStep1SLRX(), Step1, Symbol, TokenIndex, Step1.HandleSymbol({Symbol, TokenIndex }));
 			}
 		}
 		case StateE::Step2:
 		{
 			BuilderStep2 Step2{ *this };
-			SLRX::LRXBinaryTableProcessor<std::size_t, BuilderStep2> Pro(SLRX::IgnoreClear{}, EbnfStep2SLRX(), Context, Step2);
 			if (Symbol == *T::Barrier)
 			{
-				if (!Pro.EndOfFile())
+				if (!LRXProcessor.EndOfFile(EbnfStep2SLRX(), Step2))
 					return false;
 				BuilderStep3 Step3{ *this };
-				SLRX::LRXBinaryTableProcessor<std::size_t, BuilderStep3> Pro2(EbnfStep3SLRX(), Context, Step3);
+				LRXProcessor.Clear(EbnfStep3SLRX(), Step3);
 				State = StateE::Step3;
 				return true;
 			}else
-				return Pro.Consume(Symbol, TokenIndex, 1);
+				return LRXProcessor.Consume(EbnfStep2SLRX(), Step2, Symbol, TokenIndex, Step2.HandleSymbol({ Symbol, TokenIndex }));
 		}
 		case StateE::Step3:
 		{
 			BuilderStep3 Step3{ *this };
-			SLRX::LRXBinaryTableProcessor<std::size_t, BuilderStep3> Pro(SLRX::IgnoreClear{}, EbnfStep3SLRX(), Context, Step3);
 			if (Symbol == *T::Barrier)
 			{
 				return false;
 			}
-			auto Re = Pro.Consume(Symbol, TokenIndex, 2);
+			auto Re = LRXProcessor.Consume(EbnfStep3SLRX(), Step3, Symbol, TokenIndex, Step3.HandleSymbol({ Symbol, TokenIndex }));
 			return Re;
 		}
 		}
@@ -608,6 +601,7 @@ namespace Potato::EBNF
 	}
 
 
+	/*
 	bool CoreProcessor::Consume(char32_t TokenIndex, std::size_t NextTokenIndex)
 	{
 		if (LexicalConsume(TokenIndex, RequireTokenIndex))
@@ -680,7 +674,7 @@ namespace Potato::EBNF
 		}
 		return false;
 	}
-
+	*/
 
 
 

@@ -89,33 +89,37 @@ export namespace Potato::EBNF
 		std::size_t RequireTokenIndex = 0;
 		std::size_t LastSymbolToken = 0;
 		Reg::DfaBinaryTableProcessor Processor;
-		SLRX::CoreProcessor::Context Context;
+		SLRX::LRXCoreProcessor LRXProcessor;
 		std::size_t TerminalProductionIndex = 0;
 		std::optional<ElementT> LastProductionStartSymbol;
 		std::size_t OrMaskIte = 0;
 	
-		struct BuilderStep1
+		struct BuilderStep1 : public SLRX::ProcessorOperator
 		{
+			
+			BuilderStep1(EbnfBuilder& Ref) : Ref(Ref) {}
 			EbnfBuilder& Ref;
 
-			std::any operator()(SLRX::SymbolInfo Value, std::size_t Index);
-			std::any operator()(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pro);
+			std::any HandleSymbol(SLRX::SymbolInfo Value);
+			std::any HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pro);
 		};
 
-		struct BuilderStep2
+		struct BuilderStep2 : public SLRX::ProcessorOperator
 		{
+			BuilderStep2(EbnfBuilder& Ref) : Ref(Ref) {}
 			EbnfBuilder& Ref;
 
-			std::any operator()(SLRX::SymbolInfo Value, std::size_t Index);
-			std::any operator()(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pro) { return {}; }
+			std::any HandleSymbol(SLRX::SymbolInfo Value);
+			std::any HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pro) { return {}; }
 		};
 
-		struct BuilderStep3
+		struct BuilderStep3 : public SLRX::ProcessorOperator 
 		{
+			BuilderStep3(EbnfBuilder& Ref) : Ref(Ref) {}
 			EbnfBuilder& Ref;
 
-			std::any operator()(SLRX::SymbolInfo Value, std::size_t Index) { return {}; }
-			std::any operator()(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pro) { return {}; }
+			std::any HandleSymbol(SLRX::SymbolInfo Value) { return {}; }
+			std::any HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pro) { return {}; }
 		};
 
 		friend struct Ebnf;
@@ -135,9 +139,14 @@ export namespace Potato::EBNF
 		Reg::Dfa const& GetLexical() const { return Lexical; }
 		SLRX::LRX const& GetSyntax() const { return Syntax; }
 
+		struct RegInfoT
+		{
+			std::size_t MapSymbolValue;
+			std::optional<std::size_t> UserMask;
+		};
 
 		RegInfoT GetRgeInfo(std::size_t Index) const { return RegMap[Index]; }
-		std::wstring_view GetRegName(std::size_t Index) const { return SymbolMap[Index].StrIndex.slice(std::wstring_view{ TotalString }); };
+		std::wstring_view GetRegName(std::size_t Index) const { return SymbolMap[Index].StrIndex.Slice(std::wstring_view{ TotalString }); };
 		bool IsTemporaryNoTerminal(SLRX::Symbol Value) const { return Value.IsNoTerminal() && Value.Value >= SymbolMap.size(); }
 
 	protected:
@@ -151,11 +160,7 @@ export namespace Potato::EBNF
 
 		std::vector<SymbolMapT> SymbolMap;
 
-		struct RegInfoT
-		{
-			std::size_t MapSymbolValue;
-			std::optional<std::size_t> UserMask;
-		};
+		
 
 		std::vector<RegInfoT> RegMap;
 
@@ -202,6 +207,7 @@ export namespace Potato::EBNF
 		Element& operator[](std::size_t Index) { return GetProduction(Index); }
 	};
 
+	/*
 	struct CoreProcessor
 	{
 		CoreProcessor(std::size_t StartupTokenIndex)
@@ -358,6 +364,7 @@ export namespace Potato::EBNF
 		}
 		return false;
 	}
+	*/
 
 
 	/*

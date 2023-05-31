@@ -161,15 +161,16 @@ namespace Potato::Reg
 	}
 
 	Nfa::BuilderT::BuilderT(std::size_t Mask, bool IsRaw) :
-		CurrentState(IsRaw ? StateT::Raw : StateT::Normal), Mask(Mask), Processor(RexSLRXWrapper(), Context, *this) 
+		CurrentState(IsRaw ? StateT::Raw : StateT::Normal), Mask(Mask)
 	{
 		auto Top = AddNode();
 		assert(Top == 0);
+		Processor.Clear(RexSLRXWrapper(), *this);
 	}
 
 	bool Nfa::BuilderT::InsertSymbol(SLRX::Symbol SymbolValue, Interval CharsValue, Misc::IndexSpan<> TokenIndex)
 	{
-		return Processor.Consume(SymbolValue, TokenIndex, CharsValue);
+		return Processor.Consume(RexSLRXWrapper(), *this, SymbolValue, TokenIndex, HandleSymbol({SymbolValue,TokenIndex}, std::move(CharsValue)));
 	}
 
 	bool Nfa::BuilderT::Consume(char32_t InputSymbol, Misc::IndexSpan<> TokenIndex)
@@ -350,7 +351,7 @@ namespace Potato::Reg
 		if (CurrentState == StateT::Normal || CurrentState == StateT::Raw)
 		{
 			CurrentState = StateT::Done;
-			if (Processor.EndOfFile())
+			if (Processor.EndOfFile(RexSLRXWrapper(), *this))
 			{
 				auto Re = Processor.GetData<NodeSetT>();
 				auto Top = 0;
@@ -618,7 +619,7 @@ namespace Potato::Reg
 		return Default;
 	}
 
-	std::any Nfa::BuilderT::operator()(SLRX::SymbolInfo Value, Interval Chars)
+	std::any Nfa::BuilderT::HandleSymbol(SLRX::SymbolInfo Value, Interval Chars)
 	{
 		if (Value.Value == *T::ParenthesesLeft)
 		{
@@ -631,7 +632,7 @@ namespace Potato::Reg
 		return Chars;
 	}
 
-	std::any Nfa::BuilderT::operator()(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pros)
+	std::any Nfa::BuilderT::HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pros)
 	{
 		switch (Pros.UserMask)
 		{

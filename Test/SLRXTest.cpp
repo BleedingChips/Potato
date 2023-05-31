@@ -101,18 +101,18 @@ struct StringMaker
 };
 */
 
-struct StringMaker
+struct StringMaker : LRXCoreProcessor::OperatorT
 {
-	std::any operator()(SymbolElement Symbol, std::size_t Index) {
-		return std::u8string(TerminalMapping[static_cast<Terminal>(Symbol.Value.Value)]);
+	std::any operator()(Symbol Value) {
+		return std::u8string(TerminalMapping[static_cast<Terminal>(Value.Value)]);
 	}
 
-	std::any operator()(SymbolElement Symbol, ReduceDescription Desc, std::span<CoreProcessor::Element> Production) { 
+	std::any HandleReduce(SymbolInfo Symbol, ReduceProduction Production) {
 		std::u8string TotalBuffer;
 		TotalBuffer += u8'(';
-		for (auto& Ite : Production)
+		for (std::size_t I = 0; I < Production.Size(); ++I)
 		{
-			TotalBuffer += Ite.Consume<std::u8string>();
+			TotalBuffer += Production[I].Consume<std::u8string>();
 		}
 		TotalBuffer += u8')';
 		return TotalBuffer;
@@ -131,21 +131,17 @@ void TestTable(Symbol StartSymbol, std::vector<ProductionBuilder> Builder, std::
 
 		StringMaker Maker;
 
-		ProcessorContext Context;
+		LRXCoreProcessor Pro;
 
-		LRXProcessor<std::size_t, StringMaker> Pro(
-			Tab,
-			Context,
-			Maker
-		);
+		Pro.Clear(Tab, Maker);
 
 		for (std::size_t I = 0; I < Span.size(); ++I)
 		{
-			if(!Pro.Consume(*Span[I], {I, I + 1}, I))
+			if(!Pro.Consume(Tab, Maker, *Span[I], {I, I + 1}, Maker(*Span[I])))
 				throw Error;
 		}
 
-		if(!Pro.EndOfFile())
+		if(!Pro.EndOfFile(Tab, Maker))
 			throw Error;
 
 		auto P = Pro.GetData<std::u8string>();
@@ -155,22 +151,20 @@ void TestTable(Symbol StartSymbol, std::vector<ProductionBuilder> Builder, std::
 
 		auto Buffer = LRXBinaryTableWrapper::Create(Tab);
 
-		LRXBinaryTableProcessor<std::size_t, StringMaker> Pro2(
-			LRXBinaryTableWrapper{Buffer},
-			Context,
-			Maker
-		);
+		auto Wra = LRXBinaryTableWrapper{std::span(Buffer)};
+
+		Pro.Clear(Wra, Maker);
 
 		for (std::size_t I = 0; I < Span.size(); ++I)
 		{
-			if (!Pro2.Consume(*Span[I], { I, I + 1 }, I))
+			if (!Pro.Consume(Wra, Maker, *Span[I], { I, I + 1 }, Maker(*Span[I])))
 				throw Error;
 		}
 
-		if(!Pro2.EndOfFile())
+		if(!Pro.EndOfFile(Wra, Maker))
 			throw Error;
 
-		auto P2 = Pro2.GetData<std::u8string>();
+		auto P2 = Pro.GetData<std::u8string>();
 
 		if (P2 != TarStr)
 			throw Error;

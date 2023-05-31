@@ -102,6 +102,7 @@ void Test(std::u8string_view Table, std::u8string_view InputStr, std::u8string_v
 	try {
 		Ebnf Tab { Table };
 
+		/*
 		struct Action
 		{
 			std::u8string_view Ref;
@@ -128,6 +129,7 @@ void Test(std::u8string_view Table, std::u8string_view InputStr, std::u8string_v
 
 		auto P = Pro.GetData<std::u8string>();
 
+		*/
 		volatile int o = 0;
 		volatile int i = 0;
 
