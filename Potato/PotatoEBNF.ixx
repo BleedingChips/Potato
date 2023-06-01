@@ -167,11 +167,7 @@ export namespace Potato::EBNF
 		Reg::Dfa Lexical;
 		SLRX::LRX Syntax;
 
-	};
-
-	struct EbnfBinaryTabelWrapper
-	{
-
+		friend struct EbnfProcessor;
 	};
 
 
@@ -180,7 +176,6 @@ export namespace Potato::EBNF
 		std::wstring_view SymbolName;
 		Misc::IndexSpan<> TokenIndex;
 		bool IsTerminal = false;
-		std::optional<std::size_t> UserMask;
 	};
 
 	struct ReduceProduction
@@ -201,10 +196,59 @@ export namespace Potato::EBNF
 					return std::nullopt;
 			}
 		};
+		std::size_t UserMask;
 		std::span<Element> Elements;
 		std::size_t Size() const { return Elements.size(); }
 		Element& GetProduction(std::size_t Input) { return Elements[Input]; }
 		Element& operator[](std::size_t Index) { return GetProduction(Index); }
+	};
+
+	struct ProcessorOperator
+	{
+		virtual std::any HandleSymbol(SymbolInfo Symbol) = 0;
+		virtual std::any HandleReduce(SymbolInfo Symbol, ReduceProduction Production) = 0;
+	};
+
+
+	struct EbnfProcessor
+	{
+		
+
+
+		EbnfProcessor(Ebnf const& Table, std::size_t StartupTokenIndex)
+			: Table(Table), LexicalProcessor(Table.Lexical), StartupTokenIndex(StartupTokenIndex), 
+				RequireTokenIndex(StartupTokenIndex), LastSymbolTokenIndex(StartupTokenIndex)
+			{ }
+
+
+
+		void Clear(ProcessorOperator& OPe);
+
+		bool Consume(char32_t Input, std::size_t NextTokenIndex, ProcessorOperator& OPe);
+		bool EndOfFile(ProcessorOperator& OPe);
+		std::size_t GetRequireTokenIndex() const { return RequireTokenIndex; }
+
+		
+
+	protected:
+
+		struct BuildInOperator : public SLRX::ProcessorOperator
+		{
+			EbnfProcessor& Ref;
+			ProcessorOperator& Operator;
+			std::any HandleReduce(SLRX::SymbolInfo Symbol, SLRX::ReduceProduction Production);
+		};
+
+		virtual std::any HandleReduce(SLRX::SymbolInfo Symbol, SLRX::ReduceProduction Production) final;
+		std::vector<ReduceProduction::Element> TempElement;
+
+		Ebnf const& Table;
+		Reg::DfaProcessor LexicalProcessor;
+		SLRX::LRXCoreProcessor SyntaxProcessor;
+		
+		std::size_t RequireTokenIndex = 0;
+		std::size_t LastSymbolTokenIndex = 0;
+		std::size_t StartupTokenIndex = 0;
 	};
 
 	/*

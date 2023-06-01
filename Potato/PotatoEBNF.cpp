@@ -600,6 +600,22 @@ namespace Potato::EBNF
 		return true;
 	}
 
+	std::any EbnfProcessor::BuildInOperator::HandleReduce(SLRX::SymbolInfo Symbol, SLRX::ReduceProduction Production)
+	{
+		if (!Ref.Table.IsTemporaryNoTerminal())
+		{
+			SymbolInfo NewInfo;
+			NewInfo.SymbolName = Ref.Table.GetRegName(Symbol.Value.Value);
+			NewInfo.TokenIndex = Symbol.TokenIndex;
+			NewInfo.IsTerminal = Symbol.IsTerminal();
+
+		}
+		else {
+			// todo
+			return {};
+		}
+	}
+
 
 	/*
 	bool CoreProcessor::Consume(char32_t TokenIndex, std::size_t NextTokenIndex)
