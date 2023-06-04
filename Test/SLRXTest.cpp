@@ -101,7 +101,7 @@ struct StringMaker
 };
 */
 
-struct StringMaker : LRXCoreProcessor::OperatorT
+struct StringMaker : ProcessorOperator
 {
 	std::any operator()(Symbol Value) {
 		return std::u8string(TerminalMapping[static_cast<Terminal>(Value.Value)]);
@@ -133,15 +133,17 @@ void TestTable(Symbol StartSymbol, std::vector<ProductionBuilder> Builder, std::
 
 		LRXCoreProcessor Pro;
 
-		Pro.Clear(Tab, Maker);
+		Pro.SetOberverTable(&Tab, &Maker);
+
+		Pro.Clear();
 
 		for (std::size_t I = 0; I < Span.size(); ++I)
 		{
-			if(!Pro.Consume(Tab, Maker, *Span[I], {I, I + 1}, Maker(*Span[I])))
+			if(!Pro.Consume(*Span[I], {I, I + 1}, Maker(*Span[I])))
 				throw Error;
 		}
 
-		if(!Pro.EndOfFile(Tab, Maker))
+		if(!Pro.EndOfFile())
 			throw Error;
 
 		auto P = Pro.GetData<std::u8string>();
@@ -153,15 +155,17 @@ void TestTable(Symbol StartSymbol, std::vector<ProductionBuilder> Builder, std::
 
 		auto Wra = LRXBinaryTableWrapper{std::span(Buffer)};
 
-		Pro.Clear(Wra, Maker);
+
+		Pro.SetOberverTable(&Wra, &Maker);
+		Pro.Clear();
 
 		for (std::size_t I = 0; I < Span.size(); ++I)
 		{
-			if (!Pro.Consume(Wra, Maker, *Span[I], { I, I + 1 }, Maker(*Span[I])))
+			if (!Pro.Consume(*Span[I], { I, I + 1 }, Maker(*Span[I])))
 				throw Error;
 		}
 
-		if(!Pro.EndOfFile(Wra, Maker))
+		if(!Pro.EndOfFile())
 			throw Error;
 
 		auto P2 = Pro.GetData<std::u8string>();

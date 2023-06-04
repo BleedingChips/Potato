@@ -61,7 +61,7 @@ namespace Potato::EBNF
 
 	constexpr Symbol operator*(NT sym) { return Symbol::AsNoTerminal(static_cast<std::size_t>(sym)); };
 
-	Reg::DfaBinaryTableWrapper GetRegTable() {
+	Reg::DfaBinaryTableWrapper const& GetRegTable() {
 		static auto List = []() {
 
 			Reg::Nfa StartupTable{ std::basic_string_view{UR"(%%%%)"}, false, static_cast<std::size_t>(T::Barrier) };
@@ -91,11 +91,12 @@ namespace Potato::EBNF
 			Reg::Dfa FinalTable(Reg::Dfa::FormatE::GreedyHeadMatch, StartupTable);
 			return Reg::CreateDfaBinaryTable(FinalTable);
 		}();
+		static Reg::DfaBinaryTableWrapper Wrap{List};
 
-		return Reg::DfaBinaryTableWrapper(List);
+		return Wrap;
 	}
 
-	SLRX::LRXBinaryTableWrapper EbnfStep1SLRX() {
+	SLRX::LRXBinaryTableWrapper const& EbnfStep1SLRX() {
 		static SLRX::LRXBinaryTable Table(
 			*NT::Statement,
 			{
@@ -109,7 +110,7 @@ namespace Potato::EBNF
 		return Table.Wrapper;
 	};
 
-	SLRX::LRXBinaryTableWrapper EbnfStep2SLRX() {
+	SLRX::LRXBinaryTableWrapper const& EbnfStep2SLRX() {
 		static SLRX::LRXBinaryTable Table(
 			*NT::Statement,
 			{
@@ -157,7 +158,7 @@ namespace Potato::EBNF
 		return Table.Wrapper;
 	};
 
-	SLRX::LRXBinaryTableWrapper EbnfStep3SLRX() {
+	SLRX::LRXBinaryTableWrapper const& EbnfStep3SLRX() {
 		static SLRX::LRXBinaryTable Table(
 			*NT::Statement,
 			{
@@ -449,10 +450,13 @@ namespace Potato::EBNF
 
 
 	EbnfBuilder::EbnfBuilder(std::size_t StartupTokenIndex)
-		: RequireTokenIndex(StartupTokenIndex), LastSymbolToken(StartupTokenIndex), Processor(GetRegTable())
+		: RequireTokenIndex(StartupTokenIndex), LastSymbolToken(StartupTokenIndex)
 	{
+		Processor.SetObserverTable(&GetRegTable());
+		Processor.Clear();
 		BuilderStep1 Step1{*this};
-		LRXProcessor.Clear(EbnfStep1SLRX(), Step1);
+		LRXProcessor.SetObserverTable(&EbnfStep1SLRX(), &Step1);
+		LRXProcessor.Clear();
 	}
 
 	bool EbnfBuilder::Consume(char32_t InputValue, std::size_t NextTokenIndex)
@@ -537,12 +541,14 @@ namespace Potato::EBNF
 		case StateE::Step2:
 		{
 			BuilderStep2 Step2{ *this };
-			return LRXProcessor.EndOfFile(EbnfStep2SLRX(), Step2);
+			LRXProcessor.SetObserverTable(&EbnfStep2SLRX(), &Step2);
+			return LRXProcessor.EndOfFile();
 		}
 		case StateE::Step3:
 		{
 			BuilderStep3 Step3{ *this };
-			return LRXProcessor.EndOfFile(EbnfStep3SLRX(), Step3);
+			LRXProcessor.SetObserverTable(&EbnfStep3SLRX(), &Step3);
+			return LRXProcessor.EndOfFile();
 		}
 		default:
 			assert(false);
@@ -561,15 +567,18 @@ namespace Potato::EBNF
 			BuilderStep1 Step1{*this};
 			if (Symbol == *T::Barrier)
 			{
-				if(!LRXProcessor.EndOfFile(EbnfStep1SLRX(), Step1))
+				LRXProcessor.SetObserverTable(&EbnfStep1SLRX(), &Step1);
+				if(!LRXProcessor.EndOfFile())
 					return false;
 				BuilderStep2 Step2{ *this };
-				LRXProcessor.Clear(EbnfStep2SLRX(), Step2);
+				LRXProcessor.SetObserverTable(&EbnfStep2SLRX(), &Step2);
+				LRXProcessor.Clear();
 				State = StateE::Step2;
 				return true;
 			}
 			else {
-				return LRXProcessor.Consume(EbnfStep1SLRX(), Step1, Symbol, TokenIndex, Step1.HandleSymbol({Symbol, TokenIndex }));
+				LRXProcessor.SetObserverTable(&EbnfStep1SLRX(), &Step1);
+				return LRXProcessor.Consume(Symbol, TokenIndex, Step1.HandleSymbol({Symbol, TokenIndex }));
 			}
 		}
 		case StateE::Step2:
@@ -577,29 +586,195 @@ namespace Potato::EBNF
 			BuilderStep2 Step2{ *this };
 			if (Symbol == *T::Barrier)
 			{
-				if (!LRXProcessor.EndOfFile(EbnfStep2SLRX(), Step2))
+				LRXProcessor.SetObserverTable(&EbnfStep2SLRX(), &Step2);
+				if (!LRXProcessor.EndOfFile())
 					return false;
 				BuilderStep3 Step3{ *this };
-				LRXProcessor.Clear(EbnfStep3SLRX(), Step3);
+				LRXProcessor.SetObserverTable(&EbnfStep3SLRX(), &Step3);
+				LRXProcessor.Clear();
 				State = StateE::Step3;
 				return true;
-			}else
-				return LRXProcessor.Consume(EbnfStep2SLRX(), Step2, Symbol, TokenIndex, Step2.HandleSymbol({ Symbol, TokenIndex }));
+			}
+			else {
+				LRXProcessor.SetObserverTable(&EbnfStep2SLRX(), &Step2);
+				return LRXProcessor.Consume(Symbol, TokenIndex, Step2.HandleSymbol({ Symbol, TokenIndex }));
+			}
 		}
 		case StateE::Step3:
 		{
-			BuilderStep3 Step3{ *this };
+			
 			if (Symbol == *T::Barrier)
 			{
 				return false;
 			}
-			auto Re = LRXProcessor.Consume(EbnfStep3SLRX(), Step3, Symbol, TokenIndex, Step3.HandleSymbol({ Symbol, TokenIndex }));
+			BuilderStep3 Step3{ *this };
+			LRXProcessor.SetObserverTable(&EbnfStep3SLRX(), &Step3);
+			auto Re = LRXProcessor.Consume(Symbol, TokenIndex, Step3.HandleSymbol({ Symbol, TokenIndex }));
 			return Re;
 		}
 		}
 		return true;
 	}
 
+	void Ebnf::OverrideSetOberverTable(Reg::DfaProcessor& Pro1, SLRX::LRXProcessor& Pro2, SLRX::ProcessorOperator& Ope) const
+	{
+		Pro1.SetObserverTable(&Lexical);
+		Pro2.SetObserverTable(&Syntax, &Ope);
+	}
+
+	std::tuple<SymbolInfo, std::size_t> Ebnf::Tranlate(std::size_t Mask, Misc::IndexSpan<> TokenIndex) const
+	{
+		auto Inf = GetRgeInfo(Mask);
+		return {
+			{SLRX::Symbol::AsTerminal(Inf.MapSymbolValue), GetRegName(Inf.MapSymbolValue), TokenIndex},
+			Inf.UserMask.has_value() ? *Inf.UserMask : 0,
+		};
+	}
+
+	SymbolInfo Ebnf::Tranlate(SLRX::Symbol Symbol, Misc::IndexSpan<> TokenIndex) const
+	{
+		if (Symbol.Value >= SymbolMap.size())
+		{
+			return {Symbol, {}, TokenIndex};
+		}
+		else {
+			return {Symbol, GetRegName(Symbol.Value), TokenIndex };
+		}
+	}
+
+
+
+
+
+	bool EbnfProcessor::SetObserverTable(Misc::ObserverPtr<TableWrapperT const> Table, Misc::ObserverPtr<EbnfOperator> Ope) {
+		Operator = std::move(Ope);
+		TableWrapper = std::move(Table);
+		if (TableWrapper)
+		{
+			TableWrapper->OverrideSetOberverTable(LexicalProcessor, SyntaxProcessor, static_cast<SLRX::ProcessorOperator&>(*this));
+		}
+		return TableWrapper && Operator;
+	}
+
+	void EbnfProcessor::Clear(std::size_t Startup) {
+		LastSymbolTokenIndex = Startup;
+		RequireTokenIndex = Startup;
+		LexicalProcessor.Clear();
+		SyntaxProcessor.Clear();
+	}
+
+	bool EbnfProcessor::Consume(char32_t Value, std::size_t NextTokenIndex)
+	{
+		assert(TableWrapper && Operator);
+		if (LexicalProcessor.Consume(Value, GetRequireTokenIndex()))
+		{
+			RequireTokenIndex = NextTokenIndex;
+			return true;
+		}
+		else {
+			auto Accept = LexicalProcessor.GetAccept();
+			if (Accept)
+			{
+				auto MainCapture = Accept.GetMainCapture();
+				auto Capture = MainCapture;
+				if(Accept.GetCaptureSize() >= 1)
+					Capture = Accept[0];
+				bool Re = AddTerminalSymbol(*Accept.Mask, Capture);
+				if (Re)
+				{
+					RequireTokenIndex = Accept.GetMainCapture().End();
+					LastSymbolTokenIndex = RequireTokenIndex;
+					LexicalProcessor.Clear();
+					return true;
+				}
+			}
+			RequireTokenIndex = LastSymbolTokenIndex;
+			LexicalProcessor.Clear();
+			return false;
+		}
+	}
+
+	bool EbnfProcessor::EndOfFile()
+	{
+		assert(TableWrapper && Operator);
+		LexicalProcessor.EndOfFile(RequireTokenIndex);
+		auto Accept = LexicalProcessor.GetAccept();
+		if (Accept)
+		{
+			auto MainCapture = Accept.GetMainCapture();
+			auto Capture = MainCapture;
+			if (Accept.GetCaptureSize() >= 1)
+				Capture = Accept[0];
+			bool Re = AddTerminalSymbol(*Accept.Mask, Capture);
+			if (Re)
+			{
+				if (MainCapture.End() == RequireTokenIndex)
+				{
+					if (TerminalEndOfFile())
+					{
+						RequireTokenIndex = RequireTokenIndex + 1;
+						LastSymbolTokenIndex = RequireTokenIndex;
+						LexicalProcessor.Clear();
+						return true;
+					}
+				}
+				else {
+					RequireTokenIndex = Accept.GetMainCapture().End();
+					LastSymbolTokenIndex = RequireTokenIndex;
+					LexicalProcessor.Clear();
+					return true;
+				}
+			}
+		}
+		LexicalProcessor.Clear();
+		RequireTokenIndex = LastSymbolTokenIndex;
+		return false;
+	}
+
+	bool EbnfProcessor::AddTerminalSymbol(std::size_t RegIndex, Misc::IndexSpan<> TokenIndex)
+	{
+		auto [Sym, UserMask] = TableWrapper->Tranlate(RegIndex, TokenIndex);
+		if (Sym.Symbol.Value == 0)
+		{
+			return true;
+		}
+		else {
+			auto AppendData = Operator->HandleSymbol(Sym, UserMask);
+			auto Re = SyntaxProcessor.Consume(Sym.Symbol, Sym.TokenIndex, std::move(AppendData));
+			return Re;
+		}
+	}
+
+	bool EbnfProcessor::TerminalEndOfFile()
+	{
+		return SyntaxProcessor.EndOfFile();
+	}
+
+	std::any EbnfProcessor::HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Desc)
+	{
+		auto Sym = TableWrapper->Tranlate(Value.Value, Value.TokenIndex);
+		if (!Sym.SymbolName.empty())
+		{
+			TempElement.clear();
+			ReduceProduction Pro;
+			Pro.UserMask = Desc.UserMask;
+			for (auto& Ite : Desc.Elements)
+			{
+				ReduceProduction::Element Ele;
+				Ele.AppendData = std::move(Ite.AppendData);
+				static_cast<SymbolInfo&>(Ele) = TableWrapper->Tranlate(Ite.Value.Value, Ite.Value.TokenIndex);
+				TempElement.push_back(std::move(Ele));
+			}
+			Pro.Elements = std::span(TempElement);
+			return Operator->HandleReduce(Sym, Pro);
+		}
+		else {
+			// todo
+			return {};
+		}
+	}
+
+	/*
 	std::any EbnfProcessor::BuildInOperator::HandleReduce(SLRX::SymbolInfo Symbol, SLRX::ReduceProduction Production)
 	{
 		if (!Ref.Table.IsTemporaryNoTerminal())
@@ -615,6 +790,7 @@ namespace Potato::EBNF
 			return {};
 		}
 	}
+	*/
 
 
 	/*

@@ -60,14 +60,7 @@ export namespace Potato::Format
 	template<typename CharT, typename CharTraits, typename ...OT>
 	bool ProcessorScan(Reg::DfaProcessor& Processor, std::basic_string_view<CharT, CharTraits> Str, OT& ...OO)
 	{
-		auto Accept = Reg::CoreProcess(Processor, Str);
-		return RegAcceptScan(Accept, Str, OO...);
-	}
-
-	template<typename CharT, typename CharTraits, typename ...OT>
-	bool ProcessorScan(Reg::DfaBinaryTableProcessor& Processor, std::basic_string_view<CharT, CharTraits> Str, OT& ...OO)
-	{
-		auto Accept = Reg::CoreProcess(Processor, Str);
+		auto Accept = Reg::Process(Processor, Str);
 		return RegAcceptScan(Accept, Str, OO...);
 	}
 
@@ -75,7 +68,9 @@ export namespace Potato::Format
 	bool MatchScan(std::basic_string_view<CharT1, CharTT1> Regex, std::basic_string_view<CharT2, CharTT2> Source, OT&... OO)
 	{
 		Reg::Dfa Table(Reg::Dfa::FormatE::Match, Regex, false, 0);
-		Reg::DfaProcessor Processor(Table);
+		Reg::DfaProcessor Processor;
+		Processor.SetObserverTable(&Table);
+		Processor.Clear();
 		return ProcessorScan(Processor, Source, OO...);
 	}
 
@@ -83,7 +78,9 @@ export namespace Potato::Format
 	bool HeadMatchScan(std::basic_string_view<CharT1, CharTT1> Regex, std::basic_string_view<CharT2, CharTT2> Source, OT&... OO)
 	{
 		Reg::Dfa Table(Reg::Dfa::FormatE::HeadMatch, Regex, false, 0);
-		Reg::DfaProcessor Processor(Table);
+		Reg::DfaProcessor Processor;
+		Processor.SetObserverTable(&Table);
+		Processor.Clear();
 		return ProcessorScan(Processor, Source, OO...);
 	}
 

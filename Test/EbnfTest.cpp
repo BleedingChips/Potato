@@ -2,205 +2,51 @@ import Potato.EBNF;
 
 using namespace Potato::EBNF;
 
-
-std::u8string HandleCondiction(Condition Tions)
+struct StringMaker : public EbnfOperator
 {
-	std::u8string Result;
-	switch (Tions.Type)
+	virtual std::any HandleSymbol(SymbolInfo Symbol, std::size_t UserMask) override 
 	{
-	case Condition::TypeT::Or:
-		Result += u8"<|";
-		break;
-	case Condition::TypeT::Parentheses:
-		Result += u8"<{";
-		break;
-	case Condition::TypeT::SquareBrackets:
-		Result += u8"<[";
-		break;
-	}
-	for (auto& Ite : Tions.Datas)
-	{
-		auto Re = Ite.TryConsume<Condition>();
-		if (Re.has_value())
-		{
-			Result += HandleCondiction(std::move(*Re));
-		}
-		else {
-			Result += Ite.Consume<std::u8string>();
-		}
-	}
-	Result += u8">";
-	return Result;
-}
-
-struct StringMaker
-{
-	struct PredictEle
-	{
-		ParsingStep::ReduceT Reudce;
-		std::size_t LastTokenIndex;
+		std::wstring Str = std::wstring{ Symbol.TokenIndex.Slice(TotalStr) };
+		return Str;
 	};
-
-	StringMaker(const char* Error) : Error(Error) {}
-
-	std::vector<PredictEle> PredictReduceStack;
-
-	std::any operator()(VariantElement Element) {
-		if (Element.IsTerminal())
+	virtual std::any HandleReduce(SymbolInfo Symbol, ReduceProduction Production) { 
+		std::wstring Str = L"(";
+		for (auto& Ite : Production.Elements)
 		{
-			++NextTokenIndex;
-			auto Ele = Element.AsTerminal();
-			return std::u8string{ Ele.Shift.CaptureValue };
+			Str += Ite.Consume<std::wstring>();
 		}
-		else if (Element.IsNoTerminal())
-		{
-			auto Ele = Element.AsNoTerminal();
-			bool HasPredict = false;
-
-			std::u8string Tem;
-
-			if (!PredictReduceStack.empty() && PredictReduceStack.rbegin()->Reudce.UniqueReduceID == Ele.Reduce.UniqueReduceID)
-			{
-				auto Last = *PredictReduceStack.rbegin();
-				PredictReduceStack.pop_back();
-				Tem += u8"&(";
-			}
-			else {
-				Tem += u8"(";
-			}
-			for (auto& Ite : Ele.Datas)
-			{
-				auto Re = Ite.TryConsume<Condition>();
-				if (Re.has_value())
-				{
-					Tem += HandleCondiction(std::move(std::move(*Re)));
-				}else
-					Tem += Ite.Consume<std::u8string>();
-			}
-			Tem += u8")";
-			return Tem;
-		}
-		else if (Element.IsPredict())
-		{
-			auto Ele = Element.AsPredict();
-			PredictReduceStack.push_back({ Ele.Reduce, NextTokenIndex });
-			return {};
-		}
-		else {
-			return {};
-		}
-	}
-
-	std::size_t NextTokenIndex = 0;
-
-	const char* Error;
+		Str += L")";
+		return Str;
+	};
+	std::wstring_view TotalStr;
 };
 
-void Test(std::u8string_view Table, std::u8string_view InputStr, std::u8string_view TargetReg, const char* Error)
+void Test(std::wstring_view Table, std::wstring_view InputStr, std::wstring_view TargetReg, const char* Error)
 {
 	try {
 		Ebnf Tab { Table };
 
-		EbnfProcessor Pro(Tab);
+		EbnfProcessor Pro;
 
-		/*
-		struct Action
+		StringMaker Maker;
+		Maker.TotalStr = InputStr;
+
+		Pro.SetObserverTable(&Tab, &Maker);
+		Pro.Clear();
+
+		auto Re = Process(Pro, InputStr);
+
+		if (Re)
 		{
-			std::u8string_view Ref;
-			std::any operator()(SymbolInfo Info) {
-				std::u8string Name = std::u8string{Info.TokenIndex.Slice(Ref)};
-				return Name; 
-			}
-			std::any operator()(SymbolInfo Info, ReduceProduction Reduce) { 
-				std::u8string TotalString;
-
-				TotalString+= u8"(";
-				for (std::size_t I = 0; I < Reduce.Size(); ++I)
-				{
-					TotalString += Reduce[I].Consume<std::u8string>();
-				}
-				TotalString += u8")";
-
-				return TotalString; }
-		}Ace{ InputStr };
-
-		EbnfProcessor<Action> Pro(Tab, Ace);
-
-		Process(Pro, InputStr);
-
-		auto P = Pro.GetData<std::u8string>();
-
-		*/
-		volatile int o = 0;
-		volatile int i = 0;
-
-		/*
-		{
-			auto IteStr = InputStr;
-
-			LexicalProcessor Pro{ Tab };
-
-			while (!IteStr.empty())
-			{
-				auto Re = Pro.Consume(IteStr, InputStr.size() - IteStr.size());
-				if (Re.has_value())
-				{
-					IteStr = *Re;
-				}
-				else {
-					throw Error;
-				}
-			}
-
-			auto Steps = SyntaxProcessor::Process(Tab, Pro.GetSpan());
-
-			if (!Steps)
+			auto K = Pro.GetData<std::wstring>();
+			if (K != TargetReg)
 			{
 				throw Error;
 			}
-
-			StringMaker Maker(Error);
-
-			auto Strs = ProcessParsingStepWithOutputType<std::u8string>(*Steps, Maker);
-
-			if(Strs != TargetReg)
-				throw Error;
 		}
-
-		{
-			auto TableBuffer = TableWrapper::Create(Tab);
-
-			LexicalProcessor Pro{ TableWrapper{TableBuffer} };
-
-			auto IteStr = InputStr;
-
-			while (!IteStr.empty())
-			{
-				auto Re = Pro.Consume(IteStr, InputStr.size() - IteStr.size());
-				if (Re.has_value())
-				{
-					IteStr = *Re;
-				}
-				else {
-					throw Error;
-				}
-			}
-
-			auto Steps = SyntaxProcessor::Process(Tab, Pro.GetSpan());
-
-			if (!Steps)
-			{
-				throw Error;
-			}
-
-			StringMaker Maker(Error);
-
-			auto Strs = ProcessParsingStepWithOutputType<std::u8string>(*Steps, Maker);
-
-			if (Strs != TargetReg)
-				throw Error;
+		else {
+			throw Error;
 		}
-		*/
 	}
 	catch (Exception::Interface const&)
 	{
@@ -213,8 +59,8 @@ void Test(std::u8string_view Table, std::u8string_view InputStr, std::u8string_v
 void TestingEbnf()
 {
 	
-	std::u8string_view EbnfCode1 =
-		u8R"(
+	std::wstring_view EbnfCode1 =
+		LR"(
 
 Num := '[1-9][0-9]*' : [1]
 $ := '\s+'
@@ -236,10 +82,10 @@ $ := <Exp> ;
 )";
 
 	
-	std::u8string_view Source = u8R"(1*< 2 + 3 > * 4)";
+	std::wstring_view Source = LR"(1*< 2 + 3 > * 4)";
 
 
-	Test(EbnfCode1, Source, u8R"((((1)*(<((2)+(3))>))*(4)))", "TestingEbnf : Case 1");
+	Test(EbnfCode1, Source, LR"((((1)*(<((2)+(3))>))*(4)))", "TestingEbnf : Case 1");
 
 	/*
 	std::u8string_view EbnfCode2 =

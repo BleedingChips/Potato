@@ -1,6 +1,7 @@
 export module Potato.SLRX;
 export import Potato.Misc;
 export import Potato.STD;
+export import Potato.SmartPtr;
 
 export namespace Potato::SLRX
 {
@@ -244,8 +245,14 @@ export namespace Potato::SLRX
 		std::size_t Size() const { return Elements.size(); }
 	};
 
+	struct ProcessorOperator
+	{
+		bool EnableSuggestSymbol = false;
+		virtual std::any HandleReduce(SymbolInfo Value, ReduceProduction Desc) = 0;
+		virtual void GetSuggestSymbol(Symbol Value) {};
+	};
 
-	struct LRXCoreProcessor
+	struct LRXProcessor
 	{
 
 		struct ConsumeResult
@@ -273,23 +280,20 @@ export namespace Potato::SLRX
 			std::span<ProcessElement> States;
 		};
 
-		struct OperatorT
-		{
-			bool EnableSuggestSymbol = false;
-			virtual std::any HandleReduce(SymbolInfo Value, ReduceProduction Desc) = 0;
-			
-			virtual void GetSuggestSymbol(Symbol Value) {};
-		};
-
 		struct TableWrapperT
 		{
-			virtual std::optional<ConsumeResult> TableConsume(Symbol Value, CurrentStateInfo const& Info, OperatorT& Ope) const = 0;
+			virtual std::optional<ConsumeResult> TableConsume(Symbol Value, CurrentStateInfo const& Info, ProcessorOperator& Ope) const = 0;
 			virtual std::optional<ReduceResult> TableReduce(CurrentStateInfo const& Info) const = 0;
 			virtual ClearInfo GetClearInfo() const = 0;
 		};
 
-		bool Consume(TableWrapperT const& Wrapper, OperatorT& Ope, Symbol Value, Misc::IndexSpan<> TokenIndex, std::any AppendInfo);
-		bool EndOfFile(TableWrapperT const& Wrapper, OperatorT& Ope);
+		bool Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, std::any AppendInfo);
+		bool EndOfFile();
+		bool SetObserverTable(Misc::ObserverPtr<TableWrapperT const> Table, Misc::ObserverPtr<ProcessorOperator> Ope) {
+			TableWrapper = std::move(Table);
+			Operator = std::move(Ope);
+			return static_cast<bool>(TableWrapper) && static_cast<bool>(Operator);
+		}
 
 		std::any& GetDataRaw();
 
@@ -298,11 +302,14 @@ export namespace Potato::SLRX
 			return std::any_cast<RequrieT>(std::move(GetDataRaw()));
 		}
 
-		void Clear(TableWrapperT const& Wrapper, OperatorT& Ope);
+		void Clear();
 
 	protected:
 
-		void TryReduce(TableWrapperT const& Wrapper, OperatorT& Ope);
+		Misc::ObserverPtr<TableWrapperT const> TableWrapper;
+		Misc::ObserverPtr<ProcessorOperator> Operator;
+
+		void TryReduce();
 
 		std::deque<ProcessElement> CacheSymbols;
 		std::vector<ProcessElement> States;
@@ -310,10 +317,7 @@ export namespace Potato::SLRX
 		std::size_t RequireNode = 0;
 	};
 
-	using ProcessorOperator = LRXCoreProcessor::OperatorT;
-
-
-	struct LRX : public LRXCoreProcessor::TableWrapperT
+	struct LRX : public LRXProcessor::TableWrapperT
 	{
 
 		struct ReduceTuple
@@ -375,14 +379,14 @@ export namespace Potato::SLRX
 
 	private:
 
-		virtual std::optional<LRXCoreProcessor::ConsumeResult> TableConsume(Symbol Value, LRXCoreProcessor::CurrentStateInfo const& Info, LRXCoreProcessor::OperatorT& Ope) const override;
-		virtual std::optional<LRXCoreProcessor::ReduceResult> TableReduce(LRXCoreProcessor::CurrentStateInfo const& Info) const override;
-		virtual LRXCoreProcessor::ClearInfo GetClearInfo() const override;
+		virtual std::optional<LRXProcessor::ConsumeResult> TableConsume(Symbol Value, LRXProcessor::CurrentStateInfo const& Info, ProcessorOperator& Ope) const override;
+		virtual std::optional<LRXProcessor::ReduceResult> TableReduce(LRXProcessor::CurrentStateInfo const& Info) const override;
+		virtual LRXProcessor::ClearInfo GetClearInfo() const override;
 
 		LRX(std::vector<Node> Nodes) : Nodes(std::move(Nodes)) {}
 	};
 
-	struct LRXBinaryTableWrapper : public LRXCoreProcessor::TableWrapperT
+	struct LRXBinaryTableWrapper : public LRXProcessor::TableWrapperT
 	{
 		using StandardT = std::uint32_t;
 
@@ -445,9 +449,9 @@ export namespace Potato::SLRX
 		LRXBinaryTableWrapper() = default;
 		LRXBinaryTableWrapper& operator=(LRXBinaryTableWrapper const&) = default;
 
-		virtual std::optional<LRXCoreProcessor::ConsumeResult> TableConsume(Symbol Value, LRXCoreProcessor::CurrentStateInfo const& Info, LRXCoreProcessor::OperatorT& Ope) const override;
-		virtual std::optional<LRXCoreProcessor::ReduceResult> TableReduce(LRXCoreProcessor::CurrentStateInfo const& Info) const override;
-		virtual LRXCoreProcessor::ClearInfo GetClearInfo() const override;
+		virtual std::optional<LRXProcessor::ConsumeResult> TableConsume(Symbol Value, LRXProcessor::CurrentStateInfo const& Info, ProcessorOperator& Ope) const override;
+		virtual std::optional<LRXProcessor::ReduceResult> TableReduce(LRXProcessor::CurrentStateInfo const& Info) const override;
+		virtual LRXProcessor::ClearInfo GetClearInfo() const override;
 
 		Misc::StructedSerilizerReader<StandardT const> GetReader() const { return Misc::StructedSerilizerReader<StandardT const>(Buffer); }
 

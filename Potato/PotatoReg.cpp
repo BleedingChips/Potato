@@ -54,7 +54,7 @@ namespace Potato::Reg
 		return Temp;
 	};
 
-	const SLRX::LRXBinaryTableWrapper RexSLRXWrapper()
+	const SLRX::LRXBinaryTableWrapper& RexSLRXWrapper()
 	{
 #ifdef _DEBUG
 		try {
@@ -165,12 +165,13 @@ namespace Potato::Reg
 	{
 		auto Top = AddNode();
 		assert(Top == 0);
-		Processor.Clear(RexSLRXWrapper(), *this);
+		Processor.SetObserverTable(&RexSLRXWrapper(), this);
+		Processor.Clear();
 	}
 
 	bool Nfa::BuilderT::InsertSymbol(SLRX::Symbol SymbolValue, Interval CharsValue, Misc::IndexSpan<> TokenIndex)
 	{
-		return Processor.Consume(RexSLRXWrapper(), *this, SymbolValue, TokenIndex, HandleSymbol({SymbolValue,TokenIndex}, std::move(CharsValue)));
+		return Processor.Consume(SymbolValue, TokenIndex, HandleSymbol({SymbolValue,TokenIndex}, std::move(CharsValue)));
 	}
 
 	bool Nfa::BuilderT::Consume(char32_t InputSymbol, Misc::IndexSpan<> TokenIndex)
@@ -351,7 +352,7 @@ namespace Potato::Reg
 		if (CurrentState == StateT::Normal || CurrentState == StateT::Raw)
 		{
 			CurrentState = StateT::Done;
-			if (Processor.EndOfFile(RexSLRXWrapper(), *this))
+			if (Processor.EndOfFile())
 			{
 				auto Re = Processor.GetData<NodeSetT>();
 				auto Top = 0;
@@ -2157,30 +2158,47 @@ namespace Potato::Reg
 
 	}
 
-	DfaProcessor::DfaProcessor(Dfa const& Table)
-		: Table(Table), CurNodeIndex(Table.GetStartupNodeIndex())
-	{
-		CacheIndex.resize(Table.GetCacheCounterCount());
-	}
+
 
 	void DfaProcessor::Clear()
 	{
-		CurNodeIndex = Table.GetStartupNodeIndex();
-		CacheIndex.clear();
-		CacheIndex.resize(Table.GetCacheCounterCount(), 0);
-		TempResult.reserve(Table.GetTempResultCount());
-		auto& NodeRef = Table.Nodes[CurNodeIndex];
-		Record.Clear();
+		assert(TableWrapper);
+		auto Info = TableWrapper->GetClearInfo();
+		Context.CurNodeIndex = Info.Startup;
+		Context.CacheIndex.clear();
+		Context.CacheIndex.resize(Info.CacheCounterCount, 0);
+		Context.TempResult.clear();
+		Context.TempResult.reserve(Info.TempResultCount);
+		Context.Record.Clear();
 	}
 
 	auto DfaProcessor::Consume(char32_t Token, std::size_t TokenIndex) -> bool
 	{
-		auto& NodeRef = Table.Nodes[CurNodeIndex];
+		assert(TableWrapper);
+		return TableWrapper->Consume(Context, Token, TokenIndex);
+
+		
+	}
+
+	bool DfaProcessor::HasAccept() const { 
+		assert(TableWrapper);
+		return TableWrapper->HasAccept(Context);
+	}
+
+	ProcessorAcceptRef DfaProcessor::GetAccept() const
+	{
+		assert(TableWrapper);
+		return TableWrapper->GetAccept(Context);
+	}
+
+	bool Dfa::Consume(DfaProcessor::ContextT& Context, char32_t Token, std::size_t TokenIndex) const
+	{
+		auto& NodeRef = Nodes[Context.CurNodeIndex];
 		for (auto& Ite : NodeRef.Edges)
 		{
 			if (Ite.CharSets.IsInclude(Token))
 			{
-				TempResult.clear();
+				Context.TempResult.clear();
 
 				bool DetectReuslt = true;
 				for (auto& Ite2 : Ite.Propertys)
@@ -2190,46 +2208,46 @@ namespace Potato::Reg
 						switch (Ite2.Action)
 						{
 						case Dfa::PropertyActioE::CopyValue:
-							CacheIndex[Ite2.Par] = CacheIndex[Ite2.Solt];
+							Context.CacheIndex[Ite2.Par] = Context.CacheIndex[Ite2.Solt];
 							break;
 						case Dfa::PropertyActioE::RecordLocation:
-							CacheIndex[Ite2.Solt] = TokenIndex;
+							Context.CacheIndex[Ite2.Solt] = TokenIndex;
 							break;
 						case Dfa::PropertyActioE::NewContext:
-							
+
 							break;
 						case Dfa::PropertyActioE::ConstraintsTrueTrue:
-							if(TempResult[Ite2.Solt])
+							if (Context.TempResult[Ite2.Solt])
 								DetectReuslt = true;
 							break;
 						case Dfa::PropertyActioE::ConstraintsFalseFalse:
-							if (!TempResult[Ite2.Solt])
+							if (!Context.TempResult[Ite2.Solt])
 								DetectReuslt = false;
 							break;
 						case Dfa::PropertyActioE::ConstraintsFalseTrue:
-							if (!TempResult[Ite2.Solt])
+							if (!Context.TempResult[Ite2.Solt])
 								DetectReuslt = true;
 							break;
 						case Dfa::PropertyActioE::ConstraintsTrueFalse:
-							if (TempResult[Ite2.Solt])
+							if (Context.TempResult[Ite2.Solt])
 								DetectReuslt = false;
 							break;
 						case Dfa::PropertyActioE::OneCounter:
-							CacheIndex[Ite2.Solt] = 1;
+							Context.CacheIndex[Ite2.Solt] = 1;
 							break;
 						case Dfa::PropertyActioE::AddCounter:
-							CacheIndex[Ite2.Solt] += 1;
+							Context.CacheIndex[Ite2.Solt] += 1;
 							break;
 						case Dfa::PropertyActioE::LessCounter:
-							if(CacheIndex[Ite2.Solt] > Ite2.Par)
+							if (Context.CacheIndex[Ite2.Solt] > Ite2.Par)
 								DetectReuslt = false;
 							break;
 						case Dfa::PropertyActioE::BiggerCounter:
-							if (CacheIndex[Ite2.Solt] < Ite2.Par)
+							if (Context.CacheIndex[Ite2.Solt] < Ite2.Par)
 								DetectReuslt = false;
 							break;
 						case Dfa::PropertyActioE::RecordAcceptLocation:
-							Record.Accept(TokenIndex);
+							Context.Record.Accept(TokenIndex);
 							break;
 						default:
 							assert(false);
@@ -2238,18 +2256,18 @@ namespace Potato::Reg
 					}
 					if (Ite2.Action == Dfa::PropertyActioE::NewContext)
 					{
-						TempResult.push_back(DetectReuslt ? 1 : 0);
+						Context.TempResult.push_back(DetectReuslt ? 1 : 0);
 						DetectReuslt = true;
 					}
 				}
 
-				TempResult.push_back(DetectReuslt ? 1 : 0);
+				Context.TempResult.push_back(DetectReuslt ? 1 : 0);
 
 				std::size_t NextIte = 0;
 				std::optional<std::size_t> ToNode;
 				assert(!Ite.Conditions.empty());
 				bool ToAcceptNode = false;
-				for (auto Ite2 : TempResult)
+				for (auto Ite2 : Context.TempResult)
 				{
 					assert(!ToNode.has_value());
 					auto& Cond = Ite.Conditions[NextIte];
@@ -2295,33 +2313,43 @@ namespace Potato::Reg
 
 				assert(ToNode.has_value());
 
-				CurNodeIndex = *ToNode;
-				Record.RecordConsume(TokenIndex);
+				Context.CurNodeIndex = *ToNode;
+				Context.Record.RecordConsume(TokenIndex);
 				return !ToAcceptNode;
 			}
 		}
 		return false;
 	}
 
-	bool DfaProcessor::HasAccept() const { 
-		auto& CurNode = Table.Nodes[CurNodeIndex];
+	DfaProcessor::ClearInfo Dfa::GetClearInfo() const
+	{
+		return {
+			GetStartupNodeIndex(),
+			GetCacheCounterCount(),
+			GetTempResultCount()
+		};
+	}
+
+	bool Dfa::HasAccept(DfaProcessor::ContextT const& Context) const
+	{
+		auto& CurNode = Nodes[Context.CurNodeIndex];
 		return CurNode.Accept.has_value();
 	}
 
-	ProcessorAcceptRef DfaProcessor::GetAccept() const
+	ProcessorAcceptRef Dfa::GetAccept(DfaProcessor::ContextT const& Context) const
 	{
-		auto& CurNode = Table.Nodes[CurNodeIndex];
+		auto& CurNode = Nodes[Context.CurNodeIndex];
 		if (CurNode.Accept.has_value())
 		{
 			ProcessorAcceptRef NewAccept;
 			NewAccept.Mask = CurNode.Accept->Mask;
-			NewAccept.Capture = CurNode.Accept->CaptureIndex.Slice(std::span(CacheIndex));
-			NewAccept.MainCapture = Record.GetAcceptCapture(true);
+			NewAccept.Capture = CurNode.Accept->CaptureIndex.Slice(std::span(Context.CacheIndex));
+			NewAccept.MainCapture = Context.Record.GetAcceptCapture(true);
 			return NewAccept;
 		}
 		else {
 			ProcessorAcceptRef NewAccept;
-			NewAccept.MainCapture = Record.GetAcceptCapture(false);
+			NewAccept.MainCapture = Context.Record.GetAcceptCapture(false);
 			return NewAccept;
 		}
 	}
@@ -2545,26 +2573,19 @@ namespace Potato::Reg
 
 	}
 
-	DfaBinaryTableProcessor::DfaBinaryTableProcessor(DfaBinaryTableWrapper Table)
-		: Table(Table), CurrentNode(Table.GetStartupNodeIndex())
+	DfaProcessor::ClearInfo DfaBinaryTableWrapper::GetClearInfo() const
 	{
-		CacheIndex.resize(Table.GetCacheCounterCount());
-		Clear();
+		return {
+			GetStartupNodeIndex(),
+			GetCacheCounterCount(),
+			GetTempResultCount()
+		};
 	}
 
-	void DfaBinaryTableProcessor::Clear()
+	bool DfaBinaryTableWrapper::Consume(DfaProcessor::ContextT& Context, char32_t Token, std::size_t TokenIndex) const
 	{
-		Record.Clear();
-		TempResult.reserve(Table.GetTempResultCount());
-		CacheIndex.resize(Table.GetCacheCounterCount(), 0);
-		CurrentNode = Table.GetStartupNodeIndex();
-	}
-
-
-	bool DfaBinaryTableProcessor::Consume(char32_t Token, std::size_t TokenIndex)
-	{
-		auto Reader = Misc::StructedSerilizerReader(Table.Wrapper);
-		Reader.SetPointer(CurrentNode);
+		auto Reader = Misc::StructedSerilizerReader(Wrapper);
+		Reader.SetPointer(Context.CurNodeIndex);
 		auto Node = Reader.ReadObject<DfaBinaryTableWrapper::NodeT>();
 		std::size_t ECount = Node->EdgeCount;
 		for (std::size_t I = 0; I < ECount; ++I)
@@ -2573,11 +2594,11 @@ namespace Potato::Reg
 			auto IntervalSpan = Reader.ReadObjectArray<Interval::ElementT>(Pro->CharCount);
 			if (Misc::IntervalWrapperT<char32_t>::IsInclude(IntervalSpan, Token))
 			{
-				Reader.SetPointer(CurrentNode + Pro->EdgeOffset);
+				Reader.SetPointer(Context.CurNodeIndex + Pro->EdgeOffset);
 				auto Edge = Reader.ReadObject<DfaBinaryTableWrapper::EdgeT>();
 				std::size_t ECount = Edge->PropertyCount;
 				std::size_t CCount = Edge->ConditionCount;
-				TempResult.clear();
+				Context.TempResult.clear();
 				bool DetectResult = true;
 				for (std::size_t I2 = 0; I2 < ECount; ++I2)
 				{
@@ -2589,47 +2610,47 @@ namespace Potato::Reg
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
 						auto P2 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
 						if(DetectResult)
-							CacheIndex[P2] = CacheIndex[P1];
+							Context.CacheIndex[P2] = Context.CacheIndex[P1];
 						break;
 					}
 					case Dfa::PropertyActioE::RecordLocation:
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
 						if(DetectResult)
-							CacheIndex[P1] = TokenIndex;
+							Context.CacheIndex[P1] = TokenIndex;
 						break;
 					}
 					case Dfa::PropertyActioE::NewContext:
 					{
-						TempResult.push_back(DetectResult ? 1 : 0);
+						Context.TempResult.push_back(DetectResult ? 1 : 0);
 						DetectResult = true;
 						break;
 					}
 					case Dfa::PropertyActioE::ConstraintsTrueTrue:
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
-						if (DetectResult && TempResult[P1])
+						if (DetectResult && Context.TempResult[P1])
 							DetectResult = true;
 						break;
 					}
 					case Dfa::PropertyActioE::ConstraintsFalseFalse:
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
-						if (DetectResult && !TempResult[P1])
+						if (DetectResult && !Context.TempResult[P1])
 							DetectResult = false;
 						break;
 					}
 					case Dfa::PropertyActioE::ConstraintsFalseTrue:
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
-						if (DetectResult && !TempResult[P1])
+						if (DetectResult && !Context.TempResult[P1])
 							DetectResult = true;
 						break;
 					}
 					case Dfa::PropertyActioE::ConstraintsTrueFalse:
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
-						if (DetectResult && TempResult[P1])
+						if (DetectResult && Context.TempResult[P1])
 							DetectResult = false;
 						break;
 					}
@@ -2637,21 +2658,21 @@ namespace Potato::Reg
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
 						if (DetectResult)
-							CacheIndex[P1] = 1;
+							Context.CacheIndex[P1] = 1;
 						break;
 					}
 					case Dfa::PropertyActioE::AddCounter:
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
 						if (DetectResult)
-							CacheIndex[P1] += 1;
+							Context.CacheIndex[P1] += 1;
 						break;
 					}
 					case Dfa::PropertyActioE::LessCounter:
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
 						auto P2 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
-						if (DetectResult && CacheIndex[P1] > P2)
+						if (DetectResult && Context.CacheIndex[P1] > P2)
 							DetectResult = false;
 						break;
 					}
@@ -2659,12 +2680,12 @@ namespace Potato::Reg
 					{
 						auto P1 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
 						auto P2 = *Reader.ReadObject<DfaBinaryTableWrapper::StandardT>();
-						if (DetectResult && CacheIndex[P1] < P2)
+						if (DetectResult && Context.CacheIndex[P1] < P2)
 							DetectResult = false;
 						break;
 					}
 					case Dfa::PropertyActioE::RecordAcceptLocation:
-						Record.Accept(TokenIndex);
+						Context.Record.Accept(TokenIndex);
 						break;
 					default:
 						assert(false);
@@ -2672,10 +2693,10 @@ namespace Potato::Reg
 					}
 				}
 
-				TempResult.push_back(DetectResult ? 1 : 0);
+				Context.TempResult.push_back(DetectResult ? 1 : 0);
 				auto ConditionSpan = Reader.ReadObjectArray<DfaBinaryTableWrapper::ConditionT>(Edge->ConditionCount);
 				std::size_t LastCondition = 0;
-				for (auto Ite : TempResult)
+				for (auto Ite : Context.TempResult)
 				{
 					auto CurCondition = ConditionSpan[LastCondition];
 					auto TarCommand = Dfa::ConditionT::CommandE::Fail;
@@ -2696,14 +2717,14 @@ namespace Potato::Reg
 						break;
 					case Dfa::ConditionT::CommandE::ToNode:
 					{
-						CurrentNode = Solt;
-						Record.RecordConsume(TokenIndex);
+						Context.CurNodeIndex = Solt;
+						Context.Record.RecordConsume(TokenIndex);
 						return true;
 					}
 					case Dfa::ConditionT::CommandE::ToAcceptNode:
 					{
-						CurrentNode = Solt;
-						Record.RecordConsume(TokenIndex);
+						Context.CurNodeIndex = Solt;
+						Context.Record.RecordConsume(TokenIndex);
 						return false;
 					}
 					case Dfa::ConditionT::CommandE::Fail:
@@ -2718,33 +2739,33 @@ namespace Potato::Reg
 		return false;
 	}
 
-	bool DfaBinaryTableProcessor::HasAccept() const {
-		auto Reader = Misc::StructedSerilizerReader(Table.Wrapper);
-		Reader.SetPointer(CurrentNode);
+	bool DfaBinaryTableWrapper::HasAccept(DfaProcessor::ContextT const& Context) const {
+		auto Reader = Misc::StructedSerilizerReader(Wrapper);
+		Reader.SetPointer(Context.CurNodeIndex);
 		auto Node = Reader.ReadObject<DfaBinaryTableWrapper::NodeT>();
 		return Node->AcceptOffset != 0 || Node->EdgeCount == 0;
 	}
 
-	ProcessorAcceptRef DfaBinaryTableProcessor::GetAccept() const
+	ProcessorAcceptRef DfaBinaryTableWrapper::GetAccept(DfaProcessor::ContextT const& Context) const
 	{
-		auto Reader = Misc::StructedSerilizerReader(Table.Wrapper);
-		Reader.SetPointer(CurrentNode);
+		auto Reader = Misc::StructedSerilizerReader(Wrapper);
+		Reader.SetPointer(Context.CurNodeIndex);
 		auto Node = Reader.ReadObject<DfaBinaryTableWrapper::NodeT>();
 		if (Node->AcceptOffset != 0 || Node->EdgeCount == 0)
 		{
-			Reader.SetPointer(Node->AcceptOffset + CurrentNode);
+			Reader.SetPointer(Node->AcceptOffset + Context.CurNodeIndex);
 
 			auto TAccept = Reader.ReadObject<DfaBinaryTableWrapper::AcceptT>();
 
 			ProcessorAcceptRef NewAccept;
 			NewAccept.Mask = TAccept->Mask;
-			NewAccept.Capture = Misc::IndexSpan<>{ TAccept->CaptureIndexBegin, TAccept->CaptureIndexEnd}.Slice(std::span(CacheIndex));
-			NewAccept.MainCapture = Record.GetAcceptCapture(true);
+			NewAccept.Capture = Misc::IndexSpan<>{ TAccept->CaptureIndexBegin, TAccept->CaptureIndexEnd}.Slice(std::span(Context.CacheIndex));
+			NewAccept.MainCapture = Context.Record.GetAcceptCapture(true);
 			return NewAccept;
 		}
 		else {
 			ProcessorAcceptRef NewAccept;
-			NewAccept.MainCapture = Record.GetAcceptCapture(false);
+			NewAccept.MainCapture = Context.Record.GetAcceptCapture(false);
 			return NewAccept;
 		}
 	}

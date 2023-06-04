@@ -1,5 +1,5 @@
 
-cmake_minimum_required(VERSION 3.25.1)
+cmake_minimum_required(VERSION 3.26)
 
 project(
 	Potato
@@ -25,6 +25,8 @@ macro(ENABLE_CMAKE_CPP_MODULE)
 
 	if(${CMAKE_VERSION} EQUAL 3.25.1)
 		set(CMAKE_EXPERIMENTAL_CXX_MODULE_CMAKE_API  "3c375311-a3c9-4396-a187-3227ef642046")
+	elseif(${CMAKE_VERSION} EQUAL 3.26)
+		set(CMAKE_EXPERIMENTAL_CXX_MODULE_CMAKE_API  "2182bf5c-ef0d-489a-91da-49dbc3090d2a")
 	else()
 		message(FATAL_ERROR "Unsupport CMAKE Version")
 	endif()
