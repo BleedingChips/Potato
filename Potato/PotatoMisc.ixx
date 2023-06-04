@@ -51,9 +51,10 @@ export namespace Potato::Misc
 			};
 		}
 
-		constexpr IndexSpan ForwardBegin(Type Offset) { StartPoint += Offset; return *this; }
-		constexpr IndexSpan BackwardEnd(Type Offset) { StartPoint += Offset; return *this; }
-		constexpr IndexSpan Normalize(Type Length) { EndPoint = StartPoint + Length; return *this; };
+		constexpr IndexSpan& ForwardBegin(Type Offset) { StartPoint += Offset; return *this; }
+		constexpr IndexSpan& BackwardEnd(Type Offset) { EndPoint += Offset; return *this; }
+		constexpr IndexSpan& Normalize(Type Length) { EndPoint = StartPoint + Length; return *this; };
+		constexpr IndexSpan& WholeOffset(Type Length) { StartPoint += Length; EndPoint += Length; return *this;}
 
 	protected:
 		

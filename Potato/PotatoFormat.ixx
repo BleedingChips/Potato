@@ -557,18 +557,14 @@ export namespace Potato::Format
 			auto Last = Writter.GetLastBuffer();
 			if (Last.has_value())
 			{
-				auto Result = Encode::CharEncoder<wchar_t, UnicodeType>::EncodeOnceUnSafe(Input, *Last);
+				auto Result = Encode::StrEncoder<SUnicodeT, UnicodeType>::EncodeUnSafe(Input, *Last);
 				Writter.Allocate(Result.TargetSpace);
 			}
 			else {
-				auto Result = Encode::CharEncoder<wchar_t, UnicodeType>::RequireSpaceUnSafe(Input);
+				auto Result = Encode::StrEncoder<SUnicodeT, UnicodeType>::RequireSpaceUnSafe(Input);
 				Writter.Allocate(Result.TargetSpace);
 			}
 			return true;
-		}
-		static std::optional<std::size_t> FormatSize(std::basic_string_view<UnicodeType> Parameter, std::basic_string_view<SUnicodeT, CharTrais> const& Input) {
-			auto Info = Encode::StrEncoder<SUnicodeT, UnicodeType>::RequireSpaceUnSafe(Input);
-			return Info.TargetSpace;
 		}
 	};
 

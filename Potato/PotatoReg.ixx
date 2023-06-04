@@ -535,6 +535,12 @@ export namespace Potato::Reg
 	{
 		return CreateDfaBinaryTable(Dfa{ Format, Str, IsRaw, Mask }, std::allocator<DfaBinaryTableWrapper::StandardT>{});
 	}
+
+	template<typename CharT>
+	auto CreateDfaBinaryTable(Dfa::FormatE Format, CharT const* Str, bool IsRaw = false, std::size_t Mask = 0)
+	{
+		return CreateDfaBinaryTable(Dfa{ Format, std::basic_string_view<CharT>{Str}, IsRaw, Mask }, std::allocator<DfaBinaryTableWrapper::StandardT>{});
+	}
 	
 
 	
