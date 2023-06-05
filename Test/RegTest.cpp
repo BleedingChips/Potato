@@ -154,6 +154,12 @@ void Test(Dfa::FormatE Format, std::vector<std::u32string_view> Reg, std::u32str
 
 int main()
 {
+
+	MulityRegCreater Cre;
+	Cre.AppendReg(u8".*?a", false, 0);
+	Cre.AppendReg(u8".*?b", false, 0);
+	auto K = Cre.CreateDfa(Dfa::FormatE::HeadMatch);
+
 	Test(
 		Dfa::FormatE::HeadMatch,
 		{

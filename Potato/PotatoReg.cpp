@@ -515,7 +515,7 @@ namespace Potato::Reg
 					while (Change)
 					{
 						Change = false;
-						for (std::size_t I1 = 0; I1 < Nodes.size(); ++I1)
+						for (std::size_t I1 = 1; I1 < Nodes.size(); ++I1)
 						{
 							for (std::size_t I2 = I1 + 1; I2 < Nodes.size(); )
 							{
