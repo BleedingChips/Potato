@@ -131,11 +131,9 @@ void TestTable(Symbol StartSymbol, std::vector<ProductionBuilder> Builder, std::
 
 		StringMaker Maker;
 
-		LRXCoreProcessor Pro;
+		LRXProcessor Pro;
 
-		Pro.SetOberverTable(&Tab, &Maker);
-
-		Pro.Clear();
+		Pro.SetObserverTable(Tab, &Maker);
 
 		for (std::size_t I = 0; I < Span.size(); ++I)
 		{
@@ -153,10 +151,8 @@ void TestTable(Symbol StartSymbol, std::vector<ProductionBuilder> Builder, std::
 
 		auto Buffer = LRXBinaryTableWrapper::Create(Tab);
 
-		auto Wra = LRXBinaryTableWrapper{std::span(Buffer)};
 
-
-		Pro.SetOberverTable(&Wra, &Maker);
+		Pro.SetObserverTable(LRXBinaryTableWrapper{ Buffer }, &Maker);
 		Pro.Clear();
 
 		for (std::size_t I = 0; I < Span.size(); ++I)

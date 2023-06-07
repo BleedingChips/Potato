@@ -31,8 +31,7 @@ void Test(std::wstring_view Table, std::wstring_view InputStr, std::wstring_view
 		StringMaker Maker;
 		Maker.TotalStr = InputStr;
 
-		Pro.SetObserverTable(&Tab, &Maker);
-		Pro.Clear();
+		Pro.SetObserverTable(Tab, &Maker);
 
 		auto Re = Process(Pro, InputStr);
 

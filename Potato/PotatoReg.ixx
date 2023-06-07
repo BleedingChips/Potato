@@ -252,52 +252,9 @@ export namespace Potato::Reg
 		}
 	};
 
-	struct DfaProcessor
-	{
+	struct DfaProcessor;
 
-		DfaProcessor(DfaProcessor const&) = default;
-		DfaProcessor(DfaProcessor&&) = default;
-		DfaProcessor() = default;
-
-		struct ContextT
-		{
-			std::size_t CurNodeIndex;
-			std::vector<std::size_t> TempResult;
-			std::vector<std::size_t> CacheIndex;
-			TokenIndexRecorder Record;
-		};
-
-		struct ClearInfo
-		{
-			std::size_t Startup;
-			std::size_t CacheCounterCount;
-			std::size_t TempResultCount;
-		};
-
-		struct TableWrapperT
-		{
-			virtual bool Consume(ContextT& Context, char32_t InputValue, std::size_t TokenIndex) const = 0;
-			virtual ClearInfo GetClearInfo() const = 0;
-			virtual bool HasAccept(ContextT const& Context) const = 0;
-			virtual ProcessorAcceptRef GetAccept(ContextT const& Context) const = 0;
-		};
-
-		bool Consume(char32_t Token, std::size_t TokenIndex);
-		bool EndOfFile(std::size_t TokenIndex) { return Consume(Reg::EndOfFile(), TokenIndex); }
-		void Clear();
-		bool HasAccept() const;
-		ProcessorAcceptRef GetAccept() const;
-		bool SetObserverTable(Misc::ObserverPtr<TableWrapperT const> Table) { TableWrapper = std::move(Table); return TableWrapper; }
-	
-	protected:
-
-		Misc::ObserverPtr<TableWrapperT const> TableWrapper;
-
-		ContextT Context;
-	};
-
-
-	struct Dfa : public DfaProcessor::TableWrapperT
+	struct Dfa
 	{
 
 		enum class FormatE
@@ -327,10 +284,9 @@ export namespace Potato::Reg
 	
 	protected:
 
-		virtual bool Consume(DfaProcessor::ContextT& Context, char32_t InputValue, std::size_t TokenIndex) const;
-		virtual DfaProcessor::ClearInfo GetClearInfo() const;
-		virtual bool HasAccept(DfaProcessor::ContextT const& Context) const;
-		virtual ProcessorAcceptRef GetAccept(DfaProcessor::ContextT const& Context) const;
+		virtual bool Consume(DfaProcessor& Context, char32_t InputValue, std::size_t TokenIndex) const;
+		virtual bool HasAccept(DfaProcessor const& Context) const;
+		virtual ProcessorAcceptRef GetAccept(DfaProcessor const& Context) const;
 		
 		enum class ActionE
 		{
@@ -441,7 +397,7 @@ export namespace Potato::Reg
 	};
 
 
-	struct DfaBinaryTableWrapper : public DfaProcessor::TableWrapperT
+	struct DfaBinaryTableWrapper
 	{
 		using StandardT = std::uint32_t;
 		using HalfStandardT = std::uint16_t;
@@ -494,18 +450,18 @@ export namespace Potato::Reg
 
 		static void Serilize(Misc::StructedSerilizerWritter<StandardT>& Writer, Dfa const& RefTable);
 
-		DfaBinaryTableWrapper(std::span<StandardT> Buffer) : Wrapper(Buffer) {};
+		DfaBinaryTableWrapper(std::span<StandardT const> Buffer) : Wrapper(Buffer) {};
 
 	private:
 
-		virtual bool Consume(DfaProcessor::ContextT& Context, char32_t InputValue, std::size_t TokenIndex) const;
-		virtual DfaProcessor::ClearInfo GetClearInfo() const;
-		virtual bool HasAccept(DfaProcessor::ContextT const& Context) const;
-		virtual ProcessorAcceptRef GetAccept(DfaProcessor::ContextT const& Context) const;
+		virtual bool Consume(DfaProcessor& Context, char32_t InputValue, std::size_t TokenIndex) const;
+		virtual bool HasAccept(DfaProcessor const& Context) const;
+		virtual ProcessorAcceptRef GetAccept(DfaProcessor const& Context) const;
 
-		std::span<StandardT> Wrapper;
+		std::span<StandardT const> Wrapper;
 
 		friend struct DfaBinaryTableProcessor;
+		friend struct DfaProcessor;
 	};
 
 	template<typename AllocatorT>
@@ -542,7 +498,36 @@ export namespace Potato::Reg
 		return CreateDfaBinaryTable(Dfa{ Format, std::basic_string_view<CharT>{Str}, IsRaw, Mask }, std::allocator<DfaBinaryTableWrapper::StandardT>{});
 	}
 	
+	struct DfaProcessor
+	{
 
+		DfaProcessor(DfaProcessor const&) = default;
+		DfaProcessor(DfaProcessor&&) = default;
+		DfaProcessor() = default;
+
+		bool Consume(char32_t Token, std::size_t TokenIndex);
+		bool EndOfFile(std::size_t TokenIndex) { return Consume(Reg::EndOfFile(), TokenIndex); }
+		void Clear();
+		bool HasAccept() const;
+		ProcessorAcceptRef GetAccept() const;
+		void SetObserverTable(Dfa const& Table) { TableWrapper = &Table; Clear(); }
+		void SetObserverTable(DfaBinaryTableWrapper Table) { TableWrapper = Table; Clear(); }
+	protected:
+		
+		std::variant<
+			std::monostate,
+			Misc::ObserverPtr<Dfa const>,
+			DfaBinaryTableWrapper
+		> TableWrapper;
+
+		std::size_t CurNodeIndex;
+		std::vector<std::size_t> TempResult;
+		std::vector<std::size_t> CacheIndex;
+		TokenIndexRecorder Record;
+
+		friend struct Dfa;
+		friend struct DfaBinaryTableWrapper;
+	};
 	
 
 	template<typename CharT, typename CharTraidT>
@@ -588,8 +573,7 @@ export namespace Potato::Reg
 	void Process(Dfa const& Table, std::basic_string_view<CharT, CharTrais> Str, Func&& Fun)
 	{
 		DfaProcessor Processor;
-		Processor.SetObserverTable(&Table);
-		Processor.Clear();
+		Processor.SetObserverTable(Table);
 		Fun(Process(Processor, Str));
 	}
 
@@ -603,8 +587,7 @@ export namespace Potato::Reg
 	void Process(DfaBinaryTableWrapper const& Table, std::basic_string_view<CharT, CharTrais> Str, Func&& Fun)
 	{
 		DfaBinaryTableProcessor Processor;
-		Processor.SetObserverTable(&Table);
-		Processor.Clear();
+		Processor.SetObserverTable(Table);
 		Fun(Process(Processor, Str));
 	}
 

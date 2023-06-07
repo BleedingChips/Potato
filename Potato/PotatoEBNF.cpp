@@ -61,7 +61,7 @@ namespace Potato::EBNF
 
 	constexpr Symbol operator*(NT sym) { return Symbol::AsNoTerminal(static_cast<std::size_t>(sym)); };
 
-	Reg::DfaBinaryTableWrapper const& GetRegTable() {
+	Reg::DfaBinaryTableWrapper GetRegTable() {
 		static auto List = []() {
 
 			Reg::Nfa StartupTable{ std::basic_string_view{UR"(%%%%)"}, false, static_cast<std::size_t>(T::Barrier) };
@@ -91,12 +91,11 @@ namespace Potato::EBNF
 			Reg::Dfa FinalTable(Reg::Dfa::FormatE::GreedyHeadMatch, StartupTable);
 			return Reg::CreateDfaBinaryTable(FinalTable);
 		}();
-		static Reg::DfaBinaryTableWrapper Wrap{List};
 
-		return Wrap;
+		return Reg::DfaBinaryTableWrapper{List};
 	}
 
-	SLRX::LRXBinaryTableWrapper const& EbnfStep1SLRX() {
+	SLRX::LRXBinaryTableWrapper EbnfStep1SLRX() {
 		static SLRX::LRXBinaryTable Table(
 			*NT::Statement,
 			{
@@ -110,7 +109,7 @@ namespace Potato::EBNF
 		return Table.Wrapper;
 	};
 
-	SLRX::LRXBinaryTableWrapper const& EbnfStep2SLRX() {
+	SLRX::LRXBinaryTableWrapper EbnfStep2SLRX() {
 		static SLRX::LRXBinaryTable Table(
 			*NT::Statement,
 			{
@@ -158,7 +157,7 @@ namespace Potato::EBNF
 		return Table.Wrapper;
 	};
 
-	SLRX::LRXBinaryTableWrapper const& EbnfStep3SLRX() {
+	SLRX::LRXBinaryTableWrapper EbnfStep3SLRX() {
 		static SLRX::LRXBinaryTable Table(
 			*NT::Statement,
 			{
@@ -175,19 +174,45 @@ namespace Potato::EBNF
 		return Table.Wrapper;
 	};
 
-	std::any EbnfBuilder::BuilderStep1::HandleSymbol(SLRX::SymbolInfo Value)
+	std::any EbnfBuilder::HandleSymbol(SLRX::SymbolInfo Value)
+	{
+		switch (State)
+		{
+		case StateE::Step1:
+			return HandleSymbolStep1(Value);
+		case StateE::Step2:
+			return HandleSymbolStep2(Value);
+		default:
+			return HandleSymbolStep3(Value);
+		}
+	}
+
+	std::any EbnfBuilder::HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pros)
+	{
+		switch (State)
+		{
+		case StateE::Step1:
+			return HandleReduceStep1(Value, Pros);
+		case StateE::Step2:
+			return HandleReduceStep2(Value, Pros);
+		default:
+			return HandleReduceStep3(Value, Pros);
+		}
+	}
+
+	std::any EbnfBuilder::HandleSymbolStep1(SLRX::SymbolInfo Value)
 	{
 		return {};
 	}
 
-	std::any EbnfBuilder::BuilderStep1::HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pros)
+	std::any EbnfBuilder::HandleReduceStep1(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pros)
 	{
 		switch (Pros.UserMask)
 		{
 		case 4:
 		case 2:
 		{
-			Ref.RegMappings.push_back({
+			RegMappings.push_back({
 				Pros[1].Value.TokenIndex,
 				(Pros.UserMask == 4 ? RegTypeE::Empty : RegTypeE::Terminal),
 				Pros[3].Value.TokenIndex,
@@ -197,7 +222,7 @@ namespace Potato::EBNF
 		}
 		case 3:
 		{
-			Ref.RegMappings.push_back({
+			RegMappings.push_back({
 					Pros[1].Value.TokenIndex,
 					RegTypeE::Terminal,
 					Pros[3].Value.TokenIndex,
@@ -214,12 +239,12 @@ namespace Potato::EBNF
 		return {};
 	}
 
-	std::any EbnfBuilder::BuilderStep2::HandleSymbol(SLRX::SymbolInfo Value)
+	std::any EbnfBuilder::HandleSymbolStep2(SLRX::SymbolInfo Value)
 	{
 		T TValue = static_cast<T>(Value.Value.Value);
 		if (TValue == T::Rex)
 		{
-			Ref.RegMappings.push_back({
+			RegMappings.push_back({
 				Value.TokenIndex,
 				RegTypeE::Reg,
 				Value.TokenIndex,
@@ -229,7 +254,7 @@ namespace Potato::EBNF
 		return {};
 	}
 
-	std::any EbnfBuilder::BuilderStep2::HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pros)
+	std::any EbnfBuilder::HandleReduceStep2(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pros)
 	{
 		switch (Pros.UserMask)
 		{
@@ -265,9 +290,9 @@ namespace Potato::EBNF
 		case 10:
 		{
 			auto Exp = Pros[1].Consume<std::vector<ElementT>>();
-			auto CurSymbol = ElementT{ ElementTypeE::Temporary, {Ref.TerminalProductionIndex, Ref.TerminalProductionIndex} };
-			++Ref.TerminalProductionIndex;
-			Ref.Builder.push_back({
+			auto CurSymbol = ElementT{ ElementTypeE::Temporary, {TerminalProductionIndex, TerminalProductionIndex} };
+			++TerminalProductionIndex;
+			Builder.push_back({
 				CurSymbol,
 				std::move(Exp),
 				{EBNF::SmallBrace, EBNF::SmallBrace}
@@ -277,15 +302,15 @@ namespace Potato::EBNF
 		case 11:
 		{
 			auto Exp = Pros[1].Consume<std::vector<ElementT>>();
-			auto CurSymbol = ElementT{ ElementTypeE::Temporary, {Ref.TerminalProductionIndex, Ref.TerminalProductionIndex} };
-			++Ref.TerminalProductionIndex;
+			auto CurSymbol = ElementT{ ElementTypeE::Temporary, {TerminalProductionIndex, TerminalProductionIndex} };
+			++TerminalProductionIndex;
 			Exp.insert(Exp.begin(), CurSymbol);
-			Ref.Builder.push_back({
+			Builder.push_back({
 				CurSymbol,
 				std::move(Exp),
 				{EBNF::BigBrace, EBNF::BigBrace}
 				});
-			Ref.Builder.push_back({
+			Builder.push_back({
 				CurSymbol,
 				{},
 				{EBNF::BigBrace, EBNF::BigBrace}
@@ -295,14 +320,14 @@ namespace Potato::EBNF
 		case 12:
 		{
 			auto Exp = Pros[1].Consume<std::vector<ElementT>>();
-			auto CurSymbol = ElementT{ ElementTypeE::Temporary, {Ref.TerminalProductionIndex, Ref.TerminalProductionIndex} };
-			++Ref.TerminalProductionIndex;
-			Ref.Builder.push_back({
+			auto CurSymbol = ElementT{ ElementTypeE::Temporary, {TerminalProductionIndex, TerminalProductionIndex} };
+			++TerminalProductionIndex;
+			Builder.push_back({
 				CurSymbol,
 				std::move(Exp),
 				{EBNF::MiddleBrace, EBNF::MiddleBrace}
 			});
-			Ref.Builder.push_back({
+			Builder.push_back({
 				CurSymbol,
 				{},
 				{EBNF::MiddleBrace, EBNF::MiddleBrace}
@@ -320,26 +345,26 @@ namespace Potato::EBNF
 			auto Last1 = Pros[0].Consume<std::vector<ElementT>>();
 			auto Last2 = Pros[2].Consume<std::vector<ElementT>>();
 			std::reverse(Last2.begin(), Last2.end());
-			Ref.OrMaskIte = EBNF::MinMask;
+			OrMaskIte = EBNF::MinMask;
 
-			auto OrSymbol = ElementT{ ElementTypeE::Temporary, {Ref.TerminalProductionIndex, Ref.TerminalProductionIndex} };
-			++Ref.TerminalProductionIndex;
+			auto OrSymbol = ElementT{ ElementTypeE::Temporary, {TerminalProductionIndex, TerminalProductionIndex} };
+			++TerminalProductionIndex;
 
-			Ref.Builder.push_back({
+			Builder.push_back({
 					OrSymbol,
 					std::move(Last1),
-					{Ref.OrMaskIte, Ref.OrMaskIte}
+					{OrMaskIte, OrMaskIte}
 				});
 
-			++Ref.OrMaskIte;
+			++OrMaskIte;
 
-			Ref.Builder.push_back({
+			Builder.push_back({
 					OrSymbol,
 					std::move(Last2),
-					{Ref.OrMaskIte, Ref.OrMaskIte}
+					{OrMaskIte, OrMaskIte}
 				});
 
-			++Ref.OrMaskIte;
+			++OrMaskIte;
 
 			std::vector<ElementT> Temp;
 			Temp.push_back(OrSymbol);
@@ -352,12 +377,12 @@ namespace Potato::EBNF
 			std::reverse(Last2.begin(), Last2.end());
 			assert(Last1.size() == 0);
 			//assert(Last1[0].ProductionValue.IsNoTerminal());
-			Ref.Builder.push_back({
+			Builder.push_back({
 					Last1[0],
 					std::move(Last2),
-					{Ref.OrMaskIte, Ref.OrMaskIte}
+					{OrMaskIte, OrMaskIte}
 				});
-			++Ref.OrMaskIte;
+			++OrMaskIte;
 			return std::move(Last1);
 		}
 		case 18:
@@ -368,11 +393,11 @@ namespace Potato::EBNF
 			return {};
 		case 21:
 		{
-			Ref.LastProductionStartSymbol = ElementT{ ElementTypeE::NoTerminal, Pros[0].Value.TokenIndex };
+			LastProductionStartSymbol = ElementT{ ElementTypeE::NoTerminal, Pros[0].Value.TokenIndex };
 			auto List = Pros[2].Consume<std::vector<ElementT>>();
 			auto Mask = Pros[3].Consume<Misc::IndexSpan<>>();
-			Ref.Builder.push_back({
-				*Ref.LastProductionStartSymbol,
+			Builder.push_back({
+				*LastProductionStartSymbol,
 				std::move(List),
 				Mask
 			});
@@ -380,14 +405,14 @@ namespace Potato::EBNF
 		}
 		case 22:
 		{
-			if (!Ref.LastProductionStartSymbol.has_value()) [[unlikely]]
+			if (!LastProductionStartSymbol.has_value()) [[unlikely]]
 			{
 				throw BuildInUnacceptableEbnf{ BuildInUnacceptableEbnf::TypeE::UnsetProductionHead, Value.TokenIndex };
 			}
 			auto List = Pros[1].Consume<std::vector<ElementT>>();
 			auto Mask = Pros[2].Consume<Misc::IndexSpan<>>();
-			Ref.Builder.push_back({
-				*Ref.LastProductionStartSymbol,
+			Builder.push_back({
+				*LastProductionStartSymbol,
 				std::move(List),
 				Mask
 			});
@@ -395,14 +420,14 @@ namespace Potato::EBNF
 		}
 		case 23:
 		{
-			if (Ref.StartSymbol.has_value()) [[unlikely]]
+			if (StartSymbol.has_value()) [[unlikely]]
 			{
 				throw BuildInUnacceptableEbnf{ BuildInUnacceptableEbnf::TypeE::StartSymbolAreadySet, Value.TokenIndex };
 			}
-			Ref.StartSymbol = ElementT{ ElementTypeE::NoTerminal, Pros[2].Value.TokenIndex};
+			StartSymbol = ElementT{ ElementTypeE::NoTerminal, Pros[2].Value.TokenIndex};
 			if (Pros.Size() == 5)
 			{
-				Ref.MaxForwardDetect = ElementT{ ElementTypeE::Mask, Pros[3].Value.TokenIndex };
+				MaxForwardDetect = ElementT{ ElementTypeE::Mask, Pros[3].Value.TokenIndex };
 			}
 
 			return {};
@@ -413,7 +438,12 @@ namespace Potato::EBNF
 		return {};
 	}
 
-	std::any EbnfBuilder::BuilderStep3::HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pros)
+	std::any EbnfBuilder::HandleSymbolStep3(SLRX::SymbolInfo Value)
+	{
+		return {};
+	}
+	
+	std::any EbnfBuilder::HandleReduceStep3(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pros)
 	{
 		switch (Pros.UserMask)
 		{
@@ -434,13 +464,13 @@ namespace Potato::EBNF
 		case 4:
 		{
 			auto Symbols = Pros[2].Consume<std::vector<ElementT>>();
-			Ref.OpePriority.push_back({ std::move(Symbols), SLRX::OpePriority::Associativity::Right });
+			OpePriority.push_back({ std::move(Symbols), SLRX::OpePriority::Associativity::Right });
 			return {};
 		}
 		case 5:
 		{
 			auto Symbols = Pros[2].Consume<std::vector<ElementT>>();
-			Ref.OpePriority.push_back({ std::move(Symbols), SLRX::OpePriority::Associativity::Left });
+			OpePriority.push_back({ std::move(Symbols), SLRX::OpePriority::Associativity::Left });
 			return {};
 		}
 		default:
@@ -452,11 +482,8 @@ namespace Potato::EBNF
 	EbnfBuilder::EbnfBuilder(std::size_t StartupTokenIndex)
 		: RequireTokenIndex(StartupTokenIndex), LastSymbolToken(StartupTokenIndex)
 	{
-		Processor.SetObserverTable(&GetRegTable());
-		Processor.Clear();
-		BuilderStep1 Step1{*this};
-		LRXProcessor.SetObserverTable(&EbnfStep1SLRX(), &Step1);
-		LRXProcessor.Clear();
+		Processor.SetObserverTable(GetRegTable());
+		LRXProcessor.SetObserverTable(EbnfStep1SLRX(), this);
 	}
 
 	bool EbnfBuilder::Consume(char32_t InputValue, std::size_t NextTokenIndex)
@@ -540,14 +567,10 @@ namespace Potato::EBNF
 			return false;
 		case StateE::Step2:
 		{
-			BuilderStep2 Step2{ *this };
-			LRXProcessor.SetObserverTable(&EbnfStep2SLRX(), &Step2);
 			return LRXProcessor.EndOfFile();
 		}
 		case StateE::Step3:
 		{
-			BuilderStep3 Step3{ *this };
-			LRXProcessor.SetObserverTable(&EbnfStep3SLRX(), &Step3);
 			return LRXProcessor.EndOfFile();
 		}
 		default:
@@ -564,96 +587,156 @@ namespace Potato::EBNF
 		{
 		case StateE::Step1:
 		{
-			BuilderStep1 Step1{*this};
 			if (Symbol == *T::Barrier)
 			{
-				LRXProcessor.SetObserverTable(&EbnfStep1SLRX(), &Step1);
 				if(!LRXProcessor.EndOfFile())
 					return false;
-				BuilderStep2 Step2{ *this };
-				LRXProcessor.SetObserverTable(&EbnfStep2SLRX(), &Step2);
-				LRXProcessor.Clear();
 				State = StateE::Step2;
+				LRXProcessor.SetObserverTable(EbnfStep2SLRX(), this);
 				return true;
 			}
 			else {
-				LRXProcessor.SetObserverTable(&EbnfStep1SLRX(), &Step1);
-				return LRXProcessor.Consume(Symbol, TokenIndex, Step1.HandleSymbol({Symbol, TokenIndex }));
+				return LRXProcessor.Consume(Symbol, TokenIndex, HandleSymbol({Symbol, TokenIndex }));
 			}
 		}
 		case StateE::Step2:
 		{
-			BuilderStep2 Step2{ *this };
 			if (Symbol == *T::Barrier)
 			{
-				LRXProcessor.SetObserverTable(&EbnfStep2SLRX(), &Step2);
 				if (!LRXProcessor.EndOfFile())
 					return false;
-				BuilderStep3 Step3{ *this };
-				LRXProcessor.SetObserverTable(&EbnfStep3SLRX(), &Step3);
-				LRXProcessor.Clear();
 				State = StateE::Step3;
+				LRXProcessor.SetObserverTable(EbnfStep3SLRX(), this);
 				return true;
 			}
 			else {
-				LRXProcessor.SetObserverTable(&EbnfStep2SLRX(), &Step2);
-				return LRXProcessor.Consume(Symbol, TokenIndex, Step2.HandleSymbol({ Symbol, TokenIndex }));
+				return LRXProcessor.Consume(Symbol, TokenIndex, HandleSymbol({ Symbol, TokenIndex }));
 			}
 		}
 		case StateE::Step3:
 		{
-			
 			if (Symbol == *T::Barrier)
 			{
 				return false;
 			}
-			BuilderStep3 Step3{ *this };
-			LRXProcessor.SetObserverTable(&EbnfStep3SLRX(), &Step3);
-			auto Re = LRXProcessor.Consume(Symbol, TokenIndex, Step3.HandleSymbol({ Symbol, TokenIndex }));
+			auto Re = LRXProcessor.Consume(Symbol, TokenIndex, HandleSymbol({ Symbol, TokenIndex }));
 			return Re;
 		}
 		}
 		return true;
 	}
 
-	void Ebnf::OverrideSetOberverTable(Reg::DfaProcessor& Pro1, SLRX::LRXProcessor& Pro2, SLRX::ProcessorOperator& Ope) const
+	std::wstring_view Ebnf::GetRegName(std::size_t Index) const
 	{
-		Pro1.SetObserverTable(&Lexical);
-		Pro2.SetObserverTable(&Syntax, &Ope);
+		if(Index < SymbolMap.size())
+			return SymbolMap[Index].StrIndex.Slice(std::wstring_view{ TotalString });
+		return {};
+	};
+
+
+	EbnfBinaryTableWrapper::HeadT const* EbnfBinaryTableWrapper::GetHead() const {
+		return reinterpret_cast<HeadT const*>(Buffer.data());
 	}
 
-	std::tuple<SymbolInfo, std::size_t> Ebnf::Tranlate(std::size_t Mask, Misc::IndexSpan<> TokenIndex) const
+	Ebnf::RegInfoT EbnfBinaryTableWrapper::GetRgeInfo(std::size_t Index) const {
+		auto Head = GetHead();
+		Misc::StructedSerilizerReader<StandardT const> Reader{Buffer};
+		Reader.SetPointer(Head->RegMapOffset);
+		auto Span = Reader.ReadObjectArray<RegInfoT>(Head->RegMapCount);
+		Ebnf::RegInfoT Info;
+		Info.MapSymbolValue = Span[Index].MapSymbolValue;
+		Info.UserMask = Span[Index].UserMask;
+		return Info;
+	}
+
+	std::wstring_view EbnfBinaryTableWrapper::GetRegName(std::size_t Index) const 
 	{
-		auto Inf = GetRgeInfo(Mask);
-		return {
-			{SLRX::Symbol::AsTerminal(Inf.MapSymbolValue), GetRegName(Inf.MapSymbolValue), TokenIndex},
-			Inf.UserMask.has_value() ? *Inf.UserMask : 0,
+		auto Head = GetHead();
+		if (Index < Head->SymbolMapCount)
+		{
+			Misc::StructedSerilizerReader<StandardT const> Reader{Buffer};
+			Reader.SetPointer(Head->SymbolMapOffset);
+			auto Span = Reader.ReadObjectArray<SymbolMapT>(Head->SymbolMapCount);
+			auto NameIndex = Span[Index].StrIndex;
+			Reader.SetPointer(Head->TotalNameOffset);
+			auto Str = Reader.ReadObjectArray<wchar_t>(Head->TotalNameCount);
+			return std::wstring_view{NameIndex.Slice(Str)};
+		}
+		else {
+			return {};
+		}
+	}
+
+	Reg::DfaBinaryTableWrapper EbnfBinaryTableWrapper::GetLexicalTable() const
+	{
+		auto Head = GetHead();
+		return Reg::DfaBinaryTableWrapper{
+			Buffer.subspan(Head->LexicalOffset, Head->LexicalCount)
 		};
 	}
 
-	SymbolInfo Ebnf::Tranlate(SLRX::Symbol Symbol, Misc::IndexSpan<> TokenIndex) const
+	SLRX::LRXBinaryTableWrapper EbnfBinaryTableWrapper::GetSyntaxTable() const {
+		auto Head = GetHead();
+		return SLRX::LRXBinaryTableWrapper{
+			Buffer.subspan(Head->SyntaxOffset, Head->SyntaxCount)
+		};
+	}
+
+	void EbnfBinaryTableWrapper::Serilize(Misc::StructedSerilizerWritter<StandardT>& Write, Ebnf const& Table)
 	{
-		if (Symbol.Value >= SymbolMap.size())
-		{
-			return {Symbol, {}, TokenIndex};
-		}
-		else {
-			return {Symbol, GetRegName(Symbol.Value), TokenIndex };
-		}
+		HeadT Head;
+		//auto StartOffset = Write.Write(Head);
+		//Head.TotalNameOffset = Write.GetWritedCount();
 	}
 
 
+	std::tuple<SymbolInfo, std::size_t> EbnfProcessor::Tranlate(std::size_t Mask, Misc::IndexSpan<> TokenIndex) const
+	{
+		assert(!std::holds_alternative<std::monostate>(TableWrapper));
 
-
-
-	bool EbnfProcessor::SetObserverTable(Misc::ObserverPtr<TableWrapperT const> Table, Misc::ObserverPtr<EbnfOperator> Ope) {
-		Operator = std::move(Ope);
-		TableWrapper = std::move(Table);
-		if (TableWrapper)
+		if (std::holds_alternative<Misc::ObserverPtr<Ebnf const>>(TableWrapper))
 		{
-			TableWrapper->OverrideSetOberverTable(LexicalProcessor, SyntaxProcessor, static_cast<SLRX::ProcessorOperator&>(*this));
+			auto Inf = std::get<Misc::ObserverPtr<Ebnf const>>(TableWrapper)->GetRgeInfo(Mask);
+			return {
+				{SLRX::Symbol::AsTerminal(Inf.MapSymbolValue), std::get<Misc::ObserverPtr<Ebnf const>>(TableWrapper)->GetRegName(Inf.MapSymbolValue), TokenIndex},
+				Inf.UserMask.has_value() ? *Inf.UserMask : 0,
+			};
 		}
-		return TableWrapper && Operator;
+		else {
+			auto Inf = std::get<EbnfBinaryTableWrapper>(TableWrapper).GetRgeInfo(Mask);
+			return {
+				{SLRX::Symbol::AsTerminal(Inf.MapSymbolValue), std::get<EbnfBinaryTableWrapper>(TableWrapper).GetRegName(Inf.MapSymbolValue), TokenIndex},
+				Inf.UserMask.has_value() ? *Inf.UserMask : 0,
+			};
+		}
+	}
+
+	SymbolInfo EbnfProcessor::Tranlate(SLRX::Symbol Symbol, Misc::IndexSpan<> TokenIndex) const
+	{
+		assert(!std::holds_alternative<std::monostate>(TableWrapper));
+		if (std::holds_alternative<Misc::ObserverPtr<Ebnf const>>(TableWrapper))
+		{
+			return {Symbol, std::get<Misc::ObserverPtr<Ebnf const>>(TableWrapper)->GetRegName(Symbol.Value), TokenIndex };
+		}
+		else {
+			return { Symbol, std::get<EbnfBinaryTableWrapper>(TableWrapper).GetRegName(Symbol.Value), TokenIndex };
+		}
+	}
+
+	void EbnfProcessor::SetObserverTable(Ebnf const& Table, Misc::ObserverPtr<EbnfOperator> Ope) 
+	{
+		Operator = std::move(Ope);
+		TableWrapper = &Table;
+		LexicalProcessor.SetObserverTable(Table.Lexical);
+		SyntaxProcessor.SetObserverTable(Table.Syntax, this);
+	}
+
+	void EbnfProcessor::SetObserverTable(EbnfBinaryTableWrapper Table, Misc::ObserverPtr<EbnfOperator> Ope)
+	{
+		Operator = std::move(Ope);
+		TableWrapper = Table;
+		LexicalProcessor.SetObserverTable(Table.GetLexicalTable());
+		SyntaxProcessor.SetObserverTable(Table.GetSyntaxTable(), this);
 	}
 
 	void EbnfProcessor::Clear(std::size_t Startup) {
@@ -665,7 +748,8 @@ namespace Potato::EBNF
 
 	bool EbnfProcessor::Consume(char32_t Value, std::size_t NextTokenIndex)
 	{
-		assert(TableWrapper && Operator);
+		assert(!std::holds_alternative<std::monostate>(TableWrapper));
+		assert(Operator);
 		if (LexicalProcessor.Consume(Value, GetRequireTokenIndex()))
 		{
 			RequireTokenIndex = NextTokenIndex;
@@ -696,7 +780,8 @@ namespace Potato::EBNF
 
 	bool EbnfProcessor::EndOfFile()
 	{
-		assert(TableWrapper && Operator);
+		assert(!std::holds_alternative<std::monostate>(TableWrapper));
+		assert(Operator);
 		LexicalProcessor.EndOfFile(RequireTokenIndex);
 		auto Accept = LexicalProcessor.GetAccept();
 		if (Accept)
@@ -733,7 +818,7 @@ namespace Potato::EBNF
 
 	bool EbnfProcessor::AddTerminalSymbol(std::size_t RegIndex, Misc::IndexSpan<> TokenIndex)
 	{
-		auto [Sym, UserMask] = TableWrapper->Tranlate(RegIndex, TokenIndex);
+		auto [Sym, UserMask] = Tranlate(RegIndex, TokenIndex);
 		if (Sym.Symbol.Value == 0)
 		{
 			return true;
@@ -752,7 +837,7 @@ namespace Potato::EBNF
 
 	std::any EbnfProcessor::HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Desc)
 	{
-		auto Sym = TableWrapper->Tranlate(Value.Value, Value.TokenIndex);
+		auto Sym = Tranlate(Value.Value, Value.TokenIndex);
 		if (!Sym.SymbolName.empty())
 		{
 			TempElement.clear();
@@ -762,7 +847,7 @@ namespace Potato::EBNF
 			{
 				ReduceProduction::Element Ele;
 				Ele.AppendData = std::move(Ite.AppendData);
-				static_cast<SymbolInfo&>(Ele) = TableWrapper->Tranlate(Ite.Value.Value, Ite.Value.TokenIndex);
+				static_cast<SymbolInfo&>(Ele) = Tranlate(Ite.Value.Value, Ite.Value.TokenIndex);
 				TempElement.push_back(std::move(Ele));
 			}
 			Pro.Elements = std::span(TempElement);

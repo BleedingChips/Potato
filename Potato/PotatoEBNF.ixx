@@ -12,7 +12,7 @@ export import Potato.STD;
 export namespace Potato::EBNF
 {
 	
-	struct EbnfBuilder
+	struct EbnfBuilder : protected SLRX::ProcessorOperator
 	{
 
 		EbnfBuilder(std::size_t StartupTokenIndex);
@@ -25,6 +25,14 @@ export namespace Potato::EBNF
 
 		bool AddSymbol(SLRX::Symbol Symbol, Misc::IndexSpan<> TokenIndex);
 		bool AddEndOfFile();
+		std::any HandleSymbol(SLRX::SymbolInfo Value);
+		std::any HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pro);
+		std::any HandleSymbolStep1(SLRX::SymbolInfo Value);
+		std::any HandleReduceStep1(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pro);
+		std::any HandleSymbolStep2(SLRX::SymbolInfo Value);
+		std::any HandleReduceStep2(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pro);
+		std::any HandleSymbolStep3(SLRX::SymbolInfo Value);
+		std::any HandleReduceStep3(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pro);
 
 		enum RegTypeE
 		{
@@ -93,34 +101,6 @@ export namespace Potato::EBNF
 		std::size_t TerminalProductionIndex = 0;
 		std::optional<ElementT> LastProductionStartSymbol;
 		std::size_t OrMaskIte = 0;
-	
-		struct BuilderStep1 : public SLRX::ProcessorOperator
-		{
-			
-			BuilderStep1(EbnfBuilder& Ref) : Ref(Ref) {}
-			EbnfBuilder& Ref;
-
-			std::any HandleSymbol(SLRX::SymbolInfo Value);
-			std::any HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pro);
-		};
-
-		struct BuilderStep2 : public SLRX::ProcessorOperator
-		{
-			BuilderStep2(EbnfBuilder& Ref) : Ref(Ref) {}
-			EbnfBuilder& Ref;
-
-			std::any HandleSymbol(SLRX::SymbolInfo Value);
-			std::any HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pro);
-		};
-
-		struct BuilderStep3 : public SLRX::ProcessorOperator 
-		{
-			BuilderStep3(EbnfBuilder& Ref) : Ref(Ref) {}
-			EbnfBuilder& Ref;
-
-			std::any HandleSymbol(SLRX::SymbolInfo Value) { return {}; }
-			std::any HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Pro);
-		};
 
 		friend struct Ebnf;
 	};
@@ -163,16 +143,96 @@ export namespace Potato::EBNF
 		virtual std::any HandleReduce(SymbolInfo Symbol, ReduceProduction Production) { return {}; };
 	};
 
-	struct EbnfProcessor : protected SLRX::ProcessorOperator
+	struct Ebnf
 	{
-		struct TableWrapperT
+		template<typename CharT, typename CharTraisT>
+		Ebnf(std::basic_string_view<CharT, CharTraisT> EbnfStr);
+
+		Ebnf(Ebnf&&) = default;
+
+		Ebnf() = default;
+
+		Reg::Dfa const& GetLexical() const { return Lexical; }
+		SLRX::LRX const& GetSyntax() const { return Syntax; }
+
+		struct RegInfoT
 		{
-			virtual void OverrideSetOberverTable(Reg::DfaProcessor& Pro1, SLRX::LRXProcessor& Pro2, SLRX::ProcessorOperator& Ope) const = 0;
-			virtual std::tuple<SymbolInfo, std::size_t> Tranlate(std::size_t RegIndex, Misc::IndexSpan<> TokenIndex) const = 0;
-			virtual SymbolInfo Tranlate(SLRX::Symbol Symbol, Misc::IndexSpan<> TokenIndex) const = 0;
+			std::size_t MapSymbolValue;
+			std::optional<std::size_t> UserMask;
 		};
 
-		bool SetObserverTable(Misc::ObserverPtr<TableWrapperT const> Table, Misc::ObserverPtr<EbnfOperator> Ope);
+		RegInfoT GetRgeInfo(std::size_t Index) const { return RegMap[Index]; }
+		std::wstring_view GetRegName(std::size_t Index) const;
+
+	protected:
+
+		std::wstring TotalString;
+
+		struct SymbolMapT
+		{
+			Misc::IndexSpan<> StrIndex;
+		};
+
+		std::vector<SymbolMapT> SymbolMap;
+
+		std::vector<RegInfoT> RegMap;
+
+		Reg::Dfa Lexical;
+		SLRX::LRX Syntax;
+
+		friend struct EbnfProcessor;
+	};
+
+
+	struct EbnfBinaryTableWrapper
+	{
+		using StandardT = std::uint32_t;
+
+		struct HeadT
+		{
+			StandardT TotalNameOffset = 0;
+			StandardT TotalNameCount = 0;
+			StandardT SymbolMapOffset = 0;
+			StandardT SymbolMapCount = 0;
+			StandardT RegMapOffset = 0;
+			StandardT RegMapCount = 0;
+			StandardT LexicalOffset = 0;
+			StandardT LexicalCount = 0;
+			StandardT SyntaxOffset = 0;
+			StandardT SyntaxCount = 0;
+		};
+
+		struct SymbolMapT
+		{
+			Misc::IndexSpan<StandardT> StrIndex;
+		};
+
+		struct RegInfoT
+		{
+			StandardT MapSymbolValue;
+			StandardT UserMask;
+		};
+
+		EbnfBinaryTableWrapper() = default;
+		EbnfBinaryTableWrapper(std::span<StandardT const> Buffer) : Buffer(Buffer) {}
+
+		Ebnf::RegInfoT GetRgeInfo(std::size_t Index) const;
+		std::wstring_view GetRegName(std::size_t Index) const;
+		Reg::DfaBinaryTableWrapper GetLexicalTable() const;
+		SLRX::LRXBinaryTableWrapper GetSyntaxTable() const;
+
+		static void Serilize(Misc::StructedSerilizerWritter<StandardT>& Write, Ebnf const& Table);
+
+		HeadT const* GetHead() const;
+
+		std::span<StandardT const> Buffer;
+
+		friend struct EbnfProcessor;
+	};
+
+	struct EbnfProcessor : protected SLRX::ProcessorOperator
+	{
+
 		void Clear(std::size_t Startup = 0);
 		std::size_t GetRequireTokenIndex() const { return RequireTokenIndex; }
 		bool Consume(char32_t Value, std::size_t NextTokenIndex);
@@ -182,16 +242,29 @@ export namespace Potato::EBNF
 		template<typename RequrieT>
 		RequrieT GetData() { return SyntaxProcessor.GetData<RequrieT>(); }
 
+		void SetObserverTable(Ebnf const& Table, Misc::ObserverPtr<EbnfOperator> Ope);
+		void SetObserverTable(EbnfBinaryTableWrapper Table, Misc::ObserverPtr<EbnfOperator> Ope);
+
 	protected:
+
+		std::tuple<SymbolInfo, std::size_t> Tranlate(std::size_t Mask, Misc::IndexSpan<> TokenIndex) const;
+		SymbolInfo Tranlate(SLRX::Symbol Symbol, Misc::IndexSpan<> TokenIndex) const;
 
 		bool AddTerminalSymbol(std::size_t RegIndex, Misc::IndexSpan<> TokenIndex);
 		bool TerminalEndOfFile();
 		std::any HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Desc);
 
-		Misc::ObserverPtr<TableWrapperT const> TableWrapper;
+		std::variant<
+			std::monostate,
+			Misc::ObserverPtr<Ebnf const>,
+			EbnfBinaryTableWrapper
+		> TableWrapper;
+
 		Misc::ObserverPtr<EbnfOperator> Operator;
+
 		Reg::DfaProcessor LexicalProcessor;
 		SLRX::LRXProcessor SyntaxProcessor;
+
 		std::vector<ReduceProduction::Element> TempElement;
 		std::size_t RequireTokenIndex = 0;
 		std::size_t LastSymbolTokenIndex = 0;
@@ -234,54 +307,6 @@ export namespace Potato::EBNF
 			}
 		}
 	}
-
-	struct Ebnf : public EbnfProcessor::TableWrapperT
-	{
-		template<typename CharT, typename CharTraisT>
-		Ebnf(std::basic_string_view<CharT, CharTraisT> EbnfStr);
-
-		Ebnf(Ebnf&&) = default;
-
-		Ebnf() = default;
-
-		Reg::Dfa const& GetLexical() const { return Lexical; }
-		SLRX::LRX const& GetSyntax() const { return Syntax; }
-
-		struct RegInfoT
-		{
-			std::size_t MapSymbolValue;
-			std::optional<std::size_t> UserMask;
-		};
-
-		RegInfoT GetRgeInfo(std::size_t Index) const { return RegMap[Index]; }
-		std::wstring_view GetRegName(std::size_t Index) const { return SymbolMap[Index].StrIndex.Slice(std::wstring_view{ TotalString }); };
-		bool IsTemporaryNoTerminal(SLRX::Symbol Value) const { return Value.IsNoTerminal() && Value.Value >= SymbolMap.size(); }
-
-	protected:
-
-		virtual void OverrideSetOberverTable(Reg::DfaProcessor& Pro1, SLRX::LRXProcessor& Pro2, SLRX::ProcessorOperator& Ope) const override;
-		virtual std::tuple<SymbolInfo, std::size_t> Tranlate(std::size_t Mask, Misc::IndexSpan<> TokenIndex) const override;
-		virtual SymbolInfo Tranlate(SLRX::Symbol Symbol, Misc::IndexSpan<> TokenIndex) const override;
-
-		std::wstring TotalString;
-
-		struct SymbolMapT
-		{
-			Misc::IndexSpan<> StrIndex;
-		};
-
-		std::vector<SymbolMapT> SymbolMap;
-
-		std::vector<RegInfoT> RegMap;
-
-		Reg::Dfa Lexical;
-		SLRX::LRX Syntax;
-
-		friend struct EbnfProcessor;
-	};
-
-
-
 
 	/*
 	struct EbnfProcessor

@@ -54,7 +54,7 @@ namespace Potato::Reg
 		return Temp;
 	};
 
-	const SLRX::LRXBinaryTableWrapper& RexSLRXWrapper()
+	const SLRX::LRXBinaryTableWrapper RexSLRXWrapper()
 	{
 #ifdef _DEBUG
 		try {
@@ -165,8 +165,7 @@ namespace Potato::Reg
 	{
 		auto Top = AddNode();
 		assert(Top == 0);
-		Processor.SetObserverTable(&RexSLRXWrapper(), this);
-		Processor.Clear();
+		Processor.SetObserverTable(RexSLRXWrapper(), this);
 	}
 
 	bool Nfa::BuilderT::InsertSymbol(SLRX::Symbol SymbolValue, Interval CharsValue, Misc::IndexSpan<> TokenIndex)
@@ -2162,36 +2161,59 @@ namespace Potato::Reg
 
 	void DfaProcessor::Clear()
 	{
-		assert(TableWrapper);
-		auto Info = TableWrapper->GetClearInfo();
-		Context.CurNodeIndex = Info.Startup;
-		Context.CacheIndex.clear();
-		Context.CacheIndex.resize(Info.CacheCounterCount, 0);
-		Context.TempResult.clear();
-		Context.TempResult.reserve(Info.TempResultCount);
-		Context.Record.Clear();
+		assert(!std::holds_alternative<std::monostate>(TableWrapper));
+		CacheIndex.clear();
+		TempResult.clear();
+		Record.Clear();
+		if (std::holds_alternative<Misc::ObserverPtr<Dfa const>>(TableWrapper))
+		{
+			CurNodeIndex = std::get<Misc::ObserverPtr<Dfa const>>(TableWrapper)->GetStartupNodeIndex();
+			CacheIndex.resize(std::get<Misc::ObserverPtr<Dfa const>>(TableWrapper)->GetCacheCounterCount(), 0);
+			TempResult.reserve(std::get<Misc::ObserverPtr<Dfa const>>(TableWrapper)->GetTempResultCount());
+		}
+		else {
+			CurNodeIndex = std::get<DfaBinaryTableWrapper>(TableWrapper).GetStartupNodeIndex();
+			CacheIndex.resize(std::get<DfaBinaryTableWrapper>(TableWrapper).GetCacheCounterCount(), 0);
+			TempResult.reserve(std::get<DfaBinaryTableWrapper>(TableWrapper).GetTempResultCount());
+		}
 	}
 
 	auto DfaProcessor::Consume(char32_t Token, std::size_t TokenIndex) -> bool
 	{
-		assert(TableWrapper);
-		return TableWrapper->Consume(Context, Token, TokenIndex);
-
-		
+		assert(!std::holds_alternative<std::monostate>(TableWrapper));
+		if (std::holds_alternative<Misc::ObserverPtr<Dfa const>>(TableWrapper))
+		{
+			return std::get<Misc::ObserverPtr<Dfa const>>(TableWrapper)->Consume(*this, Token, TokenIndex);
+		}
+		else {
+			return std::get<DfaBinaryTableWrapper>(TableWrapper).Consume(*this, Token, TokenIndex);
+		}
 	}
 
 	bool DfaProcessor::HasAccept() const { 
-		assert(TableWrapper);
-		return TableWrapper->HasAccept(Context);
+		assert(!std::holds_alternative<std::monostate>(TableWrapper));
+		if (std::holds_alternative<Misc::ObserverPtr<Dfa const>>(TableWrapper))
+		{
+			return std::get<Misc::ObserverPtr<Dfa const>>(TableWrapper)->HasAccept(*this);
+		}
+		else {
+			return std::get<DfaBinaryTableWrapper>(TableWrapper).HasAccept(*this);
+		}
 	}
 
 	ProcessorAcceptRef DfaProcessor::GetAccept() const
 	{
-		assert(TableWrapper);
-		return TableWrapper->GetAccept(Context);
+		assert(!std::holds_alternative<std::monostate>(TableWrapper));
+		if (std::holds_alternative<Misc::ObserverPtr<Dfa const>>(TableWrapper))
+		{
+			return std::get<Misc::ObserverPtr<Dfa const>>(TableWrapper)->GetAccept(*this);
+		}
+		else {
+			return std::get<DfaBinaryTableWrapper>(TableWrapper).GetAccept(*this);
+		}
 	}
 
-	bool Dfa::Consume(DfaProcessor::ContextT& Context, char32_t Token, std::size_t TokenIndex) const
+	bool Dfa::Consume(DfaProcessor& Context, char32_t Token, std::size_t TokenIndex) const
 	{
 		auto& NodeRef = Nodes[Context.CurNodeIndex];
 		for (auto& Ite : NodeRef.Edges)
@@ -2321,22 +2343,13 @@ namespace Potato::Reg
 		return false;
 	}
 
-	DfaProcessor::ClearInfo Dfa::GetClearInfo() const
-	{
-		return {
-			GetStartupNodeIndex(),
-			GetCacheCounterCount(),
-			GetTempResultCount()
-		};
-	}
-
-	bool Dfa::HasAccept(DfaProcessor::ContextT const& Context) const
+	bool Dfa::HasAccept(DfaProcessor const& Context) const
 	{
 		auto& CurNode = Nodes[Context.CurNodeIndex];
 		return CurNode.Accept.has_value();
 	}
 
-	ProcessorAcceptRef Dfa::GetAccept(DfaProcessor::ContextT const& Context) const
+	ProcessorAcceptRef Dfa::GetAccept(DfaProcessor const& Context) const
 	{
 		auto& CurNode = Nodes[Context.CurNodeIndex];
 		if (CurNode.Accept.has_value())
@@ -2573,16 +2586,7 @@ namespace Potato::Reg
 
 	}
 
-	DfaProcessor::ClearInfo DfaBinaryTableWrapper::GetClearInfo() const
-	{
-		return {
-			GetStartupNodeIndex(),
-			GetCacheCounterCount(),
-			GetTempResultCount()
-		};
-	}
-
-	bool DfaBinaryTableWrapper::Consume(DfaProcessor::ContextT& Context, char32_t Token, std::size_t TokenIndex) const
+	bool DfaBinaryTableWrapper::Consume(DfaProcessor& Context, char32_t Token, std::size_t TokenIndex) const
 	{
 		auto Reader = Misc::StructedSerilizerReader(Wrapper);
 		Reader.SetPointer(Context.CurNodeIndex);
@@ -2739,14 +2743,14 @@ namespace Potato::Reg
 		return false;
 	}
 
-	bool DfaBinaryTableWrapper::HasAccept(DfaProcessor::ContextT const& Context) const {
+	bool DfaBinaryTableWrapper::HasAccept(DfaProcessor const& Context) const {
 		auto Reader = Misc::StructedSerilizerReader(Wrapper);
 		Reader.SetPointer(Context.CurNodeIndex);
 		auto Node = Reader.ReadObject<DfaBinaryTableWrapper::NodeT>();
 		return Node->AcceptOffset != 0 || Node->EdgeCount == 0;
 	}
 
-	ProcessorAcceptRef DfaBinaryTableWrapper::GetAccept(DfaProcessor::ContextT const& Context) const
+	ProcessorAcceptRef DfaBinaryTableWrapper::GetAccept(DfaProcessor const& Context) const
 	{
 		auto Reader = Misc::StructedSerilizerReader(Wrapper);
 		Reader.SetPointer(Context.CurNodeIndex);

@@ -1339,20 +1339,35 @@ namespace Potato::SLRX
 		return Re;
 	}
 
+	void LRXProcessor::SetObserverTable(LRX const& Table, Misc::ObserverPtr<ProcessorOperator> Ope) {
+		assert(Ope);
+		TableWrapper = &Table;
+		Operator = std::move(Ope);
+		Clear();
+	}
+
+	void LRXProcessor::SetObserverTable(LRXBinaryTableWrapper Table, Misc::ObserverPtr<ProcessorOperator> Ope) {
+		assert(Ope);
+		TableWrapper = Table;
+		Operator = std::move(Ope);
+		Clear();
+	}
+
 	bool LRXProcessor::Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, std::any AppendData)
 	{
-		assert(TableWrapper);
+		assert(!std::holds_alternative<std::monostate>(TableWrapper));
 		assert(Operator);
 		assert(Value.IsTerminal());
 		assert(States.rbegin()->TableState == CurrentTopState);
 
-		CurrentStateInfo StateInfo{
-			CurrentTopState,
-			RequireNode,
-			std::span(States)
-		};
-
-		std::optional<ConsumeResult> Result = TableWrapper->TableConsume(Value, StateInfo, *Operator);
+		std::optional<TableConsumeResult> Result;
+		
+		if(std::holds_alternative<Misc::ObserverPtr<LRX const>>(TableWrapper))
+			Result = std::get<Misc::ObserverPtr<LRX const>>(TableWrapper)->TableConsume(Value, *this, *Operator);
+		else
+			Result = std::get<LRXBinaryTableWrapper>(TableWrapper).TableConsume(Value, *this, *Operator);
+		
+		
 
 		if (Result.has_value())
 		{
@@ -1437,12 +1452,10 @@ namespace Potato::SLRX
 				}
 				if (!CacheSymbols.empty())
 				{
-					CurrentStateInfo StateInfo{
-						CurrentTopState,
-						RequireNode,
-						std::span(States)
-					};
-					Result = TableWrapper->TableConsume(CacheSymbols[SymbolsIndex].Value.Value, StateInfo, *Operator);
+					if (std::holds_alternative<Misc::ObserverPtr<LRX const>>(TableWrapper))
+						Result = std::get<Misc::ObserverPtr<LRX const>>(TableWrapper)->TableConsume(CacheSymbols[SymbolsIndex].Value.Value, *this, *Operator);
+					else
+						Result = std::get<LRXBinaryTableWrapper>(TableWrapper).TableConsume(CacheSymbols[SymbolsIndex].Value.Value, *this, *Operator);
 					++SymbolsIndex;
 					assert(Result.has_value());
 				}
@@ -1459,12 +1472,16 @@ namespace Potato::SLRX
 
 	void LRXProcessor::Clear()
 	{
-		assert(TableWrapper);
+		assert(!std::holds_alternative<std::monostate>(TableWrapper));
 		assert(Operator);
 		CacheSymbols.clear();
 		States.clear();
-		auto ClearInfo = TableWrapper->GetClearInfo();
-		CurrentTopState = ClearInfo.StartupTokenIndex;
+		std::size_t StartupIndex = 0;
+		if (std::holds_alternative<Misc::ObserverPtr<LRX const>>(TableWrapper))
+			StartupIndex = std::get<Misc::ObserverPtr<LRX const>>(TableWrapper)->StartupNodeIndex();
+		else
+			StartupIndex = std::get<LRXBinaryTableWrapper>(TableWrapper).StartupNodeIndex();
+		CurrentTopState = StartupIndex;
 		States.push_back({ CurrentTopState, {}, {}, {}});
 		RequireNode = 0;
 		TryReduce();
@@ -1489,18 +1506,17 @@ namespace Potato::SLRX
 
 	void LRXProcessor::TryReduce()
 	{
-		assert(TableWrapper);
+		assert(!std::holds_alternative<std::monostate>(TableWrapper));
 		assert(Operator);
 		if (RequireNode == 0)
 		{
 			while (true)
 			{
-				CurrentStateInfo StateInfo{
-					CurrentTopState,
-					RequireNode,
-					std::span(States)
-				};
-				std::optional<ReduceResult> Result = TableWrapper->TableReduce(StateInfo);
+				std::optional<TableReduceResult> Result;
+				if (std::holds_alternative<Misc::ObserverPtr<LRX const>>(TableWrapper))
+					Result = std::get<Misc::ObserverPtr<LRX const>>(TableWrapper)->TableReduce(*this);
+				else
+					Result = std::get<LRXBinaryTableWrapper>(TableWrapper).TableReduce(*this);
 				if (Result.has_value())
 				{
 					Misc::IndexSpan<> Cur;
@@ -1556,7 +1572,7 @@ namespace Potato::SLRX
 	}
 
 
-	std::optional<LRXProcessor::ConsumeResult> LRX::TableConsume(Symbol Value, LRXProcessor::CurrentStateInfo const& Info, ProcessorOperator& Ope) const
+	std::optional<TableConsumeResult> LRX::TableConsume(Symbol Value, LRXProcessor const& Info, ProcessorOperator& Ope) const
 	{
 		assert(Value.IsTerminal());
 		assert(Nodes.size() > Info.CurrentTopState);
@@ -1578,7 +1594,7 @@ namespace Potato::SLRX
 				{
 				case LRX::RequireNodeType::SymbolValue:
 				{
-					LRXProcessor::ConsumeResult Re;
+					TableConsumeResult Re;
 					Re.State = Info.CurrentTopState;
 					Re.RequireNode = Ite.ReferenceIndex;
 					return Re;
@@ -1586,14 +1602,14 @@ namespace Potato::SLRX
 				case LRX::RequireNodeType::NeedPredictShiftProperty:
 				case LRX::RequireNodeType::ShiftProperty:
 				{
-					LRXProcessor::ConsumeResult Re;
+					TableConsumeResult Re;
 					Re.State = Ite.ReferenceIndex;
 					Re.RequireNode = 0;
 					return Re;
 				}
 				case LRX::RequireNodeType::ReduceProperty:
 				{
-					LRXProcessor::ConsumeResult Re;
+					TableConsumeResult Re;
 					assert(NodeRef.Reduces.size() > Ite.ReferenceIndex);
 					auto& CurReduceTuple = NodeRef.Reduces[Ite.ReferenceIndex];
 					Re.Reduce = CurReduceTuple.Property;
@@ -1620,7 +1636,7 @@ namespace Potato::SLRX
 		return {};
 	}
 
-	std::optional<LRXProcessor::ReduceResult> LRX::TableReduce(LRXProcessor::CurrentStateInfo const& Info) const
+	std::optional<TableReduceResult> LRX::TableReduce(LRXProcessor const& Info) const
 	{
 		assert(Nodes.size() > Info.CurrentTopState);
 		auto& NodeRef = Nodes[Info.CurrentTopState];
@@ -1636,7 +1652,7 @@ namespace Potato::SLRX
 					return Tup.LastState == LastState;
 					});
 				assert(FindIte != Ref.Tuples.end());
-				LRXProcessor::ReduceResult Result;
+				TableReduceResult Result;
 				Result.Reduce = Ref.Property;
 				Result.State = FindIte->TargetState;
 				return Result;
@@ -1645,12 +1661,7 @@ namespace Potato::SLRX
 		return {};
 	}
 
-	LRXProcessor::ClearInfo LRX::GetClearInfo() const
-	{
-		return {StartupOffset()};
-	}
-
-	auto LRXBinaryTableWrapper::TableConsume(Symbol Value, LRXProcessor::CurrentStateInfo const& Info, ProcessorOperator& Ope) const ->std::optional<LRXProcessor::ConsumeResult>
+	auto LRXBinaryTableWrapper::TableConsume(Symbol Value, LRXProcessor const& Info, ProcessorOperator& Ope) const ->std::optional<TableConsumeResult>
 	{
 		assert(TotalBufferSize() > Info.CurrentTopState);
 		assert(Info.States.rbegin()->TableState == Info.CurrentTopState);
@@ -1681,7 +1692,7 @@ namespace Potato::SLRX
 					{
 					case LRX::RequireNodeType::SymbolValue:
 					{
-						LRXProcessor::ConsumeResult Re;
+						TableConsumeResult Re;
 						Re.State = Info.CurrentTopState;
 						Re.RequireNode = Ite.ToIndexOffset;
 						return Re;
@@ -1689,14 +1700,14 @@ namespace Potato::SLRX
 					case LRX::RequireNodeType::NeedPredictShiftProperty:
 					case LRX::RequireNodeType::ShiftProperty:
 					{
-						LRXProcessor::ConsumeResult Re;
+						TableConsumeResult Re;
 						Re.State = Ite.ToIndexOffset;
 						Re.RequireNode = 0;
 						return Re;
 					}
 					case LRX::RequireNodeType::ReduceProperty:
 					{
-						LRXProcessor::ConsumeResult Re;
+						TableConsumeResult Re;
 						auto ReducePropertyReader = Reader.SubReader(Ite.ToIndexOffset);
 						auto ReduceP = ReducePropertyReader.ReadObject<LRXBinaryTableWrapper::ZipReducePropertyT>();
 						LR0::Reduce Reduce;
@@ -1738,7 +1749,7 @@ namespace Potato::SLRX
 		return {};
 	}
 
-	auto LRXBinaryTableWrapper::TableReduce(LRXProcessor::CurrentStateInfo const& Info) const -> std::optional<LRXProcessor::ReduceResult>
+	auto LRXBinaryTableWrapper::TableReduce(LRXProcessor const& Info) const -> std::optional<TableReduceResult>
 	{
 		assert(TotalBufferSize() > Info.CurrentTopState);
 		assert(Info.States.rbegin()->TableState == Info.CurrentTopState);
@@ -1756,7 +1767,7 @@ namespace Potato::SLRX
 				Reduce.Reduce.Mask = ReduceP->Mask;
 				Reduce.Reduce.ProductionIndex = ReduceP->ProductionIndex;
 				Reduce.Reduce.ElementCount = ReduceP->ProductionCount;
-				LRXProcessor::ReduceResult Result;
+				TableReduceResult Result;
 				Result.Reduce = Reduce;
 				assert(Info.States.size() > Reduce.Reduce.ElementCount);
 				auto RefState = Info.States[Info.States.size() - Reduce.Reduce.ElementCount - 1].TableState;
@@ -1771,11 +1782,6 @@ namespace Potato::SLRX
 
 		}
 		return {};
-	}
-
-	LRXProcessor::ClearInfo LRXBinaryTableWrapper::GetClearInfo() const
-	{
-		return {StartupNodeIndex()};
 	}
 
 	namespace Exception
