@@ -46,6 +46,26 @@ void Test(std::wstring_view Table, std::wstring_view InputStr, std::wstring_view
 		else {
 			throw Error;
 		}
+
+		auto Buffer = CreateEbnfBinaryTable(Tab);
+
+		Pro.SetObserverTable(EbnfBinaryTableWrapper{Buffer}, &Maker);
+
+		auto Re2 = Process(Pro, InputStr);
+
+		if (Re2)
+		{
+			auto K = Pro.GetData<std::wstring>();
+			if (K != TargetReg)
+			{
+				throw Error;
+			}
+		}
+		else {
+			throw Error;
+		}
+
+		volatile int i = 0;
 	}
 	catch (Exception::Interface const&)
 	{

@@ -156,7 +156,7 @@ export namespace Potato::Misc
 	}
 
 	template<typename StructT>
-	struct StructedSerilizerWritter
+	struct StructedSerilizerWritter 
 	{
 		bool IsPredice() const { return !OutputBuffer.has_value(); }
 		bool IsWritting() const { return OutputBuffer.has_value(); }
@@ -176,19 +176,23 @@ export namespace Potato::Misc
 		std::optional<StructedSerilizerReader<StructT>> GetReader() const {
 			if (IsWritting())
 			{
-				return StructedSerilizerReader<StructT>{std::span(*OutputBuffer).subspan(0, WritedSize)};
+				return StructedSerilizerReader<StructT>{std::span(*OutputBuffer).subspan(Mark, WritedSize - Mark)};
 			}
 			return {};
 		}
 
-		std::size_t GetWritedSize() const { return WritedSize; }
+		std::size_t GetWritedSize() const { return WritedSize - Mark; }
 
 		StructedSerilizerWritter() = default;
 		StructedSerilizerWritter(std::span<StructT> ProxyBuffer) :
 			OutputBuffer(ProxyBuffer) {}
 
-	public:
+		std::size_t PushMark() { auto OldMark = Mark; Mark = WritedSize; return OldMark; }
+		void PopMark(std::size_t OldMark) { Mark = OldMark; }
 
+	public:
+		
+		std::size_t Mark = 0;
 		std::size_t WritedSize = 0;
 		std::optional<std::span<StructT>> OutputBuffer;
 	};
@@ -208,7 +212,7 @@ export namespace Potato::Misc
 			new (Tar.data()) OtherT{ Type };
 		}
 		WritedSize += TargetObject;
-		return OldWriteSize;
+		return OldWriteSize - Mark;
 	}
 
 	template<typename StructT>
@@ -228,7 +232,7 @@ export namespace Potato::Misc
 			}
 		}
 		WritedSize += TargetObject;
-		return OldWriteSize;
+		return OldWriteSize - Mark;
 	}
 
 	template<typename StructT>
@@ -248,7 +252,7 @@ export namespace Potato::Misc
 			}
 		}
 		WritedSize += TargetObject;
-		return OldWriteSize;
+		return OldWriteSize - Mark;
 	}
 
 	struct LineRecorder

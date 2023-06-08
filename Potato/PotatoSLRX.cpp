@@ -1152,6 +1152,8 @@ namespace Potato::SLRX
 
 	void LRXBinaryTableWrapper::Serilize(Misc::StructedSerilizerWritter<StandardT>& Writter, LRX const& Ref)
 	{
+		auto OldMark = Writter.PushMark();
+
 		std::vector<std::size_t> NodeOffset;
 
 		if(Writter.IsWritting())
@@ -1323,6 +1325,8 @@ namespace Potato::SLRX
 			auto Head = Reader->ReadObject<ZipHeadT>();
 			Misc::CrossTypeSetThrow<OutOfRange>(Head->StartupOffset, NodeOffset[1], OutOfRange::TypeT::NodeOffset, NodeOffset[1]);
 		}
+
+		Writter.PopMark(OldMark);
 	}
 
 	auto LRXBinaryTableWrapper::Create(LRX const& Le) -> std::vector<StandardT>

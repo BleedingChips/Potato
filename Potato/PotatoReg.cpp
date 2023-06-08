@@ -2372,6 +2372,8 @@ namespace Potato::Reg
 		using WriterT = Misc::StructedSerilizerWritter<StandardT>;
 		using namespace Potato::Reg::Exception;
 
+		auto OldMark = Writer.PushMark();
+
 		HeadT Head;
 
 		Writer.WriteObject(Head);
@@ -2584,6 +2586,7 @@ namespace Potato::Reg
 			Head->TempResult = static_cast<StandardT>(RefTable.ResultCount);
 		}
 
+		Writer.PopMark(OldMark);
 	}
 
 	bool DfaBinaryTableWrapper::Consume(DfaProcessor& Context, char32_t Token, std::size_t TokenIndex) const
