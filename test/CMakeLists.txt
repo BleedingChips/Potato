@@ -25,3 +25,6 @@ target_link_libraries(FormatTest PUBLIC PotatoModule)
 
 add_executable(EbnfTest EbnfTest.cpp)
 target_link_libraries(EbnfTest PUBLIC PotatoModule)
+
+add_executable(TaskSystemTest TaskSystemTest.cpp)
+target_link_libraries(TaskSystemTest PUBLIC PotatoModule)
