@@ -512,6 +512,7 @@ export namespace Potato::Reg
 		ProcessorAcceptRef GetAccept() const;
 		void SetObserverTable(Dfa const& Table) { TableWrapper = &Table; Clear(); }
 		void SetObserverTable(DfaBinaryTableWrapper Table) { TableWrapper = Table; Clear(); }
+
 	protected:
 		
 		std::variant<

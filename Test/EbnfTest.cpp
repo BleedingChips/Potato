@@ -81,8 +81,8 @@ void TestingEbnf()
 	std::wstring_view EbnfCode1 =
 		LR"(
 
-Num := '[1-9][0-9]*' : [1]
-$ := '\s+'
+Num := '[1-9][0-9]*' : [1];
+$ := '\s+';
 
 %%%%
 
@@ -97,14 +97,54 @@ $ := <Exp> ;
 
 %%%%
 
-+('*' '/') +('+' '-')
++('*' '/');
++('+' '-');
 )";
 
 	
 	std::wstring_view Source = LR"(1*< 2 + 3 > * 4)";
 
+	std::wstring_view EbnfCode2 =
+		LR"(
+$ := '\s+';
 
-	Test(EbnfCode1, Source, LR"((((1)*(<((2)+(3))>))*(4)))", "TestingEbnf : Case 1");
+%%%%
+
+$ := <Exp> ;
+
+<Exp> := [ 'a' ] : [1];
+		//:= <Exp> ['b'] : [2];
+		//:= <Exp> ('c') : [3];
+		//:=  'd'|'e'|'f' : [4];
+		//:= : [5];
+
+)";
+
+	Ebnf Tab2{ EbnfCode2 };
+
+	std::wstring_view Input = LR"()";
+
+	struct Maker : public EbnfOperator
+	{
+		virtual std::any HandleSymbol(SymbolInfo Symbol, std::size_t UserMask) override
+		{
+			volatile int i = 0;
+			return {};
+		};
+		virtual std::any HandleReduce(SymbolInfo Symbol, ReduceProduction Production) {
+			auto K = Production[0].Consume<BuilInStatement>();
+			return {};
+		};
+	}mk;
+
+	EbnfProcessor Pro2;
+	Pro2.SetObserverTable(Tab2, &mk);
+
+	auto Ki = Process(Pro2, Input);
+
+	volatile int o = 0;
+
+
 
 	/*
 	std::u8string_view EbnfCode2 =

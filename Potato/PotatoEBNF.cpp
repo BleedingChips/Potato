@@ -9,14 +9,25 @@ namespace Potato::EBNF
 
 	using namespace Exception;
 
-	static constexpr std::size_t SmallBrace = 0;
-	static constexpr std::size_t MiddleBrace = 1;
-	static constexpr std::size_t BigBrace = 2;
-	static constexpr std::size_t OrLeft = 3;
-	static constexpr std::size_t OrRight = 4;
-	static constexpr std::size_t MinMask = 5;
+	static constexpr std::size_t SmallBrace = 1;
+	static constexpr std::size_t MiddleBrace = 2;
+	static constexpr std::size_t BigBrace = 3;
+	static constexpr std::size_t MinMask = 4;
 
 	using SLRX::Symbol;
+
+	std::wstring_view OrStatementRegName() {
+		return L"$Or";
+	}
+	static std::wstring_view RoundBracketStatementRegName() {
+		return L"$RoundBracket";
+	}
+	static std::wstring_view SquareBracketStatementRegName() {
+		return L"$SquareBracket";
+	}
+	static std::wstring_view CurlyBracketStatementRegName() {
+		return L"$CurlyBracket";
+	}
 
 	enum class T
 	{
@@ -70,11 +81,11 @@ namespace Potato::EBNF
 			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"([0-9a-zA-Z_\z]+)"},false, static_cast<std::size_t>(T::Terminal) });
 			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(<[0-9a-zA-Z_\z]+>)"},false, static_cast<std::size_t>(T::NoTerminal) });
 			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(:=)"}, false,static_cast<std::size_t>(T::Equal) });
-			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\'([^\s]+)\')"}, false,static_cast<std::size_t>(T::Rex) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\'(.*?)[^\\]\')"}, false,static_cast<std::size_t>(T::Rex) });
 			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(;)"}, false,static_cast<std::size_t>(T::Semicolon) });
 			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(:)"}, false,static_cast<std::size_t>(T::Colon) });
 			//StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\r?\n)"}, false,static_cast<std::size_t>(T::Line) });
-			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\s+)"}, false,static_cast<std::size_t>(T::Empty) });
+			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"([\s\t]+)"}, false,static_cast<std::size_t>(T::Empty) });
 			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\$)"}, false,static_cast<std::size_t>(T::Start) });
 			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\|)"}, false,static_cast<std::size_t>(T::Or) });
 			StartupTable.Link(Reg::Nfa{ std::basic_string_view{UR"(\[)"}, false,static_cast<std::size_t>(T::LM_Brace) });
@@ -100,9 +111,9 @@ namespace Potato::EBNF
 			*NT::Statement,
 			{
 				{*NT::Statement, {}, 1},
-				{*NT::Statement, {*NT::Statement, *T::Terminal, *T::Equal, *T::Rex}, 2},
-				{*NT::Statement, {*NT::Statement, *T::Terminal, *T::Equal, *T::Rex, *T::Colon, *T::LM_Brace, *T::Number, *T::RM_Brace}, 3},
-				{*NT::Statement, {*NT::Statement, *T::Start, *T::Equal, *T::Rex}, 4},
+				{*NT::Statement, {*NT::Statement, *T::Terminal, *T::Equal, *T::Rex, *T::Semicolon}, 2},
+				{*NT::Statement, {*NT::Statement, *T::Terminal, *T::Equal, *T::Rex, *T::Colon, *T::LM_Brace, *T::Number, *T::RM_Brace, *T::Semicolon}, 3},
+				{*NT::Statement, {*NT::Statement, *T::Start, *T::Equal, *T::Rex, *T::Semicolon}, 4},
 			},
 			{}
 		);
@@ -166,8 +177,8 @@ namespace Potato::EBNF
 				{*NT::ExpressionStatement, {*NT::Expression}, 2},
 				{*NT::ExpressionStatement, {*NT::ExpressionStatement, *NT::Expression}, 3},
 				{*NT::Statement, {}},
-				{*NT::Statement, {*NT::Statement, *T::LS_Brace, *NT::ExpressionStatement, *T::RightPriority }, 4},
-				{*NT::Statement, {*NT::Statement, *T::LeftPriority, *NT::ExpressionStatement, *T::RS_Brace }, 5},
+				{*NT::Statement, {*NT::Statement, *T::LS_Brace, *NT::ExpressionStatement, *T::RightPriority, *T::Semicolon}, 4},
+				{*NT::Statement, {*NT::Statement, *T::LeftPriority, *NT::ExpressionStatement, *T::RS_Brace, *T::Semicolon }, 5},
 			},
 			{}
 		);
@@ -346,9 +357,9 @@ namespace Potato::EBNF
 			auto Last2 = Pros[2].Consume<std::vector<ElementT>>();
 			std::reverse(Last2.begin(), Last2.end());
 			OrMaskIte = EBNF::MinMask;
-
-			auto OrSymbol = ElementT{ ElementTypeE::Temporary, {TerminalProductionIndex, TerminalProductionIndex} };
+			auto LastOrStatementTokenIndex = TerminalProductionIndex;
 			++TerminalProductionIndex;
+			auto OrSymbol = ElementT{ ElementTypeE::Temporary, {LastOrStatementTokenIndex, LastOrStatementTokenIndex} };
 
 			Builder.push_back({
 					OrSymbol,
@@ -375,7 +386,7 @@ namespace Potato::EBNF
 			auto Last1 = Pros[0].Consume<std::vector<ElementT>>();
 			auto Last2 = Pros[2].Consume<std::vector<ElementT>>();
 			std::reverse(Last2.begin(), Last2.end());
-			assert(Last1.size() == 0);
+			assert(Last1.size() == 1);
 			//assert(Last1[0].ProductionValue.IsNoTerminal());
 			Builder.push_back({
 					Last1[0],
@@ -581,7 +592,7 @@ namespace Potato::EBNF
 
 	bool EbnfBuilder::AddSymbol(SLRX::Symbol Symbol, Misc::IndexSpan<> TokenIndex)
 	{
-		if(Symbol == *T::Empty)
+		if(Symbol == *T::Empty || Symbol == *T::Command)
 			return true;
 		switch (State)
 		{
@@ -856,33 +867,45 @@ namespace Potato::EBNF
 	{
 		assert(!std::holds_alternative<std::monostate>(TableWrapper));
 		assert(Operator);
-		LexicalProcessor.EndOfFile(RequireTokenIndex);
-		auto Accept = LexicalProcessor.GetAccept();
-		if (Accept)
+		if (LastSymbolTokenIndex != RequireTokenIndex)
 		{
-			auto MainCapture = Accept.GetMainCapture();
-			auto Capture = MainCapture;
-			if (Accept.GetCaptureSize() >= 1)
-				Capture = Accept[0];
-			bool Re = AddTerminalSymbol(*Accept.Mask, Capture);
-			if (Re)
+			LexicalProcessor.EndOfFile(RequireTokenIndex);
+			auto Accept = LexicalProcessor.GetAccept();
+			if (Accept)
 			{
-				if (MainCapture.End() == RequireTokenIndex)
+				auto MainCapture = Accept.GetMainCapture();
+				auto Capture = MainCapture;
+				if (Accept.GetCaptureSize() >= 1)
+					Capture = Accept[0];
+				bool Re = AddTerminalSymbol(*Accept.Mask, Capture);
+				if (Re)
 				{
-					if (TerminalEndOfFile())
+					if (MainCapture.End() == RequireTokenIndex)
 					{
-						RequireTokenIndex = RequireTokenIndex + 1;
+						if (TerminalEndOfFile())
+						{
+							RequireTokenIndex = RequireTokenIndex + 1;
+							LastSymbolTokenIndex = RequireTokenIndex;
+							LexicalProcessor.Clear();
+							return true;
+						}
+					}
+					else {
+						RequireTokenIndex = Accept.GetMainCapture().End();
 						LastSymbolTokenIndex = RequireTokenIndex;
 						LexicalProcessor.Clear();
 						return true;
 					}
 				}
-				else {
-					RequireTokenIndex = Accept.GetMainCapture().End();
-					LastSymbolTokenIndex = RequireTokenIndex;
-					LexicalProcessor.Clear();
-					return true;
-				}
+			}
+		}
+		else {
+			if (TerminalEndOfFile())
+			{
+				RequireTokenIndex = RequireTokenIndex + 1;
+				LastSymbolTokenIndex = RequireTokenIndex;
+				LexicalProcessor.Clear();
+				return true;
 			}
 		}
 		LexicalProcessor.Clear();
@@ -912,24 +935,108 @@ namespace Potato::EBNF
 	std::any EbnfProcessor::HandleReduce(SLRX::SymbolInfo Value, SLRX::ReduceProduction Desc)
 	{
 		auto Sym = Tranlate(Value.Value, Value.TokenIndex);
+		TempElement.clear();
+
+		for (auto& Ite : Desc.Elements)
+		{
+			ReduceProduction::Element Ele;
+			Ele.AppendData = std::move(Ite.AppendData);
+			static_cast<SymbolInfo&>(Ele) = Tranlate(Ite.Value.Value, Ite.Value.TokenIndex);
+			if (Ele.SymbolName.empty())
+			{
+				assert(Ite.Reduce.has_value());
+				switch (Ite.Reduce->UserMask)
+				{
+				case SmallBrace:
+					Ele.SymbolName = RoundBracketStatementRegName();
+					break;
+				case MiddleBrace:
+					Ele.SymbolName = SquareBracketStatementRegName();
+					break;
+				case BigBrace:
+					Ele.SymbolName = CurlyBracketStatementRegName();
+					break;
+				case 0:
+					assert(false);
+					break;
+				default:
+					Ele.SymbolName = OrStatementRegName();
+					break;
+				}
+			}
+			TempElement.push_back(std::move(Ele));
+		}
+
 		if (!Sym.SymbolName.empty())
 		{
-			TempElement.clear();
 			ReduceProduction Pro;
 			Pro.UserMask = Desc.UserMask;
-			for (auto& Ite : Desc.Elements)
-			{
-				ReduceProduction::Element Ele;
-				Ele.AppendData = std::move(Ite.AppendData);
-				static_cast<SymbolInfo&>(Ele) = Tranlate(Ite.Value.Value, Ite.Value.TokenIndex);
-				TempElement.push_back(std::move(Ele));
-			}
 			Pro.Elements = std::span(TempElement);
-			return Operator->HandleReduce(Sym, Pro);
+			auto Re = Operator->HandleReduce(Sym, Pro);
+			TempElement.clear();
+			return Re;
 		}
 		else {
-			// todo
-			return {};
+			BuilInStatement NewStatement;
+			NewStatement.Info = Sym;
+			NewStatement.UserMask = Desc.UserMask;
+			switch (Desc.UserMask)
+			{
+			case SmallBrace:
+				NewStatement.Info.SymbolName = RoundBracketStatementRegName();
+				NewStatement.ProductionElements.insert(
+					NewStatement.ProductionElements.end(),
+					std::move_iterator(TempElement.begin()),
+					std::move_iterator(TempElement.end())
+				);
+				break;
+			case MiddleBrace:
+				NewStatement.Info.SymbolName = SquareBracketStatementRegName();
+				NewStatement.ProductionElements.insert(
+					NewStatement.ProductionElements.end(),
+					std::move_iterator(TempElement.begin()),
+					std::move_iterator(TempElement.end())
+				);
+				break;
+			case BigBrace:
+				NewStatement.Info.SymbolName = CurlyBracketStatementRegName();
+				if (TempElement.size() >= 1)
+				{
+					auto OldElement = TempElement[0].Consume<BuilInStatement>();
+					NewStatement.ProductionElements.insert(
+						NewStatement.ProductionElements.end(),
+						std::move_iterator(OldElement.ProductionElements.begin()),
+						std::move_iterator(OldElement.ProductionElements.end())
+					);
+					NewStatement.ProductionElements.insert(
+						NewStatement.ProductionElements.end(),
+						std::move_iterator(TempElement.begin() + 1),
+						std::move_iterator(TempElement.end())
+					);
+				}
+				else {
+					NewStatement.ProductionElements.insert(
+						NewStatement.ProductionElements.end(),
+						std::move_iterator(TempElement.begin()),
+						std::move_iterator(TempElement.end())
+					);
+				}
+				break;
+			case 0:
+				assert(false);
+				break;
+			default:
+				NewStatement.Info.SymbolName = OrStatementRegName();
+				NewStatement.UserMask -= MinMask;
+				NewStatement.ProductionElements.insert(
+					NewStatement.ProductionElements.end(),
+					std::move_iterator(TempElement.begin()),
+					std::move_iterator(TempElement.end())
+				);
+				break;
+			}
+			TempElement.clear();
+			return std::move(NewStatement);
 		}
 	}
 }
@@ -978,14 +1085,8 @@ namespace Potato::EBNF::Exception
 					case BigBrace:
 						Result.push_back({ NTMap{UR"({...})", 0, 0} });
 						break;
-					case OrLeft:
-						Result.push_back({ NTMap{UR"(...|)", 0, 0} });
-						break;
-					case OrRight:
-						Result.push_back({ NTMap{UR"(|...)", 0, 0} });
-						break;
 					default:
-						assert(false);
+						Result.push_back({ NTMap{UR"(...|...)", 0, 0} });
 						break;
 					}
 				}

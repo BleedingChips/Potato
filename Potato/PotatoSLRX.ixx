@@ -229,6 +229,11 @@ export namespace Potato::SLRX
 		std::remove_reference_t<Type> Consume() { return std::move(std::any_cast<std::add_lvalue_reference_t<Type>>(AppendData)); }
 		std::any Consume() { return std::move(AppendData); }
 		template<typename Type>
+		bool IsA() const {
+			auto P = std::any_cast<Type const>(&AppendData);
+			return P != nullptr;
+		}
+		template<typename Type>
 		std::optional<Type> TryConsume() {
 			auto P = std::any_cast<Type>(&AppendData);
 			if (P != nullptr)

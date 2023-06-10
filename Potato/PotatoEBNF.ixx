@@ -105,6 +105,11 @@ export namespace Potato::EBNF
 		friend struct Ebnf;
 	};
 
+	std::wstring_view OrStatementRegName();
+	std::wstring_view RoundBracketStatementRegName();
+	std::wstring_view SquareBracketStatementRegName();
+	std::wstring_view CurlyBracketStatementRegName();
+
 	struct SymbolInfo
 	{
 		SLRX::Symbol Symbol;
@@ -129,12 +134,24 @@ export namespace Potato::EBNF
 				else
 					return std::nullopt;
 			}
+			template<typename Type>
+			bool IsA() const {
+				auto P = std::any_cast<Type const>(&AppendData);
+				return P != nullptr;
+			}
 		};
 		std::size_t UserMask;
 		std::span<Element> Elements;
 		std::size_t Size() const { return Elements.size(); }
 		Element& GetProduction(std::size_t Input) { return Elements[Input]; }
 		Element& operator[](std::size_t Index) { return GetProduction(Index); }
+	};
+
+	struct BuilInStatement
+	{
+		SymbolInfo Info;
+		std::size_t UserMask;
+		std::vector<ReduceProduction::Element> ProductionElements;
 	};
 
 	struct EbnfOperator
@@ -621,6 +638,10 @@ export namespace Potato::EBNF
 				{
 					auto Str = Ite.UserMask.Slice(EbnfStr);
 					Format::DirectScan(Str, ProdutionMask);
+				}
+				else if(Ite.StartSymbol.ElementType == EbnfBuilder::ElementTypeE::Temporary)
+				{
+					ProdutionMask = Ite.UserMask.Begin();
 				}
 				PBuilder.push_back({StartSymbol, std::move(Element), ProdutionMask });
 			}
