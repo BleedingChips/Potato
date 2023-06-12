@@ -5,6 +5,7 @@ module;
 export module Potato.Encode;
 
 export import Potato.Misc;
+export import Potato.STD;
 
 export namespace Potato::Encode
 {

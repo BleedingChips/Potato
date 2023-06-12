@@ -4,8 +4,6 @@ module;
 
 module Potato.Encode;
 
-import Potato.STD;
-
 namespace Potato::Encode
 {
 

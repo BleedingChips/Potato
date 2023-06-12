@@ -1,4 +1,4 @@
-import Potato;
+import Potato.Misc;
 
 using namespace Potato::Misc;
 

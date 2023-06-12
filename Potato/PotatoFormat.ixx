@@ -69,7 +69,7 @@ export namespace Potato::Format
 	{
 		Reg::Dfa Table(Reg::Dfa::FormatE::Match, Regex, false, 0);
 		Reg::DfaProcessor Processor;
-		Processor.SetObserverTable(&Table);
+		Processor.SetObserverTable(Table);
 		Processor.Clear();
 		return ProcessorScan(Processor, Source, OO...);
 	}
@@ -79,7 +79,7 @@ export namespace Potato::Format
 	{
 		Reg::Dfa Table(Reg::Dfa::FormatE::HeadMatch, Regex, false, 0);
 		Reg::DfaProcessor Processor;
-		Processor.SetObserverTable(&Table);
+		Processor.SetObserverTable(Table);
 		Processor.Clear();
 		return ProcessorScan(Processor, Source, OO...);
 	}
