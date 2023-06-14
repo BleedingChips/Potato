@@ -21,13 +21,17 @@ export namespace Potato::Task
 			
 		};
 
-		TaskSystem(std::size_t ThreadCount = std::thread::hardware_concurrency() - 1);
-		~TaskSystem();
+		using Ptr = Potato::Misc::IntrusivePtr<TaskSystem>;
+
+		static Ptr Create(std::size_t ThreadCount = std::thread::hardware_concurrency() - 1);
 
 		void AddRef();
 		void SubRef();
 
 	protected:
+
+		TaskSystem(std::size_t ThreadCount = std::thread::hardware_concurrency() - 1);
+		~TaskSystem();
 
 		void Executor();
 

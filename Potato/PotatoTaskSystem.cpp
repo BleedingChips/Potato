@@ -12,6 +12,26 @@ module Potato.TaskSystem;
 namespace Potato::Task
 {
 
+	TaskSystem::Ptr TaskSystem::Create(std::size_t ThreadCount)
+	{
+		return new TaskSystem{ ThreadCount };
+	}
+
+	void TaskSystem::AddRef()
+	{
+		Ref.AddRef();
+	}
+
+	void TaskSystem::SubRef()
+	{
+		if (!Ref.AddRef())
+		{
+			delete this;
+		}
+	}
+
+
+
 	TaskSystem::TaskSystem(std::size_t ThreadCount)
 	{
 		ThreadCount = std::max(std::size_t{1}, ThreadCount);
