@@ -1,6 +1,8 @@
 export module Potato.TaskSystem;
+
 export import Potato.STD;
 export import Potato.Misc;
+export import Potato.SmartPtr;
 
 export namespace Potato::Task
 {

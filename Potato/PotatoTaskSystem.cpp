@@ -24,7 +24,7 @@ namespace Potato::Task
 
 	void TaskSystem::SubRef()
 	{
-		if (!Ref.AddRef())
+		if (!Ref.SubRef())
 		{
 			delete this;
 		}
