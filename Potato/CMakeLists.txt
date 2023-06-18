@@ -29,7 +29,6 @@ target_sources(
 		"PotatoEncode.ixx"
 		"PotatoEBNF.ixx"
 		"PotatoDocument.ixx"
-		"PotatoAllocator.ixx"
 		"PotatoTaskSystem.ixx"
 )
 

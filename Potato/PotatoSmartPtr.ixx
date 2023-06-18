@@ -38,8 +38,8 @@ export namespace Potato::Misc
 		constexpr SmartPtr& operator=(SmartPtr IPtr) { Reset(); Ptr = IPtr.Ptr; IPtr.Ptr = nullptr; return *this; };
 		constexpr std::strong_ordering operator<=>(SmartPtr const& IPtr) const { return Ptr <=> IPtr.Ptr; }
 
-		decltype(auto) GetPointer() { return Ptr; }
-		decltype(auto) GetPointer() const { return Ptr; }
+		decltype(auto) GetPointer() requires(!TMP::Exist<WrapperT, ForbidPtrRole>::Value) { return Ptr; }
+		decltype(auto) GetPointer() const requires(!TMP::Exist<WrapperT, ForbidPtrRole>::Value) { return Ptr; }
 
 		constexpr ~SmartPtr() { Reset(); }
 
@@ -62,10 +62,13 @@ export namespace Potato::Misc
 			}
 			return false;
 		}
+
 		constexpr decltype(auto) operator->() requires(!TMP::Exist<WrapperT, ForbidPtrRole>::Value) { return Ptr; }
 		constexpr decltype(auto) operator->() const requires(!TMP::Exist<WrapperT, ForbidPtrRole>::Value) { return Ptr; }
 		constexpr decltype(auto) operator*() requires(!TMP::Exist<WrapperT, ForbidPtrRole>::Value)  { return *Ptr; }
 		constexpr decltype(auto) operator*() const requires(!TMP::Exist<WrapperT, ForbidPtrRole>::Value) { return *Ptr; }
+		constexpr decltype(auto) Switch() requires(WrapperT::SwitchT) { return SmartPtr<PtrT, typename WrapperT::SwitchT>{*this}; }
+		constexpr decltype(auto) Switch() const requires(WrapperT::SwitchT) { return SmartPtr<PtrT, typename WrapperT::SwitchT>{*this}; }
 
 	protected:
 

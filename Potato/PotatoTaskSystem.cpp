@@ -1,20 +1,15 @@
 module;
 
-#ifdef _WIN32
-
-#endif
-
-
 module Potato.TaskSystem;
-
-
 
 namespace Potato::Task
 {
 
-	TaskSystem::Ptr TaskSystem::Create(std::size_t ThreadCount)
+	TaskSystemPtr TaskSystem::Create(std::size_t ThreadCount, Allocator<TaskSystem> Allo)
 	{
-		return new TaskSystem{ ThreadCount };
+		TaskSystem* APtr = Allo.allocate_object<TaskSystem>(1);
+		new (APtr) TaskSystem{ ThreadCount, Allo };
+		return TaskSystemPtr{ APtr };
 	}
 
 	void TaskSystem::AddRef()
@@ -26,13 +21,14 @@ namespace Potato::Task
 	{
 		if (!Ref.SubRef())
 		{
-			delete this;
+			auto TempAllo = SelfAllocator;
+			this->~TaskSystem();
+			TempAllo.deallocate_object<TaskSystem>(this, 1);
 		}
 	}
 
-
-
-	TaskSystem::TaskSystem(std::size_t ThreadCount)
+	TaskSystem::TaskSystem(std::size_t ThreadCount, Allocator<TaskSystem> InputAllocator)
+		: Available(true), SelfAllocator(InputAllocator), Thread(InputAllocator)
 	{
 		ThreadCount = std::max(std::size_t{1}, ThreadCount);
 		Thread.reserve(ThreadCount);
