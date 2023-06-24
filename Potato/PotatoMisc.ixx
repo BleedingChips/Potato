@@ -68,6 +68,7 @@ export namespace Potato::Misc
 		bool TryAndRef() const noexcept;
 		void AddRef() const noexcept;
 		bool SubRef() const noexcept;
+		bool TryAddRefNotFromZero() const noexcept;
 		size_t Count() const noexcept { return ref.load(std::memory_order_relaxed); }
 		AtomicRefCount() noexcept : ref(0) {}
 		AtomicRefCount(AtomicRefCount const&) = delete;

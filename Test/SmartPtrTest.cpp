@@ -61,6 +61,89 @@ struct Type3
 	}
 };
 
+struct Type4
+{
+	int32_t& RefValue;
+
+	Type4(int32_t& Ref) : RefValue(Ref) { RefValue = 1; }
+	~Type4() { RefValue = 2; }
+};
+
+struct SWRef
+{
+	mutable Potato::Misc::AtomicRefCount SRef;
+	mutable Potato::Misc::AtomicRefCount WRef;
+};
+
+struct WeakWrapper;
+
+struct StrongWrapper
+{
+	SWRef* Ref = nullptr;
+	StrongWrapper(Type4 const* T) : Ref(new SWRef{}) { }
+	StrongWrapper() {}
+	void AddRef(Type4 const* T)
+	{
+		Ref->WRef.AddRef();
+		Ref->SRef.AddRef();
+	}
+	void SubRef(Type4 const* T)
+	{
+
+		if (Ref->SRef.SubRef())
+		{
+			delete T;
+		}
+
+		if (Ref->WRef.SubRef())
+		{
+			delete Ref;
+		}
+		Ref = nullptr;
+	}
+	StrongWrapper(Type4 const* T, WeakWrapper const& Wra);
+	using DowngradeT = WeakWrapper;
+};
+
+struct WeakWrapper
+{
+	SWRef* Ref = nullptr;
+	WeakWrapper(Type4 const* T) = delete;
+	WeakWrapper() {}
+	WeakWrapper(Type4 const* T, StrongWrapper const& Wra);
+	
+	void AddRef(Type4 const* T)
+	{
+		Ref->WRef.AddRef();
+	}
+
+	void SubRef(Type4 const* T)
+	{
+		if (Ref->WRef.SubRef())
+		{
+			delete Ref;
+		}
+		Ref = nullptr;
+	}
+
+	bool IsAvailable(Type4 const* T)
+	{
+		return Ref != nullptr && Ref->SRef.
+	}
+	using UpgradeT = StrongWrapper;
+	using ForbidPtrT = void;
+};
+
+StrongWrapper::StrongWrapper(Type4 const* T, WeakWrapper const& Wra)
+{
+	Ref = Wra.Ref;
+}
+
+WeakWrapper::WeakWrapper(Type4 const* T, StrongWrapper const& Wra)
+{
+	Ref = Wra.Ref;
+}
+
 int main()
 {
 	GobalIndex = 10086;
@@ -83,6 +166,27 @@ int main()
 
 	DefaultRef K;
 
+	int32_t State = 0;
+
+	SmartPtr<Type4, StrongWrapper> Ptr{new Type4{ State }};
+
+	auto W = Ptr.Downgrade();
+
+	auto Kw = W.Upgrade();
+
+	Ptr.Reset();
+
+	Kw.Reset();
+
+	W.Reset();
+
+	auto K = W.Upgrade();
+
+	
+
+	volatile int i = 0;
+
+	/*
 	{
 		StrongPtr<Type3, DefaultRef> Ptr{ new Type3, &K };
 
@@ -99,6 +203,7 @@ int main()
 
 		static_assert(!std::is_constructible_v<UniquePtr<Type23>, UniquePtr<Type23> const&>);
 	}
+	*/
 
 	return 0;
 }

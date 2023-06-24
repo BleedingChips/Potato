@@ -4,28 +4,17 @@ module;
 
 export module Potato.TaskSystem;
 
-
 export import Potato.STD;
 export import Potato.Misc;
 export import Potato.SmartPtr;
 
+
 namespace Potato::Task
 {
-
+	
 	export struct TaskSystem;
-	struct Task;
-
-	struct TaskSystemPointerWrapper
-	{
-		TaskSystemPointerWrapper(TaskSystemPointerWrapper const&) = default;
-		TaskSystemPointerWrapper(TaskSystemPointerWrapper&&) = default;
-		TaskSystemPointerWrapper() = default;
-
-		inline static void AddRef(TaskSystem* t);
-		inline static void SubRef(TaskSystem* t);
-	};
-
-	export using TaskSystemPtr = Potato::Misc::IntrusivePtr<TaskSystem, TaskSystemPointerWrapper>;
+	export struct Task;
+	export struct TaskGraphic;
 
 	export enum class TaskPriority
 	{
@@ -52,32 +41,28 @@ namespace Potato::Task
 		TaskGuessConsume Consume = TaskGuessConsume::Normal;
 	};
 
-
 	struct TaskInterfaceWeakPointerWrapper;
 
 	struct TaskInterfaceStrongPointerWrapper;
 
-	struct TaskInterface
+	export struct TaskInterface
 	{
 
 		TaskProperty GetProperty() const { return Property;  }
-
-		std::wstring_view GetTaskName() const { return TaskName; }
-		TaskPriority GetTaskPriority() const { return Priority; }
-		TaskGuessConsume GetTaskGuessConsume() const { return Consume; }
 
 	protected:
 
 		virtual void ReleaseTask() const = 0;
 		virtual void ReleaseSelf() const = 0;
 
-		TaskInterface(TaskProperty Pro) : Property(Pro) {}
+		TaskInterface(TaskProperty Pro, TaskSystemPtr ) : Property(Pro) {}
 
 	private:
 
 		virtual bool IsReady() const { return true; }
 		virtual bool IsMulityTask() const { return false; }
 		virtual bool IsReCommit() const { return false; }
+		virtual void Execute(TaskSystem& System) const = 0;
 
 		void AddSRef() const;
 		void AddWRef() const;
@@ -103,29 +88,20 @@ namespace Potato::Task
 		inline static void SubRef(TaskInterface const* Ptr) { assert(Ptr != nullptr); Ptr->SubSRef(); }
 	};
 
-	struct TaskInterfaceWeakPointerWrapper
-	{
-		using SwitchT = TaskInterfaceStrongPointerWrapper;
-		TaskInterfaceWeakPointerWrapper(TaskInterfaceStrongPointerWrapper const&) {};
-		using ForbidPtrT = void;
-
-		inline static void AddRef(TaskInterface const* Ptr) { assert(Ptr != nullptr); Ptr->AddWRef(); }
-		inline static void SubRef(TaskInterface const* Ptr) { assert(Ptr != nullptr); Ptr->SubWRef(); }
-	};
-
 	export using TaskPtr = Misc::SmartPtr<TaskInterface, TaskInterfaceStrongPointerWrapper>;
 
 	export struct TaskSystem
 	{
 
 		static TaskSystemPtr Create(std::size_t ThreadCount = std::thread::hardware_concurrency() - 1, Allocator<TaskSystem> Allo= Allocator<TaskSystem>{DefaultMemoryResource()});
+		
 		template<typename FuncT>
-		TaskPtr CreateLambdaTask(TaskProperty Property, FuncT Func, MemoryResource* Resource = DefaultMemoryResource());
-
-	protected:
+		TaskPtr CreateLambdaTask(TaskProperty Property, FuncT&& Func, MemoryResource* Resource = DefaultMemoryResource());
 
 		void AddRef();
 		void SubRef();
+
+	protected:
 
 		~TaskSystem();
 		TaskSystem(std::size_t ThreadCount, Allocator<TaskSystem> RequireAllocator);
@@ -152,20 +128,47 @@ namespace Potato::Task
 		t->SubRef();
 	}
 
-	template<typename T> 
-	struct NormalTaskImplement : public TaskInterface, protected T
+	template<typename T>
+	//requires(std::is_onvoideable_v<T, TaskSystem&>)
+	struct NormalTaskImplement : public TaskInterface
 	{
 		template<typename ...AT>
-		TaskImplement(TaskProperty Property, AllocatorT<NormalTaskImplement<T>> Allo, AT ...Ats)
-			: TaskInterface(Property), T(std::forward<AT>(Ats)...), SelfAllocator(Allo)
-		{}
+		NormalTaskImplement(TaskProperty Property, Allocator<NormalTaskImplement<T>> Allo, AT&& ...Ats)
+			: TaskInterface(Property), SelfAllocator(Allo)
+		{
+			CObject.emplace(std::forward<AT>(Ats)...);
+		}
 
-		AllocatorT<NormalTaskImplement<T>> SelfAllocator;
+		virtual void ReleaseTask() const override {
+			CObject.reset();
+		}
+
+		virtual void ReleaseSelf() const override {
+			auto TAllo = SelfAllocator;
+			this->~NormalTaskImplement();
+			TAllo.deallocate_object(this, 1);
+		}
+
+		virtual void Execute(TaskSystem& System) const override {
+			assert(CObject.has_value());
+			(*CObject)(System);
+		}
+
+		Allocator<NormalTaskImplement<T>> SelfAllocator;
+		std::optional<T> CObject;
 	};
 
 	template<typename FuncT>
-	TaskPtr TaskSystem::CreateLambdaTask(TaskProperty Property, FuncT Func, MemoryResource* Resource)
+	TaskPtr TaskSystem::CreateLambdaTask(TaskProperty Property, FuncT&& Func, MemoryResource* Resource)
 	{
+		using PureType = std::remove_reference_t<FuncT>;
 		
+		Allocator<NormalTaskImplement<PureType>> Allo{Resource};
+		auto Ptr = Allo.allocate_object(1);
+		new (Ptr) NormalTaskImplement<PureType>{
+			Property, Allo, std::forward<FuncT>(Func)
+		};
+		TaskPtr TPtr{Ptr};
+		return TPtr;
 	}
 }

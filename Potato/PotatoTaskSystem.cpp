@@ -1,6 +1,10 @@
 module;
 
+#if __INTELLISENSE__
+#include "PotatoTaskSystem.ixx"
+#else
 module Potato.TaskSystem;
+#endif
 
 namespace Potato::Task
 {
