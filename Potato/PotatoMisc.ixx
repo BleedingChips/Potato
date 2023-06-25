@@ -64,11 +64,9 @@ export namespace Potato::Misc
 
 	struct AtomicRefCount
 	{
-		void WaitTouch(size_t targe_value) const noexcept;
-		bool TryAndRef() const noexcept;
+		bool TryAddRefNotFromZero() const noexcept;
 		void AddRef() const noexcept;
 		bool SubRef() const noexcept;
-		bool TryAddRefNotFromZero() const noexcept;
 		size_t Count() const noexcept { return ref.load(std::memory_order_relaxed); }
 		AtomicRefCount() noexcept : ref(0) {}
 		AtomicRefCount(AtomicRefCount const&) = delete;
@@ -282,28 +280,19 @@ namespace Potato::Misc
 
 	AtomicRefCount::~AtomicRefCount() { assert(ref.load(std::memory_order_relaxed) == 0); }
 
-	bool AtomicRefCount::TryAndRef() const noexcept
+	bool AtomicRefCount::TryAddRefNotFromZero() const noexcept
 	{
-		auto oldValue = ref.load(std::memory_order_relaxed);
-		assert(static_cast<std::ptrdiff_t>(oldValue) >= 0);
-		do
-		{
-			if (oldValue == 0)
-			{
-				return false;
-			}
-		} while (!ref.compare_exchange_strong(oldValue, oldValue + 1, std::memory_order_relaxed, std::memory_order_relaxed));
-		return true;
-	}
+		std::size_t Except = 1;
+		std::size_t Desired = 2;
 
-	void AtomicRefCount::WaitTouch(size_t targe_value) const noexcept
-	{
-		while (auto oldValue = ref.load(std::memory_order_relaxed))
+		while (!ref.compare_exchange_strong(Except, Desired, std::memory_order_relaxed, std::memory_order_relaxed))
 		{
-			assert(static_cast<std::ptrdiff_t>(oldValue) >= 0);
-			if (oldValue == targe_value)
-				break;
+			if(Except == 0)
+				return false;
+			else
+				Desired = Except + 1;
 		}
+		return true;
 	}
 }
 

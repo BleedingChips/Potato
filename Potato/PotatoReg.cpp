@@ -2165,11 +2165,12 @@ namespace Potato::Reg
 		CacheIndex.clear();
 		TempResult.clear();
 		Record.Clear();
-		if (std::holds_alternative<Misc::ObserverPtr<Dfa const>>(TableWrapper))
+		if (std::holds_alternative<std::reference_wrapper<Dfa const>>(TableWrapper))
 		{
-			CurNodeIndex = std::get<Misc::ObserverPtr<Dfa const>>(TableWrapper)->GetStartupNodeIndex();
-			CacheIndex.resize(std::get<Misc::ObserverPtr<Dfa const>>(TableWrapper)->GetCacheCounterCount(), 0);
-			TempResult.reserve(std::get<Misc::ObserverPtr<Dfa const>>(TableWrapper)->GetTempResultCount());
+			auto& Ref = std::get<std::reference_wrapper<Dfa const>>(TableWrapper).get();
+			CurNodeIndex = Ref.GetStartupNodeIndex();
+			CacheIndex.resize(Ref.GetCacheCounterCount(), 0);
+			TempResult.reserve(Ref.GetTempResultCount());
 		}
 		else {
 			CurNodeIndex = std::get<DfaBinaryTableWrapper>(TableWrapper).GetStartupNodeIndex();
@@ -2181,9 +2182,9 @@ namespace Potato::Reg
 	auto DfaProcessor::Consume(char32_t Token, std::size_t TokenIndex) -> bool
 	{
 		assert(!std::holds_alternative<std::monostate>(TableWrapper));
-		if (std::holds_alternative<Misc::ObserverPtr<Dfa const>>(TableWrapper))
+		if (std::holds_alternative<std::reference_wrapper<Dfa const>>(TableWrapper))
 		{
-			return std::get<Misc::ObserverPtr<Dfa const>>(TableWrapper)->Consume(*this, Token, TokenIndex);
+			return std::get<std::reference_wrapper<Dfa const>>(TableWrapper).get().Consume(*this, Token, TokenIndex);
 		}
 		else {
 			return std::get<DfaBinaryTableWrapper>(TableWrapper).Consume(*this, Token, TokenIndex);
@@ -2192,9 +2193,9 @@ namespace Potato::Reg
 
 	bool DfaProcessor::HasAccept() const { 
 		assert(!std::holds_alternative<std::monostate>(TableWrapper));
-		if (std::holds_alternative<Misc::ObserverPtr<Dfa const>>(TableWrapper))
+		if (std::holds_alternative<std::reference_wrapper<Dfa const>>(TableWrapper))
 		{
-			return std::get<Misc::ObserverPtr<Dfa const>>(TableWrapper)->HasAccept(*this);
+			return std::get<std::reference_wrapper<Dfa const>>(TableWrapper).get().HasAccept(*this);
 		}
 		else {
 			return std::get<DfaBinaryTableWrapper>(TableWrapper).HasAccept(*this);
@@ -2204,9 +2205,9 @@ namespace Potato::Reg
 	ProcessorAcceptRef DfaProcessor::GetAccept() const
 	{
 		assert(!std::holds_alternative<std::monostate>(TableWrapper));
-		if (std::holds_alternative<Misc::ObserverPtr<Dfa const>>(TableWrapper))
+		if (std::holds_alternative<std::reference_wrapper<Dfa const>>(TableWrapper))
 		{
-			return std::get<Misc::ObserverPtr<Dfa const>>(TableWrapper)->GetAccept(*this);
+			return std::get<std::reference_wrapper<Dfa const>>(TableWrapper).get().GetAccept(*this);
 		}
 		else {
 			return std::get<DfaBinaryTableWrapper>(TableWrapper).GetAccept(*this);

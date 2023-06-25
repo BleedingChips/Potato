@@ -494,7 +494,7 @@ namespace Potato::EBNF
 		: RequireTokenIndex(StartupTokenIndex), LastSymbolToken(StartupTokenIndex)
 	{
 		Processor.SetObserverTable(GetRegTable());
-		LRXProcessor.SetObserverTable(EbnfStep1SLRX(), this);
+		LRXProcessor.SetObserverTable(EbnfStep1SLRX(), Misc::ObserverPtr<SLRX::ProcessorOperator>{this});
 	}
 
 	bool EbnfBuilder::Consume(char32_t InputValue, std::size_t NextTokenIndex)

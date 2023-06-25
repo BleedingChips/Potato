@@ -1345,7 +1345,7 @@ namespace Potato::SLRX
 
 	void LRXProcessor::SetObserverTable(LRX const& Table, Misc::ObserverPtr<ProcessorOperator> Ope) {
 		assert(Ope);
-		TableWrapper = &Table;
+		TableWrapper = std::reference_wrapper<LRX const>{Table};
 		Operator = std::move(Ope);
 		Clear();
 	}
@@ -1366,12 +1366,10 @@ namespace Potato::SLRX
 
 		std::optional<TableConsumeResult> Result;
 		
-		if(std::holds_alternative<Misc::ObserverPtr<LRX const>>(TableWrapper))
-			Result = std::get<Misc::ObserverPtr<LRX const>>(TableWrapper)->TableConsume(Value, *this, *Operator);
+		if(std::holds_alternative<std::reference_wrapper<LRX const>>(TableWrapper))
+			Result = std::get<std::reference_wrapper<LRX const>>(TableWrapper).get().TableConsume(Value, *this, *Operator);
 		else
 			Result = std::get<LRXBinaryTableWrapper>(TableWrapper).TableConsume(Value, *this, *Operator);
-		
-		
 
 		if (Result.has_value())
 		{
@@ -1456,8 +1454,8 @@ namespace Potato::SLRX
 				}
 				if (!CacheSymbols.empty())
 				{
-					if (std::holds_alternative<Misc::ObserverPtr<LRX const>>(TableWrapper))
-						Result = std::get<Misc::ObserverPtr<LRX const>>(TableWrapper)->TableConsume(CacheSymbols[SymbolsIndex].Value.Value, *this, *Operator);
+					if (std::holds_alternative<std::reference_wrapper<LRX const>>(TableWrapper))
+						Result = std::get<std::reference_wrapper<LRX const>>(TableWrapper).get().TableConsume(CacheSymbols[SymbolsIndex].Value.Value, *this, *Operator);
 					else
 						Result = std::get<LRXBinaryTableWrapper>(TableWrapper).TableConsume(CacheSymbols[SymbolsIndex].Value.Value, *this, *Operator);
 					++SymbolsIndex;
@@ -1481,8 +1479,8 @@ namespace Potato::SLRX
 		CacheSymbols.clear();
 		States.clear();
 		std::size_t StartupIndex = 0;
-		if (std::holds_alternative<Misc::ObserverPtr<LRX const>>(TableWrapper))
-			StartupIndex = std::get<Misc::ObserverPtr<LRX const>>(TableWrapper)->StartupNodeIndex();
+		if (std::holds_alternative<std::reference_wrapper<LRX const>>(TableWrapper))
+			StartupIndex = std::get<std::reference_wrapper<LRX const>>(TableWrapper).get().StartupNodeIndex();
 		else
 			StartupIndex = std::get<LRXBinaryTableWrapper>(TableWrapper).StartupNodeIndex();
 		CurrentTopState = StartupIndex;
@@ -1517,8 +1515,8 @@ namespace Potato::SLRX
 			while (true)
 			{
 				std::optional<TableReduceResult> Result;
-				if (std::holds_alternative<Misc::ObserverPtr<LRX const>>(TableWrapper))
-					Result = std::get<Misc::ObserverPtr<LRX const>>(TableWrapper)->TableReduce(*this);
+				if (std::holds_alternative<std::reference_wrapper<LRX const>>(TableWrapper))
+					Result = std::get<std::reference_wrapper<LRX const>>(TableWrapper).get().TableReduce(*this);
 				else
 					Result = std::get<LRXBinaryTableWrapper>(TableWrapper).TableReduce(*this);
 				if (Result.has_value())

@@ -484,9 +484,10 @@ export namespace Potato::SLRX
 
 		std::variant<
 			std::monostate,
-			Misc::ObserverPtr<LRX const>,
+			std::reference_wrapper<LRX const>,
 			LRXBinaryTableWrapper
 		> TableWrapper;
+
 		Misc::ObserverPtr<ProcessorOperator> Operator;
 
 		void TryReduce();

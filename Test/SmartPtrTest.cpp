@@ -117,6 +117,12 @@ struct WeakWrapper
 		Ref->WRef.AddRef();
 	}
 
+	bool EnableDowngrade(Type4 const* Ptr)
+	{
+		//return
+		return ture;
+	}
+
 	void SubRef(Type4 const* T)
 	{
 		if (Ref->WRef.SubRef())
@@ -126,10 +132,6 @@ struct WeakWrapper
 		Ref = nullptr;
 	}
 
-	bool IsAvailable(Type4 const* T)
-	{
-		return Ref != nullptr && Ref->SRef.
-	}
 	using UpgradeT = StrongWrapper;
 	using ForbidPtrT = void;
 };
@@ -169,6 +171,8 @@ int main()
 	int32_t State = 0;
 
 	SmartPtr<Type4, StrongWrapper> Ptr{new Type4{ State }};
+
+	SmartPtr<Type4, WeakWrapper> Ptr2{new Type4{ State }};
 
 	auto W = Ptr.Downgrade();
 

@@ -510,14 +510,14 @@ export namespace Potato::Reg
 		void Clear();
 		bool HasAccept() const;
 		ProcessorAcceptRef GetAccept() const;
-		void SetObserverTable(Dfa const& Table) { TableWrapper = &Table; Clear(); }
+		void SetObserverTable(Dfa const& Table) { TableWrapper = std::reference_wrapper<Dfa const>{Table}; Clear(); }
 		void SetObserverTable(DfaBinaryTableWrapper Table) { TableWrapper = Table; Clear(); }
 
 	protected:
 		
 		std::variant<
 			std::monostate,
-			Misc::ObserverPtr<Dfa const>,
+			std::reference_wrapper<Dfa const>,
 			DfaBinaryTableWrapper
 		> TableWrapper;
 
