@@ -1,3 +1,5 @@
+#include <cassert>
+
 import Potato.SmartPtr;
 
 int GobalIndex = 0;
@@ -37,8 +39,18 @@ struct Type2
 
 struct Type2Wrapper
 {
-	static void AddRef(Type2* Type) { Type->AddRef2(); }
-	static void SubRef(Type2* Type) { if(Type->SubRef2()) { delete Type; } }
+	Type2Wrapper(Type2* IType) {
+		if(IType != nullptr)
+			IType->AddRef2();
+	}
+	Type2Wrapper(Type2* IType, Type2Wrapper const&) : Type2Wrapper(IType) {}
+	void Reset(Type2* IType) {
+		if (IType != nullptr)
+		{
+			if(IType->SubRef2())
+				delete IType;
+		}
+	}
 };
 
 struct DefaultRef
@@ -80,79 +92,139 @@ struct WeakWrapper;
 struct StrongWrapper
 {
 	SWRef* Ref = nullptr;
-	StrongWrapper(Type4 const* T) : Ref(new SWRef{}) { }
+	StrongWrapper(Type4 const* T){
+		if (T != nullptr)
+		{
+			Ref = new SWRef{};
+			Ref->SRef.AddRef();
+			Ref->WRef.AddRef();
+		}
+	}
 	StrongWrapper() {}
-	void AddRef(Type4 const* T)
-	{
-		Ref->WRef.AddRef();
-		Ref->SRef.AddRef();
-	}
-	void SubRef(Type4 const* T)
-	{
 
-		if (Ref->SRef.SubRef())
-		{
-			delete T;
-		}
+	StrongWrapper(Type4*& IP, WeakWrapper const& Wra);
 
-		if (Ref->WRef.SubRef())
+	void Reset(Type4* T)
+	{
+		if (T != nullptr && Ref != nullptr)
 		{
-			delete Ref;
+			if (Ref->SRef.SubRef())
+			{
+				delete T;
+			}
+
+			if (Ref->WRef.SubRef())
+			{
+				delete Ref;
+			}
+
+			Ref = nullptr;
 		}
-		Ref = nullptr;
 	}
-	StrongWrapper(Type4 const* T, WeakWrapper const& Wra);
-	using DowngradeT = WeakWrapper;
+
+	StrongWrapper(Type4* T, StrongWrapper const& Wra) {
+		if (T != nullptr)
+		{
+			Ref = Wra.Ref;
+			if (Ref != nullptr)
+			{
+				Ref->SRef.AddRef();
+				Ref->WRef.AddRef();
+			}
+		}
+	}
+
+	Potato::Misc::SmartPtr<Type4, WeakWrapper> Downgrade(Type4* IPtr);
+
+	using RequireExplicitPointConstructT = void;
 };
 
 struct WeakWrapper
 {
 	SWRef* Ref = nullptr;
-	WeakWrapper(Type4 const* T) = delete;
+
+
 	WeakWrapper() {}
-	WeakWrapper(Type4 const* T, StrongWrapper const& Wra);
-	
-	void AddRef(Type4 const* T)
-	{
-		Ref->WRef.AddRef();
-	}
-
-	bool EnableDowngrade(Type4 const* Ptr)
-	{
-		//return
-		return ture;
-	}
-
-	void SubRef(Type4 const* T)
-	{
-		if (Ref->WRef.SubRef())
+	WeakWrapper(Type4* IP, WeakWrapper const& Wra) {
+		if (IP != nullptr)
 		{
-			delete Ref;
+			Ref = Wra.Ref;
+			Ref->WRef.AddRef();
 		}
-		Ref = nullptr;
 	}
 
-	using UpgradeT = StrongWrapper;
+	void Reset(Type4* T)
+	{
+		if (T != nullptr && Ref != nullptr)
+		{
+			if (Ref->WRef.SubRef())
+			{
+				delete Ref;
+			}
+
+			Ref = nullptr;
+		}
+	}
+
+	WeakWrapper(Type4* T, StrongWrapper const& Wra) {
+		if (T != nullptr)
+		{
+			Ref = Wra.Ref;
+			if (Ref != nullptr)
+			{
+				Ref->WRef.AddRef();
+			}
+		}
+	}
+
+	SmartPtr<Type4, StrongWrapper> Upgrade(Type4* IPtr) {
+		if (IPtr != nullptr && Ref != nullptr)
+			return SmartPtr<Type4, StrongWrapper>(IPtr, *this);
+		return {};
+	}
+
+	using RequireExplicitPointConstructT = void;
 	using ForbidPtrT = void;
 };
 
-StrongWrapper::StrongWrapper(Type4 const* T, WeakWrapper const& Wra)
-{
-	Ref = Wra.Ref;
+StrongWrapper::StrongWrapper(Type4*& IP, WeakWrapper const& Wra) {
+	auto Temp = Wra.Ref;
+	if (Temp != nullptr)
+	{
+		assert(IP != nullptr);
+		if (Temp->SRef.TryAddRefNotFromZero())
+		{
+			Temp->WRef.AddRef();
+			Ref = Temp;
+		}
+		else {
+			IP = nullptr;
+		}
+	}
 }
 
-WeakWrapper::WeakWrapper(Type4 const* T, StrongWrapper const& Wra)
-{
-	Ref = Wra.Ref;
+Potato::Misc::SmartPtr<Type4, WeakWrapper> StrongWrapper::Downgrade(Type4* IPtr) {
+	if (IPtr != nullptr && Ref != nullptr)
+		return Misc::SmartPtr<Type4, WeakWrapper>{IPtr, static_cast<StrongWrapper const&>(*this)};
+	return {};
 }
+
+struct K
+{
+	K(int32_t I) {}
+};
+
+
 
 int main()
 {
+
+	static_assert(std::is_constructible_v<K, int32_t&>, "Fuck");
+
 	GobalIndex = 10086;
 
-	IntrusivePtr<Type1> P1{ new Type1 };
 
-	//IntrusivePtr<Type1> P2{(Type1*)(nullptr)};
+	IntrusivePtr<Type1> P1{ new Type1 };
 
 	P1.Reset();
 
@@ -172,8 +244,6 @@ int main()
 
 	SmartPtr<Type4, StrongWrapper> Ptr{new Type4{ State }};
 
-	SmartPtr<Type4, WeakWrapper> Ptr2{new Type4{ State }};
-
 	auto W = Ptr.Downgrade();
 
 	auto Kw = W.Upgrade();
@@ -182,9 +252,11 @@ int main()
 
 	Kw.Reset();
 
-	W.Reset();
+	
 
-	auto K = W.Upgrade();
+	auto Kc = W.Upgrade();
+
+	W.Reset();
 
 	
 

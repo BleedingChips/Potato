@@ -26,11 +26,6 @@ namespace Potato::Misc
 export namespace Potato::Misc
 {
 
-	struct SmartPtrIgnoreAddReference
-	{
-
-	};
-
 	template<typename PtrT, typename WrapperT>
 	struct SmartPtr : public WrapperT
 	{
@@ -40,35 +35,35 @@ export namespace Potato::Misc
 		constexpr SmartPtr() requires(std::is_constructible_v<WrapperT>) : Ptr(nullptr), WrapperT() {}
 		
 		template<typename ...AT>
-		SmartPtr(PtrT* IPtr, AT&& ...at) requires(!TMP::Exist<WrapperT, WrapperRequireExplicitPointConstructPtrRole> ::Value && std::is_constructible_v<WrapperT, PtrT*, AT...>)
+		SmartPtr(PtrT* IPtr, AT&& ...at) requires(!TMP::Exist<WrapperT, WrapperRequireExplicitPointConstructPtrRole> ::Value && std::is_constructible_v<WrapperT, PtrT*&, AT...>)
 			: Ptr(nullptr), WrapperT(IPtr, std::forward<AT>(at)...)
 		{
 			Ptr = IPtr;
 		}
 
 		template<typename ...AT>
-		explicit SmartPtr(PtrT* IPtr, AT&& ...at) requires(TMP::Exist<WrapperT, WrapperRequireExplicitPointConstructPtrRole> ::Value && std::is_constructible_v<WrapperT, PtrT*, AT...>)
+		explicit SmartPtr(PtrT* IPtr, AT&& ...at) requires(TMP::Exist<WrapperT, WrapperRequireExplicitPointConstructPtrRole> ::Value && std::is_constructible_v<WrapperT, PtrT*&, AT...>)
 			: Ptr(nullptr), WrapperT(IPtr, std::forward<AT>(at)...)
 		{
 			Ptr = IPtr;
 		}
 
 		template<typename PtrT2, typename ...AT>
-		constexpr SmartPtr(PtrT2* IPtr, AT&& ...at) requires(!TMP::Exist<WrapperT, WrapperRequireExplicitPointConstructPtrRole> ::Value && std::is_constructible_v<PtrT*, PtrT2*>&& std::is_constructible_v<WrapperT, PtrT*, AT...>)
+		constexpr SmartPtr(PtrT2* IPtr, AT&& ...at) requires(!std::is_same_v<PtrT2, PtrT> && !TMP::Exist<WrapperT, WrapperRequireExplicitPointConstructPtrRole> ::Value && std::is_constructible_v<PtrT*, PtrT2*>&& std::is_constructible_v<WrapperT, PtrT*&, AT...>)
 			: SmartPtr(static_cast<PtrT*>(IPtr), std::forward<AT>(at)...)
 		{
 		}
 
 		template<typename PtrT2, typename ...AT>
-		explicit constexpr SmartPtr(PtrT2* IPtr, AT&& ...at) requires(TMP::Exist<WrapperT, WrapperRequireExplicitPointConstructPtrRole> ::Value && std::is_constructible_v<PtrT*, PtrT2*> && std::is_constructible_v<WrapperT, PtrT*, AT...>)
+		explicit constexpr SmartPtr(PtrT2* IPtr, AT&& ...at) requires(!std::is_same_v<PtrT2, PtrT> &&  TMP::Exist<WrapperT, WrapperRequireExplicitPointConstructPtrRole> ::Value && std::is_constructible_v<PtrT*, PtrT2*> && std::is_constructible_v<WrapperT, PtrT*&, AT...>)
 			: SmartPtr(static_cast<PtrT*>(IPtr), std::forward<AT>(at)...)
 		{
 		}
 
-		constexpr SmartPtr(SmartPtr const& IPtr) requires(std::is_constructible_v<WrapperT, PtrT*, WrapperT const&>)
+		constexpr SmartPtr(SmartPtr const& IPtr) requires(std::is_constructible_v<WrapperT, PtrT*&, WrapperT const&>)
 			: SmartPtr(IPtr.Ptr, static_cast<WrapperT const&>(IPtr)) {}
 
-		constexpr SmartPtr(SmartPtr&& IPtr) requires(std::is_constructible_v<WrapperT, PtrT*, WrapperT &&>)
+		constexpr SmartPtr(SmartPtr&& IPtr) requires(std::is_constructible_v<WrapperT, PtrT*&, WrapperT &&>)
 			: Ptr(nullptr), WrapperT(IPtr.Ptr, static_cast<WrapperT&&>(IPtr))
 		{
 			Ptr = IPtr.Ptr;
@@ -167,7 +162,17 @@ export namespace Potato::Misc
 			return WrapperT::Upgrade(Ptr);
 		}
 
-		constexpr decltype(auto) Downgrade() const requires(TMP::Exist<WrapperT, WrapperDowngradeRole, PtrT>::Value)
+		constexpr decltype(auto) Downgrade() requires(TMP::Exist<WrapperT, WrapperDowngradeRole, PtrT>::Value)
+		{
+			return WrapperT::Downgrade(Ptr);
+		}
+
+		constexpr decltype(auto) Upgrade() const requires(TMP::Exist<WrapperT const&, WrapperUpgradeRole, PtrT>::Value)
+		{
+			return WrapperT::Upgrade(Ptr);
+		}
+
+		constexpr decltype(auto) Downgrade() const requires(TMP::Exist<WrapperT const&, WrapperDowngradeRole, PtrT>::Value)
 		{
 			return WrapperT::Downgrade(Ptr);
 		}
