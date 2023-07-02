@@ -9,7 +9,7 @@ add_library(PotatoModule STATIC
 	"PotatoEncode.cpp"
 	"PotatoEBNF.cpp"
 	"PotatoDocument.cpp"
-	#"PotatoTaskSystem.cpp"
+	"PotatoTaskSystem.cpp"
 )
 
 target_sources(
@@ -29,7 +29,7 @@ target_sources(
 		"PotatoEncode.ixx"
 		"PotatoEBNF.ixx"
 		"PotatoDocument.ixx"
-		#"PotatoTaskSystem.ixx"
+		"PotatoTaskSystem.ixx"
 )
 
 

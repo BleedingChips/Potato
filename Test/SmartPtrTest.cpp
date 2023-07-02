@@ -85,136 +85,46 @@ struct SWRef
 {
 	mutable Potato::Misc::AtomicRefCount SRef;
 	mutable Potato::Misc::AtomicRefCount WRef;
-};
 
-struct WeakWrapper;
-
-struct StrongWrapper
-{
-	SWRef* Ref = nullptr;
-	StrongWrapper(Type4 const* T){
-		if (T != nullptr)
-		{
-			Ref = new SWRef{};
-			Ref->SRef.AddRef();
-			Ref->WRef.AddRef();
-		}
-	}
-	StrongWrapper() {}
-
-	StrongWrapper(Type4*& IP, WeakWrapper const& Wra);
-
-	void Reset(Type4* T)
+	void AddStrongRef(Type4* Ptr)
 	{
-		if (T != nullptr && Ref != nullptr)
-		{
-			if (Ref->SRef.SubRef())
-			{
-				delete T;
-			}
-
-			if (Ref->WRef.SubRef())
-			{
-				delete Ref;
-			}
-
-			Ref = nullptr;
-		}
+		assert(Ptr != nullptr);
+		SRef.AddRef();
+	}
+	void SubStrongRef(Type4* Ptr) {
+		assert(Ptr != nullptr);
+		if(SRef.SubRef())
+			delete Ptr;
 	}
 
-	StrongWrapper(Type4* T, StrongWrapper const& Wra) {
-		if (T != nullptr)
-		{
-			Ref = Wra.Ref;
-			if (Ref != nullptr)
-			{
-				Ref->SRef.AddRef();
-				Ref->WRef.AddRef();
-			}
-		}
-	}
-
-	Potato::Misc::SmartPtr<Type4, WeakWrapper> Downgrade(Type4* IPtr);
-
-	using RequireExplicitPointConstructT = void;
-};
-
-struct WeakWrapper
-{
-	SWRef* Ref = nullptr;
-
-
-	WeakWrapper() {}
-	WeakWrapper(Type4* IP, WeakWrapper const& Wra) {
-		if (IP != nullptr)
-		{
-			Ref = Wra.Ref;
-			Ref->WRef.AddRef();
-		}
-	}
-
-	void Reset(Type4* T)
+	void AddWeakRef(Type4* Ptr)
 	{
-		if (T != nullptr && Ref != nullptr)
-		{
-			if (Ref->WRef.SubRef())
-			{
-				delete Ref;
-			}
-
-			Ref = nullptr;
-		}
+		assert(Ptr != nullptr);
+		WRef.AddRef();
 	}
 
-	WeakWrapper(Type4* T, StrongWrapper const& Wra) {
-		if (T != nullptr)
-		{
-			Ref = Wra.Ref;
-			if (Ref != nullptr)
-			{
-				Ref->WRef.AddRef();
-			}
-		}
-	}
-
-	SmartPtr<Type4, StrongWrapper> Upgrade(Type4* IPtr) {
-		if (IPtr != nullptr && Ref != nullptr)
-			return SmartPtr<Type4, StrongWrapper>(IPtr, *this);
-		return {};
-	}
-
-	using RequireExplicitPointConstructT = void;
-	using ForbidPtrT = void;
-};
-
-StrongWrapper::StrongWrapper(Type4*& IP, WeakWrapper const& Wra) {
-	auto Temp = Wra.Ref;
-	if (Temp != nullptr)
+	void SubWeakRef(Type4* Ptr)
 	{
-		assert(IP != nullptr);
-		if (Temp->SRef.TryAddRefNotFromZero())
+		if (WRef.SubRef())
 		{
-			Temp->WRef.AddRef();
-			Ref = Temp;
-		}
-		else {
-			IP = nullptr;
+			delete this;
 		}
 	}
-}
 
-Potato::Misc::SmartPtr<Type4, WeakWrapper> StrongWrapper::Downgrade(Type4* IPtr) {
-	if (IPtr != nullptr && Ref != nullptr)
-		return Misc::SmartPtr<Type4, WeakWrapper>{IPtr, static_cast<StrongWrapper const&>(*this)};
-	return {};
-}
+	bool TryAddStrongRef(Type4* Ptr)
+	{
+		return SRef.TryAddRefNotFromZero();
+	}
+
+	~SWRef() {
+		volatile int i = 0;
+	}
+};
 
 struct K
 {
 	K(int32_t I) {}
 };
-
-
 
 int main()
 {
@@ -242,7 +152,7 @@ int main()
 
 	int32_t State = 0;
 
-	SmartPtr<Type4, StrongWrapper> Ptr{new Type4{ State }};
+	StrongPtr<Type4, SWRef> Ptr{new Type4{ State }, new SWRef{}};
 
 	auto W = Ptr.Downgrade();
 

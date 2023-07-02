@@ -8,44 +8,75 @@ export import Potato.STD;
 export import Potato.Misc;
 export import Potato.SmartPtr;
 
-
 namespace Potato::Task
 {
-	
-	export struct TaskSystem;
-	export struct Task;
-	export struct TaskGraphic;
+	struct Task;
 
-	export enum class TaskPriority
+	struct TaskSystem;
+
+
+	struct TaskSystemReference
 	{
-		VeryHigh,
-		High,
-		Normal,
-		Low,
-		VeryLow,
+		Misc::AtomicRefCount SRef;
+		Misc::AtomicRefCount WRef;
+		std::pmr::polymorphic_allocator<> Allocator;
+		std::pmr::synchronized_pool_resource MemoryPool;
+
+		TaskSystemReference(std::pmr::polymorphic_allocator<> IAllocator, std::pmr::memory_resource* MemoryResouce)
+			: Allocator(IAllocator), MemoryPool(MemoryResouce)
+		{
+
+		}
+
+		void AddStrongRef(TaskSystem* Ptr);
+		void SubStrongRef(TaskSystem* Ptr);
+		void AddWeakRef(TaskSystem* Ptr);
+		void SubWeakRef(TaskSystem* Ptr);
+		bool TryAddStrongRef(TaskSystem* Ptr);
 	};
 
-	export enum class TaskGuessConsume
+}
+
+
+
+export namespace Potato::Task
+{
+
+	struct TaskGraph;
+
+
+	struct TaskSystem
 	{
-		VeryHigh,
-		High,
-		Normal,
-		Low,
-		VeryLow,
+
+		using Ptr = Misc::StrongPtr<TaskSystem, TaskSystemReference>;
+		using WeakPtr = Misc::WeakPtr<TaskSystem, TaskSystemReference>;
+
+		static Ptr Create(std::size_t ThreadCount = std::thread::hardware_concurrency() - 1, std::pmr::memory_resource* MemoryResouce = std::pmr::get_default_resource());
+
+	protected:
+		
+		~TaskSystem();
+		TaskSystem(std::size_t ThreadCount, std::pmr::memory_resource* MemoryResource, TaskSystemReference* Ref);
+
+		void Executor();
+
+		std::atomic_bool Available = true;
+		TaskSystemReference* Ref = nullptr;
+		std::vector<std::thread, std::pmr::polymorphic_allocator<std::thread>> Thread;
+
+		friend struct TaskSystemReference;
 	};
 
-	struct TaskProperty
+	/*
+	struct TaskGraph
 	{
-		std::wstring_view Name = L"UnDefine";
-		TaskPriority Priority = TaskPriority::Normal;
-		TaskGuessConsume Consume = TaskGuessConsume::Normal;
+		virtual std::wstring_view GetGraphName() = 0;
 	};
 
-	struct TaskInterfaceWeakPointerWrapper;
 
-	struct TaskInterfaceStrongPointerWrapper;
 
-	export struct TaskInterface
+
+	struct TaskInterface
 	{
 
 		TaskProperty GetProperty() const { return Property;  }
@@ -171,4 +202,7 @@ namespace Potato::Task
 		TaskPtr TPtr{Ptr};
 		return TPtr;
 	}
+	*/
+
+
 }

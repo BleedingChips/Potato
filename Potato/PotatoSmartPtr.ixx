@@ -1,5 +1,7 @@
 module;
 
+#include <cassert>
+
 export module Potato.SmartPtr;
 
 export import Potato.Misc;
@@ -9,14 +11,14 @@ export import Potato.STD;
 namespace Potato::Misc
 {
 	template<typename T, typename PtrT, typename = decltype(std::declval<T>().IsAvailable(std::declval<PtrT*>()))> struct WrapperIsAvailableRole {};
-	template<typename T, typename PtrT, typename = decltype(std::declval<T>().Upgrade(std::declval<PtrT*>()))> struct WrapperUpgradeRole {};
-	template<typename T, typename PtrT, typename = decltype(std::declval<T>().Downgrade(std::declval<PtrT*>()))> struct WrapperDowngradeRole {};
+	template<typename T, typename PtrT, typename = decltype(std::declval<T>().Upgrade(std::declval<PtrT*&>()))> struct WrapperUpgradeRole {};
+	template<typename T, typename PtrT, typename = decltype(std::declval<T>().Downgrade(std::declval<PtrT*&>()))> struct WrapperDowngradeRole {};
 
-	template<typename T, typename PtrT, typename = decltype(std::declval<T>().EqualMove(std::declval<PtrT*>(), std::declval<T&&>()))> struct WrapperEqualMoveRole {};
-	template<typename T, typename PtrT, typename = decltype(std::declval<T>().Equal(std::declval<PtrT*>(), std::declval<T const&>()))> struct WrapperEqualRole {};
-	template<typename T, typename PtrT, typename = decltype(std::declval<T>().EqualPointer(std::declval<PtrT*>()))> struct WrapperEqualPointerRole {};
+	template<typename T, typename PtrT, typename = decltype(std::declval<T>().EqualMove(std::declval<PtrT*&>(), std::declval<T&&>()))> struct WrapperEqualMoveRole {};
+	template<typename T, typename PtrT, typename = decltype(std::declval<T>().Equal(std::declval<PtrT*&>(), std::declval<T const&>()))> struct WrapperEqualRole {};
+	template<typename T, typename PtrT, typename = decltype(std::declval<T>().EqualPointer(std::declval<PtrT*&>()))> struct WrapperEqualPointerRole {};
 
-	template<typename T, typename PtrT, typename = decltype(std::declval<T>().Reset(std::declval<PtrT*>()))> struct WrapperResetRole {};
+	template<typename T, typename PtrT, typename = decltype(std::declval<T>().Reset(std::declval<PtrT*&>()))> struct WrapperResetRole {};
 
 	template<typename T, typename = typename T::ForbidPtrT> struct WrapperForbidPtrRole{};
 	template<typename T, typename = typename T::RequireExplicitPointConstructT> struct WrapperRequireExplicitPointConstructPtrRole {};
@@ -97,11 +99,11 @@ export namespace Potato::Misc
 		};
 
 		constexpr SmartPtr& operator=(PtrT* IPtr)
-			requires(TMP::Exist<WrapperT, WrapperEqualMoveRole, PtrT>::Value)
+			requires(TMP::Exist<WrapperT, WrapperEqualPointerRole, PtrT>::Value)
 		{
 			Reset();
 			WrapperT::EqualPointer(IPtr);
-			Ptr = IPtr.Ptr;
+			Ptr = IPtr;
 			return *this;
 		};
 
@@ -218,6 +220,10 @@ export namespace Potato::Misc
 		template<typename PtrT>
 		void Equal(PtrT* IPtr, ObserverPtrDefaultWrapper const&) {}
 		template<typename PtrT>
+		void EqualPointer(PtrT* IPtr) {}
+		template<typename PtrT>
+		void EqualMove(PtrT* IPtr) {}
+		template<typename PtrT>
 		void Reset(PtrT* IPtr) {}
 	};
 
@@ -237,5 +243,240 @@ export namespace Potato::Misc
 
 	template<typename Type>
 	using UniquePtr = IntrusivePtr<Type, UniquePtrDefaultWrapper>;
+
+	template<typename RefType>
+	struct WeakPtrDefaultWrapper;
+
+	template<typename RefType>
+	struct StrongPtrDefaultWrapper
+	{
+		
+
+		StrongPtrDefaultWrapper() = default;
+
+		template<typename T>
+		StrongPtrDefaultWrapper(T*& Ptr, RefType* IRef)
+		{
+			if (Ptr != nullptr && IRef != nullptr)
+			{
+				Ref = IRef;
+				Ref->AddStrongRef(Ptr);
+				Ref->AddWeakRef(Ptr);
+			}
+			else {
+				assert(Ptr == nullptr && IRef == nullptr);
+				Ptr = nullptr;
+			}
+		}
+
+		template<typename T>
+		StrongPtrDefaultWrapper(T*& Ptr, StrongPtrDefaultWrapper const& IRef)
+		{
+			if (Ptr != nullptr && IRef.Ref != nullptr)
+			{
+				Ref = IRef.Ref;
+				Ref->AddStrongRef(Ptr);
+				Ref->AddWeakRef(Ptr);
+			}
+			else {
+				assert(Ptr == nullptr && IRef == nullptr);
+				Ptr = nullptr;
+			}
+		}
+
+		template<typename T>
+		StrongPtrDefaultWrapper(T*& Ptr, StrongPtrDefaultWrapper&& IRef)
+		{
+			if (Ptr != nullptr && IRef.Ref != nullptr)
+			{
+				Ref = IRef.Ref;
+				IRef.Ref = nullptr;
+			}
+			else {
+				assert(Ptr == nullptr && IRef == nullptr);
+				Ptr = nullptr;
+			}
+		}
+
+		template<typename T>
+		void Reset(T* Ptr)
+		{
+			if (Ptr != nullptr && Ref != nullptr)
+			{
+				Ref->SubStrongRef(Ptr);
+				Ref->SubWeakRef(Ptr);
+
+				Ref = nullptr;
+			}
+			else {
+				assert(Ptr == nullptr && Ref == nullptr);
+			}
+		}
+
+		template<typename T>
+		StrongPtrDefaultWrapper(T*& Ptr, WeakPtrDefaultWrapper<RefType> const& IRef);
+
+		template<typename T>
+		Potato::Misc::SmartPtr<T, WeakPtrDefaultWrapper<RefType>> Downgrade(T*& IPtr);
+
+		template<typename T>
+		void Equal(T*& IPtr, StrongPtrDefaultWrapper const& Wra) {
+			Reset(IPtr);
+			if (IPtr != nullptr && Wra.Ref != nullptr)
+			{
+				Ref = Wra.Ref;
+				Ref->AddStringRef(IPtr);
+				Ref->AddWeakRef(IPtr);
+			}
+			else {
+				assert(IPtr == nullptr && Wra.Ref == nullptr);
+				IPtr = nullptr;
+			}
+		}
+
+		template<typename T>
+		void EqualMove(T*& IPtr, StrongPtrDefaultWrapper && Wra) {
+			Reset(IPtr);
+			if (IPtr != nullptr && Wra.Ref != nullptr)
+			{
+				Ref = Wra.Ref;
+				Wra.Ref = nullptr;
+			}
+			else {
+				assert(IPtr == nullptr && Wra.Ref == nullptr);
+				IPtr = nullptr;
+			}
+		}
+
+		using RequireExplicitPointConstructT = void;
+
+	protected:
+
+		friend struct WeakPtrDefaultWrapper<RefType>;
+		
+		RefType* Ref = nullptr;
+	};
+
+	template<typename RefType>
+	struct WeakPtrDefaultWrapper
+	{
+		
+		WeakPtrDefaultWrapper() {}
+
+		template<typename T>
+		WeakPtrDefaultWrapper(T*& IP, WeakPtrDefaultWrapper const& Wra) {
+			if (IP != nullptr && Wra.Ref != nullptr)
+			{
+				Ref = Wra.Ref;
+				Ref->AddWeakRef(IP);
+			}
+			else {
+				assert(IP == nullptr && Wra.Ref == nullptr);
+				IP = nullptr;
+			}
+		}
+
+		template<typename T>
+		void Reset(T* Ptr)
+		{
+			if (Ref != nullptr && Ptr != nullptr)
+			{
+				Ref->SubWeakRef(Ptr);
+				Ref = nullptr;
+			}
+			else {
+				assert(Ptr == nullptr && Ref == nullptr);
+			}
+		}
+
+		template<typename T>
+		WeakPtrDefaultWrapper(T*& IPtr, StrongPtrDefaultWrapper<RefType> const& Wra) {
+			if (IPtr != nullptr && Wra.Ref != nullptr)
+			{
+				Ref = Wra.Ref;
+				Ref->AddWeakRef(IPtr);
+			}
+			else {
+				assert(IPtr == nullptr && Wra.Ref == nullptr);
+				IPtr = nullptr;
+			}
+		}
+
+		template<typename T>
+		Misc::SmartPtr<T, StrongPtrDefaultWrapper<RefType>> Upgrade(T* IPtr) {
+			return SmartPtr<T, StrongPtrDefaultWrapper<RefType>>(IPtr, *this);
+		}
+
+		template<typename T>
+		void Equal(T*& IPtr, WeakPtrDefaultWrapper const& Wra) {
+			Reset(IPtr);
+			if (IPtr != nullptr && Wra.Ref != nullptr)
+			{
+				Ref = Wra.Ref;
+				Ref->AddWeakRef(IPtr);
+			}
+			else {
+				assert(IPtr == nullptr && Wra.Ref == nullptr);
+				IPtr = nullptr;
+			}
+		}
+
+		template<typename T>
+		void EqualMove(T*& IPtr, WeakPtrDefaultWrapper&& Wra) {
+			Reset(IPtr);
+			if (IPtr != nullptr && Wra.Ref != nullptr)
+			{
+				Ref = Wra.Ref;
+				Wra.Ref = nullptr;
+			}
+			else {
+				assert(IPtr == nullptr && Wra.Ref == nullptr);
+				IPtr = nullptr;
+			}
+		}
+
+		using RequireExplicitPointConstructT = void;
+		using ForbidPtrT = void;
+
+	protected:
+
+		friend struct StrongPtrDefaultWrapper<RefType>;
+
+		RefType* Ref = nullptr;
+	};
+
+	template<typename RefType>
+	template<typename T>
+	StrongPtrDefaultWrapper<RefType>::StrongPtrDefaultWrapper(T*& Ptr, WeakPtrDefaultWrapper<RefType> const& IRef)
+	{
+		if (Ptr != nullptr && IRef.Ref != nullptr)
+		{
+			if (IRef.Ref->TryAddStrongRef(Ptr))
+			{
+				Ref = IRef.Ref;
+				Ref->AddWeakRef(Ptr);
+			}
+			else {
+				Ptr = nullptr;
+			}
+		}
+		else {
+			assert(Ptr == nullptr && IRef.Ref == nullptr);
+			Ptr = nullptr;
+		}
+	}
+
+	template<typename RefType>
+	template<typename T>
+	Potato::Misc::SmartPtr<T, WeakPtrDefaultWrapper<RefType>> StrongPtrDefaultWrapper<RefType>::Downgrade(T*& IPtr)
+	{
+		return Potato::Misc::SmartPtr<T, WeakPtrDefaultWrapper<RefType>>{IPtr, *this};
+	}
+
+	template<typename PtrT, typename RefT>
+	using StrongPtr = SmartPtr<PtrT, StrongPtrDefaultWrapper<RefT>>;
+
+	template<typename PtrT, typename RefT>
+	using WeakPtr = SmartPtr<PtrT, WeakPtrDefaultWrapper<RefT>>;
 
 }

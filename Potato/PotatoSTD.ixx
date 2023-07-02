@@ -5,6 +5,8 @@ export import std.filesystem;
 export import std.threading;
 export import std.memory;
 
+
+/*
 export namespace Potato
 {
 
@@ -15,3 +17,4 @@ export namespace Potato
 
 	inline MemoryResource* DefaultMemoryResource() noexcept { return std::pmr::new_delete_resource(); }
 }
+*/
