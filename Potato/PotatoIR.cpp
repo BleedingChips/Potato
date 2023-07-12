@@ -1,5 +1,5 @@
 module;
-module Potato.IR;
+module PotatoIR;
 //import :Define;
 
 namespace Potato::IR

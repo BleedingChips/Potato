@@ -2,7 +2,7 @@ module;
 
 #include <cassert>
 
-module Potato.SLRX;
+module PotatoSLRX;
 
 namespace Potato::SLRX
 {

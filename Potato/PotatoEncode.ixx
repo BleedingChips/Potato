@@ -2,10 +2,10 @@ module;
 
 #include <cassert>
 
-export module Potato.Encode;
+export module PotatoEncode;
 
-export import Potato.Misc;
-export import Potato.STD;
+export import PotatoMisc;
+export import PotatoSTD;
 
 export namespace Potato::Encode
 {

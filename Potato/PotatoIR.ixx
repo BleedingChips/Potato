@@ -1,7 +1,7 @@
-export module Potato.IR;
+export module PotatoIR;
 
-export import Potato.SmartPtr;
-export import Potato.Interval;
+export import PotatoSmartPtr;
+export import PotatoInterval;
 
 export namespace Potato::IR
 {
@@ -98,7 +98,7 @@ export namespace Potato::IR
 
 	struct TypeDescription
 	{
-		enum class TypeT : uint32_t
+		enum class TypeT : std::uint32_t
 		{
 			Unsighed,
 			Sighed,
@@ -106,7 +106,7 @@ export namespace Potato::IR
 		};
 
 		TypeT Type : 2;
-		uint32_t Value : 30;
+		std::uint32_t Value : 30;
 	};
 
 

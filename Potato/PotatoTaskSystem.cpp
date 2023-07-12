@@ -2,15 +2,18 @@ module;
 
 #include <cassert>
 
-#if __INTELLISENSE__
-#include "PotatoTaskSystem.ixx"
-#else
-module Potato.TaskSystem;
-#endif
+module PotatoTaskSystem;
+
 
 namespace Potato::Task
 {
 
+	struct TaskSystemImp : public TaskSystemReference
+	{
+		using TaskSystemReference::TaskSystemReference;
+
+		std::optional<TaskSystem> System;
+	};
 
 	void TaskSystemReference::AddStrongRef(TaskSystem* Ptr)
 	{
@@ -20,7 +23,7 @@ namespace Potato::Task
 	void TaskSystemReference::SubStrongRef(TaskSystem* Ptr) {
 		if (SRef.SubRef())
 		{
-			Ptr->~TaskSystem();
+			static_cast<TaskSystemImp*>(this)->System.reset();
 		}
 	}
 
@@ -31,9 +34,12 @@ namespace Potato::Task
 	void TaskSystemReference::SubWeakRef(TaskSystem* Ptr) {
 		if (WRef.SubRef())
 		{
-			auto OldAllocator = Allocator;
-			this->~TaskSystemReference();
-			OldAllocator.deallocate_bytes(reinterpret_cast<std::byte*>(this), sizeof(TaskSystemReference) + sizeof(TaskSystem), alignof(TaskSystemReference));
+			auto OldMemoryResource = RefMemoryResource;
+			static_cast<TaskSystemImp*>(this)->~TaskSystemImp();
+			OldMemoryResource->deallocate(this, 
+				sizeof(TaskSystemImp),
+				alignof(TaskSystemImp)
+			);
 		}
 	}
 
@@ -41,67 +47,98 @@ namespace Potato::Task
 		return SRef.TryAddRefNotFromZero();
 	}
 
-
-	auto TaskSystem::Create(std::size_t ThreadCount, std::pmr::memory_resource* MemoryResouce) -> Ptr
+	auto TaskSystem::Create(std::pmr::memory_resource* MemoryResouce) -> Ptr
 	{
+		assert(MemoryResouce != nullptr);
 
-		std::pmr::polymorphic_allocator<> Allocator{MemoryResouce};
-
-		static_assert(alignof(TaskSystemReference) == alignof(TaskSystem));
-
-		auto APtr = Allocator.allocate_bytes(sizeof(TaskSystemReference) + sizeof(TaskSystem), alignof(TaskSystemReference));
+		void* APtr = MemoryResouce->allocate(
+			sizeof(TaskSystemImp),
+			alignof(TaskSystemImp)
+		);
 
 		try {
 			
-			TaskSystemReference* Ref = new (APtr) TaskSystemReference{
-				Allocator, MemoryResouce
+			TaskSystemImp* Ref = new (APtr) TaskSystemImp{
+				MemoryResouce
 			};
 
 			try {
-				TaskSystem* System = new (static_cast<std::byte*>(APtr) + sizeof(TaskSystem)) TaskSystem{
-					ThreadCount, MemoryResouce, Ref
-				};
-				return Ptr{ System, Ref };
+				Ref->System.emplace(static_cast<TaskSystemReference*>(Ref));
+				return Ptr{ &(*Ref->System), static_cast<TaskSystemReference*>(Ref) };
 			}
 			catch (...)
 			{
-				Ref->~TaskSystemReference();
+				Ref->~TaskSystemImp();
 				throw;
 			}
 		}
 		catch (...)
 		{
-			Allocator.deallocate(static_cast<std::byte*>(APtr), sizeof(TaskSystemReference) + sizeof(TaskSystem));
+			MemoryResouce->deallocate(static_cast<std::byte*>(APtr), sizeof(TaskSystemImp) + sizeof(TaskSystemImp));
 			throw;
 		}
 	}
 
-	TaskSystem::TaskSystem(std::size_t ThreadCount, std::pmr::memory_resource* MemoryResouce, TaskSystemReference* Ref)
-		: Available(true), Thread(std::pmr::polymorphic_allocator<std::thread>{MemoryResouce}), Ref(Ref)
+	TaskSystem::TaskSystem(TaskSystemReference* Ref)
+		: Available(true), Thread(&Ref->MemoryPool), Ref(Ref)
 	{
 		assert(Ref != nullptr);
-		ThreadCount = std::max(std::size_t{1}, ThreadCount);
-		Thread.reserve(ThreadCount);
-		for(std::size_t I = 0; I < ThreadCount; ++I)
-			Thread.push_back(std::thread{[this](){Executor(); }});
+	}
+
+	bool TaskSystem::FireThreads(Ptr Ref, std::size_t ThreadCount)
+	{
+		if (Ref)
+		{
+			std::lock_guard lg(Ref->ThreadMutex);
+			if (Ref->Thread.empty())
+			{
+				auto WPtr = Ref.Downgrade();
+				Ref->Thread.reserve(ThreadCount);
+				for (std::size_t I = 0; I < ThreadCount; ++I)
+				{
+					Ref->Thread.emplace_back(
+						[WPtr](){
+							TaskSystem::Executor(std::move(WPtr));
+						}
+					);
+				}
+				return true;
+			}
+		}
+		return false;
 	}
 
 	TaskSystem::~TaskSystem()
 	{
 		Available = false;
+
+		auto Curid = std::this_thread::get_id();
+
+		std::lock_guard lg(ThreadMutex);
+
 		for (auto& Ite : Thread)
 		{
-			Ite.join();
+			if (Curid == Ite.get_id())
+			{
+				Ite.detach();
+			}else
+				Ite.join();
 		}
+
 		Thread.clear();
 	}
 
-	void TaskSystem::Executor()
+	void TaskSystem::Executor(WeakPtr WP)
 	{
-		while (Available)
+
+		while (true)
 		{
-			std::this_thread::yield();
+			auto PK = WP.Upgrade();
+			if (PK && PK->Available)
+			{
+				std::this_thread::yield();
+			}else
+				break;
 		}
-		volatile int i = 0;
 	}
 }

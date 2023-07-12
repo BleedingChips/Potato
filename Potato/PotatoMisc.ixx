@@ -1,8 +1,10 @@
 module;
-#include <assert.h>
-export module Potato.Misc;
 
-export import Potato.TMP;
+#include <assert.h>
+
+export module PotatoMisc;
+
+export import PotatoTMP;
 
 export namespace Potato::Misc
 {
@@ -68,12 +70,12 @@ export namespace Potato::Misc
 		void AddRef() const noexcept;
 		bool SubRef() const noexcept;
 		size_t Count() const noexcept { return ref.load(std::memory_order_relaxed); }
-		AtomicRefCount() noexcept : ref(0) {}
+		AtomicRefCount() noexcept : ref(static_cast<std::size_t>(0)) {}
 		AtomicRefCount(AtomicRefCount const&) = delete;
 		AtomicRefCount& operator= (AtomicRefCount const&) = delete;
 		~AtomicRefCount();
 	private:
-		mutable std::atomic_size_t ref = 0;
+		mutable std::atomic_size_t ref;
 	};
 
 	template<typename RequireAlignType>

@@ -1,4 +1,4 @@
-import Potato.TaskSystem;
+import PotatoTaskSystem;
 
 using namespace Potato::Task;
 
@@ -6,7 +6,7 @@ using namespace Potato::Task;
 int main()
 {
 	{
-		auto Ptr = TaskSystem::Create();
+		auto Ptr = TaskSystem::CreateAndFire();
 		std::this_thread::sleep_for(std::chrono::seconds{10});
 	}
 }

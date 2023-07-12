@@ -2,11 +2,11 @@ module;
 
 #include <cassert>
 
-export module Potato.TaskSystem;
+export module PotatoTaskSystem;
 
-export import Potato.STD;
-export import Potato.Misc;
-export import Potato.SmartPtr;
+export import PotatoSTD;
+export import PotatoMisc;
+export import PotatoSmartPtr;
 
 namespace Potato::Task
 {
@@ -17,13 +17,15 @@ namespace Potato::Task
 
 	struct TaskSystemReference
 	{
+		std::pmr::memory_resource* RefMemoryResource;
+		std::pmr::synchronized_pool_resource MemoryPool;
 		Misc::AtomicRefCount SRef;
 		Misc::AtomicRefCount WRef;
-		std::pmr::polymorphic_allocator<> Allocator;
-		std::pmr::synchronized_pool_resource MemoryPool;
+		// todo
+		//std::pmr::synchronized_pool_resource MemoryPool;
 
-		TaskSystemReference(std::pmr::polymorphic_allocator<> IAllocator, std::pmr::memory_resource* MemoryResouce)
-			: Allocator(IAllocator), MemoryPool(MemoryResouce)
+		TaskSystemReference(std::pmr::memory_resource* MemoryResouce)
+			:  RefMemoryResource(MemoryResouce), MemoryPool(MemoryResouce)//, MemoryPool(MemoryResouce)
 		{
 
 		}
@@ -51,17 +53,27 @@ export namespace Potato::Task
 		using Ptr = Misc::StrongPtr<TaskSystem, TaskSystemReference>;
 		using WeakPtr = Misc::WeakPtr<TaskSystem, TaskSystemReference>;
 
-		static Ptr Create(std::size_t ThreadCount = std::thread::hardware_concurrency() - 1, std::pmr::memory_resource* MemoryResouce = std::pmr::get_default_resource());
+		static Ptr Create(std::pmr::memory_resource* MemoryResouce = std::pmr::new_delete_resource());
+
+		static Ptr CreateAndFire(std::size_t ThreadCount = std::thread::hardware_concurrency() - 1, std::pmr::memory_resource* MemoryResouce = std::pmr::new_delete_resource())
+		{
+			auto P = Create(MemoryResouce);
+			FireThreads(P, ThreadCount);
+			return P;
+		}
+
+		static bool FireThreads(Ptr Ref, std::size_t ThreadCount = std::thread::hardware_concurrency() - 1);
+
+		~TaskSystem();
+		TaskSystem(TaskSystemReference* Ref);
 
 	protected:
-		
-		~TaskSystem();
-		TaskSystem(std::size_t ThreadCount, std::pmr::memory_resource* MemoryResource, TaskSystemReference* Ref);
 
-		void Executor();
+		static void Executor(WeakPtr Ptr);
 
-		std::atomic_bool Available = true;
+		std::atomic_bool Available;
 		TaskSystemReference* Ref = nullptr;
+		std::mutex ThreadMutex;
 		std::vector<std::thread, std::pmr::polymorphic_allocator<std::thread>> Thread;
 
 		friend struct TaskSystemReference;

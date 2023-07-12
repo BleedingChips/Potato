@@ -1,10 +1,10 @@
 module;
 
-export module Potato.Format;
+export module PotatoFormat;
 
-export import Potato.STD;
-export import Potato.Reg;
-export import Potato.Encode;
+export import PotatoSTD;
+export import PotatoReg;
+export import PotatoEncode;
 
 export namespace Potato::Format
 {
@@ -472,19 +472,19 @@ export namespace Potato::Format
 	struct Scanner<float, UnicodeT> : BuildInNumberScanner<float, UnicodeT> {};
 
 	template<typename UnicodeT>
-	struct Scanner<int32_t, UnicodeT> : BuildInNumberScanner<int32_t, UnicodeT> {};
+	struct Scanner<std::int32_t, UnicodeT> : BuildInNumberScanner<std::int32_t, UnicodeT> {};
 
 	template<typename UnicodeT>
-	struct Scanner<uint32_t, UnicodeT> : BuildInNumberScanner<uint32_t, UnicodeT> {};
+	struct Scanner<std::uint32_t, UnicodeT> : BuildInNumberScanner<std::uint32_t, UnicodeT> {};
 
 	template<typename UnicodeT>
-	struct Scanner<uint64_t, UnicodeT> : BuildInNumberScanner<uint64_t, UnicodeT> {};
+	struct Scanner<std::uint64_t, UnicodeT> : BuildInNumberScanner<std::uint64_t, UnicodeT> {};
 
 	template<typename UnicodeT>
-	struct Scanner<int64_t, UnicodeT> : BuildInNumberScanner<int64_t, UnicodeT> {};
+	struct Scanner<std::int64_t, UnicodeT> : BuildInNumberScanner<std::int64_t, UnicodeT> {};
 
 	template<typename TargetType, typename CharaTrai, typename Allocator, typename UnicodeT>
-	struct Scanner<std::basic_string<TargetType, CharaTrai, Allocator>, UnicodeT> : BuildInNumberScanner<int64_t, UnicodeT>
+	struct Scanner<std::basic_string<TargetType, CharaTrai, Allocator>, UnicodeT> : BuildInNumberScanner<std::int64_t, UnicodeT>
 	{
 		bool Scan(std::basic_string_view<UnicodeT> Par, std::basic_string<TargetType, CharaTrai, Allocator>& Output)
 		{
@@ -529,21 +529,21 @@ export namespace Potato::Format
 	};
 
 	template<typename UnicodeType>
-	struct Formatter<uint64_t, UnicodeType> : BuildInNumberFormatter<uint64_t, UnicodeType> {};
+	struct Formatter<std::uint64_t, UnicodeType> : BuildInNumberFormatter<std::uint64_t, UnicodeType> {};
 	template<typename UnicodeType>
-	struct Formatter<int64_t, UnicodeType> : BuildInNumberFormatter<int64_t, UnicodeType> {};
+	struct Formatter<std::int64_t, UnicodeType> : BuildInNumberFormatter<std::int64_t, UnicodeType> {};
 	template<typename UnicodeType>
-	struct Formatter<uint32_t, UnicodeType> : BuildInNumberFormatter<uint32_t, UnicodeType> {};
+	struct Formatter<std::uint32_t, UnicodeType> : BuildInNumberFormatter<std::uint32_t, UnicodeType> {};
 	template<typename UnicodeType>
-	struct Formatter<int32_t, UnicodeType> : BuildInNumberFormatter<int32_t, UnicodeType> {};
+	struct Formatter<std::int32_t, UnicodeType> : BuildInNumberFormatter<std::int32_t, UnicodeType> {};
 	template<typename UnicodeType>
-	struct Formatter<uint16_t, UnicodeType> : BuildInNumberFormatter<uint16_t, UnicodeType> {};
+	struct Formatter<std::uint16_t, UnicodeType> : BuildInNumberFormatter<std::uint16_t, UnicodeType> {};
 	template<typename UnicodeType>
-	struct Formatter<int16_t, UnicodeType> : BuildInNumberFormatter<int16_t, UnicodeType> {};
+	struct Formatter<std::int16_t, UnicodeType> : BuildInNumberFormatter<std::int16_t, UnicodeType> {};
 	template<typename UnicodeType>
-	struct Formatter<uint8_t, UnicodeType> : BuildInNumberFormatter<uint8_t, UnicodeType> {};
+	struct Formatter<std::uint8_t, UnicodeType> : BuildInNumberFormatter<std::uint8_t, UnicodeType> {};
 	template<typename UnicodeType>
-	struct Formatter<int8_t, UnicodeType> : BuildInNumberFormatter<int8_t, UnicodeType> {};
+	struct Formatter<std::int8_t, UnicodeType> : BuildInNumberFormatter<std::int8_t, UnicodeType> {};
 	template<typename UnicodeType>
 	struct Formatter<float, UnicodeType> : BuildInNumberFormatter<float, UnicodeType> {};
 	template<typename UnicodeType>

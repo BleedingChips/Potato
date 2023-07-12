@@ -2,7 +2,7 @@ module;
 
 #include <cassert>
 
-module Potato.Document;
+module PotatoDocument;
 
 namespace Potato::Document
 {

@@ -1,20 +1,9 @@
-export module Potato.STD;
+export module PotatoSTD;
 
-export import std.core;
-export import std.filesystem;
-export import std.threading;
-export import std.memory;
+export import std;
+export import std.compat;
 
-
-/*
-export namespace Potato
-{
-
-	using MemoryResource = std::pmr::memory_resource;
-
-	template<typename Type = std::byte>
-	using Allocator = std::pmr::polymorphic_allocator<Type>;
-
-	inline MemoryResource* DefaultMemoryResource() noexcept { return std::pmr::new_delete_resource(); }
-}
-*/
+//export import std.core;
+//export import std.filesystem;
+//export import std.threading;
+//export import std.memory;

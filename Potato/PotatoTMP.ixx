@@ -1,6 +1,6 @@
-export module Potato.TMP;
+export module PotatoTMP;
 
-export import Potato.STD;
+export import PotatoSTD;
 
 namespace Potato::TMP::Implement
 {

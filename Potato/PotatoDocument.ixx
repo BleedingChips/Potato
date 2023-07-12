@@ -1,9 +1,9 @@
 module;
 
-export module Potato.Document;
+export module PotatoDocument;
 
-export import Potato.Encode;
-export import Potato.STD;
+export import PotatoEncode;
+export import PotatoSTD;
 
 
 

@@ -1,10 +1,11 @@
 module;
 
-export module Potato.Reg;
-export import Potato.SLRX;
-export import Potato.Interval;
-export import Potato.Encode;
-export import Potato.STD;
+export module PotatoReg;
+
+export import PotatoSLRX;
+export import PotatoInterval;
+export import PotatoEncode;
+export import PotatoSTD;
 
 export namespace Potato::Reg
 {

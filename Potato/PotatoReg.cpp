@@ -2,7 +2,7 @@ module;
 
 #include <cassert>
 
-module Potato.Reg;
+module PotatoReg;
 
 namespace Potato::Reg
 {
@@ -2108,7 +2108,7 @@ namespace Potato::Reg
 							}
 							else if (Ite4 == ActionE::False)
 							{
-								if (Cur.UnpassCommand == ConditionT::CommandE::Fail);
+								if (Cur.UnpassCommand == ConditionT::CommandE::Fail)
 								{
 									Cur.UnpassCommand = ConditionT::CommandE::Next;
 									Cur.Unpass = Conditions.size();
@@ -2441,7 +2441,7 @@ namespace Potato::Reg
 						{
 							Reader->SetPointer(Ite2.Adress);
 							auto Ref = Reader->ReadObject<CharSetPropertyT>();
-							Ref->EdgeOffset = EdgeAdress - NodeAdress;
+							Ref->EdgeOffset = static_cast<HalfStandardT>(EdgeAdress - NodeAdress);
 						}
 					}
 				}

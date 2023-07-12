@@ -2,10 +2,10 @@ module;
 
 #include <cassert>
 
-export module Potato.SmartPtr;
+export module PotatoSmartPtr;
 
-export import Potato.Misc;
-export import Potato.STD;
+export import PotatoMisc;
+export import PotatoSTD;
 
 
 namespace Potato::Misc
@@ -270,7 +270,7 @@ export namespace Potato::Misc
 		}
 
 		template<typename T>
-		StrongPtrDefaultWrapper(T*& Ptr, StrongPtrDefaultWrapper const& IRef)
+		explicit StrongPtrDefaultWrapper(T*& Ptr, StrongPtrDefaultWrapper const& IRef)
 		{
 			if (Ptr != nullptr && IRef.Ref != nullptr)
 			{
@@ -279,13 +279,13 @@ export namespace Potato::Misc
 				Ref->AddWeakRef(Ptr);
 			}
 			else {
-				assert(Ptr == nullptr && IRef == nullptr);
+				assert(Ptr == nullptr && IRef.Ref == nullptr);
 				Ptr = nullptr;
 			}
 		}
 
 		template<typename T>
-		StrongPtrDefaultWrapper(T*& Ptr, StrongPtrDefaultWrapper&& IRef)
+		explicit StrongPtrDefaultWrapper(T*& Ptr, StrongPtrDefaultWrapper&& IRef)
 		{
 			if (Ptr != nullptr && IRef.Ref != nullptr)
 			{
@@ -293,7 +293,7 @@ export namespace Potato::Misc
 				IRef.Ref = nullptr;
 			}
 			else {
-				assert(Ptr == nullptr && IRef == nullptr);
+				assert(Ptr == nullptr && IRef.Ref == nullptr);
 				Ptr = nullptr;
 			}
 		}
@@ -364,11 +364,24 @@ export namespace Potato::Misc
 		WeakPtrDefaultWrapper() {}
 
 		template<typename T>
-		WeakPtrDefaultWrapper(T*& IP, WeakPtrDefaultWrapper const& Wra) {
+		explicit WeakPtrDefaultWrapper(T*& IP, WeakPtrDefaultWrapper const& Wra) {
 			if (IP != nullptr && Wra.Ref != nullptr)
 			{
 				Ref = Wra.Ref;
 				Ref->AddWeakRef(IP);
+			}
+			else {
+				assert(IP == nullptr && Wra.Ref == nullptr);
+				IP = nullptr;
+			}
+		}
+
+		template<typename T>
+		explicit WeakPtrDefaultWrapper(T*& IP, WeakPtrDefaultWrapper && Wra) {
+			if (IP != nullptr && Wra.Ref != nullptr)
+			{
+				Ref = Wra.Ref;
+				Wra.Ref = nullptr;
 			}
 			else {
 				assert(IP == nullptr && Wra.Ref == nullptr);
@@ -390,7 +403,7 @@ export namespace Potato::Misc
 		}
 
 		template<typename T>
-		WeakPtrDefaultWrapper(T*& IPtr, StrongPtrDefaultWrapper<RefType> const& Wra) {
+		explicit WeakPtrDefaultWrapper(T*& IPtr, StrongPtrDefaultWrapper<RefType> const& Wra) {
 			if (IPtr != nullptr && Wra.Ref != nullptr)
 			{
 				Ref = Wra.Ref;

@@ -2,7 +2,7 @@ module;
 
 #include <cassert>
 
-module Potato.EBNF;
+module PotatoEBNF;
 
 namespace Potato::EBNF
 {

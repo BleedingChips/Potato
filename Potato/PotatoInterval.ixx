@@ -2,8 +2,9 @@ module;
 
 #include <cassert>
 
-export module Potato.Interval;
-export import Potato.Misc;
+export module PotatoInterval;
+
+export import PotatoMisc;
 
 export namespace Potato::Misc
 {

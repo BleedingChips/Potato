@@ -2,7 +2,7 @@ module;
 
 #include <cassert>
 
-module Potato.Encode;
+module PotatoEncode;
 
 namespace Potato::Encode
 {

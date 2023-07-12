@@ -2,12 +2,12 @@ module;
 
 #include <cassert>
 
-export module Potato.EBNF;
+export module PotatoEBNF;
 
-export import Potato.Reg;
-export import Potato.Encode;
-export import Potato.Format;
-export import Potato.STD;
+export import PotatoReg;
+export import PotatoEncode;
+export import PotatoFormat;
+export import PotatoSTD;
 
 export namespace Potato::EBNF
 {
