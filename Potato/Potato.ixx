@@ -1,13 +1,15 @@
 export module Potato;
-//export import Potato.STD;
-//export import Potato.TMP;
-//export import Potato.Misc;
-//export import Potato.SmartPtr;
-//export import Potato.IR;
-//export import Potato.Interval;
-//export import Potato.SLRX;
-//export import Potato.Encode;
-//export import Potato.Format;
-//export import Potato.EBNF;
-//export import Potato.Reg;
-//export import Potato.Document;
+
+export import PotatoSTD;
+export import PotatoTMP;
+export import PotatoMisc;
+export import PotatoSmartPtr;
+export import PotatoIR;
+export import PotatoInterval;
+export import PotatoSLRX;
+export import PotatoEncode;
+export import PotatoFormat;
+export import PotatoEBNF;
+export import PotatoReg;
+export import PotatoDocument;
+export import PotatoTaskSystem;

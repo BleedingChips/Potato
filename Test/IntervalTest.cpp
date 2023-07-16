@@ -1,7 +1,7 @@
 
 
-import Potato.Interval;
-import Potato.Misc;
+import PotatoInterval;
+import PotatoMisc;
 
 using namespace Potato::Misc;
 

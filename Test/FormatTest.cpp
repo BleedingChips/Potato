@@ -1,4 +1,4 @@
-import Potato.Format;
+import PotatoFormat;
 
 using namespace Potato::Format;
 

@@ -1,4 +1,4 @@
-import Potato.EBNF;
+import PotatoEBNF;
 
 using namespace Potato::EBNF;
 

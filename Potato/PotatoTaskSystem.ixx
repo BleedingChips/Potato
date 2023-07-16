@@ -11,6 +11,7 @@ export import PotatoSmartPtr;
 namespace Potato::Task
 {
 	struct Task;
+	struct TaskGraph;
 
 	struct TaskSystem;
 
@@ -37,39 +38,69 @@ namespace Potato::Task
 		bool TryAddStrongRef(TaskSystem* Ptr);
 	};
 
+	struct TaskSystemReferenceWrapper
+	{
+		void AddRef(TaskSystemReference* Ref) { Ref->AddWeakRef(nullptr); }
+		void SubRef(TaskSystemReference* Ref) { Ref->SubWeakRef(nullptr); }
+	};
+
+	struct TaskReference
+	{
+
+		Misc::AtomicRefCount SRef;
+		Misc::AtomicRefCount WRef;
+
+		void AddStrongRef(Task* Ptr);
+		void SubStrongRef(Task* Ptr);
+		void AddWeakRef(Task* Ptr);
+		void SubWeakRef(Task* Ptr);
+		bool TryAddStrongRef(Task* Ptr);
+
+		void AddStrongRef(TaskGraph* Ptr);
+		void SubStrongRef(TaskGraph* Ptr);
+		void AddWeakRef(TaskGraph* Ptr);
+		void SubWeakRef(TaskGraph* Ptr);
+		bool TryAddStrongRef(TaskGraph* Ptr);
+	};
+
 }
 
 
 
 export namespace Potato::Task
 {
+	struct Task;
+	using TaskPtr = Misc::StrongPtr<TaskSystem, TaskReference>;
+	using TaskWeakPtr = Misc::WeakPtr<TaskSystem, TaskReference>;
 
 	struct TaskGraph;
+	using TaskGraphPtr = Misc::StrongPtr<TaskGraph, TaskReference>;
+	using TaskGraphWeakPtr = Misc::WeakPtr<TaskGraph, TaskReference>;
 
+	struct TaskSystem;
+	using TaskSystemPtr = Misc::StrongPtr<TaskSystem, TaskSystemReference>;
+	using TaskSystemWeakPtr = Misc::WeakPtr<TaskSystem, TaskSystemReference>;
 
 	struct TaskSystem
 	{
 
-		using Ptr = Misc::StrongPtr<TaskSystem, TaskSystemReference>;
-		using WeakPtr = Misc::WeakPtr<TaskSystem, TaskSystemReference>;
+		static TaskSystemPtr Create(std::pmr::memory_resource* MemoryResouce = std::pmr::new_delete_resource());
 
-		static Ptr Create(std::pmr::memory_resource* MemoryResouce = std::pmr::new_delete_resource());
-
-		static Ptr CreateAndFire(std::size_t ThreadCount = std::thread::hardware_concurrency() - 1, std::pmr::memory_resource* MemoryResouce = std::pmr::new_delete_resource())
+		static TaskSystemPtr CreateAndFire(std::size_t ThreadCount = std::thread::hardware_concurrency() - 1, std::pmr::memory_resource* MemoryResouce = std::pmr::new_delete_resource())
 		{
 			auto P = Create(MemoryResouce);
-			FireThreads(P, ThreadCount);
+			Fire(P, ThreadCount);
 			return P;
 		}
 
-		static bool FireThreads(Ptr Ref, std::size_t ThreadCount = std::thread::hardware_concurrency() - 1);
+		static bool Fire(TaskSystemPtr Ref, std::size_t ThreadCount = std::thread::hardware_concurrency() - 1);
 
 		~TaskSystem();
 		TaskSystem(TaskSystemReference* Ref);
 
 	protected:
 
-		static void Executor(WeakPtr Ptr);
+		static void Executor(TaskSystemWeakPtr Ptr);
 
 		std::atomic_bool Available;
 		TaskSystemReference* Ref = nullptr;
@@ -78,6 +109,28 @@ export namespace Potato::Task
 
 		friend struct TaskSystemReference;
 	};
+
+	struct TaskGraph
+	{
+		TaskSystemPtr GetOwner() const { return Ptr; };
+		TaskGraph(TaskSystemPtr Owner) : Ptr(std::move(Owner)) { assert(Ptr); }
+		virtual TaskWeakPtr ForeachTask() = 0;
+	private:
+		TaskSystemPtr Ptr;
+	};
+
+	struct Task
+	{
+		Task(TaskSystemPtr System, TaskGraphPtr Owner)
+			: System(std::move(System)), Owner(std::move(Owner)) {}
+	protected:
+		virtual void operator()() = 0;
+	private:
+		TaskSystemPtr System;
+		TaskGraphPtr Owner;
+	};
+
+	
 
 	/*
 	struct TaskGraph

@@ -64,7 +64,7 @@ target_sources(
 	PotatoModule PUBLIC
 	FILE_SET cxx_modules TYPE CXX_MODULES
 	FILES
-		#"Potato.ixx"
+		"Potato/Potato.ixx"
 		"Potato/PotatoMisc.ixx"
 		"Potato/PotatoSTD.ixx"
 		"Potato/PotatoTMP.ixx"

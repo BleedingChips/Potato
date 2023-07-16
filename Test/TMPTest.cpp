@@ -1,5 +1,4 @@
-#include "Potato/PotatoTMP.h"
-#include <iostream>
+import PotatoTMP;
 
 struct Type1 {};
 

@@ -1,5 +1,5 @@
 ﻿
-import Potato.Encode;
+import PotatoEncode;
 
 using namespace Potato::Encode;
 

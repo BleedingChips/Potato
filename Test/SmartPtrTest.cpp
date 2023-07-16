@@ -1,6 +1,6 @@
 #include <cassert>
 
-import Potato.SmartPtr;
+import PotatoSmartPtr;
 
 int GobalIndex = 0;
 

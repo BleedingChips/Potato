@@ -1,4 +1,4 @@
-import Potato.SLRX;
+import PotatoSLRX;
 
 using namespace Potato::SLRX;
 

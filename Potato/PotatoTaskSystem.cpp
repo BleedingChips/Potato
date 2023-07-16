@@ -47,7 +47,7 @@ namespace Potato::Task
 		return SRef.TryAddRefNotFromZero();
 	}
 
-	auto TaskSystem::Create(std::pmr::memory_resource* MemoryResouce) -> Ptr
+	auto TaskSystem::Create(std::pmr::memory_resource* MemoryResouce) -> TaskSystemPtr
 	{
 		assert(MemoryResouce != nullptr);
 
@@ -64,7 +64,7 @@ namespace Potato::Task
 
 			try {
 				Ref->System.emplace(static_cast<TaskSystemReference*>(Ref));
-				return Ptr{ &(*Ref->System), static_cast<TaskSystemReference*>(Ref) };
+				return TaskSystemPtr{ &(*Ref->System), static_cast<TaskSystemReference*>(Ref) };
 			}
 			catch (...)
 			{
@@ -85,7 +85,7 @@ namespace Potato::Task
 		assert(Ref != nullptr);
 	}
 
-	bool TaskSystem::FireThreads(Ptr Ref, std::size_t ThreadCount)
+	bool TaskSystem::Fire(TaskSystemPtr Ref, std::size_t ThreadCount)
 	{
 		if (Ref)
 		{
@@ -128,7 +128,7 @@ namespace Potato::Task
 		Thread.clear();
 	}
 
-	void TaskSystem::Executor(WeakPtr WP)
+	void TaskSystem::Executor(TaskSystemWeakPtr WP)
 	{
 
 		while (true)
