@@ -15,7 +15,7 @@ namespace Potato::Task
 
 	struct TaskSystem;
 
-
+	/*
 	struct TaskSystemReference
 	{
 		std::pmr::memory_resource* RefMemoryResource;
@@ -62,13 +62,14 @@ namespace Potato::Task
 		void SubWeakRef(TaskGraph* Ptr);
 		bool TryAddStrongRef(TaskGraph* Ptr);
 	};
-
+	*/
 }
 
 
 
 export namespace Potato::Task
 {
+	/*
 	struct Task;
 	using TaskPtr = Misc::StrongPtr<TaskSystem, TaskReference>;
 	using TaskWeakPtr = Misc::WeakPtr<TaskSystem, TaskReference>;
@@ -78,57 +79,71 @@ export namespace Potato::Task
 	using TaskGraphWeakPtr = Misc::WeakPtr<TaskGraph, TaskReference>;
 
 	struct TaskSystem;
-	using TaskSystemPtr = Misc::StrongPtr<TaskSystem, TaskSystemReference>;
+	
 	using TaskSystemWeakPtr = Misc::WeakPtr<TaskSystem, TaskSystemReference>;
+	*/
+
 
 	struct TaskSystem
 	{
+		using Ptr = Misc::IntrusivePtr<TaskSystem>;
 
-		static TaskSystemPtr Create(std::pmr::memory_resource* MemoryResouce = std::pmr::new_delete_resource());
+		void AddRef() const;
+		void SubRef() const;
 
-		static TaskSystemPtr CreateAndFire(std::size_t ThreadCount = std::thread::hardware_concurrency() - 1, std::pmr::memory_resource* MemoryResouce = std::pmr::new_delete_resource())
+		static Ptr Create(std::pmr::memory_resource* MemoryPool = std::pmr::new_delete_resource(), std::pmr::memory_resource* SelfAllocator = std::pmr::new_delete_resource());
+
+		static Ptr CreateAndFire(std::size_t ThreadCount = std::thread::hardware_concurrency() - 1, std::pmr::memory_resource* MemoryPool = std::pmr::new_delete_resource(), std::pmr::memory_resource* SelfAllocator = std::pmr::new_delete_resource())
 		{
-			auto P = Create(MemoryResouce);
-			Fire(P, ThreadCount);
+			auto P = Create(MemoryPool, SelfAllocator);
+			if (P)
+			{
+				P->Fire(ThreadCount);
+			}
 			return P;
 		}
 
-		static bool Fire(TaskSystemPtr Ref, std::size_t ThreadCount = std::thread::hardware_concurrency() - 1);
-
-		~TaskSystem();
-		TaskSystem(TaskSystemReference* Ref);
+		bool Fire(std::size_t ThreadCount = std::thread::hardware_concurrency() - 1);
 
 	protected:
 
-		static void Executor(TaskSystemWeakPtr Ptr);
+		TaskSystem(std::pmr::memory_resource* MemoryPool, std::pmr::memory_resource* SelfAllocator);
+		~TaskSystem();
+		static void Executor(Ptr Ptr);
 
-		std::atomic_bool Available;
-		TaskSystemReference* Ref = nullptr;
+		mutable Misc::AtomicRefCount RefCount;
+		std::atomic_bool Avaible;
+		std::pmr::memory_resource* SelfAllocator = nullptr;
+		std::pmr::synchronized_pool_resource Allocator;
+		std::pmr::polymorphic_allocator<std::byte> TaskAllocator;
 		std::mutex ThreadMutex;
-		std::vector<std::thread, std::pmr::polymorphic_allocator<std::thread>> Thread;
-
-		friend struct TaskSystemReference;
+		std::vector<std::thread, std::pmr::polymorphic_allocator<std::thread>> Threads;
 	};
 
+	/*
 	struct TaskGraph
 	{
-		TaskSystemPtr GetOwner() const { return Ptr; };
-		TaskGraph(TaskSystemPtr Owner) : Ptr(std::move(Owner)) { assert(Ptr); }
-		virtual TaskWeakPtr ForeachTask() = 0;
+		struct TaskInfo
+		{
+			TaskWeakPtr TaskPtr;
+			std::size_t Delay;
+		};
+
+		TaskGraph(TaskSystem& Owner) : OwnerPtr(Owner.GetStrongPtr()) { assert(OwnerPtr); }
+		virtual TaskInfo ExportTask(TaskSystem& System) = 0;
+		virtual void OnTaskExeFinish(Task& Task, TaskSystem& System) {};
+
 	private:
-		TaskSystemPtr Ptr;
+		
+		TaskSystemPtr OwnerPtr;
 	};
 
 	struct Task
 	{
-		Task(TaskSystemPtr System, TaskGraphPtr Owner)
-			: System(std::move(System)), Owner(std::move(Owner)) {}
-	protected:
-		virtual void operator()() = 0;
-	private:
-		TaskSystemPtr System;
-		TaskGraphPtr Owner;
+		virtual void operator()(TaskSystem& System) = 0;
+		virtual ~Task() = default;
 	};
+	*/
 
 	
 
@@ -271,3 +286,95 @@ export namespace Potato::Task
 
 
 }
+
+module : private;
+
+namespace Potato::Task
+{
+	auto TaskSystem::Create(std::pmr::memory_resource* MemoryPool, std::pmr::memory_resource* SelfAllocator)
+		-> Ptr
+	{
+		assert(MemoryPool != nullptr && SelfAllocator != nullptr);
+		auto AllAdress = SelfAllocator->allocate(sizeof(TaskSystem), alignof(TaskSystem));
+		assert(AllAdress != nullptr);
+		auto TaskPtr = new (AllAdress) TaskSystem{ MemoryPool, SelfAllocator };
+		return Ptr{TaskPtr};
+	}
+
+	TaskSystem::TaskSystem(std::pmr::memory_resource* MemoryPool, std::pmr::memory_resource* SelfAllocator)
+		: Avaible(true), SelfAllocator(SelfAllocator), Allocator(MemoryPool), TaskAllocator(&Allocator)
+	{
+	}
+
+	bool TaskSystem::Fire(std::size_t ThreadCount)
+	{
+		if (ThreadMutex.try_lock())
+		{
+			std::lock_guard lg(ThreadMutex, std::adopt_lock_t{});
+			if (Threads.empty())
+			{
+				auto WPtr = Ptr{this};
+				Threads.reserve(ThreadCount);
+				for (std::size_t I = 0; I < ThreadCount; ++I)
+				{
+					Threads.emplace_back(
+						[WPtr]() {
+							TaskSystem::Executor(std::move(WPtr));
+						}
+					);
+				}
+				return true;
+			}
+		}
+		return false;
+	}
+
+
+	void TaskSystem::Executor(Ptr WP)
+	{
+		if (WP)
+		{
+			while (WP->Avaible)
+			{
+				std::this_thread::yield();
+			}
+		}
+	}
+
+	TaskSystem::~TaskSystem()
+	{
+		Avaible = false;
+
+		auto Curid = std::this_thread::get_id();
+
+		std::lock_guard lg(ThreadMutex);
+
+		for (auto& Ite : Threads)
+		{
+			if (Curid == Ite.get_id())
+			{
+				Ite.detach();
+			}
+			else
+				Ite.join();
+		}
+
+		Threads.clear();
+	}
+
+	void TaskSystem::AddRef() const
+	{
+		RefCount.AddRef();
+	}
+	void TaskSystem::SubRef() const
+	{
+		if (RefCount.SubRef())
+		{
+			auto OldMemopryResource = SelfAllocator;
+			this->~TaskSystem();
+			OldMemopryResource->deallocate(const_cast<void*>(reinterpret_cast<void const*>(this)), sizeof(TaskSystem), alignof(TaskSystem));
+		}
+	}
+
+}
+
