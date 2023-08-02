@@ -93,7 +93,7 @@ export namespace Potato::Misc
 		{
 			Reset();
 			Ptr = IPtr.Ptr;
-			WrapperT::EqualMove(IPtr.Ptr, static_cast<WrapperT &&>(IPtr));
+			WrapperT::EqualMove(Ptr, static_cast<WrapperT &&>(IPtr));
 			IPtr.Ptr = nullptr;
 			return *this;
 		};

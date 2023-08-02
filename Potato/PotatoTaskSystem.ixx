@@ -8,167 +8,203 @@ export import PotatoSTD;
 export import PotatoMisc;
 export import PotatoSmartPtr;
 
-namespace Potato::Task
-{
-
-	struct TaskReference
-	{
-
-		struct AdressInfo
-		{
-			void* Adress = nullptr;
-			std::size_t Size = 0;
-			std::size_t Align = 0;
-			void (*Destructor)(void* Adress) = nullptr;
-		};
-
-		void AddStrongRef(void*) { RefCount.AddRef(); }
-		void SubStrongRef(void*);
-		void AddWeakRef(void*) { WRefCount.AddRef(); }
-		void SubWeakRef(void*);
-		void AddRef() { AddWeakRef(nullptr); }
-		void SubRef() { SubWeakRef(nullptr); }
-		bool TryAddStrongRef(void*) { return RefCount.TryAddRefNotFromZero(); }
-
-		using Ptr = Misc::IntrusivePtr<TaskReference>;
-
-	private:
-
-		AdressInfo Info;
-
-		mutable Misc::AtomicRefCount RefCount;
-		mutable Misc::AtomicRefCount WRefCount;
-
-		friend struct TaskSystem;
-	};
-}
-
-
 
 export namespace Potato::Task
 {
-	/*
-	struct Task;
-	using TaskPtr = Misc::StrongPtr<TaskSystem, TaskReference>;
-	using TaskWeakPtr = Misc::WeakPtr<TaskSystem, TaskReference>;
 
-	struct TaskGraph;
-	using TaskGraphPtr = Misc::StrongPtr<TaskGraph, TaskReference>;
-	using TaskGraphWeakPtr = Misc::WeakPtr<TaskGraph, TaskReference>;
+	struct BaseTaskReference
+	{
+		void AddStrongRef(void*) { RefCount.AddRef(); }
+		void AddWeakRef(void*) { WRefCount.AddRef(); }
+		bool TryAddStrongRef(void*) { return RefCount.TryAddRefNotFromZero(); }
 
-	struct TaskSystem;
-	
-	using TaskSystemWeakPtr = Misc::WeakPtr<TaskSystem, TaskSystemReference>;
-	*/
+	protected:
 
-	struct Context
+		mutable Misc::AtomicRefCount RefCount;
+		mutable Misc::AtomicRefCount WRefCount;
+	};
+
+	template<typename DriverT>
+	struct TaskReference : public BaseTaskReference
+	{
+		void SubStrongRef(void*) {
+			if (RefCount.SubRef())
+			{
+				static_cast<DriverT*>(this)->StrongRelease();
+			}
+		}
+		
+		void SubWeakRef(void*)
+		{
+			if (WRefCount.SubRef())
+			{
+				static_cast<DriverT*>(this)->WeakRelease();
+			}
+		}
+
+	};
+
+	struct TaskContext : protected TaskReference<TaskContext>
 	{
 
-		using Ptr = Potato::Misc::StrongPtr<Context, Context>;
-		using WPtr = Potato::Misc::WeakPtr<Context, Context>;
+		using Ptr = Potato::Misc::StrongPtr<TaskContext, TaskContext>;
+		using WPtr = Potato::Misc::WeakPtr<TaskContext, TaskContext>;
 
 		static Ptr Create(std::size_t ThreadCount =
 			std::thread::hardware_concurrency() - 1,
 			std::pmr::memory_resource* MemoryPool = std::pmr::new_delete_resource(), std::pmr::memory_resource* SelfAllocator = std::pmr::new_delete_resource());
 
-		struct Task
+
+		struct Task : protected TaskReference<Task>
 		{
 
-			struct Property
+			enum class PriorityT : std::size_t
 			{
-				std::u16string_view Name;
-				std::size_t ProgressBar;
-				std::size_t Trigger;
+				High = 100,
+				Normal = 1000,
+				Low = 10000,
 			};
 
-			struct TaskInit
+			struct Info
 			{
-				Context::Ptr Owner;
-				TaskReference::Ptr Ref;
-				std::size_t Priority;
 				std::u16string Name;
+				std::size_t Priority = 1000;
 			};
 
-			Task(TaskInit Init)
-				: Owner(std::move(Init.Owner)), Ref(std::move(Init.Ref)) {
-				assert(Owner && Ref);
-			}
+			using Ptr = Potato::Misc::StrongPtr<Task, Task>;
+			using WPtr = Potato::Misc::WeakPtr<Task, Task>;
 
-		private:
+			Task(TaskContext::Ptr Owner, Info SelfInfo)
+				: Owner(std::move(Owner)) {}
 
-			Context::Ptr Owner;
-			TaskReference::Ptr Ref;
+			TaskContext::Ptr GetOwner() const { return Owner; }
+
+			void Commit();
+
+		protected:
+
+			virtual void StrongRelease() = 0;
+			virtual void WeakRelease() = 0;
+
+			virtual void Execute() = 0;
+			
+			TaskContext::Ptr Owner;
+
+			friend struct Potato::Misc::StrongPtrDefaultWrapper<Task>;
+			friend struct Potato::Misc::WeakPtrDefaultWrapper<Task>;
+			friend struct TaskContext;
+			friend struct TaskReference<Task>;
 		};
+
+		template<typename TaskT, typename ...OTher>
+		Task::Ptr CreateTask(Task::Info Info, OTher&& ...OT);
+
+		template<typename Func>
+		Task::Ptr CreateLambdaTask(Task::Info Info, Func&& Fun) {
+			return CreateTask<std::remove_reference_t<Func>>(std::move(Info), std::forward<Func>(Fun));
+		}
 
 	private:
 
-		Context(std::pmr::memory_resource* MemoryPool, std::pmr::memory_resource* SelfAllocator)
-			: SelfAllocator(SelfAllocator), MemoryPool(MemoryPool), Threads(MemoryPool)
-		{
-		}
-		~Context() {}
+		void Commit(Task::Ptr TaskPtr);
+
+		void StopTaskImp();
+
+		void StrongRelease();
+		void WeakRelease();
+
+		TaskContext(std::pmr::memory_resource* MemoryPool, std::pmr::memory_resource* SelfAllocator)
+			: SelfAllocator(SelfAllocator), MemoryPool(MemoryPool), Threads(&this->MemoryPool), WaittingTask(&this->MemoryPool)
+		{}
+
+		~TaskContext() {}
 
 		static void Executer(std::stop_token ST, WPtr P);
 
-		void AddStrongRef(void*);
-		void SubStrongRef(void*);
-		void AddWeakRef(void*);
-		void SubWeakRef(void*);
-		bool TryAddStrongRef(void*);
-
-		mutable Potato::Misc::AtomicRefCount RefCount;
-		mutable Potato::Misc::AtomicRefCount WRefCount;
-
-		std::mutex ThreadMutex;
-		std::vector<std::jthread, std::pmr::polymorphic_allocator<std::jthread>> Threads;
+		
 		std::pmr::memory_resource* SelfAllocator;
 		std::pmr::synchronized_pool_resource MemoryPool;
 
-		friend struct Potato::Misc::StrongPtrDefaultWrapper<Context>;
-		friend struct Potato::Misc::WeakPtrDefaultWrapper<Context>;
+		std::mutex ThreadMutex;
+		std::vector<std::jthread, std::pmr::polymorphic_allocator<std::jthread>> Threads;
+
+		struct WaittingTaskT
+		{
+			std::size_t Priority;
+			Task::WPtr Task;
+			bool operator<(WaittingTaskT const& T2) const { return Priority < T2.Priority; }
+		};
+
+		std::mutex TaskMutex;
+		std::size_t BasePriority = 0;
+		std::priority_queue<WaittingTaskT, std::vector<WaittingTaskT, std::pmr::polymorphic_allocator<WaittingTaskT>>> WaittingTask;
+
+		friend struct Potato::Misc::StrongPtrDefaultWrapper<TaskContext>;
+		friend struct Potato::Misc::WeakPtrDefaultWrapper<TaskContext>;
+		friend struct TaskReference<TaskContext>;
+		template<typename TaskImpT>
+		friend struct TaskImp;
 	};
+
 }
+
+namespace Potato::Task
+{
+	template<typename TaskImpT>
+	struct TaskImp : public TaskContext::Task
+	{
+		std::optional<TaskImpT> Task;
+
+		template<typename ...AT>
+		TaskImp(TaskContext::Ptr Owner, Task::Info Info, AT&& ...at)
+			: TaskContext::Task(std::move(Owner), std::move(Info)), Task(std::in_place_t{}, std::forward<AT>(at)...) {}
+
+
+		virtual void Execute() override {
+			Task->operator()(GetOwner());
+		}
+		virtual void StrongRelease() override {
+			Task.reset();
+		}
+		virtual void WeakRelease() override {
+			auto OldOwner = std::move(Owner);
+			this->~TaskImp();
+			OldOwner->MemoryPool.deallocate(this, sizeof(TaskImp), alignof(TaskImp));
+		}
+	};
+
+	template<typename TaskT, typename ...OTher>
+	auto TaskContext::CreateTask(Task::Info Info, OTher&& ...OT) ->Task::Ptr
+	{
+		Ptr ThisPtr{this, this};
+		auto Adress = MemoryPool.allocate(sizeof(TaskImp<TaskT>), alignof(TaskImp<TaskT>));
+		auto TaskPtr = new (Adress) TaskImp<TaskT> {std::move(ThisPtr), std::move(Info), std::forward<OTher>(OT)...};
+		return Task::Ptr{TaskPtr, TaskPtr};
+	}
+}
+
+constexpr std::size_t operator*(Potato::Task::TaskContext::Task::PriorityT Priority) { return static_cast<std::size_t>(Priority); }
 
 module : private;
 
 namespace Potato::Task
 {
 
-	void TaskReference::SubStrongRef(void*) {
-		if (RefCount.SubRef())
-		{
-			if (Info.Adress != nullptr)
-			{
-				(*Info.Destructor)(Info.Adress);
-				//MemoryResource->MemoryPool.deallocate(Info.Adress, Info.Size, Info.Align);
-			}
-		}
-	}
-
-	void TaskReference::SubWeakRef(void*) {
-		if (WRefCount.SubRef())
-		{
-			//auto MR = std::move(MemoryResource);
-			this->~TaskReference();
-			//MemoryResource->MemoryPool.deallocate(this, sizeof(TaskReference), alignof(TaskReference));
-		}
-	}
-
-	auto Context::Create(std::size_t ThreadCount, std::pmr::memory_resource* MemoryPool, std::pmr::memory_resource* SelfAllocator)
+	auto TaskContext::Create(std::size_t ThreadCount, std::pmr::memory_resource* MemoryPool, std::pmr::memory_resource* SelfAllocator)
 		-> Ptr
 	{
 		ThreadCount = std::max(ThreadCount, std::size_t{1});
 		assert(MemoryPool != nullptr && SelfAllocator != nullptr);
-		auto ConAdress = SelfAllocator->allocate(sizeof(Context), alignof(Context));
+		auto ConAdress = SelfAllocator->allocate(sizeof(TaskContext), alignof(TaskContext));
 		if (ConAdress != nullptr)
 		{
-			auto ConPtr = new (ConAdress) Context{ MemoryPool, SelfAllocator };
+			auto ConPtr = new (ConAdress) TaskContext{ MemoryPool, SelfAllocator };
 			Ptr P{ ConPtr, ConPtr };
 			auto WP = P.Downgrade();
 			for (std::size_t I = 0; I < ThreadCount; ++I)
 			{
 				P->Threads.emplace_back([WP](std::stop_token ST) {
-					Context::Executer(std::move(ST), std::move(WP));
+					TaskContext::Executer(std::move(ST), std::move(WP));
 					});
 			}
 			return P;
@@ -176,57 +212,83 @@ namespace Potato::Task
 		return {};
 	}
 
-	void Context::Executer(std::stop_token ST, WPtr P)
+	void TaskContext::StopTaskImp()
+	{
+		auto Curid = std::this_thread::get_id();
+		std::lock_guard lg(ThreadMutex);
+		for (auto& Ite : Threads)
+		{
+			Ite.request_stop();
+			if (Curid == Ite.get_id())
+			{
+				Ite.detach();
+			}
+		}
+		Threads.clear();
+	}
+
+	void TaskContext::Executer(std::stop_token ST, WPtr P)
 	{
 		while (!ST.stop_requested())
 		{
 			auto Upgrade = P.Upgrade();
 			if (Upgrade)
 			{
-				std::this_thread::yield();
-			}
-		}
-	}
-
-	void Context::AddStrongRef(void*)
-	{
-		RefCount.AddRef();
-	}
-	void Context::SubStrongRef(void*)
-	{
-		if (RefCount.SubRef())
-		{
-			auto Curid = std::this_thread::get_id();
-			std::lock_guard lg(ThreadMutex);
-			for (auto& Ite : Threads)
-			{
-				Ite.request_stop();
-				if (Curid == Ite.get_id())
+				Task::Ptr TaskPtr;
+				bool NeedSleep = false;
+				if (Upgrade->ThreadMutex.try_lock())
 				{
-					Ite.detach();
+					std::lock_guard lg(Upgrade->ThreadMutex, std::adopt_lock_t{});
+					if (Upgrade->WaittingTask.empty())
+					{
+						NeedSleep = true;
+					}
+					else {
+						auto TopTask = Upgrade->WaittingTask.top();
+						TaskPtr = TopTask.Task.Upgrade();
+						Upgrade->WaittingTask.pop();
+					}
+				}else
+					std::this_thread::yield();
+				Upgrade.Reset();
+				if (TaskPtr)
+				{
+					TaskPtr->Execute();
+					std::this_thread::yield();
+				}
+				else {
+					std::this_thread::sleep_for(std::chrono::microseconds{1});
 				}
 			}
-			Threads.clear();
 		}
 	}
 
-	void Context::AddWeakRef(void*)
+	void TaskContext::StrongRelease()
 	{
-		WRefCount.AddRef();
-	}
-	void Context::SubWeakRef(void*)
-	{
-		if (WRefCount.SubRef())
-		{
-			auto OldSelfAllocator = SelfAllocator;
-			this->~Context();
-			OldSelfAllocator->deallocate(this, sizeof(Context), alignof(Context));
-		}
+		StopTaskImp();
 	}
 
-	bool Context::TryAddStrongRef(void*)
+	void TaskContext::WeakRelease()
 	{
-		return RefCount.TryAddRefNotFromZero();
+		auto OldSelfAllocator = SelfAllocator;
+		StopTaskImp();
+		this->~TaskContext();
+		OldSelfAllocator->deallocate(this, sizeof(TaskContext), alignof(TaskContext));
+	}
+
+	void TaskContext::Commit(Task::Ptr TaskPtr)
+	{
+		std::lock_guard lg(TaskMutex);
+		WaittingTaskT TaskInfo{
+			100 + BasePriority,
+			TaskPtr.Downgrade()
+		};
+		WaittingTask.push(std::move(TaskInfo));
+	}
+
+	void TaskContext::Task::Commit()
+	{
+		GetOwner()->Commit(Ptr{this, this});
 	}
 }
 
