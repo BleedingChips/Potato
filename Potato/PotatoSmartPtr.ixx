@@ -492,4 +492,58 @@ export namespace Potato::Misc
 	template<typename PtrT, typename RefT>
 	using WeakPtr = SmartPtr<PtrT, WeakPtrDefaultWrapper<RefT>>;
 
+	struct ConstructFromPtrT{};
+
+	template<typename WrapperT, typename ...Par>
+	concept EnableConstructT = requires(WrapperT T, Par ...P)
+	{
+		{T.Construct(P...)};
+	};
+
+
+	template<typename PtrT, typename WrapperT>
+	struct SP : public WrapperT
+	{
+		static_assert(!std::is_reference_v<PtrT>, "SmartPtr : Type should not be reference Type");
+		
+		template<typename ...AppendT>
+		explicit SP(PtrT * MainPtr, AppendT&&... AT) 
+			requires EnableConstructT<WrapperT, ConstructFromPtrT, PtrT*, PtrT*>
+			: WrapperT(ConstructFromPtrT{}, std::forward<AppendT>(AT)...)
+		{
+			this->WrapperT::Construct(ConstructFromPtrT{}, this->MainPtr, MainPtr);
+		}
+
+		template<typename ...AppendT>
+		explicit SP(PtrT* MainPtr, AppendT&&... AT)
+			requires EnableConstructT<WrapperT, ConstructFromPtrT>
+		: WrapperT(ConstructFromPtrT{}, std::forward<AppendT>(AT)...)
+		{
+			this->WrapperT::Construct(ConstructFromPtrT{});
+			this->MainPtr = MainPtr;
+		}
+
+		explicit SP() = default;
+
+	protected:
+		PtrT* MainPtr = nullptr;
+	};
+
+	struct IntrusivePtrDefaultWrapper2
+	{
+		IntrusivePtrDefaultWrapper2(ConstructFromPtrT) {};
+		IntrusivePtrDefaultWrapper2() = default;
+
+		template<typename PtrT>
+		void Construct(ConstructFromPtrT, PtrT*& Ptr, PtrT* Input) {
+			Ptr = Input;
+			if (Ptr != nullptr)
+			{
+				Ptr->AddRef();
+			}
+		}
+	};
+
+	template<typename PtrT>
+	using IntrusivePtr2 = SP<PtrT, IntrusivePtrDefaultWrapper2>;
 }

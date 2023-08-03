@@ -168,6 +168,8 @@ int main()
 
 	W.Reset();
 
+	IntrusivePtr2<Type1> L(new Type1{});
+
 	
 
 	volatile int i = 0;
