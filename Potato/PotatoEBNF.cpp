@@ -494,7 +494,7 @@ namespace Potato::EBNF
 		: RequireTokenIndex(StartupTokenIndex), LastSymbolToken(StartupTokenIndex)
 	{
 		Processor.SetObserverTable(GetRegTable());
-		LRXProcessor.SetObserverTable(EbnfStep1SLRX(), Misc::ObserverPtr<SLRX::ProcessorOperator>{this});
+		LRXProcessor.SetObserverTable(EbnfStep1SLRX(), this);
 	}
 
 	bool EbnfBuilder::Consume(char32_t InputValue, std::size_t NextTokenIndex)
@@ -775,11 +775,11 @@ namespace Potato::EBNF
 	{
 		assert(!std::holds_alternative<std::monostate>(TableWrapper));
 
-		if (std::holds_alternative<Misc::ObserverPtr<Ebnf const>>(TableWrapper))
+		if (std::holds_alternative<SP::ObserverPtr<Ebnf const>>(TableWrapper))
 		{
-			auto Inf = std::get<Misc::ObserverPtr<Ebnf const>>(TableWrapper)->GetRgeInfo(Mask);
+			auto Inf = std::get<SP::ObserverPtr<Ebnf const>>(TableWrapper)->GetRgeInfo(Mask);
 			return {
-				{SLRX::Symbol::AsTerminal(Inf.MapSymbolValue), std::get<Misc::ObserverPtr<Ebnf const>>(TableWrapper)->GetRegName(Inf.MapSymbolValue), TokenIndex},
+				{SLRX::Symbol::AsTerminal(Inf.MapSymbolValue), std::get<SP::ObserverPtr<Ebnf const>>(TableWrapper)->GetRegName(Inf.MapSymbolValue), TokenIndex},
 				Inf.UserMask.has_value() ? *Inf.UserMask : 0,
 			};
 		}
@@ -795,16 +795,16 @@ namespace Potato::EBNF
 	SymbolInfo EbnfProcessor::Tranlate(SLRX::Symbol Symbol, Misc::IndexSpan<> TokenIndex) const
 	{
 		assert(!std::holds_alternative<std::monostate>(TableWrapper));
-		if (std::holds_alternative<Misc::ObserverPtr<Ebnf const>>(TableWrapper))
+		if (std::holds_alternative<SP::ObserverPtr<Ebnf const>>(TableWrapper))
 		{
-			return {Symbol, std::get<Misc::ObserverPtr<Ebnf const>>(TableWrapper)->GetRegName(Symbol.Value), TokenIndex };
+			return {Symbol, std::get<SP::ObserverPtr<Ebnf const>>(TableWrapper)->GetRegName(Symbol.Value), TokenIndex };
 		}
 		else {
 			return { Symbol, std::get<EbnfBinaryTableWrapper>(TableWrapper).GetRegName(Symbol.Value), TokenIndex };
 		}
 	}
 
-	void EbnfProcessor::SetObserverTable(Ebnf const& Table, Misc::ObserverPtr<EbnfOperator> Ope, std::size_t StartupTokenIndex) 
+	void EbnfProcessor::SetObserverTable(Ebnf const& Table, SP::ObserverPtr<EbnfOperator> Ope, std::size_t StartupTokenIndex)
 	{
 		Operator = std::move(Ope);
 		TableWrapper = &Table;
@@ -814,7 +814,7 @@ namespace Potato::EBNF
 		RequireTokenIndex = StartupTokenIndex;
 	}
 
-	void EbnfProcessor::SetObserverTable(EbnfBinaryTableWrapper Table, Misc::ObserverPtr<EbnfOperator> Ope, std::size_t StartupTokenIndex)
+	void EbnfProcessor::SetObserverTable(EbnfBinaryTableWrapper Table, SP::ObserverPtr<EbnfOperator> Ope, std::size_t StartupTokenIndex)
 	{
 		Operator = std::move(Ope);
 		TableWrapper = Table;

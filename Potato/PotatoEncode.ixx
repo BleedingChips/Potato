@@ -377,4 +377,56 @@ export namespace Potato::Encode
 			return {};
 		}
 	};
+
+	template<>
+	struct StrEncoder<char, wchar_t>
+	{
+		static EncodeInfo RequireSpaceUnSafe(std::span<char const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
+		static EncodeInfo RequireSpace(std::span<char const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())
+		{
+			return RequireSpaceUnSafe(Source, MaxCharacter);
+		}
+
+		static EncodeInfo EncodeUnSafe(std::span<char const> Source, std::span<wchar_t> Target, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
+
+		template<typename CharTraits, typename AllocatorT = std::allocator<wchar_t>>
+		static auto EncodeToString(std::basic_string_view<char, CharTraits> Source, AllocatorT Allocator = {}) -> std::optional<std::basic_string<wchar_t, std::char_traits<wchar_t>, AllocatorT>>
+		{
+			auto Info = RequireSpaceUnSafe(Source);
+			if (Info)
+			{
+				std::basic_string<wchar_t, std::char_traits<wchar_t>, AllocatorT> Result{ std::move(Allocator) };
+				Result.resize(Info.TargetSpace);
+				EncodeUnSafe(Source, Result);
+				return Result;
+			}
+			return {};
+		}
+	};
+
+	template<>
+	struct StrEncoder<wchar_t, char>
+	{
+		static EncodeInfo RequireSpaceUnSafe(std::span<wchar_t const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
+		static EncodeInfo RequireSpace(std::span<wchar_t const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())
+		{
+			return RequireSpaceUnSafe(Source, MaxCharacter);
+		}
+
+		static EncodeInfo EncodeUnSafe(std::span<wchar_t const> Source, std::span<char> Target, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
+
+		template<typename CharTraits, typename AllocatorT = std::allocator<wchar_t>>
+		static auto EncodeToString(std::basic_string_view<wchar_t, CharTraits> Source, AllocatorT Allocator = {}) -> std::optional<std::basic_string<char, std::char_traits<wchar_t>, AllocatorT>>
+		{
+			auto Info = RequireSpaceUnSafe(Source);
+			if (Info)
+			{
+				std::basic_string<char, std::char_traits<char>, AllocatorT> Result{ std::move(Allocator) };
+				Result.resize(Info.TargetSpace);
+				EncodeUnSafe(Source, Result);
+				return Result;
+			}
+			return {};
+		}
+	};
 }

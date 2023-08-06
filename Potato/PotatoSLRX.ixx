@@ -468,9 +468,9 @@ export namespace Potato::SLRX
 		bool Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, std::any AppendInfo);
 		bool EndOfFile();
 
-		void SetObserverTable(LRX const& Table, Misc::ObserverPtr<ProcessorOperator> Ope);
+		void SetObserverTable(LRX const& Table, SP::ObserverPtr<ProcessorOperator> Ope);
 
-		void SetObserverTable(LRXBinaryTableWrapper Table, Misc::ObserverPtr<ProcessorOperator> Ope);
+		void SetObserverTable(LRXBinaryTableWrapper Table, SP::ObserverPtr<ProcessorOperator> Ope);
 
 		std::any& GetDataRaw();
 
@@ -489,7 +489,7 @@ export namespace Potato::SLRX
 			LRXBinaryTableWrapper
 		> TableWrapper;
 
-		Misc::ObserverPtr<ProcessorOperator> Operator;
+		SP::ObserverPtr<ProcessorOperator> Operator;
 
 		void TryReduce();
 

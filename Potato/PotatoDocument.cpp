@@ -299,6 +299,22 @@ namespace Potato::Document
 
 	std::optional<std::u8string_view> ImmediateReader::TryCastU8() const
 	{
+		if (Buffer.has_value())
+		{
+			if (Bom == BomT::UTF8 || Bom == BomT::NoBom)
+			{
+				std::u8string_view Re = { reinterpret_cast<char8_t const*>(Buffer->data()), Buffer->size() };
+#ifdef _WIN32
+				if (Bom == BomT::NoBom)
+				{
+					auto K = Encode::StrEncoder<char8_t, char32_t>::RequireSpace(Re);
+					if(!K)
+						return {};
+				}
+#endif
+				return Re;
+			}
+		}
 		if (Buffer.has_value() && (Bom == BomT::NoBom || Bom == BomT::UTF8))
 		{
 			std::u8string_view Re = {reinterpret_cast<char8_t const*>(Buffer->data()), Buffer->size()};

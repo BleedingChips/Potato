@@ -93,7 +93,7 @@ export namespace Potato::IR
 		std::size_t InsertSymbol(std::u32string Name, std::size_t FeedbackIndex, std::any Data);
 		std::size_t MarkAsAreaBegin();
 		std::optional<std::size_t> PopArea(bool Searchable = false, bool KeepProperty = true);
-		Misc::ObserverPtr<Property> FindLastActiveSymbol(std::u32string_view Name);
+		SP::ObserverPtr<Property> FindLastActiveSymbol(std::u32string_view Name);
 	};
 
 	struct TypeDescription

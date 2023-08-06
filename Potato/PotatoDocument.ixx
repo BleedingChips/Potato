@@ -218,6 +218,8 @@ export namespace Potato::Document
 		ImmediateReader(std::filesystem::path Path);
 		bool IsGood() const { return Buffer.has_value(); }
 		std::optional<std::u8string_view> TryCastU8() const;
+		BomT GetBom() const { return Bom; }
+		std::span<std::byte const> GetBuffer() const { return std::span(*Buffer); }
 	private:
 		std::optional<std::vector<std::byte>> Buffer;
 		BomT Bom = BomT::NoBom;

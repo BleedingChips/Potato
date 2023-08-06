@@ -14,9 +14,9 @@ export namespace Potato::Task
 
 	struct BaseTaskReference
 	{
-		void AddStrongRef(void*) { RefCount.AddRef(); }
-		void AddWeakRef(void*) { WRefCount.AddRef(); }
-		bool TryAddStrongRef(void*) { return RefCount.TryAddRefNotFromZero(); }
+		void AddStrongRef() { RefCount.AddRef(); }
+		void AddWeakRef() { WRefCount.AddRef(); }
+		bool TryAddStrongRef() { return RefCount.TryAddRefNotFromZero(); }
 
 	protected:
 
@@ -27,14 +27,14 @@ export namespace Potato::Task
 	template<typename DriverT>
 	struct TaskReference : public BaseTaskReference
 	{
-		void SubStrongRef(void*) {
+		void SubStrongRef() {
 			if (RefCount.SubRef())
 			{
 				static_cast<DriverT*>(this)->StrongRelease();
 			}
 		}
 		
-		void SubWeakRef(void*)
+		void SubWeakRef()
 		{
 			if (WRefCount.SubRef())
 			{
@@ -47,8 +47,8 @@ export namespace Potato::Task
 	struct TaskContext : protected TaskReference<TaskContext>
 	{
 
-		using Ptr = Potato::Misc::StrongPtr<TaskContext, TaskContext>;
-		using WPtr = Potato::Misc::WeakPtr<TaskContext, TaskContext>;
+		using Ptr = Potato::SP::StrongPtr<TaskContext>;
+		using WPtr = Potato::SP::WeakPtr<TaskContext>;
 
 		static Ptr Create(std::size_t ThreadCount =
 			std::thread::hardware_concurrency() - 1,
@@ -71,8 +71,8 @@ export namespace Potato::Task
 				std::size_t Priority = 1000;
 			};
 
-			using Ptr = Potato::Misc::StrongPtr<Task, Task>;
-			using WPtr = Potato::Misc::WeakPtr<Task, Task>;
+			using Ptr = Potato::SP::StrongPtr<Task>;
+			using WPtr = Potato::SP::WeakPtr<Task>;
 
 			Task(TaskContext::Ptr Owner, Info SelfInfo)
 				: Owner(std::move(Owner)) {}
@@ -90,8 +90,8 @@ export namespace Potato::Task
 			
 			TaskContext::Ptr Owner;
 
-			friend struct Potato::Misc::StrongPtrDefaultWrapper<Task>;
-			friend struct Potato::Misc::WeakPtrDefaultWrapper<Task>;
+			friend struct Potato::SP::SWSubWrapperT;
+			friend struct Potato::SP::SWSubWrapperT;
 			friend struct TaskContext;
 			friend struct TaskReference<Task>;
 		};
@@ -139,8 +139,8 @@ export namespace Potato::Task
 		std::size_t BasePriority = 0;
 		std::priority_queue<WaittingTaskT, std::vector<WaittingTaskT, std::pmr::polymorphic_allocator<WaittingTaskT>>> WaittingTask;
 
-		friend struct Potato::Misc::StrongPtrDefaultWrapper<TaskContext>;
-		friend struct Potato::Misc::WeakPtrDefaultWrapper<TaskContext>;
+		friend struct Potato::SP::SWSubWrapperT;
+		friend struct Potato::SP::SWSubWrapperT;
 		friend struct TaskReference<TaskContext>;
 		template<typename TaskImpT>
 		friend struct TaskImp;
@@ -176,10 +176,10 @@ namespace Potato::Task
 	template<typename TaskT, typename ...OTher>
 	auto TaskContext::CreateTask(Task::Info Info, OTher&& ...OT) ->Task::Ptr
 	{
-		Ptr ThisPtr{this, this};
+		Ptr ThisPtr{this};
 		auto Adress = MemoryPool.allocate(sizeof(TaskImp<TaskT>), alignof(TaskImp<TaskT>));
 		auto TaskPtr = new (Adress) TaskImp<TaskT> {std::move(ThisPtr), std::move(Info), std::forward<OTher>(OT)...};
-		return Task::Ptr{TaskPtr, TaskPtr};
+		return Task::Ptr{TaskPtr};
 	}
 }
 
@@ -199,8 +199,8 @@ namespace Potato::Task
 		if (ConAdress != nullptr)
 		{
 			auto ConPtr = new (ConAdress) TaskContext{ MemoryPool, SelfAllocator };
-			Ptr P{ ConPtr, ConPtr };
-			auto WP = P.Downgrade();
+			Ptr P{ ConPtr };
+			WPtr WP = P;
 			for (std::size_t I = 0; I < ThreadCount; ++I)
 			{
 				P->Threads.emplace_back([WP](std::stop_token ST) {
@@ -231,7 +231,7 @@ namespace Potato::Task
 	{
 		while (!ST.stop_requested())
 		{
-			auto Upgrade = P.Upgrade();
+			Ptr Upgrade = P;
 			if (Upgrade)
 			{
 				Task::Ptr TaskPtr;
@@ -245,7 +245,7 @@ namespace Potato::Task
 					}
 					else {
 						auto TopTask = Upgrade->WaittingTask.top();
-						TaskPtr = TopTask.Task.Upgrade();
+						TaskPtr = TopTask.Task;
 						Upgrade->WaittingTask.pop();
 					}
 				}else
@@ -281,14 +281,14 @@ namespace Potato::Task
 		std::lock_guard lg(TaskMutex);
 		WaittingTaskT TaskInfo{
 			100 + BasePriority,
-			TaskPtr.Downgrade()
+			TaskPtr
 		};
 		WaittingTask.push(std::move(TaskInfo));
 	}
 
 	void TaskContext::Task::Commit()
 	{
-		GetOwner()->Commit(Ptr{this, this});
+		Owner->Commit(Ptr{this});
 	}
 }
 

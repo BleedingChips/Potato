@@ -6,6 +6,7 @@ int GobalIndex = 0;
 
 using namespace Potato;
 using namespace Potato::Misc;
+using namespace Potato::SP;
 
 struct Type1
 {
@@ -131,6 +132,7 @@ int main()
 
 	static_assert(std::is_constructible_v<K, int32_t&>, "Fuck");
 
+	/*
 	GobalIndex = 10086;
 
 
@@ -170,6 +172,23 @@ int main()
 
 	IntrusivePtr2<Type1> L(new Type1{});
 
+	//ObserverPtr2<Type1> BP(new Type1{});
+
+	//auto K22 = BP;
+
+	//IntrusivePtr2<Type1> K34 { std::move(L)};
+
+	//auto P = K34;
+
+	IntrusivePtr2<Type1> K44 { L };
+
+	IntrusivePtr2<Type1> J {std::move(K44)};
+
+	auto Jh = std::move(J);
+
+	J = Jh;
+
+	Jh = std::move(J);
 	
 
 	volatile int i = 0;
