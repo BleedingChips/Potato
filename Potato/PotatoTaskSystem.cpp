@@ -39,7 +39,7 @@ namespace Potato::Task
 	}
 
 	TaskContext::TaskContext(std::pmr::memory_resource* Resource)
-		: Resource(Resource), Threads(Resource), WaitingTask(Resource)
+		: Resource(Resource), Threads(Resource), DelayTasks(Resource), ReadyTasks(Resource)
 	{
 		assert(Resource != nullptr);
 	}
@@ -47,11 +47,32 @@ namespace Potato::Task
 	bool TaskContext::FireThreads(std::size_t TaskCount)
 	{
 		std::lock_guard lg(ThreadMutex);
-		if(Threads.empty())
+		if(!TimmerThread.joinable() && Threads.empty())
 		{
 			Threads.reserve(TaskCount);
 			Ptr NewThis{this};
 			WPtr ThisPtr{NewThis};
+			TimmerThread = std::jthread{[ThisPtr](std::stop_token ST)
+			{
+				while(!ST.stop_requested())
+				{
+					Ptr InstanceThis{ ThisPtr };
+					if(InstanceThis)
+					{
+						if(InstanceThis->TryPushDelayTask())
+						{
+							InstanceThis.Reset();
+							std::this_thread::sleep_for(std::chrono::milliseconds{ 1 });
+						}else
+						{
+							InstanceThis.Reset();
+							std::this_thread::yield();
+						}
+					}else
+						break;
+				}
+			}};
+
 			for(std::size_t Count = 0; Count < TaskCount; ++Count)
 			{
 				Threads.emplace_back([ThisPtr](std::stop_token ST)
@@ -61,32 +82,28 @@ namespace Potato::Task
 						Ptr InstanceThis{ThisPtr};
 						if(InstanceThis)
 						{
-							if(InstanceThis->TaskMutex.try_lock())
+							auto [Re, Task] = InstanceThis->TryGetTopTask();
+							if(Re)
 							{
-								Task::Ptr RequireTask;
+								if (Task)
 								{
-									std::lock_guard lg(InstanceThis->TaskMutex, std::adopt_lock);
-									if (!InstanceThis->WaitingTask.empty())
-									{
-										auto Top = std::move(*InstanceThis->WaitingTask.begin());
-										InstanceThis->WaitingTask.pop_front();
-										for(auto& Ite : InstanceThis->WaitingTask)
-										{
-											Ite.Priority -= Top.Priority;
-										}
-										RequireTask = std::move(Top.Task);
-									}
+									Task->Execute(ExecuteStatus::Normal, *InstanceThis);
+									InstanceThis.Reset();
+									std::this_thread::yield();
 								}
-								if(RequireTask)
+								else
 								{
-									RequireTask->Execute(ExecuteStatus::Normal, *InstanceThis);
+									InstanceThis.Reset();
+									std::this_thread::sleep_for(std::chrono::milliseconds{ 1 });
 								}
-								std::this_thread::sleep_for(std::chrono::nanoseconds{1});
 							}else
 							{
-								std::this_thread::yield();
+								assert(!Task);
+								InstanceThis.Reset();
+								std::this_thread::sleep_for(std::chrono::milliseconds{ 1 });
 							}
-						}
+						}else
+							break;
 					}
 				});
 			}
@@ -99,6 +116,7 @@ namespace Potato::Task
 		auto CurID = std::this_thread::get_id();
 		std::lock_guard lg(ThreadMutex);
 		std::size_t NowTaskCount = Threads.size();
+		TimmerThread.request_stop();
 		for(auto& Ite : Threads)
 		{
 			Ite.request_stop();
@@ -106,36 +124,86 @@ namespace Potato::Task
 				Ite.detach();
 		}
 		Threads.clear();
+		TimmerThread = std::jthread{};
 		return NowTaskCount;
 	}
 
-	void TaskContext::ExecuteAndRemoveAllTask()
+	void TaskContext::ExecuteAndRemoveAllTask(std::pmr::memory_resource* TempResource)
 	{
-		bool Continue = true;
-		while(Continue)
+		std::vector<Task::Ptr, std::pmr::polymorphic_allocator<Task::Ptr>> TempTask(TempResource);
 		{
-			Task::Ptr RequireTask;
+			std::lock_guard lg(TaskMutex);
+			EnableInsertTask = false;
+			auto Span1 = std::span(DelayTasks).subspan(DelayTaskIte);
+			auto Span2 = std::span(ReadyTasks).subspan(ReadyTasksIte);
+			TempTask.reserve(
+				Span1.size() + Span2.size()
+			);
+			for(auto& Ite : Span1)
+				TempTask.push_back(std::move(Ite.Task));
+			for(auto& Ite : Span2)
+				TempTask.push_back(std::move(Ite.Task));
+			DelayTasks.clear();
+			DelayTaskIte = 0;
+			ReadyTasks.clear();
+			ReadyTasksIte = 0;
+		}
+		for(auto& Ite : TempTask)
+		{
+			Ite->Execute(ExecuteStatus::Close, *this);
+			Ite.Reset();
+		}
+		TempTask.clear();
+		{
+			std::lock_guard lg(TaskMutex);
+			EnableInsertTask = true;
+		}
+	}
+
+	bool TaskContext::TryPushDelayTask()
+	{
+		if(TaskMutex.try_lock())
+		{
+			std::lock_guard lg(TaskMutex, std::adopt_lock);
+			if (DelayTaskIte < DelayTasks.size())
 			{
-				std::lock_guard lg(TaskMutex);
-				if (!WaitingTask.empty())
+				auto CTime = std::chrono::system_clock::now();
+				bool Move = false;
+				for (; DelayTaskIte < DelayTasks.size(); ++DelayTaskIte)
 				{
-					auto Top = std::move(*WaitingTask.begin());
-					WaitingTask.pop_front();
-					for (auto& Ite : WaitingTask)
+					auto& Cur = DelayTasks[DelayTaskIte];
+					if (CTime >= Cur.DelayTimePoint)
 					{
-						Ite.Priority -= Top.Priority;
+						Move = true;
+						if (Cur.Task)
+						{
+							auto Pri = Cur.Task->GetTaskPriority();
+							ReadyTaskT Task{
+								0,
+								std::move(Cur.Task)
+							};
+							auto find = std::find_if(ReadyTasks.begin() + ReadyTasksIte, ReadyTasks.end(),
+								[](ReadyTaskT const& TaskT)
+								{
+									return TaskT.Priority > 0;
+								});
+							ReadyTasks.insert(find, std::move(Task));
+						}
 					}
-					RequireTask = std::move(Top.Task);
-				}else
+					else
+					{
+						break;
+					}
+				}
+				if (Move && DelayTaskIte * 2 >= DelayTasks.size())
 				{
-					return;
+					DelayTasks.erase(DelayTasks.begin(), DelayTasks.begin() + DelayTaskIte);
+					DelayTaskIte = 0;
 				}
 			}
-			if (RequireTask)
-			{
-				RequireTask->Execute(ExecuteStatus::Close, *this);
-			}
+			return true;
 		}
+		return false;
 	}
 
 	std::tuple<bool, Task::Ptr> TaskContext::TryGetTopTask()
@@ -143,95 +211,65 @@ namespace Potato::Task
 		if(TaskMutex.try_lock())
 		{
 			std::lock_guard lg(TaskMutex, std::adopt_lock);
-			if(StartTask >= WaitingTask.size())
+
+			if(ReadyTasksIte < ReadyTasks.size())
 			{
-				return {false, {}};
-			}else
-			{
-				auto Top = std::move(WaitingTask[StartTask]);
-				++StartTask;
-				for(std::size_t I = StartTask; StartTask < WaitingTask.size(); ++I)
+				auto Top = std::move(ReadyTasks[ReadyTasksIte]);
+				++ReadyTasksIte;
+				for(std::size_t I = ReadyTasksIte; I < ReadyTasks.size(); ++I)
 				{
-					assert(WaitingTask[I].Priority >= Top.Priority);
-					WaitingTask[I].Priority -= Top.Priority;
+					assert(ReadyTasks[I].Priority >= Top.Priority);
+					ReadyTasks[I].Priority -= Top.Priority;
 				}
-				if(StartTask * 2 >= WaitingTask.size())
+				if(ReadyTasksIte * 2 >= ReadyTasks.size())
 				{
-					WaitingTask.erase(WaitingTask.begin(), WaitingTask.begin() + StartTask);
-					StartTask = 0;
+					ReadyTasks.erase(ReadyTasks.begin(), ReadyTasks.begin() + ReadyTasksIte);
+					ReadyTasksIte = 0;
 				}
 				return {true, std::move(Top.Task)};
 			}
+			return {false, {}};
 		}
 		return {true, {}};
 	}
 
-	bool TaskContext::Commit(Task::Ptr TaskPtr, bool RequireUnique)
+	bool TaskContext::CommitTask(Task::Ptr TaskPtr)
 	{
 		if(TaskPtr)
 		{
 			std::lock_guard lg(TaskMutex);
-			if(RequireUnique)
+			if(EnableInsertTask)
 			{
-				for(auto& Ite : WaitingTask)
-				{
-					if(Ite.Task == TaskPtr)
+				auto Priority = TaskPtr->GetTaskPriority();
+				auto Find = std::find_if(ReadyTasks.begin() + ReadyTasksIte, ReadyTasks.end(),
+					[Priority](ReadyTaskT const& T)
 					{
-						return false;
+						return Priority < T.Priority;
 					}
-				}
+				);
+				ReadyTasks.insert(Find, ReadyTaskT{ Priority, std::move(TaskPtr) });
+				return true;
 			}
-			auto Priority = TaskPtr->GetTaskPriority();
-			auto Find = std::find_if(WaitingTask.begin() + StartTask, WaitingTask.end(),
-			[Priority](WaittingTaskT const& T)
-			{
-				return Priority < T.Priority;
-			}
-			);
-			WaitingTask.insert(Find, WaittingTaskT{Priority, std::move(TaskPtr)});
-			return true;
 		}
 		return false;
 	}
 
-	/*
-	struct TaskSystemImp : public TaskSystemReference
+	bool TaskContext::CommitDelayTask(Task::Ptr TaskPtr, std::chrono::system_clock::time_point TimePoint)
 	{
-		using TaskSystemReference::TaskSystemReference;
-
-		std::optional<TaskSystem> System;
-	};
-
-	void TaskSystemReference::AddStrongRef(TaskSystem* Ptr)
-	{
-		SRef.AddRef();
-	}
-	
-	void TaskSystemReference::SubStrongRef(TaskSystem* Ptr) {
-		if (SRef.SubRef())
+		if(TaskPtr)
 		{
-			static_cast<TaskSystemImp*>(this)->System.reset();
+			std::lock_guard lg(TaskMutex);
+			if(EnableInsertTask)
+			{
+				auto Find = std::find_if(DelayTasks.begin() + DelayTaskIte, DelayTasks.end(), 
+				[TimePoint](DelayTaskT const& Task)
+				{
+					return Task.DelayTimePoint > TimePoint;
+				});
+				DelayTasks.insert(Find, DelayTaskT{ TimePoint, std::move(TaskPtr)});
+				return true;
+			}
 		}
+		return false;
 	}
-
-	void TaskSystemReference::AddWeakRef(TaskSystem* Ptr) {
-		WRef.AddRef();
-	}
-
-	void TaskSystemReference::SubWeakRef(TaskSystem* Ptr) {
-		if (WRef.SubRef())
-		{
-			auto OldMemoryResource = RefMemoryResource;
-			static_cast<TaskSystemImp*>(this)->~TaskSystemImp();
-			OldMemoryResource->deallocate(this, 
-				sizeof(TaskSystemImp),
-				alignof(TaskSystemImp)
-			);
-		}
-	}
-
-	bool TaskSystemReference::TryAddStrongRef(TaskSystem* Ptr) {
-		return SRef.TryAddRefNotFromZero();
-	}
-	*/
 }

@@ -81,9 +81,10 @@ export namespace Potato::Task
 		static Ptr Create(std::pmr::memory_resource* Resource = std::pmr::new_delete_resource());
 		bool FireThreads(std::size_t TaskCount = std::thread::hardware_concurrency() - 1);
 		std::size_t CloseThreads();
-		void ExecuteAndRemoveAllTask();
+		void ExecuteAndRemoveAllTask(std::pmr::memory_resource* TempResource = std::pmr::new_delete_resource());
 
-		bool Commit(Task::Ptr TaskPtr, bool RequireUnique = false);
+		bool CommitTask(Task::Ptr TaskPtr);
+		bool CommitDelayTask(Task::Ptr TaskPtr, std::chrono::system_clock::time_point TimePoint);
 
 	private:
 
@@ -94,6 +95,8 @@ export namespace Potato::Task
 		void AddWeakRef() { WRef.AddRef(); }
 		void SubWeakRef();
 		bool TryAddStrongRef() { return SRef.TryAddRefNotFromZero(); }
+
+		bool TryPushDelayTask();
 		std::tuple<bool, Task::Ptr> TryGetTopTask();
 
 		std::pmr::memory_resource* Resource;
@@ -101,15 +104,25 @@ export namespace Potato::Task
 		std::mutex ThreadMutex;
 		std::vector<std::jthread, std::pmr::polymorphic_allocator<std::jthread>> Threads;
 
-		struct WaittingTaskT
+		struct ReadyTaskT
 		{
 			std::size_t Priority;
 			Task::Ptr Task;
 		};
 
+		struct DelayTaskT
+		{
+			std::chrono::system_clock::time_point DelayTimePoint;
+			Task::Ptr Task;
+		};
+
+		std::jthread TimmerThread;
 		std::mutex TaskMutex;
-		std::deque<WaittingTaskT,std::pmr::polymorphic_allocator<WaittingTaskT>> WaitingTask;
-		std::size_t StartTask = 0;
+		bool EnableInsertTask = true;
+		std::vector<DelayTaskT, std::pmr::polymorphic_allocator<DelayTaskT>> DelayTasks;
+		std::size_t DelayTaskIte = 0;
+		std::vector<ReadyTaskT,std::pmr::polymorphic_allocator<ReadyTaskT>> ReadyTasks;
+		std::size_t ReadyTasksIte = 0;
 
 		friend struct Pointer::SWSubWrapperT;
 		friend struct Pointer::SWSubWrapperT;
@@ -117,128 +130,6 @@ export namespace Potato::Task
 		Misc::AtomicRefCount SRef;
 		Misc::AtomicRefCount WRef;
 	};
-
-	/*
-	template<typename DriverT>
-	struct TaskReference : public BaseTaskReference
-	{
-		void SubStrongRef() {
-			if (RefCount.SubRef())
-			{
-				static_cast<DriverT*>(this)->StrongRelease();
-			}
-		}
-		
-		void SubWeakRef()
-		{
-			if (WRefCount.SubRef())
-			{
-				static_cast<DriverT*>(this)->WeakRelease();
-			}
-		}
-
-	};
-
-	struct TaskContext : protected TaskReference<TaskContext>
-	{
-
-		using Ptr = Potato::SP::StrongPtr<TaskContext>;
-		using WPtr = Potato::SP::WeakPtr<TaskContext>;
-
-		static Ptr Create(std::size_t ThreadCount =
-			std::thread::hardware_concurrency() - 1,
-			std::pmr::memory_resource* MemoryPool = std::pmr::new_delete_resource(), std::pmr::memory_resource* SelfAllocator = std::pmr::new_delete_resource());
-
-		enum class StatusE
-		{
-			Normal
-		};
-
-		enum class PriorityE : std::size_t
-		{
-			High = 100,
-			Normal = 1000,
-			Low = 10000,
-		};
-
-		constexpr std::size_t operator*(PriorityE Priority) {
-			return static_cast<std::size_t>(Priority);
-		}
-
-		struct Info
-		{
-			std::u16string Name;
-			std::size_t Priority = 1000;
-		};
-
-		struct Task
-		{
-
-			using Ptr = Potato::SP::IntrusivePtr<Task>;
-
-			virtual const Info GetInfo() const = 0;
-
-		protected:
-
-			virtual void AddRef() = 0;
-			virtual void SubRef() = 0;
-
-			virtual void Execute(StatusE Status, TaskContext&) = 0;
-
-			friend struct Potato::SP::IntrusiveSubWrapperT;
-			friend struct TaskContext;
-			friend struct TaskReference<Task>;
-		};
-
-		template<typename TaskT, typename ...OTher>
-		Task::Ptr CreateTask(Info Info, OTher&& ...OT);
-
-		template<typename Func>
-		Task::Ptr CreateLambdaTask(Info Info, Func&& Fun) {
-			return CreateTask<std::remove_reference_t<Func>>(std::move(Info), std::forward<Func>(Fun));
-		}
-
-		void Commit(Task::Ptr RequireTask);
-
-	private:
-
-		void StopTaskImp();
-
-		void StrongRelease();
-		void WeakRelease();
-
-		TaskContext(std::pmr::memory_resource* MemoryPool, std::pmr::memory_resource* SelfAllocator)
-			: SelfAllocator(SelfAllocator), MemoryPool(MemoryPool), Threads(&this->MemoryPool), WaittingTask(&this->MemoryPool)
-		{}
-
-		~TaskContext() {}
-
-		static void Executer(std::stop_token ST, WPtr P);
-		
-		std::pmr::memory_resource* SelfAllocator;
-		std::pmr::synchronized_pool_resource MemoryPool;
-
-		std::mutex ThreadMutex;
-		std::vector<std::jthread, std::pmr::polymorphic_allocator<std::jthread>> Threads;
-
-		struct WaittingTaskT
-		{
-			std::size_t Priority;
-			Task::Ptr Task;
-			bool operator<(WaittingTaskT const& T2) const { return Priority < T2.Priority; }
-		};
-
-		std::mutex TaskMutex;
-		std::size_t BasePriority = 0;
-		std::priority_queue<WaittingTaskT, std::vector<WaittingTaskT, std::pmr::polymorphic_allocator<WaittingTaskT>>> WaittingTask;
-
-		friend struct Potato::SP::SWSubWrapperT;
-		friend struct Potato::SP::SWSubWrapperT;
-		friend struct TaskReference<TaskContext>;
-		template<typename TaskImpT>
-		friend struct TaskImp;
-	};
-	*/
 }
 
 namespace Potato::Task
@@ -305,111 +196,3 @@ namespace Potato::Task
 		return {};
 	}
 }
-
-module : private;
-
-namespace Potato::Task
-{
-	/*
-	auto TaskContext::Create(std::size_t ThreadCount, std::pmr::memory_resource* MemoryPool, std::pmr::memory_resource* SelfAllocator)
-		-> Ptr
-	{
-		ThreadCount = std::max(ThreadCount, std::size_t{1});
-		assert(MemoryPool != nullptr && SelfAllocator != nullptr);
-		auto ConAdress = SelfAllocator->allocate(sizeof(TaskContext), alignof(TaskContext));
-		if (ConAdress != nullptr)
-		{
-			auto ConPtr = new (ConAdress) TaskContext{ MemoryPool, SelfAllocator };
-			Ptr P{ ConPtr };
-			WPtr WP = P;
-			for (std::size_t I = 0; I < ThreadCount; ++I)
-			{
-				P->Threads.emplace_back([WP](std::stop_token ST) {
-					TaskContext::Executer(std::move(ST), std::move(WP));
-				});
-			}
-			return P;
-		}
-		return {};
-	}
-
-	void TaskContext::StopTaskImp()
-	{
-		auto Curid = std::this_thread::get_id();
-		std::lock_guard lg(ThreadMutex);
-		for (auto& Ite : Threads)
-		{
-			Ite.request_stop();
-			if (Curid == Ite.get_id())
-			{
-				Ite.detach();
-			}
-		}
-		Threads.clear();
-	}
-
-	void TaskContext::Executer(std::stop_token ST, WPtr P)
-	{
-		while (!ST.stop_requested())
-		{
-			Ptr Upgrade = P;
-			if (Upgrade)
-			{
-				Task::Ptr TaskPtr;
-				bool NeedSleep = false;
-				if (Upgrade->ThreadMutex.try_lock())
-				{
-					std::lock_guard lg(Upgrade->ThreadMutex, std::adopt_lock_t{});
-					if (Upgrade->WaittingTask.empty())
-					{
-						NeedSleep = true;
-					}
-					else {
-						auto TopTask = Upgrade->WaittingTask.top();
-						TaskPtr = std::move(TopTask.Task);
-						Upgrade->WaittingTask.pop();
-					}
-				}else
-					std::this_thread::yield();
-				
-				if (TaskPtr)
-				{
-					TaskPtr->Execute(StatusE::Normal, *Upgrade);
-					Upgrade.Reset();
-					std::this_thread::yield();
-				}
-				else {
-					Upgrade.Reset();
-					std::this_thread::sleep_for(std::chrono::microseconds{1});
-				}
-			}
-		}
-	}
-
-	void TaskContext::StrongRelease()
-	{
-		StopTaskImp();
-	}
-
-	void TaskContext::WeakRelease()
-	{
-		auto OldSelfAllocator = SelfAllocator;
-		StopTaskImp();
-		this->~TaskContext();
-		OldSelfAllocator->deallocate(this, sizeof(TaskContext), alignof(TaskContext));
-	}
-
-	void TaskContext::Commit(Task::Ptr RequireTask)
-	{
-		if (RequireTask)
-		{
-			std::lock_guard lg(TaskMutex);
-			WaittingTask.emplace(
-				BasePriority + TargetPriority,
-				TaskP
-			);
-		}
-	}
-	*/
-}
-
