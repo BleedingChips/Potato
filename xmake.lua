@@ -1,7 +1,6 @@
 set_project("Potato")
 add_rules("mode.debug", "mode.release")
 set_languages("cxxlatest")
-add_rules("plugin.vsxmake.autoupdate")
 
 target("Potato")
     set_kind("static")
