@@ -1,7 +1,6 @@
 export module PotatoSTD;
 
 export import std;
-export import std.compat;
 
 //export import std.core;
 //export import std.filesystem;

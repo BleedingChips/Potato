@@ -15,6 +15,7 @@ export namespace Potato::Task
 	enum class ExecuteStatus : std::size_t
 	{
 		Normal,
+		Close,
 	};
 
 	enum class TaskPriority : std::size_t
@@ -32,39 +33,89 @@ export namespace Potato::Task
 
 	struct TaskInit
 	{
-		std::wstring Name;
+		std::wstring_view Name;
 		std::size_t Priority = *TaskPriority::Normal;
-		std::pmr::memory_resource* Resource = nullptr;
+		std::pmr::memory_resource* Resource = std::pmr::new_delete_resource();
 	};
 
 	struct Task
 	{
 		using Ptr = Pointer::IntrusivePtr<Task>;
 
-		virtual std::u16string_view GetTaskName() const = 0;
-		virtual std::size_t GetTaskPriority() = 0;
+		virtual std::wstring_view GetTaskName() const = 0;
+		virtual std::size_t GetTaskPriority() const = 0;
 
 		template<typename TaskT, typename ...AT>
+			requires (std::is_constructible_v<TaskT, AT&&...>)
 		static Ptr Create(TaskInit Init, AT&& ...at);
+
+		template<typename FuncT>
+		static Ptr CreateLambda(TaskInit Init, FuncT&& Fun)
+		{
+			return Create<std::remove_cvref_t<FuncT>>(std::move(Init), std::forward<FuncT>(Fun));
+		}
 
 	private:
 		
 		virtual void AddRef() const = 0;
 		virtual void SubRef() const = 0;
-		virtual void Execute(ExecuteStatus Status, TaskContext& Context);
+		virtual void Execute(ExecuteStatus Status, TaskContext& Context) = 0;
 
 		friend struct TaskContext;
 		friend struct Pointer::IntrusiveSubWrapperT;
 	};
 
+	struct ExecuteInfo
+	{
+		ExecuteStatus Status;
+		TaskContext& Context;
+		Task* Self;
+		operator bool() const { return Status == ExecuteStatus::Normal; }
+	};
+
 	struct TaskContext
 	{
-		using Ptr = Pointer::IntrusivePtr<TaskContext>;
+		using Ptr = Pointer::StrongPtr<TaskContext>;
+		using WPtr = Pointer::WeakPtr<TaskContext>;
+
+		static Ptr Create(std::pmr::memory_resource* Resource = std::pmr::new_delete_resource());
+		bool FireThreads(std::size_t TaskCount = std::thread::hardware_concurrency() - 1);
+		std::size_t CloseThreads();
+		void ExecuteAndRemoveAllTask();
+
+		bool Commit(Task::Ptr TaskPtr, bool RequireUnique = false);
 
 	private:
 
-		
+		TaskContext(std::pmr::memory_resource* Resource);
 
+		void AddStrongRef() { SRef.AddRef(); }
+		void SubStrongRef() ;
+		void AddWeakRef() { WRef.AddRef(); }
+		void SubWeakRef();
+		bool TryAddStrongRef() { return SRef.TryAddRefNotFromZero(); }
+		std::tuple<bool, Task::Ptr> TryGetTopTask();
+
+		std::pmr::memory_resource* Resource;
+
+		std::mutex ThreadMutex;
+		std::vector<std::jthread, std::pmr::polymorphic_allocator<std::jthread>> Threads;
+
+		struct WaittingTaskT
+		{
+			std::size_t Priority;
+			Task::Ptr Task;
+		};
+
+		std::mutex TaskMutex;
+		std::deque<WaittingTaskT,std::pmr::polymorphic_allocator<WaittingTaskT>> WaitingTask;
+		std::size_t StartTask = 0;
+
+		friend struct Pointer::SWSubWrapperT;
+		friend struct Pointer::SWSubWrapperT;
+
+		Misc::AtomicRefCount SRef;
+		Misc::AtomicRefCount WRef;
 	};
 
 	/*
@@ -192,63 +243,67 @@ export namespace Potato::Task
 
 namespace Potato::Task
 {
-	/*
+
 	template<typename TaskImpT>
-	struct TaskImp : public TaskContext::Task
+	struct TaskImp : public Task
 	{
 
-		void AddRef() override
+		virtual void AddRef() const override
 		{
 			RefCount.AddRef();
 		}
 
-		void SubRef() override
+		virtual void SubRef() const override
 		{
 			if (RefCount.SubRef())
 			{
 				auto OldResource = Resource;
 				this->~TaskImp();
-				OldResource->deallocate(this, sizeof(TaskImp), alignof(TaskImp));
+				OldResource->deallocate( const_cast<TaskImp*>(this), sizeof(TaskImp), alignof(TaskImp));
 			}
 		}
 
+		virtual std::wstring_view GetTaskName() const override{ return std::wstring_view{ TaskName }; }
+		virtual std::size_t GetTaskPriority() const override { return TasklPriority; }
+
 		template<typename ...AT>
-		TaskImp(TaskContext::Info Info, std::pmr::memory_resource* Resource, AT&& ...at)
-			: TaskInfo(std::move(Info)), Resource(Resource),
-			TaskInstance(std::forward<AT>(at)...) {}
+		TaskImp(TaskInit Init, AT&& ...at)
+			: Resource(Init.Resource), TaskName(Init.Name, Init.Resource), TasklPriority(Init.Priority), TaskInstance(std::forward<AT>(at)...) {}
 
-		virtual void Execute(TaskContext::StatusE Status, TaskContext& Context) override {
-			TaskInstance.operator()(Status, Context);
-		}
-
-		virtual TaskContext::Info const& GetInfo() const override
+		virtual void Execute(ExecuteStatus Status, TaskContext& Context) override
 		{
-			return TaskInfo;
+			ExecuteInfo Info{
+				Status,
+				Context,
+				this
+			};
+			TaskInstance.operator()(Info);
 		}
 
 	private:
 
-		TaskContext::Info TaskInfo;
 		Potato::Misc::AtomicRefCount RefCount;
 		std::pmr::memory_resource* Resource;
+		std::basic_string<wchar_t, std::char_traits<wchar_t>, std::pmr::polymorphic_allocator<wchar_t>> TaskName;
+		std::size_t TasklPriority;
 		TaskImpT TaskInstance;
 	};
 
-	template<typename TaskT, typename ...OTher>
-	auto TaskContext::CreateTask(TaskContext::Info Info, OTher&& ...OT) ->Task::Ptr
+	template<typename TaskT, typename ...AT>
+		requires (std::is_constructible_v<TaskT, AT&&...>)
+	auto Task::Create(TaskInit Init, AT&& ...OT)  ->Ptr
 	{
-		auto TargetPriority = Info.Priority;
-		auto Adress = MemoryPool.allocate(sizeof(TaskImp<TaskT>), alignof(TaskImp<TaskT>));
+		assert(Init.Resource != nullptr);
+		auto Adress = Init.Resource->allocate(sizeof(TaskImp<TaskT>), alignof(TaskImp<TaskT>));
 		if (Adress != nullptr)
 		{
-			auto TaskPtr = new (Adress) TaskImp<TaskT> {std::move(Info), & MemoryPool, std::forward<OTher>(OT)...};
+			auto TaskPtr = new (Adress) TaskImp<TaskT> {Init, std::forward<AT>(OT)...};
 			Task::Ptr TaskP{ TaskPtr };
 			
 			return TaskP;
 		}
 		return {};
 	}
-	*/
 }
 
 module : private;
