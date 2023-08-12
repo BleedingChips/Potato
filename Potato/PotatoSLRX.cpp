@@ -1343,14 +1343,14 @@ namespace Potato::SLRX
 		return Re;
 	}
 
-	void LRXProcessor::SetObserverTable(LRX const& Table, SP::ObserverPtr<ProcessorOperator> Ope) {
+	void LRXProcessor::SetObserverTable(LRX const& Table, Pointer::ObserverPtr<ProcessorOperator> Ope) {
 		assert(Ope);
 		TableWrapper = std::reference_wrapper<LRX const>{Table};
 		Operator = std::move(Ope);
 		Clear();
 	}
 
-	void LRXProcessor::SetObserverTable(LRXBinaryTableWrapper Table, SP::ObserverPtr<ProcessorOperator> Ope) {
+	void LRXProcessor::SetObserverTable(LRXBinaryTableWrapper Table, Pointer::ObserverPtr<ProcessorOperator> Ope) {
 		assert(Ope);
 		TableWrapper = Table;
 		Operator = std::move(Ope);

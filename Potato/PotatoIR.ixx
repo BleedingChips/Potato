@@ -1,6 +1,6 @@
 export module PotatoIR;
 
-export import PotatoSmartPtr;
+export import PotatoPointer;
 export import PotatoInterval;
 
 export namespace Potato::IR
@@ -93,7 +93,7 @@ export namespace Potato::IR
 		std::size_t InsertSymbol(std::u32string Name, std::size_t FeedbackIndex, std::any Data);
 		std::size_t MarkAsAreaBegin();
 		std::optional<std::size_t> PopArea(bool Searchable = false, bool KeepProperty = true);
-		SP::ObserverPtr<Property> FindLastActiveSymbol(std::u32string_view Name);
+		Pointer::ObserverPtr<Property> FindLastActiveSymbol(std::u32string_view Name);
 	};
 
 	struct TypeDescription

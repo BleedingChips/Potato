@@ -65,12 +65,12 @@ namespace Potato::IR
 		return {};
 	}
 
-	auto SymbolTable::FindLastActiveSymbol(std::u32string_view Name) ->SP::ObserverPtr<Property>
+	auto SymbolTable::FindLastActiveSymbol(std::u32string_view Name) ->Pointer::ObserverPtr<Property>
 	{
 		for (auto Ite = ActiveProperty.rbegin(); Ite != ActiveProperty.rend(); ++Ite)
 		{
 			if(Ite->Name == Name)
-				return SP::ObserverPtr<Property>{&*Ite};
+				return Pointer::ObserverPtr<Property>{&*Ite};
 		}
 		return {};
 	}

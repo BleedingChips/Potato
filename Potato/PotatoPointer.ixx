@@ -2,14 +2,14 @@ module;
 
 #include <cassert>
 
-export module PotatoSmartPtr;
+export module PotatoPointer;
 
 export import PotatoMisc;
 export import PotatoSTD;
 
 
 
-export namespace Potato::SP
+export namespace Potato::Pointer
 {
 
 	template<typename WrapperT, typename ...Par>

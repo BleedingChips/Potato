@@ -3,7 +3,7 @@ export module Potato;
 export import PotatoSTD;
 export import PotatoTMP;
 export import PotatoMisc;
-export import PotatoSmartPtr;
+export import PotatoPointer;
 export import PotatoIR;
 export import PotatoInterval;
 export import PotatoSLRX;

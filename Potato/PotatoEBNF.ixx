@@ -262,8 +262,8 @@ export namespace Potato::EBNF
 		template<typename RequrieT>
 		RequrieT GetData() { return SyntaxProcessor.GetData<RequrieT>(); }
 
-		void SetObserverTable(Ebnf const& Table, SP::ObserverPtr<EbnfOperator> Ope, std::size_t StartupTokenIndex = 0);
-		void SetObserverTable(EbnfBinaryTableWrapper Table, SP::ObserverPtr<EbnfOperator> Ope, std::size_t StartupTokenIndex = 0);
+		void SetObserverTable(Ebnf const& Table, Pointer::ObserverPtr<EbnfOperator> Ope, std::size_t StartupTokenIndex = 0);
+		void SetObserverTable(EbnfBinaryTableWrapper Table, Pointer::ObserverPtr<EbnfOperator> Ope, std::size_t StartupTokenIndex = 0);
 
 	protected:
 
@@ -276,11 +276,11 @@ export namespace Potato::EBNF
 
 		std::variant<
 			std::monostate,
-			SP::ObserverPtr<Ebnf const>,
+			Pointer::ObserverPtr<Ebnf const>,
 			EbnfBinaryTableWrapper
 		> TableWrapper;
 
-		SP::ObserverPtr<EbnfOperator> Operator;
+		Pointer::ObserverPtr<EbnfOperator> Operator;
 
 		Reg::DfaProcessor LexicalProcessor;
 		SLRX::LRXProcessor SyntaxProcessor;

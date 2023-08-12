@@ -6,24 +6,68 @@ export module PotatoTaskSystem;
 
 export import PotatoSTD;
 export import PotatoMisc;
-export import PotatoSmartPtr;
+export import PotatoPointer;
 
 
 export namespace Potato::Task
 {
 
-	struct BaseTaskReference
+	enum class ExecuteStatus : std::size_t
 	{
-		void AddStrongRef() { RefCount.AddRef(); }
-		void AddWeakRef() { WRefCount.AddRef(); }
-		bool TryAddStrongRef() { return RefCount.TryAddRefNotFromZero(); }
-
-	protected:
-
-		mutable Misc::AtomicRefCount RefCount;
-		mutable Misc::AtomicRefCount WRefCount;
+		Normal,
 	};
 
+	enum class TaskPriority : std::size_t
+	{
+		High = 100,
+		Normal = 1000,
+		Low = 10000,
+	};
+
+	constexpr std::size_t operator*(TaskPriority Priority) {
+		return static_cast<std::size_t>(Priority);
+	}
+
+	struct TaskContext;
+
+	struct TaskInit
+	{
+		std::wstring Name;
+		std::size_t Priority = *TaskPriority::Normal;
+		std::pmr::memory_resource* Resource = nullptr;
+	};
+
+	struct Task
+	{
+		using Ptr = Pointer::IntrusivePtr<Task>;
+
+		virtual std::u16string_view GetTaskName() const = 0;
+		virtual std::size_t GetTaskPriority() = 0;
+
+		template<typename TaskT, typename ...AT>
+		static Ptr Create(TaskInit Init, AT&& ...at);
+
+	private:
+		
+		virtual void AddRef() const = 0;
+		virtual void SubRef() const = 0;
+		virtual void Execute(ExecuteStatus Status, TaskContext& Context);
+
+		friend struct TaskContext;
+		friend struct Pointer::IntrusiveSubWrapperT;
+	};
+
+	struct TaskContext
+	{
+		using Ptr = Pointer::IntrusivePtr<TaskContext>;
+
+	private:
+
+		
+
+	};
+
+	/*
 	template<typename DriverT>
 	struct TaskReference : public BaseTaskReference
 	{
@@ -54,59 +98,58 @@ export namespace Potato::Task
 			std::thread::hardware_concurrency() - 1,
 			std::pmr::memory_resource* MemoryPool = std::pmr::new_delete_resource(), std::pmr::memory_resource* SelfAllocator = std::pmr::new_delete_resource());
 
+		enum class StatusE
+		{
+			Normal
+		};
 
-		struct Task : protected TaskReference<Task>
+		enum class PriorityE : std::size_t
+		{
+			High = 100,
+			Normal = 1000,
+			Low = 10000,
+		};
+
+		constexpr std::size_t operator*(PriorityE Priority) {
+			return static_cast<std::size_t>(Priority);
+		}
+
+		struct Info
+		{
+			std::u16string Name;
+			std::size_t Priority = 1000;
+		};
+
+		struct Task
 		{
 
-			enum class PriorityT : std::size_t
-			{
-				High = 100,
-				Normal = 1000,
-				Low = 10000,
-			};
+			using Ptr = Potato::SP::IntrusivePtr<Task>;
 
-			struct Info
-			{
-				std::u16string Name;
-				std::size_t Priority = 1000;
-			};
-
-			using Ptr = Potato::SP::StrongPtr<Task>;
-			using WPtr = Potato::SP::WeakPtr<Task>;
-
-			Task(TaskContext::Ptr Owner, Info SelfInfo)
-				: Owner(std::move(Owner)) {}
-
-			TaskContext::Ptr GetOwner() const { return Owner; }
-
-			void Commit();
+			virtual const Info GetInfo() const = 0;
 
 		protected:
 
-			virtual void StrongRelease() = 0;
-			virtual void WeakRelease() = 0;
+			virtual void AddRef() = 0;
+			virtual void SubRef() = 0;
 
-			virtual void Execute() = 0;
-			
-			TaskContext::Ptr Owner;
+			virtual void Execute(StatusE Status, TaskContext&) = 0;
 
-			friend struct Potato::SP::SWSubWrapperT;
-			friend struct Potato::SP::SWSubWrapperT;
+			friend struct Potato::SP::IntrusiveSubWrapperT;
 			friend struct TaskContext;
 			friend struct TaskReference<Task>;
 		};
 
 		template<typename TaskT, typename ...OTher>
-		Task::Ptr CreateTask(Task::Info Info, OTher&& ...OT);
+		Task::Ptr CreateTask(Info Info, OTher&& ...OT);
 
 		template<typename Func>
-		Task::Ptr CreateLambdaTask(Task::Info Info, Func&& Fun) {
+		Task::Ptr CreateLambdaTask(Info Info, Func&& Fun) {
 			return CreateTask<std::remove_reference_t<Func>>(std::move(Info), std::forward<Func>(Fun));
 		}
 
-	private:
+		void Commit(Task::Ptr RequireTask);
 
-		void Commit(Task::Ptr TaskPtr);
+	private:
 
 		void StopTaskImp();
 
@@ -120,7 +163,6 @@ export namespace Potato::Task
 		~TaskContext() {}
 
 		static void Executer(std::stop_token ST, WPtr P);
-
 		
 		std::pmr::memory_resource* SelfAllocator;
 		std::pmr::synchronized_pool_resource MemoryPool;
@@ -131,7 +173,7 @@ export namespace Potato::Task
 		struct WaittingTaskT
 		{
 			std::size_t Priority;
-			Task::WPtr Task;
+			Task::Ptr Task;
 			bool operator<(WaittingTaskT const& T2) const { return Priority < T2.Priority; }
 		};
 
@@ -145,51 +187,75 @@ export namespace Potato::Task
 		template<typename TaskImpT>
 		friend struct TaskImp;
 	};
-
+	*/
 }
 
 namespace Potato::Task
 {
+	/*
 	template<typename TaskImpT>
 	struct TaskImp : public TaskContext::Task
 	{
-		std::optional<TaskImpT> Task;
+
+		void AddRef() override
+		{
+			RefCount.AddRef();
+		}
+
+		void SubRef() override
+		{
+			if (RefCount.SubRef())
+			{
+				auto OldResource = Resource;
+				this->~TaskImp();
+				OldResource->deallocate(this, sizeof(TaskImp), alignof(TaskImp));
+			}
+		}
 
 		template<typename ...AT>
-		TaskImp(TaskContext::Ptr Owner, Task::Info Info, AT&& ...at)
-			: TaskContext::Task(std::move(Owner), std::move(Info)), Task(std::in_place_t{}, std::forward<AT>(at)...) {}
+		TaskImp(TaskContext::Info Info, std::pmr::memory_resource* Resource, AT&& ...at)
+			: TaskInfo(std::move(Info)), Resource(Resource),
+			TaskInstance(std::forward<AT>(at)...) {}
 
+		virtual void Execute(TaskContext::StatusE Status, TaskContext& Context) override {
+			TaskInstance.operator()(Status, Context);
+		}
 
-		virtual void Execute() override {
-			Task->operator()(GetOwner());
+		virtual TaskContext::Info const& GetInfo() const override
+		{
+			return TaskInfo;
 		}
-		virtual void StrongRelease() override {
-			Task.reset();
-		}
-		virtual void WeakRelease() override {
-			auto OldOwner = std::move(Owner);
-			this->~TaskImp();
-			OldOwner->MemoryPool.deallocate(this, sizeof(TaskImp), alignof(TaskImp));
-		}
+
+	private:
+
+		TaskContext::Info TaskInfo;
+		Potato::Misc::AtomicRefCount RefCount;
+		std::pmr::memory_resource* Resource;
+		TaskImpT TaskInstance;
 	};
 
 	template<typename TaskT, typename ...OTher>
-	auto TaskContext::CreateTask(Task::Info Info, OTher&& ...OT) ->Task::Ptr
+	auto TaskContext::CreateTask(TaskContext::Info Info, OTher&& ...OT) ->Task::Ptr
 	{
-		Ptr ThisPtr{this};
+		auto TargetPriority = Info.Priority;
 		auto Adress = MemoryPool.allocate(sizeof(TaskImp<TaskT>), alignof(TaskImp<TaskT>));
-		auto TaskPtr = new (Adress) TaskImp<TaskT> {std::move(ThisPtr), std::move(Info), std::forward<OTher>(OT)...};
-		return Task::Ptr{TaskPtr};
+		if (Adress != nullptr)
+		{
+			auto TaskPtr = new (Adress) TaskImp<TaskT> {std::move(Info), & MemoryPool, std::forward<OTher>(OT)...};
+			Task::Ptr TaskP{ TaskPtr };
+			
+			return TaskP;
+		}
+		return {};
 	}
+	*/
 }
-
-constexpr std::size_t operator*(Potato::Task::TaskContext::Task::PriorityT Priority) { return static_cast<std::size_t>(Priority); }
 
 module : private;
 
 namespace Potato::Task
 {
-
+	/*
 	auto TaskContext::Create(std::size_t ThreadCount, std::pmr::memory_resource* MemoryPool, std::pmr::memory_resource* SelfAllocator)
 		-> Ptr
 	{
@@ -205,7 +271,7 @@ namespace Potato::Task
 			{
 				P->Threads.emplace_back([WP](std::stop_token ST) {
 					TaskContext::Executer(std::move(ST), std::move(WP));
-					});
+				});
 			}
 			return P;
 		}
@@ -245,18 +311,20 @@ namespace Potato::Task
 					}
 					else {
 						auto TopTask = Upgrade->WaittingTask.top();
-						TaskPtr = TopTask.Task;
+						TaskPtr = std::move(TopTask.Task);
 						Upgrade->WaittingTask.pop();
 					}
 				}else
 					std::this_thread::yield();
-				Upgrade.Reset();
+				
 				if (TaskPtr)
 				{
-					TaskPtr->Execute();
+					TaskPtr->Execute(StatusE::Normal, *Upgrade);
+					Upgrade.Reset();
 					std::this_thread::yield();
 				}
 				else {
+					Upgrade.Reset();
 					std::this_thread::sleep_for(std::chrono::microseconds{1});
 				}
 			}
@@ -276,19 +344,17 @@ namespace Potato::Task
 		OldSelfAllocator->deallocate(this, sizeof(TaskContext), alignof(TaskContext));
 	}
 
-	void TaskContext::Commit(Task::Ptr TaskPtr)
+	void TaskContext::Commit(Task::Ptr RequireTask)
 	{
-		std::lock_guard lg(TaskMutex);
-		WaittingTaskT TaskInfo{
-			100 + BasePriority,
-			TaskPtr
-		};
-		WaittingTask.push(std::move(TaskInfo));
+		if (RequireTask)
+		{
+			std::lock_guard lg(TaskMutex);
+			WaittingTask.emplace(
+				BasePriority + TargetPriority,
+				TaskP
+			);
+		}
 	}
-
-	void TaskContext::Task::Commit()
-	{
-		Owner->Commit(Ptr{this});
-	}
+	*/
 }
 

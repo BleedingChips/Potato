@@ -775,11 +775,11 @@ namespace Potato::EBNF
 	{
 		assert(!std::holds_alternative<std::monostate>(TableWrapper));
 
-		if (std::holds_alternative<SP::ObserverPtr<Ebnf const>>(TableWrapper))
+		if (std::holds_alternative<Pointer::ObserverPtr<Ebnf const>>(TableWrapper))
 		{
-			auto Inf = std::get<SP::ObserverPtr<Ebnf const>>(TableWrapper)->GetRgeInfo(Mask);
+			auto Inf = std::get<Pointer::ObserverPtr<Ebnf const>>(TableWrapper)->GetRgeInfo(Mask);
 			return {
-				{SLRX::Symbol::AsTerminal(Inf.MapSymbolValue), std::get<SP::ObserverPtr<Ebnf const>>(TableWrapper)->GetRegName(Inf.MapSymbolValue), TokenIndex},
+				{SLRX::Symbol::AsTerminal(Inf.MapSymbolValue), std::get<Pointer::ObserverPtr<Ebnf const>>(TableWrapper)->GetRegName(Inf.MapSymbolValue), TokenIndex},
 				Inf.UserMask.has_value() ? *Inf.UserMask : 0,
 			};
 		}
@@ -795,16 +795,16 @@ namespace Potato::EBNF
 	SymbolInfo EbnfProcessor::Tranlate(SLRX::Symbol Symbol, Misc::IndexSpan<> TokenIndex) const
 	{
 		assert(!std::holds_alternative<std::monostate>(TableWrapper));
-		if (std::holds_alternative<SP::ObserverPtr<Ebnf const>>(TableWrapper))
+		if (std::holds_alternative<Pointer::ObserverPtr<Ebnf const>>(TableWrapper))
 		{
-			return {Symbol, std::get<SP::ObserverPtr<Ebnf const>>(TableWrapper)->GetRegName(Symbol.Value), TokenIndex };
+			return {Symbol, std::get<Pointer::ObserverPtr<Ebnf const>>(TableWrapper)->GetRegName(Symbol.Value), TokenIndex };
 		}
 		else {
 			return { Symbol, std::get<EbnfBinaryTableWrapper>(TableWrapper).GetRegName(Symbol.Value), TokenIndex };
 		}
 	}
 
-	void EbnfProcessor::SetObserverTable(Ebnf const& Table, SP::ObserverPtr<EbnfOperator> Ope, std::size_t StartupTokenIndex)
+	void EbnfProcessor::SetObserverTable(Ebnf const& Table, Pointer::ObserverPtr<EbnfOperator> Ope, std::size_t StartupTokenIndex)
 	{
 		Operator = std::move(Ope);
 		TableWrapper = &Table;
@@ -814,7 +814,7 @@ namespace Potato::EBNF
 		RequireTokenIndex = StartupTokenIndex;
 	}
 
-	void EbnfProcessor::SetObserverTable(EbnfBinaryTableWrapper Table, SP::ObserverPtr<EbnfOperator> Ope, std::size_t StartupTokenIndex)
+	void EbnfProcessor::SetObserverTable(EbnfBinaryTableWrapper Table, Pointer::ObserverPtr<EbnfOperator> Ope, std::size_t StartupTokenIndex)
 	{
 		Operator = std::move(Ope);
 		TableWrapper = Table;
