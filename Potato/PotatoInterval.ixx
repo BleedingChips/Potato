@@ -4,7 +4,9 @@ module;
 
 export module PotatoInterval;
 
-export import PotatoMisc;
+import std;
+import PotatoMisc;
+
 
 export namespace Potato::Misc
 {

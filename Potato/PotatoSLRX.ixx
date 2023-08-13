@@ -1,8 +1,9 @@
 export module PotatoSLRX;
 
-export import PotatoMisc;
-export import PotatoSTD;
-export import PotatoPointer;
+import std;
+import PotatoMisc;
+
+import PotatoPointer;
 
 export namespace Potato::SLRX
 {

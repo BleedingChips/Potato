@@ -4,8 +4,9 @@ module;
 
 export module PotatoPointer;
 
-export import PotatoMisc;
-export import PotatoSTD;
+import std;
+import PotatoMisc;
+
 
 
 

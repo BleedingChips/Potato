@@ -1,29 +1,37 @@
-set_project("Potato")
+option("PotatoMainProject", {default = false, description = "Enable Unit Test"})
+
+if (has_config("PotatoMainProject")) then
+    set_project("Potato")
+end
 
 add_rules("mode.debug", "mode.release")
 set_languages("cxxlatest")
-
-option("PotatoUnitTest", {default = false, description = "Enable Unit Test"})
 
 target("Potato")
     set_kind("static")
     add_files("Potato/*.cpp")
     add_files("Potato/*.ixx")
+    
 
-if has_config("PotatoUnitTest") then
+if has_config("PotatoMainProject") then
 
-    target("PotatoTaskSystemTest")
+    target("TaskSystemTest")
         set_kind("binary")
         add_files("Test/TaskSystemTest.cpp")
         add_deps("Potato")
         
 
-    target("PotatoPointerTest")
+    target("PointerTest")
         set_kind("binary")
         add_files("Test/PointerTest.cpp")
         add_deps("Potato")
 
-    target("PotatoEbnfTest")
+    target("EbnfTest")
+        set_kind("binary")
+        add_files("Test/EbnfTest.cpp")
+        add_deps("Potato")
+
+     target("EncodeTest")
         set_kind("binary")
         add_files("Test/EbnfTest.cpp")
         add_deps("Potato")

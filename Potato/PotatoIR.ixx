@@ -1,7 +1,8 @@
 export module PotatoIR;
 
-export import PotatoPointer;
-export import PotatoInterval;
+import std;
+import PotatoPointer;
+import PotatoMisc;
 
 export namespace Potato::IR
 {

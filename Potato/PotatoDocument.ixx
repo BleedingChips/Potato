@@ -2,8 +2,9 @@ module;
 
 export module PotatoDocument;
 
-export import PotatoEncode;
-export import PotatoSTD;
+import std;
+import PotatoMisc;
+import PotatoEncode;
 
 
 

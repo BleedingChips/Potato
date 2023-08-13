@@ -1,6 +1,5 @@
 export module Potato;
 
-export import PotatoSTD;
 export import PotatoTMP;
 export import PotatoMisc;
 export import PotatoPointer;

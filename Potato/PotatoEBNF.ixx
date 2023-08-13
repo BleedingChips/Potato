@@ -4,10 +4,12 @@ module;
 
 export module PotatoEBNF;
 
-export import PotatoReg;
-export import PotatoEncode;
-export import PotatoFormat;
-export import PotatoSTD;
+import std;
+import PotatoReg;
+import PotatoEncode;
+import PotatoFormat;
+import PotatoSLRX;
+import PotatoMisc;
 
 export namespace Potato::EBNF
 {

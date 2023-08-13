@@ -2,9 +2,11 @@ module;
 
 export module PotatoFormat;
 
-export import PotatoSTD;
-export import PotatoReg;
-export import PotatoEncode;
+import std;
+import PotatoReg;
+import PotatoEncode;
+import PotatoMisc;
+import PotatoTMP;
 
 export namespace Potato::Format
 {

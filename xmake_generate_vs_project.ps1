@@ -1,2 +1,2 @@
-xmake f --PotatoUnitTest=true
+xmake f --PotatoMainProject=true
 xmake project -k vsxmake -m "debug;release"

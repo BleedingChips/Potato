@@ -1,12 +1,14 @@
 #include <cassert>
 
-import PotatoSmartPtr;
+import std;
+import PotatoPointer;
+import PotatoMisc;
 
 int GobalIndex = 0;
 
 using namespace Potato;
 using namespace Potato::Misc;
-using namespace Potato::SP;
+using namespace Potato::Pointer;
 
 struct Type1
 {
@@ -68,7 +70,7 @@ struct DefaultRef
 
 struct Type3
 {
-	int32_t C = 0;
+	std::int32_t C = 0;
 	void Release() {
 		delete this;
 	}
@@ -76,9 +78,9 @@ struct Type3
 
 struct Type4
 {
-	int32_t& RefValue;
+	std::int32_t& RefValue;
 
-	Type4(int32_t& Ref) : RefValue(Ref) { RefValue = 1; }
+	Type4(std::int32_t& Ref) : RefValue(Ref) { RefValue = 1; }
 	~Type4() { RefValue = 2; }
 };
 
@@ -124,13 +126,13 @@ struct SWRef
 
 struct K
 {
-	K(int32_t I) {}
+	K(std::int32_t I) {}
 };
 
 int main()
 {
 
-	static_assert(std::is_constructible_v<K, int32_t&>, "Fuck");
+	static_assert(std::is_constructible_v<K, std::int32_t&>, "Fuck");
 
 	/*
 	GobalIndex = 10086;

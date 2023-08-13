@@ -4,9 +4,9 @@ module;
 
 export module PotatoTaskSystem;
 
-export import PotatoSTD;
-export import PotatoMisc;
-export import PotatoPointer;
+import std;
+import PotatoMisc;
+import PotatoPointer;
 
 
 export namespace Potato::Task
