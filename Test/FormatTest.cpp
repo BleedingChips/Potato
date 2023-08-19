@@ -1,4 +1,5 @@
 import PotatoFormat;
+import std;
 
 using namespace Potato::Format;
 
@@ -48,7 +49,7 @@ void TestingStrFormat()
 	//constexpr std::vector<char8_t> K = CreateFormatPatternImp(Str);
 
 
-	TestScan<int32_t>(u8R"(([0-9]+))", u8R"(123455)", 123455, "StrFormatTest : Case 1");
+	TestScan<std::int32_t>(u8R"(([0-9]+))", u8R"(123455)", 123455, "StrFormatTest : Case 1");
 
 	TestFormat(u8R"(123456{{}}{}{{)", u8R"(123456{}123455{)","StrFormatTest : Case 1",  123455);
 

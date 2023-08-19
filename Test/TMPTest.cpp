@@ -1,4 +1,5 @@
 import PotatoTMP;
+import std;
 
 struct Type1 {};
 
@@ -18,7 +19,7 @@ struct ExistValue1Role {};
 
 template<Potato::TMP::TypeString H1> struct CST {};
 
-void TestingTMP()
+int main()
 {
 	using namespace Potato::TMP;
 
@@ -63,8 +64,8 @@ void TestingTMP()
 	{
 		struct Sample1
 		{
-			int32_t Value1;
-			void Func1(int32_t);
+			std::int32_t Value1;
+			void Func1(std::int32_t);
 		};
 
 		struct Sample2
@@ -99,10 +100,10 @@ void TestingTMP()
 	{
 		struct Sample1
 		{
-			int32_t Function(char32_t, ...) && noexcept;
+			std::int32_t Function(char32_t, ...) && noexcept;
 		};
 
-		int32_t Function1(char32_t, int64_t I);
+		std::int32_t Function1(char32_t, std::int64_t I);
 
 		using Info = FunctionInfo<decltype(&Sample1::Function)>;
 
@@ -114,9 +115,9 @@ void TestingTMP()
 		static_assert(!Info::IsVolatile, "FunctionInfo Not Pass");
 
 		static_assert(std::is_same_v<Info::OwnerType, Sample1>, "FunctionInfo Not Pass");
-		static_assert(std::is_same_v<Info::ReturnType, int32_t>, "FunctionInfo Not Pass");
+		static_assert(std::is_same_v<Info::ReturnType, std::int32_t>, "FunctionInfo Not Pass");
 		static_assert(std::is_same_v<Info::PackParameters<TypeTuple>, TypeTuple<char32_t>>, "FunctionInfo Not Pass");
-		static_assert(std::is_same_v<Info::PackReturnParameters<TypeTuple>, TypeTuple<int32_t, char32_t>>, "FunctionInfo Not Pass");
+		static_assert(std::is_same_v<Info::PackReturnParameters<TypeTuple>, TypeTuple<std::int32_t, char32_t>>, "FunctionInfo Not Pass");
 
 		using Info2 = FunctionInfo<decltype(Function1)>;
 		static_assert(!Info2::IsNoException, "FunctionInfo Not Pass");
@@ -131,4 +132,6 @@ void TestingTMP()
 	}
 
 	std::cout << "TMP Pass !" << std::endl;
+
+	return 0;
 }

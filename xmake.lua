@@ -1,9 +1,3 @@
-option("PotatoMainProject", {default = false, description = "Enable Unit Test"})
-
-if (has_config("PotatoMainProject")) then
-    set_project("Potato")
-end
-
 add_rules("mode.debug", "mode.release")
 set_languages("cxxlatest")
 
@@ -11,28 +5,20 @@ target("Potato")
     set_kind("static")
     add_files("Potato/*.cpp")
     add_files("Potato/*.ixx")
-    
+target_end()
 
-if has_config("PotatoMainProject") then
+if os.scriptdir() == os.projectdir() then
+    set_project("Potato")
 
-    target("TaskSystemTest")
-        set_kind("binary")
-        add_files("Test/TaskSystemTest.cpp")
-        add_deps("Potato")
-        
+    for _, file in ipairs(os.files("Test/*.cpp")) do
 
-    target("PointerTest")
-        set_kind("binary")
-        add_files("Test/PointerTest.cpp")
-        add_deps("Potato")
+        local name = path.basename(file)
 
-    target("EbnfTest")
-        set_kind("binary")
-        add_files("Test/EbnfTest.cpp")
-        add_deps("Potato")
+        target(name)
+            set_kind("binary")
+            add_files(file)
+            add_deps("Potato")
+        target_end()
 
-     target("EncodeTest")
-        set_kind("binary")
-        add_files("Test/EbnfTest.cpp")
-        add_deps("Potato")
-end 
+    end
+end

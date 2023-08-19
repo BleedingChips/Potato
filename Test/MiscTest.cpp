@@ -1,4 +1,5 @@
 import PotatoMisc;
+import std;
 
 using namespace Potato::Misc;
 
@@ -14,14 +15,14 @@ void TestingMisc()
 
 	struct Type1
 	{
-		int32_t Index;
+		std::int32_t Index;
 		char32_t I;
 		char o;
 	};
 
-	std::vector<int32_t> Datas = {1, 2, 3, 4, 5};
+	std::vector<std::int32_t> Datas = {1, 2, 3, 4, 5};
 
-	std::vector<uint64_t> Buffer;
+	std::vector<std::uint64_t> Buffer;
 
 	Type1 T1;
 	T1.Index = 100;
