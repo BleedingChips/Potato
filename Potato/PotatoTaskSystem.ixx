@@ -35,7 +35,7 @@ export namespace Potato::Task
 	{
 		std::wstring_view Name;
 		std::size_t Priority = *TaskPriority::Normal;
-		std::pmr::memory_resource* Resource = std::pmr::new_delete_resource();
+		std::pmr::memory_resource* Resource = std::pmr::get_default_resource();
 	};
 
 	struct Task
@@ -78,10 +78,10 @@ export namespace Potato::Task
 		using Ptr = Pointer::StrongPtr<TaskContext>;
 		using WPtr = Pointer::WeakPtr<TaskContext>;
 
-		static Ptr Create(std::pmr::memory_resource* Resource = std::pmr::new_delete_resource());
+		static Ptr Create(std::pmr::memory_resource* Resource = std::pmr::get_default_resource());
 		bool FireThreads(std::size_t TaskCount = std::thread::hardware_concurrency() - 1);
 		std::size_t CloseThreads();
-		void ExecuteAndRemoveAllTask(std::pmr::memory_resource* TempResource = std::pmr::new_delete_resource());
+		void ExecuteAndRemoveAllTask(std::pmr::memory_resource* TempResource = std::pmr::get_default_resource());
 
 		bool CommitTask(Task::Ptr TaskPtr);
 		bool CommitDelayTask(Task::Ptr TaskPtr, std::chrono::system_clock::time_point TimePoint);
@@ -102,7 +102,7 @@ export namespace Potato::Task
 		std::pmr::memory_resource* Resource;
 
 		std::mutex ThreadMutex;
-		std::vector<std::jthread, std::pmr::polymorphic_allocator<std::jthread>> Threads;
+		std::pmr::vector<std::jthread> Threads;
 
 		struct ReadyTaskT
 		{
@@ -119,9 +119,9 @@ export namespace Potato::Task
 		std::jthread TimmerThread;
 		std::mutex TaskMutex;
 		bool EnableInsertTask = true;
-		std::vector<DelayTaskT, std::pmr::polymorphic_allocator<DelayTaskT>> DelayTasks;
+		std::pmr::vector<DelayTaskT> DelayTasks;
 		std::size_t DelayTaskIte = 0;
-		std::vector<ReadyTaskT,std::pmr::polymorphic_allocator<ReadyTaskT>> ReadyTasks;
+		std::pmr::vector<ReadyTaskT> ReadyTasks;
 		std::size_t ReadyTasksIte = 0;
 
 		friend struct Pointer::SWSubWrapperT;

@@ -46,6 +46,15 @@ export namespace Potato::IR
 		return Start;
 	}
 
+	struct TypeID
+	{
+		template<typename Type>
+		static TypeID CreateTypeID() { return typeid(Type); }
+	private:
+		TypeID(std::type_index ID) : ID(ID) {}
+		std::type_index ID;
+	};
+
 	struct SymbolTable
 	{
 
