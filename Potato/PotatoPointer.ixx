@@ -198,6 +198,64 @@ export namespace Potato::Pointer
 	using ObserverPtr = SmartPtr<PtrT, SmartPtrDefaultWrapper<ObserverSubWrapperT>>;
 
 	template<typename SubWrapperT>
+	struct UniqueDefaultWrapper : public SubWrapperT
+	{
+		template<typename PtrT>
+		UniqueDefaultWrapper(PtrT*& Ptr, PtrT* Input)
+		{
+			Ptr = Input;
+		};
+
+		template<typename PtrT>
+		explicit UniqueDefaultWrapper(PtrT*& Ptr, PtrT* InputPtr, UniqueDefaultWrapper const& SW) = delete;
+
+		template<typename PtrT>
+		explicit UniqueDefaultWrapper(PtrT*& Ptr, PtrT*& InputPtr, UniqueDefaultWrapper&& SW)
+		{
+			Ptr = InputPtr;
+			InputPtr = nullptr;
+		};
+
+		template<typename PtrT>
+		void Clear(PtrT*& Ptr) {
+			if (Ptr != nullptr)
+			{
+				SubWrapperT::SubRef(Ptr);
+				Ptr = nullptr;
+			}
+		}
+
+		template<typename PtrT>
+		void Equal(PtrT*& Ptr, PtrT* InputPtr) {
+			Ptr = InputPtr;
+			if (Ptr != nullptr)
+				SubWrapperT::AddRef(Ptr);
+		}
+
+		template<typename PtrT>
+		void Equal(PtrT*& Ptr, PtrT* InputPtr, UniqueDefaultWrapper const& SW) = delete;
+
+		template<typename PtrT>
+		void Equal(PtrT*& Ptr, PtrT*& InputPtr, UniqueDefaultWrapper&& SW) {
+			Ptr = InputPtr;
+			InputPtr = nullptr;
+		}
+
+		UniqueDefaultWrapper() = default;
+	};
+
+	struct UniqueSubWrapperT {
+		template<typename PtrT>
+		void AddRef(PtrT* Ptr) {}
+
+		template<typename PtrT>
+		void SubRef(PtrT* Ptr) { Ptr->Release(); }
+	};
+
+	template<typename PtrT, typename SubWrapper = UniqueSubWrapperT>
+	using UniquePtr = SmartPtr<PtrT, UniqueDefaultWrapper<SubWrapper>>;
+
+	template<typename SubWrapperT>
 	struct WeakPtrWrapperT;
 
 	template<typename SubWrapperT>
