@@ -183,6 +183,18 @@ export namespace Potato::Pointer
 		void SubRef(PtrT* Ptr) { Ptr->SubRef(); }
 	};
 
+	struct DefaultIntrusiveInterface
+	{
+	protected:
+
+		void AddRef() const { SRefCount.AddRef(); }
+		void SubRef() const { if (SRefCount.SubRef()) const_cast<DefaultIntrusiveInterface*>(this)->Release(); }
+		virtual void Release() = 0;
+		mutable Potato::Misc::AtomicRefCount SRefCount;
+
+		friend struct IntrusiveSubWrapperT;
+	};
+
 	struct ObserverSubWrapperT {
 		template<typename PtrT>
 		void AddRef(PtrT* Ptr) {}
@@ -402,6 +414,25 @@ export namespace Potato::Pointer
 		void SubStrongRef(PtrT* P) { P->SubStrongRef(); }
 		template<typename PtrT>
 		bool TryAddStrongRef(PtrT* P) { return P->TryAddStrongRef(); }
+	};
+
+	struct DefaultStrongWeakInterface
+	{
+	protected:
+
+		void AddWeakRef() const {  WRefCount.AddRef(); }
+		void SubWeakRef() const { if(WRefCount.SubRef()) const_cast<DefaultStrongWeakInterface*>(this)->WeakRelease(); }
+		void AddStrongRef() const { SRefCount.AddRef(); }
+		void SubStrongRef() const { if(SRefCount.SubRef()) const_cast<DefaultStrongWeakInterface*>(this)->StrongRelease(); }
+		bool TryAddStrongRef() const { return SRefCount.TryAddRefNotFromZero(); }
+
+		virtual void WeakRelease() = 0;
+		virtual void StrongRelease() = 0;
+
+		mutable Potato::Misc::AtomicRefCount SRefCount;
+		mutable Potato::Misc::AtomicRefCount WRefCount;
+
+		friend struct SWSubWrapperT;
 	};
 
 	template<typename PtrT, typename SubWrapperT = SWSubWrapperT>
