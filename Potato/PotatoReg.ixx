@@ -1,12 +1,14 @@
 module;
 
+#include <stdint.h>
+
 export module PotatoReg;
 
 import std;
-import PotatoSLRX;
 import PotatoInterval;
 import PotatoEncode;
 import PotatoMisc;
+import PotatoSLRX;
 
 export namespace Potato::Reg
 {
@@ -401,8 +403,8 @@ export namespace Potato::Reg
 
 	struct DfaBinaryTableWrapper
 	{
-		using StandardT = std::uint32_t;
-		using HalfStandardT = std::uint16_t;
+		using StandardT = uint32_t;
+		using HalfStandardT = uint16_t;
 
 		std::size_t GetStartupNodeIndex() const { return reinterpret_cast<HeadT const*>(Wrapper.data())->StartupNodeIndex; }
 		std::size_t GetCacheCounterCount() const { return reinterpret_cast<HeadT const*>(Wrapper.data())->CacheSolt; }

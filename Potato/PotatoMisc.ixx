@@ -4,8 +4,9 @@ module;
 
 export module PotatoMisc;
 
-import PotatoTMP;
 import std;
+import PotatoTMP;
+
 
 export namespace Potato::Misc
 {
