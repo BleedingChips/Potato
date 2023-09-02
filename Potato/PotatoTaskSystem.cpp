@@ -106,50 +106,68 @@ namespace Potato::Task
 			}
 			Context.LastingTask = LastingTask;
 			Context.Status = Status;
-			if(DelayTaskIte < DelayTasks.size() && CurrentTime >= NewestTimePoint)
+			if(!DelayTasks.empty() && CurrentTime >= ClosestTimePoint)
 			{
-				while(DelayTaskIte < DelayTasks.size())
+				ClosestTimePoint = std::chrono::system_clock::time_point::max();
+				std::size_t OldReadyTaskSize = ReadyTasks.size();
+				auto EndIte = DelayTasks.end();
+				for(auto Ite = DelayTasks.begin(); Ite != EndIte;)
 				{
-					auto& Top = DelayTasks[DelayTaskIte];
-					if(Top.DelayTimePoint <= CurrentTime)
+					if(Ite->DelayTimePoint <= CurrentTime)
 					{
-						auto Pri = Top.Task->GetTaskPriority();
-						ReadyTaskT Task{
-							Pri,
-							std::move(Top.Task)
-						};
-						DelayTaskIte += 1;
-						auto find = std::find_if(ReadyTasks.begin() + ReadyTasksIte, ReadyTasks.end(),
-							[](ReadyTaskT const& TaskT)
-							{
-								return TaskT.Priority > 0;
-							});
-						ReadyTasks.insert(find, std::move(Task));
-					}else
+						std::size_t Priority = Ite->Task->GetTaskPriority();
+						auto& Ref = ReadyTasks.emplace_back(
+							Priority,
+							std::move(Ite->Task)
+						);
+						EndIte -= 1;
+						if(Ite != EndIte)
+						{
+							std::swap(*Ite, *EndIte);
+						}
+					}else if(Ite->DelayTimePoint < ClosestTimePoint)
 					{
-						NewestTimePoint = Top.DelayTimePoint;
-						break;
+						ClosestTimePoint = Ite->DelayTimePoint;
+						++Ite;
 					}
 				}
-
-				if (DelayTaskIte * 2 >= DelayTasks.size())
+				if(OldReadyTaskSize < ReadyTasks.size())
 				{
-					DelayTasks.erase(DelayTasks.begin(), DelayTasks.begin() + DelayTaskIte);
-					DelayTaskIte = 0;
+					auto Index = std::max(OldReadyTaskSize, std::size_t{1});
+					auto Begin = ReadyTasks.begin();
+					for(auto Ite = ReadyTasks.begin() + Index; Ite < ReadyTasks.end(); ++Ite)
+					{
+						if(Ite->Priority < Begin->Priority)
+						{
+							std::swap(*Ite, *Begin);
+						}
+					}
 				}
 			}
-			if(ReadyTasksIte < ReadyTasks.size())
+			if(!ReadyTasks.empty())
 			{
-				auto Top = std::move(ReadyTasks[ReadyTasksIte]);
-				ExecuteOnce = std::move(Top.Task);
-				++ReadyTasksIte;
-				if (ReadyTasksIte * 2 >= ReadyTasks.size())
+				auto Top = std::move(*ReadyTasks.begin());
+				if(ReadyTasks.size() >= 2)
 				{
-					ReadyTasks.erase(ReadyTasks.begin(), ReadyTasks.begin() + ReadyTasksIte);
-					ReadyTasksIte = 0;
+					auto BeginIte = ReadyTasks.begin();
+					auto EndIte = ReadyTasks.end() - 1;
+					std::swap(*BeginIte, *EndIte);
+					BeginIte->Priority -= Top.Priority;
+					for(auto Ite = BeginIte + 1; Ite < EndIte; ++Ite)
+					{
+						Ite->Priority -= Top.Priority;
+						if(Ite->Priority < BeginIte->Priority)
+						{
+							std::swap(*Ite, *BeginIte);
+						}
+					}
+					ReadyTasks.resize(ReadyTasks.size() - 1);
+				}else
+				{
+					ReadyTasks.clear();
 				}
-				for(std::size_t I = ReadyTasksIte; I < ReadyTasks.size(); ++I)
-					ReadyTasks[I].Priority -= Top.Priority;
+				ExecuteOnce = std::move(Top.Task);
+				
 			}
 		}else
 		{
@@ -170,13 +188,16 @@ namespace Potato::Task
 			Task::WPtr TaskPtr{ InTaskPtr.GetPointer() };
 			std::lock_guard lg(TaskMutex);
 			auto Priority = TaskPtr->GetTaskPriority();
-			auto Find = std::find_if(ReadyTasks.begin() + ReadyTasksIte, ReadyTasks.end(),
-				[Priority](ReadyTaskT const& T)
-				{
-					return Priority < T.Priority;
-				}
-			);
-			ReadyTasks.insert(Find, ReadyTaskT{ Priority, std::move(TaskPtr) });
+
+			ReadyTasks.emplace_back(Priority, std::move(TaskPtr));
+			
+			if(ReadyTasks.size() >= 2)
+			{
+				auto Ite1 = ReadyTasks.begin();
+				auto Ite2 = ReadyTasks.rbegin();
+				if(Ite1->Priority > Ite2->Priority)
+					std::swap(*Ite1, *Ite2);
+			}
 			++LastingTask;
 			return true;
 		}
@@ -189,12 +210,9 @@ namespace Potato::Task
 		{
 			Task::WPtr TaskPtr{ InTaskPtr.GetPointer() };
 			std::lock_guard lg(TaskMutex);
-			auto Find = std::find_if(DelayTasks.begin() + DelayTaskIte, DelayTasks.end(),
-				[TimePoint](DelayTaskT const& Task)
-				{
-					return Task.DelayTimePoint > TimePoint;
-				});
-			DelayTasks.insert(Find, DelayTaskT{ TimePoint, std::move(TaskPtr) });
+			if(ClosestTimePoint > TimePoint)
+				ClosestTimePoint = TimePoint;
+			DelayTasks.emplace_back(TimePoint, std::move(TaskPtr));
 			++LastingTask;
 			return true;
 		}

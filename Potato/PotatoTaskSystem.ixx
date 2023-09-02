@@ -133,12 +133,10 @@ export namespace Potato::Task
 
 		std::mutex TaskMutex;
 		ExecuteStatus Status = ExecuteStatus::Normal;
-		std::chrono::system_clock::time_point NewestTimePoint;
 		std::size_t LastingTask = 0;
+		std::chrono::system_clock::time_point ClosestTimePoint;
 		std::pmr::vector<DelayTaskT> DelayTasks;
-		std::size_t DelayTaskIte = 0;
 		std::pmr::vector<ReadyTaskT> ReadyTasks;
-		std::size_t ReadyTasksIte = 0;
 	};
 }
 
