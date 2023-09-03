@@ -131,6 +131,7 @@ namespace Potato::Task
 						++Ite;
 					}
 				}
+				DelayTasks.erase(EndIte, DelayTasks.end());
 				if(OldReadyTaskSize < ReadyTasks.size())
 				{
 					auto Index = std::max(OldReadyTaskSize, std::size_t{1});
