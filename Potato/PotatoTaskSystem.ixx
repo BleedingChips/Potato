@@ -63,10 +63,7 @@ export namespace Potato::Task
 		using Ptr = ControlPtr<Task>;
 
 		template<typename FunT>
-		static Ptr CreatLambdaTask(FunT&& Func, std::u8string_view Name = u8"NoNameLambdaFunc", std::size_t Priority = *TaskPriority::Normal, std::pmr::memory_resource* Resource = std::pmr::get_default_resource());
-
-		virtual std::u8string_view GetTaskName() const = 0;
-		virtual std::size_t GetTaskPriority() const { return *TaskPriority::Normal; }
+		static Ptr CreatLambdaTask(FunT&& Func, std::pmr::memory_resource* Resource = std::pmr::get_default_resource());
 
 	protected:
 
@@ -90,8 +87,12 @@ export namespace Potato::Task
 		void FlushTask();
 		void WaitTask();
 
-		bool CommitTask(Task::Ptr TaskPtr);
-		bool CommitDelayTask(Task::Ptr TaskPtr, std::chrono::system_clock::time_point TimePoint);
+		bool CommitTask(Task::Ptr TaskPtr, std::size_t Priority = *TaskPriority::Normal, std::u8string_view TaskName = u8"NoName");
+		bool CommitDelayTask(Task::Ptr TaskPtr, std::chrono::system_clock::time_point TimePoint, std::size_t Priority = *TaskPriority::Normal, std::u8string_view TaskName = u8"NoName");
+		bool CommitDelayTask(Task::Ptr TaskPtr, std::chrono::system_clock::duration Duration, std::size_t Priority = *TaskPriority::Normal, std::u8string_view TaskName = u8"NoName")
+		{
+			return CommitDelayTask(std::move(TaskPtr), std::chrono::system_clock::now() + Duration, Priority, TaskName);
+		}
 
 		~TaskContext();
 
@@ -122,12 +123,15 @@ export namespace Potato::Task
 		struct ReadyTaskT
 		{
 			std::size_t Priority;
+			std::u8string_view TaskName;
 			Task::WPtr Task;
 		};
 
 		struct DelayTaskT
 		{
 			std::chrono::system_clock::time_point DelayTimePoint;
+			std::size_t Priority;
+			std::u8string_view TaskName;
 			Task::WPtr Task;
 		};
 
@@ -154,12 +158,9 @@ namespace Potato::Task
 			OldResource->deallocate(const_cast<TaskImp*>(this), sizeof(TaskImp), alignof(TaskImp));
 		}
 
-		virtual std::u8string_view GetTaskName() const override{ return std::u8string_view{ TaskName }; }
-		virtual std::size_t GetTaskPriority() const override { return TasklPriority; }
-
 		template<typename FunT>
-		TaskImp(std::u8string_view Name, std::size_t Priority, std::pmr::memory_resource* Resource, FunT&& Fun)
-			: Resource(Resource), TaskName(Name), TasklPriority(Priority), TaskInstance(std::forward<FunT>(Fun))
+		TaskImp(std::pmr::memory_resource* Resource, FunT&& Fun)
+			: Resource(Resource), TaskInstance(std::forward<FunT>(Fun))
 		{
 			
 		}
@@ -173,20 +174,18 @@ namespace Potato::Task
 	private:
 
 		std::pmr::memory_resource* Resource;
-		std::u8string_view TaskName;
-		std::size_t TasklPriority;
 		TaskImpT TaskInstance;
 	};
 
 	template<typename FunT>
-	Task::Ptr Task::CreatLambdaTask(FunT&& Func, std::u8string_view Name, std::size_t Priority, std::pmr::memory_resource* Resource)
+	Task::Ptr Task::CreatLambdaTask(FunT&& Func, std::pmr::memory_resource* Resource)
 	{
 		using Type = TaskImp<std::remove_cvref_t<FunT>>;
 		assert(Resource != nullptr);
 		auto Adress = Resource->allocate(sizeof(Type), alignof(Type));
 		if(Adress != nullptr)
 		{
-			return new (Adress) Type{ Name, Priority, Resource, std::forward<FunT>(Func)};
+			return new (Adress) Type{ Resource, std::forward<FunT>(Func)};
 		}
 		return {};
 	}

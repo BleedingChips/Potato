@@ -8,7 +8,7 @@ int main()
 {
 	{
 		auto Ptr = TaskContext::Create();
-		Ptr->FireThreads();
+		Ptr->FireThreads(1);
 		std::size_t Count = 0;
 		auto Lambda = Task::CreatLambdaTask([&Count](Potato::Task::ExecuteStatus Status, Potato::Task::TaskContext& Context, Potato::Task::Task::Ptr This){
 			std::println("Count :{0} {1}", Count, static_cast<std::size_t>(Status));
