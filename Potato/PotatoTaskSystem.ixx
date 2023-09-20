@@ -58,19 +58,28 @@ export namespace Potato::Task
 
 	struct TaskContext;
 
+	struct TaskProperty
+	{
+		std::size_t TaskPriority = *TaskPriority::Normal;
+		std::u8string_view TaskName = u8"Unnamed Task";
+		std::size_t AppendData = 0;
+	};
+
 	struct Task : public ControlDefaultInterface
 	{
 		using Ptr = ControlPtr<Task>;
 
 		template<typename FunT>
-		static Ptr CreatLambdaTask(FunT&& Func, std::pmr::memory_resource* Resource = std::pmr::get_default_resource());
+		static Ptr CreatLambdaTask(FunT&& Func, std::pmr::memory_resource* Resource = std::pmr::get_default_resource())
+			requires(std::is_invocable_v<FunT, ExecuteStatus, TaskContext&, Task::Ptr, TaskProperty>)
+		;
 
 	protected:
 
 		using WPtr = Pointer::IntrusivePtr<Task>;
 
 		virtual void ControlRelease() override {};
-		virtual void operator()(ExecuteStatus Status, TaskContext&) = 0;
+		virtual void operator()(ExecuteStatus Status, TaskContext&, TaskProperty Property) = 0;
 		virtual ~Task() = default;
 
 		friend struct TaskContext;
@@ -87,11 +96,11 @@ export namespace Potato::Task
 		void FlushTask();
 		void WaitTask();
 
-		bool CommitTask(Task::Ptr TaskPtr, std::size_t Priority = *TaskPriority::Normal, std::u8string_view TaskName = u8"NoName");
-		bool CommitDelayTask(Task::Ptr TaskPtr, std::chrono::system_clock::time_point TimePoint, std::size_t Priority = *TaskPriority::Normal, std::u8string_view TaskName = u8"NoName");
-		bool CommitDelayTask(Task::Ptr TaskPtr, std::chrono::system_clock::duration Duration, std::size_t Priority = *TaskPriority::Normal, std::u8string_view TaskName = u8"NoName")
+		bool CommitTask(Task::Ptr TaskPtr, TaskProperty Property = {});
+		bool CommitDelayTask(Task::Ptr TaskPtr, std::chrono::system_clock::time_point TimePoint, TaskProperty Property = {});
+		bool CommitDelayTask(Task::Ptr TaskPtr, std::chrono::system_clock::duration Duration, TaskProperty Property = {})
 		{
-			return CommitDelayTask(std::move(TaskPtr), std::chrono::system_clock::now() + Duration, Priority, TaskName);
+			return CommitDelayTask(std::move(TaskPtr), std::chrono::system_clock::now() + Duration, Property);
 		}
 
 		~TaskContext();
@@ -122,16 +131,14 @@ export namespace Potato::Task
 
 		struct ReadyTaskT
 		{
-			std::size_t Priority;
-			std::u8string_view TaskName;
+			TaskProperty Property;
 			Task::WPtr Task;
 		};
 
 		struct DelayTaskT
 		{
 			std::chrono::system_clock::time_point DelayTimePoint;
-			std::size_t Priority;
-			std::u8string_view TaskName;
+			TaskProperty Property;
 			Task::WPtr Task;
 		};
 
@@ -142,6 +149,74 @@ export namespace Potato::Task
 		std::pmr::vector<DelayTaskT> DelayTasks;
 		std::pmr::vector<ReadyTaskT> ReadyTasks;
 	};
+
+
+	struct DependenceTaskGraphic : protected Task
+	{
+
+		struct Node : public Pointer::DefaultIntrusiveInterface
+		{
+			using Ptr = Pointer::IntrusivePtr<Node>;
+
+			virtual ~Node() = default;
+		protected:
+			virtual void Release() = 0;
+			Node() = default;
+		};
+
+		struct Builder
+		{
+		protected:
+			Builder(DependenceTaskGraphic& Graphic)
+				: Graphic(Graphic) {}
+			DependenceTaskGraphic& Graphic;
+
+			friend DependenceTaskGraphic;
+		};
+
+		template<typename FunT>
+		bool CreateGraphic(FunT const& Func)
+			requires(std::is_invocable_v<FunT, Builder&>)
+		{
+			std::lock_guard lg(NodeMutex);
+			if(Nodes.empty())
+			{
+				Builder Build{ *this };
+				Func(Build);
+				return true;
+			}
+			return false;
+		}
+
+	protected:
+
+		DependenceTaskGraphic(TaskContext::Ptr Owner)
+			: Owner(Owner) {}
+
+		virtual void operator()(ExecuteStatus Status, TaskContext&, TaskProperty Property);
+
+		TaskContext::Ptr Owner;
+
+		struct NormalNode
+		{
+			TaskProperty Property;
+			Node::Ptr Node;
+			bool Done = false;
+		};
+
+		struct Dependence
+		{
+			std::size_t Require;
+			//std::size_t 
+		};
+
+		std::mutex NodeMutex;
+
+		std::pmr::vector<NormalNode> Nodes;
+		//std::pmr::vector<>
+	};
+
+
 }
 
 namespace Potato::Task
@@ -165,10 +240,10 @@ namespace Potato::Task
 			
 		}
 
-		virtual void operator()(ExecuteStatus Status, TaskContext& Context) override
+		virtual void operator()(ExecuteStatus Status, TaskContext& Context, TaskProperty Property) override
 		{
 			Task::Ptr ThisPtr{this};
-			TaskInstance.operator()(Status, Context, std::move(ThisPtr));
+			TaskInstance.operator()(Status, Context, std::move(ThisPtr), Property);
 		}
 
 	private:
@@ -179,6 +254,7 @@ namespace Potato::Task
 
 	template<typename FunT>
 	Task::Ptr Task::CreatLambdaTask(FunT&& Func, std::pmr::memory_resource* Resource)
+		requires(std::is_invocable_v<FunT, ExecuteStatus, TaskContext&, Task::Ptr, TaskProperty>)
 	{
 		using Type = TaskImp<std::remove_cvref_t<FunT>>;
 		assert(Resource != nullptr);

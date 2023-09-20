@@ -92,7 +92,7 @@ namespace Potato::Task
 
 	void TaskContext::ExecuteOnce(ExecuteContext& Context, std::chrono::system_clock::time_point CurrentTime)
 	{
-		Task::WPtr ExecuteOnce;
+		ReadyTaskT CurrentTask;
 		ExecuteStatus LocStatus = ExecuteStatus::Normal;
 		if(TaskMutex.try_lock())
 		{
@@ -117,8 +117,7 @@ namespace Potato::Task
 					{
 						auto Cur = std::move(*Ite);
 						auto& Ref = ReadyTasks.emplace_back(
-							Cur.Priority,
-							Cur.TaskName,
+							Cur.Property,
 							std::move(Cur.Task)
 						);
 						EndIte -= 1;
@@ -139,7 +138,7 @@ namespace Potato::Task
 					auto Begin = ReadyTasks.begin();
 					for(auto Ite = ReadyTasks.begin() + Index; Ite < ReadyTasks.end(); ++Ite)
 					{
-						if(Ite->Priority < Begin->Priority)
+						if(Ite->Property.TaskPriority < Begin->Property.TaskPriority)
 						{
 							std::swap(*Ite, *Begin);
 						}
@@ -154,11 +153,11 @@ namespace Potato::Task
 					auto BeginIte = ReadyTasks.begin();
 					auto EndIte = ReadyTasks.end() - 1;
 					std::swap(*BeginIte, *EndIte);
-					BeginIte->Priority -= Top.Priority;
+					BeginIte->Property.TaskPriority -= Top.Property.TaskPriority;
 					for(auto Ite = BeginIte + 1; Ite < EndIte; ++Ite)
 					{
-						Ite->Priority -= Top.Priority;
-						if(Ite->Priority < BeginIte->Priority)
+						Ite->Property.TaskPriority -= Top.Property.TaskPriority;
+						if(Ite->Property.TaskPriority < BeginIte->Property.TaskPriority)
 						{
 							std::swap(*Ite, *BeginIte);
 						}
@@ -168,7 +167,7 @@ namespace Potato::Task
 				{
 					ReadyTasks.clear();
 				}
-				ExecuteOnce = std::move(Top.Task);
+				CurrentTask = std::move(Top);
 				
 			}
 		}else
@@ -176,27 +175,27 @@ namespace Potato::Task
 			Context.Locked = false;
 		}
 
-		if(ExecuteOnce)
+		if(CurrentTask.Task)
 		{
-			ExecuteOnce->operator()(LocStatus, *this);
+			CurrentTask.Task->operator()(LocStatus, *this, CurrentTask.Property);
 			Context.LastExecute = true;
 		}
 	}
 
-	bool TaskContext::CommitTask(Task::Ptr InTaskPtr, std::size_t Priority, std::u8string_view TaskName)
+	bool TaskContext::CommitTask(Task::Ptr InTaskPtr, TaskProperty Property)
 	{
 		if(InTaskPtr)
 		{
 			Task::WPtr TaskPtr{ InTaskPtr.GetPointer() };
 			std::lock_guard lg(TaskMutex);
 
-			ReadyTasks.emplace_back(Priority, TaskName, std::move(TaskPtr));
+			ReadyTasks.emplace_back(Property, std::move(TaskPtr));
 			
 			if(ReadyTasks.size() >= 2)
 			{
 				auto Ite1 = ReadyTasks.begin();
 				auto Ite2 = ReadyTasks.rbegin();
-				if(Ite1->Priority > Ite2->Priority)
+				if(Ite1->Property.TaskPriority > Ite2->Property.TaskPriority)
 					std::swap(*Ite1, *Ite2);
 			}
 			++LastingTask;
@@ -205,7 +204,7 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskContext::CommitDelayTask(Task::Ptr InTaskPtr, std::chrono::system_clock::time_point TimePoint, std::size_t Priority, std::u8string_view TaskName)
+	bool TaskContext::CommitDelayTask(Task::Ptr InTaskPtr, std::chrono::system_clock::time_point TimePoint, TaskProperty Property)
 	{
 		if(InTaskPtr)
 		{
@@ -213,7 +212,7 @@ namespace Potato::Task
 			std::lock_guard lg(TaskMutex);
 			if(ClosestTimePoint > TimePoint)
 				ClosestTimePoint = TimePoint;
-			DelayTasks.emplace_back(TimePoint, Priority, TaskName, std::move(TaskPtr));
+			DelayTasks.emplace_back(TimePoint, Property, std::move(TaskPtr));
 			++LastingTask;
 			return true;
 		}
