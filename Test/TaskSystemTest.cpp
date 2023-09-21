@@ -10,11 +10,11 @@ int main()
 		auto Ptr = TaskContext::Create();
 		Ptr->FireThreads();
 		std::size_t Count = 0;
-		auto Lambda = Task::CreatLambdaTask([&Count](Potato::Task::ExecuteStatus Status, Potato::Task::TaskContext& Context, Potato::Task::Task::Ptr This, Potato::Task::TaskProperty Property){
+		auto Lambda = Task::CreatLambdaTask([&Count](Potato::Task::ExecuteStatus Status, Potato::Task::Task::Ptr This){
 			std::println("Count :{0} {1}", Count, static_cast<std::size_t>(Status));
 			Count++;
 			if(Count <= 20)
-				Context.CommitDelayTask(This, std::chrono::system_clock::now() + std::chrono::milliseconds{50});
+				Status.Context.CommitDelayTask(This, std::chrono::system_clock::now() + std::chrono::milliseconds{50});
 		});
 		Ptr->CommitTask(Lambda);
 	}

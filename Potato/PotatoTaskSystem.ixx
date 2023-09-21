@@ -36,15 +36,6 @@ export namespace Potato::Task
 	template<typename PtrT>
 	using ControlPtr = Potato::Pointer::SmartPtr<PtrT, Pointer::SmartPtrDefaultWrapper<ControlPtrDefaultWrapper>>;
 
-
-	enum class ExecuteStatus : std::size_t
-	{
-		Normal,
-		Close,
-	};
-
-	constexpr bool operator *(ExecuteStatus Status) { return Status == ExecuteStatus::Normal; }
-
 	enum class TaskPriority : std::size_t
 	{
 		High = 100,
@@ -65,13 +56,28 @@ export namespace Potato::Task
 		std::size_t AppendData = 0;
 	};
 
+	enum class TaskContextStatus : std::size_t
+	{
+		Normal,
+		Close,
+	};
+
+	struct ExecuteStatus
+	{
+		TaskContextStatus Status = TaskContextStatus::Normal;
+		TaskProperty Property;
+		TaskContext& Context;
+
+		operator bool() const { return Status == TaskContextStatus::Normal; }
+	};
+
 	struct Task : public ControlDefaultInterface
 	{
 		using Ptr = ControlPtr<Task>;
 
 		template<typename FunT>
 		static Ptr CreatLambdaTask(FunT&& Func, std::pmr::memory_resource* Resource = std::pmr::get_default_resource())
-			requires(std::is_invocable_v<FunT, ExecuteStatus, TaskContext&, Task::Ptr, TaskProperty>)
+			requires(std::is_invocable_v<FunT, ExecuteStatus& , Task::Ptr>)
 		;
 
 	protected:
@@ -79,7 +85,7 @@ export namespace Potato::Task
 		using WPtr = Pointer::IntrusivePtr<Task>;
 
 		virtual void ControlRelease() override {};
-		virtual void operator()(ExecuteStatus Status, TaskContext&, TaskProperty Property) = 0;
+		virtual void operator()(ExecuteStatus& Status) = 0;
 		virtual ~Task() = default;
 
 		friend struct TaskContext;
@@ -119,7 +125,7 @@ export namespace Potato::Task
 			std::size_t LastingTask = 1;
 			bool LastExecute = false;
 			bool Locked = false;
-			ExecuteStatus Status = ExecuteStatus::Normal;
+			TaskContextStatus Status = TaskContextStatus::Normal;
 		};
 
 		void ExecuteOnce(ExecuteContext& Context, std::chrono::system_clock::time_point CurrentTime);
@@ -143,7 +149,7 @@ export namespace Potato::Task
 		};
 
 		std::mutex TaskMutex;
-		ExecuteStatus Status = ExecuteStatus::Normal;
+		TaskContextStatus Status = TaskContextStatus::Normal;
 		std::size_t LastingTask = 0;
 		std::chrono::system_clock::time_point ClosestTimePoint;
 		std::pmr::vector<DelayTaskT> DelayTasks;
@@ -193,7 +199,7 @@ export namespace Potato::Task
 		DependenceTaskGraphic(TaskContext::Ptr Owner)
 			: Owner(Owner) {}
 
-		virtual void operator()(ExecuteStatus Status, TaskContext&, TaskProperty Property);
+		virtual void operator()(ExecuteStatus& Status) final override;
 
 		TaskContext::Ptr Owner;
 
@@ -240,10 +246,10 @@ namespace Potato::Task
 			
 		}
 
-		virtual void operator()(ExecuteStatus Status, TaskContext& Context, TaskProperty Property) override
+		virtual void operator()(ExecuteStatus& Status) override
 		{
 			Task::Ptr ThisPtr{this};
-			TaskInstance.operator()(Status, Context, std::move(ThisPtr), Property);
+			TaskInstance.operator()(Status, std::move(ThisPtr));
 		}
 
 	private:
@@ -254,7 +260,7 @@ namespace Potato::Task
 
 	template<typename FunT>
 	Task::Ptr Task::CreatLambdaTask(FunT&& Func, std::pmr::memory_resource* Resource)
-		requires(std::is_invocable_v<FunT, ExecuteStatus, TaskContext&, Task::Ptr, TaskProperty>)
+		requires(std::is_invocable_v<FunT, ExecuteStatus&, Task::Ptr>)
 	{
 		using Type = TaskImp<std::remove_cvref_t<FunT>>;
 		assert(Resource != nullptr);

@@ -19,7 +19,7 @@ namespace Potato::Task
 	{
 		{
 			std::lock_guard lg(TaskMutex);
-			Status = ExecuteStatus::Close;
+			Status = TaskContextStatus::Close;
 		}
 
 		WaitTask();
@@ -60,7 +60,7 @@ namespace Potato::Task
 					while(!ST.stop_requested())
 					{
 						ThisPtr->ExecuteOnce(Context, std::chrono::system_clock::now());
-						if(Context.Locked && Context.LastingTask == 0 && Context.Status == ExecuteStatus::Close)
+						if(Context.Locked && Context.LastingTask == 0 && Context.Status == TaskContextStatus::Close)
 							break;
 						if(Context.Locked && Context.LastExecute)
 							std::this_thread::yield();
@@ -93,7 +93,7 @@ namespace Potato::Task
 	void TaskContext::ExecuteOnce(ExecuteContext& Context, std::chrono::system_clock::time_point CurrentTime)
 	{
 		ReadyTaskT CurrentTask;
-		ExecuteStatus LocStatus = ExecuteStatus::Normal;
+		TaskContextStatus LocStatus = TaskContextStatus::Normal;
 		if(TaskMutex.try_lock())
 		{
 			std::lock_guard lg(TaskMutex, std::adopt_lock);
@@ -177,7 +177,12 @@ namespace Potato::Task
 
 		if(CurrentTask.Task)
 		{
-			CurrentTask.Task->operator()(LocStatus, *this, CurrentTask.Property);
+			ExecuteStatus Status{
+				LocStatus,
+				CurrentTask.Property,
+				*this
+			};
+			CurrentTask.Task->operator()(Status);
 			Context.LastExecute = true;
 		}
 	}
@@ -249,7 +254,7 @@ namespace Potato::Task
 	{
 		{
 			std::lock_guard lg(TaskMutex);
-			Status = ExecuteStatus::Close;
+			Status = TaskContextStatus::Close;
 		}
 
 		auto CurID = std::this_thread::get_id();
