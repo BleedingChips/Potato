@@ -69,6 +69,7 @@ export namespace Potato::Misc
 	struct AtomicRefCount
 	{
 		bool TryAddRefNotFromZero() const noexcept;
+		bool TryAddRefFromZero() const noexcept;
 		void AddRef() const noexcept;
 		bool SubRef() const noexcept;
 		size_t Count() const noexcept { return ref.load(std::memory_order_relaxed); }
@@ -297,6 +298,12 @@ namespace Potato::Misc
 				Desired = Except + 1;
 		}
 		return true;
+	}
+
+	bool AtomicRefCount::TryAddRefFromZero() const noexcept
+	{
+		std::size_t Except = 0;
+		return ref.compare_exchange_strong(Except, 1, std::memory_order_relaxed, std::memory_order_relaxed);
 	}
 }
 

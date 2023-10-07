@@ -50,7 +50,9 @@ export namespace Potato::IR
 	{
 		template<typename Type>
 		static TypeID CreateTypeID() { return typeid(Type); }
+		std::strong_ordering operator<=>(TypeID const& i) const { return ID <=> i.ID; }
 	private:
+		TypeID(std::type_info const& ID) : ID(ID) {}
 		TypeID(std::type_index ID) : ID(ID) {}
 		std::type_index ID;
 	};
