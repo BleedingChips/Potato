@@ -57,6 +57,7 @@ export namespace Potato::Task
 		std::size_t TaskPriority = *TaskPriority::Normal;
 		std::u8string_view TaskName = u8"Unnamed Task";
 		std::size_t AppendData = 0;
+		std::size_t AppendData2 = 0;
 	};
 
 	enum class TaskContextStatus : std::size_t
