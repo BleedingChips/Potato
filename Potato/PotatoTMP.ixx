@@ -74,21 +74,6 @@ export namespace Potato::TMP
 		template<template<typename ...> class OutHolder> using With = OutHolder<Type...>;
 	};
 
-	// Exist
-	template<typename DetectType, template<typename ...> class Role, typename ...RoleParameter> struct Exist
-	{
-	private:
-		template<typename P> static std::true_type DetectFunc(typename Role<P, RoleParameter...>*);
-		template<typename P> static std::false_type DetectFunc(...);
-	public:
-		static constexpr bool Value = decltype(DetectFunc<DetectType>(nullptr))::value;
-	};
-
-	template<typename Type, typename = std::void_t<decltype(&Type::operator())>>
-	struct IsFunctionObjectRole {};
-
-	template<typename DetectType> struct IsFunctionObject : Exist<DetectType, IsFunctionObjectRole> {};
-
 	template<typename T> struct FunctionInfoWrapper { using Type = decltype(&T::operator()); };
 
 	template<typename FT> struct FunctionInfo;
@@ -469,6 +454,7 @@ export namespace Potato::TMP
 		static constexpr bool IsNoException = false;
 		static constexpr bool IsEllipsis = true;
 	};
+
 	template<typename RT, typename ...Parameter> struct FunctionInfo<RT(Parameter..., ...)  volatile&& noexcept> {
 		using ReturnType = RT;
 		using OwnerType = void;
@@ -482,19 +468,38 @@ export namespace Potato::TMP
 		static constexpr bool IsEllipsis = true;
 	};
 
-	template<typename Type> struct FunctionObjectInfo : FunctionInfo<decltype(&Type::operator())> {};
+	template<typename FuncT>
+	concept RequireMemberFunctionPointer = std::is_member_function_pointer_v<FuncT>;
 
-	template<typename Type> struct MemberFunctionInfo;
-	template<typename Owner, typename FunctionType> struct MemberFunctionInfo<FunctionType Owner::*> : FunctionInfo<FunctionType>
+	template<typename FuncT>
+	struct SubFunctionInfo;
+
+	template<typename FuntionType, typename Owner>
+	struct SubFunctionInfo<FuntionType Owner::*> : public FunctionInfo<FuntionType>
 	{
 		using OwnerType = Owner;
 	};
 
-	template<typename InputType, typename ReturnValue, typename ...Parameter>
-	struct IsFunction
+	template<RequireMemberFunctionPointer FuncT>
+	struct FunctionInfo<FuncT> : SubFunctionInfo<FuncT>
+	{
+		
+	};
+
+	template<typename FuncT>
+	concept RequireCertainlyOperatorParentheses = requires(FuncT fun)
+	{
+		{&FuncT::operator()};
+	};
+
+	template<RequireCertainlyOperatorParentheses FuncT>
+	struct FunctionInfo<FuncT> : FunctionInfo<decltype(&FuncT::operator())>
 	{
 
 	};
+
+	template<typename FuncT>
+	concept  RequireDetectableFunction = std::is_function_v<std::remove_cvref_t<FuncT>> || std::is_member_function_pointer_v<std::remove_cvref_t<FuncT>> || RequireCertainlyOperatorParentheses<std::remove_cvref_t<FuncT>>;
 
 	template<typename CharT, std::size_t N>
 	struct TypeString

@@ -19,6 +19,11 @@ struct ExistValue1Role {};
 
 template<Potato::TMP::TypeString H1> struct CST {};
 
+void NormalTest(Type1)
+{
+	
+}
+
 int main()
 {
 	using namespace Potato::TMP;
@@ -60,42 +65,6 @@ int main()
 		static_assert(std::is_same_v<T2, TTuple2<Type1, Type2, Type3, Type1>>, "Tmp::Replace Not Pass");
 	}
 
-	// Exist 配合 Role 使用，判断某个类是否有某个命名为xXXX的函数或者变量
-	{
-		struct Sample1
-		{
-			std::int32_t Value1;
-			void Func1(std::int32_t);
-		};
-
-		struct Sample2
-		{
-
-		};
-
-		static_assert(Exist<Sample1, ExistValue1Role>::Value, "Exist Not Pass");
-		static_assert(Exist<Sample1, ExistFun1Role>::Value, "Exist Not Pass");
-
-		static_assert(!Exist<Sample2, ExistValue1Role>::Value, "Exist Not Pass");
-		static_assert(!Exist<Sample2, ExistFun1Role>::Value, "Exist Not Pass");
-	}
-	
-	// IsFunctionObjectRole 判断某个类型是否是CallableObject
-	{
-		struct Sample1
-		{
-			void operator()();
-		};
-
-		struct Sample2
-		{
-
-		};
-
-		static_assert(Exist<Sample1, IsFunctionObjectRole>::Value, "IsFunctionObjectRole Not Pass");
-		static_assert(!Exist<Sample2, IsFunctionObjectRole>::Value, "IsFunctionObjectRole Not Pass");
-	}
-
 	// FunctionInfo 萃取函数类型
 	{
 		struct Sample1
@@ -122,6 +91,16 @@ int main()
 		using Info2 = FunctionInfo<decltype(Function1)>;
 		static_assert(!Info2::IsNoException, "FunctionInfo Not Pass");
 		static_assert(std::is_same_v<Info2::OwnerType, void>, "FunctionInfo Not Pass");
+
+		auto lambda = [](Type1, Type2){};
+
+		using Info3 = FunctionInfo<decltype(lambda)>;
+
+		static_assert(std::is_same_v<Info3::OwnerType, decltype(lambda)>, "FunctionInfo Not Pass");
+
+		using Info4 = FunctionInfo<decltype(NormalTest)>;
+
+		static_assert(std::is_same_v<Info4::OwnerType, void>, "FunctionInfo Not Pass");
 	}
 
 	// TempString 用于模板参数的字符串常量
