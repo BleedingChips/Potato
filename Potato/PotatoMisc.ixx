@@ -267,6 +267,19 @@ export namespace Potato::Misc
 		void AddCharacter(std::size_t Count = 1) { CharacterCount += 1; }
 	};
 
+	inline std::strong_ordering PriorityCompareStrongOrdering() { return std::strong_ordering::equivalent; }
+
+	template<typename T, typename ...OT>
+	std::strong_ordering PriorityCompareStrongOrdering(T&& k1, T&& k2, OT&&... ot)
+	{
+		std::strong_ordering re = std::forward<T&&>(k1) <=> std::forward<T&&>(k2);
+		if(re == std::strong_ordering::equivalent)
+			return PriorityCompareStrongOrdering(std::forward<OT>(ot)...);
+		return re;
+	}
+
+	
+
 }
 
 namespace Potato::Misc

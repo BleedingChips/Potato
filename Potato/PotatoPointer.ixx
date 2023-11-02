@@ -42,6 +42,8 @@ export namespace Potato::Pointer
 	{
 		static_assert(!std::is_reference_v<PtrT>, "SmartPtr : Type should not be reference Type");
 
+		using Type = PtrT;
+
 		template<typename PtrT2, typename ...AppendT>
 		SmartPtr(PtrT2* InputPtr, AppendT&& ...Append)
 			requires(std::is_convertible_v<PtrT2*, PtrT*> && std::is_constructible_v<WrapperT, PtrT*&, PtrT2*&, AppendT&&...>)
