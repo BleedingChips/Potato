@@ -20,12 +20,13 @@ export namespace Potato::Task
 
 	struct ControlDefaultInterface : public Potato::Pointer::DefaultIntrusiveInterface
 	{
-		
+
+		bool IsControlRefZero() const { return CRef.Count() == 0; }
+
 	protected:
 
 		void AddControlRef() const { CRef.AddRef(); }
 		void SubControlRef() const { if (CRef.SubRef()) const_cast<ControlDefaultInterface*>(this)->ControlRelease(); }
-
 		virtual void ControlRelease() = 0;
 		mutable Misc::AtomicRefCount CRef;
 		friend struct ControlPtrDefaultWrapper;
