@@ -5,6 +5,18 @@ module PotatoIR;
 namespace Potato::IR
 {
 
+	std::strong_ordering TypeID::operator<=>(TypeID const& i) const
+	{
+		if(ID == i.ID)
+		{
+			return std::strong_ordering::equal;
+		}else if(ID < i.ID)
+		{
+			return std::strong_ordering::less;
+		}else
+			return std::strong_ordering::greater;
+	}
+
 	auto SymbolTable::InsertSymbol(std::u32string Name, std::size_t FeedbackIndex, std::any Data) -> std::size_t
 	{
 		std::size_t Index = Mappings.size();

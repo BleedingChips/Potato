@@ -287,7 +287,13 @@ export namespace Potato::Pointer
 
 		template<typename PtrT>
 		explicit StrongPtrWrapperT(PtrT*& Ptr, PtrT* InputPtr, StrongPtrWrapperT const&)
-		{};
+		{
+			Ptr = InputPtr;
+			if (Ptr != nullptr) {
+				SubWrapperT::AddWeakRef(Ptr);
+				SubWrapperT::AddStrongRef(Ptr);
+			}
+		};
 
 		template<typename PtrT>
 		explicit StrongPtrWrapperT(PtrT*& Ptr, PtrT*& InputPtr, StrongPtrWrapperT&&)

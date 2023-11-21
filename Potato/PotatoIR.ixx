@@ -13,6 +13,7 @@ export namespace Potato::IR
 
 		template<typename Type>
 		static constexpr Layout Get() { return { alignof(std::remove_cvref_t<Type>), sizeof(std::remove_cvref_t<Type>) }; }
+		bool operator==(Layout const& l) const { return Align == l.Align && Size == l.Size; }
 	};
 
 	inline constexpr std::size_t InsertLayoutCPP(Layout& Target, Layout const Inserted)
@@ -50,8 +51,9 @@ export namespace Potato::IR
 	{
 		template<typename Type>
 		static TypeID CreateTypeID() { return typeid(Type); }
-		std::strong_ordering operator<=>(TypeID const& i) const { return ID <=> i.ID; }
-		bool operator==(TypeID const& i) const { return this->operator<=>(i) == std::strong_ordering::equivalent; }
+		
+		std::strong_ordering operator<=>(TypeID const& i) const;
+		bool operator==(TypeID const& i) const { return ID == i.ID; }
 		TypeID(TypeID const&) = default;
 		TypeID& operator=(TypeID const& i) { ID.~type_index(); new (&ID) std::type_index{i.ID}; return *this; }
 	private:
