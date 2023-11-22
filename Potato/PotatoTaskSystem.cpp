@@ -7,7 +7,7 @@ module PotatoTaskSystem;
 namespace Potato::Task
 {
 
-	void TaskContext::Release()
+	void TaskContext::WeakRelease()
 	{
 		auto LastResource = Resource;
 		assert(LastResource != nullptr);
@@ -15,7 +15,7 @@ namespace Potato::Task
 		LastResource->deallocate(this, sizeof(TaskContext), alignof(TaskContext));
 	}
 
-	void TaskContext::ControlRelease()
+	void TaskContext::StrongRelease()
 	{
 		{
 			std::lock_guard lg(TaskMutex);
@@ -50,16 +50,17 @@ namespace Potato::Task
 		if(Threads.empty())
 		{
 			Threads.reserve(TaskCount);
-			WPtr ThisPtr{ this };
+			Ptr TempPtr{this};
+			WPtr ThisPtr{ TempPtr };
 			for(std::size_t I = 0; I < TaskCount; ++I)
 			{
-				Threads.emplace_back([ThisPtr](std::stop_token ST)
+				Threads.emplace_back([ThisPtr, this](std::stop_token ST)
 				{
 					assert(ThisPtr);
 					ExecuteContext Context;
-					while(!ST.stop_requested())
+					while(!ST.stop_requested() && ThisPtr)
 					{
-						ThisPtr->ExecuteOnce(Context, std::chrono::system_clock::now());
+						ExecuteOnce(Context, std::chrono::system_clock::now());
 						if(Context.Locked && Context.LastingTask == 0 && Context.Status == TaskContextStatus::Close)
 							break;
 						if(Context.Locked && Context.LastExecute)
@@ -191,10 +192,9 @@ namespace Potato::Task
 	{
 		if(InTaskPtr)
 		{
-			Task::WPtr TaskPtr{ InTaskPtr.GetPointer() };
 			std::lock_guard lg(TaskMutex);
 
-			ReadyTasks.emplace_back(Property, std::move(TaskPtr));
+			ReadyTasks.emplace_back(Property, std::move(InTaskPtr));
 			
 			if(ReadyTasks.size() >= 2)
 			{
@@ -213,11 +213,10 @@ namespace Potato::Task
 	{
 		if(InTaskPtr)
 		{
-			Task::WPtr TaskPtr{ InTaskPtr.GetPointer() };
 			std::lock_guard lg(TaskMutex);
 			if(ClosestTimePoint > TimePoint)
 				ClosestTimePoint = TimePoint;
-			DelayTasks.emplace_back(TimePoint, Property, std::move(TaskPtr));
+			DelayTasks.emplace_back(TimePoint, Property, std::move(InTaskPtr));
 			++LastingTask;
 			return true;
 		}

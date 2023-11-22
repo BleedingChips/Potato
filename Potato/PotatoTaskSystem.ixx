@@ -8,37 +8,9 @@ import std;
 import PotatoMisc;
 import PotatoPointer;
 
-export namespace Potato::Task
-{
-	struct ControlPtrDefaultWrapper
-	{
-		template<typename PtrT>
-		void AddRef(PtrT* Ptr) { Ptr->AddRef(); Ptr->AddControlRef(); }
-		template<typename PtrT>
-		void SubRef(PtrT* Ptr) { Ptr->SubControlRef(); Ptr->SubRef(); }
-	};
-
-	struct ControlDefaultInterface : public Potato::Pointer::DefaultIntrusiveInterface
-	{
-
-		bool IsControlRefZero() const { return CRef.Count() == 0; }
-
-	protected:
-
-		void AddControlRef() const { CRef.AddRef(); }
-		void SubControlRef() const { if (CRef.SubRef()) const_cast<ControlDefaultInterface*>(this)->ControlRelease(); }
-		virtual void ControlRelease() = 0;
-		mutable Misc::AtomicRefCount CRef;
-		friend struct ControlPtrDefaultWrapper;
-	};
-
-}
 
 export namespace Potato::Task
 {
-
-	template<typename PtrT>
-	using ControlPtr = Potato::Pointer::SmartPtr<PtrT, Pointer::SmartPtrDefaultWrapper<ControlPtrDefaultWrapper>>;
 
 	enum class TaskPriority : std::size_t
 	{
@@ -76,9 +48,9 @@ export namespace Potato::Task
 		operator bool() const { return Status == TaskContextStatus::Normal; }
 	};
 
-	struct Task : public ControlDefaultInterface
+	struct Task : public Pointer::DefaultIntrusiveInterface
 	{
-		using Ptr = ControlPtr<Task>;
+		using Ptr = Pointer::IntrusivePtr<Task>;
 
 		template<typename FunT>
 		static Ptr CreatLambdaTask(FunT&& Func, std::pmr::memory_resource* Resource = std::pmr::get_default_resource())
@@ -87,18 +59,15 @@ export namespace Potato::Task
 
 	protected:
 
-		using WPtr = Pointer::IntrusivePtr<Task>;
-
-		virtual void ControlRelease() override {};
 		virtual void operator()(ExecuteStatus& Status) = 0;
 		virtual ~Task() = default;
 
 		friend struct TaskContext;
 	};
 
-	struct TaskContext : public ControlDefaultInterface
+	struct TaskContext : public Pointer::DefaultStrongWeakInterface
 	{
-		using Ptr = ControlPtr<TaskContext>;
+		using Ptr = Pointer::StrongPtr<TaskContext>;
 
 		static Ptr Create(std::pmr::memory_resource* Resource = std::pmr::get_default_resource());
 		bool FireThreads(std::size_t TaskCount = std::thread::hardware_concurrency() - 1);
@@ -118,10 +87,10 @@ export namespace Potato::Task
 
 	private:
 
-		void Release();
-		void ControlRelease();
+		void WeakRelease();
+		void StrongRelease();
 
-		using WPtr = Pointer::IntrusivePtr<TaskContext>;
+		using WPtr = Pointer::WeakPtr<TaskContext>;
 
 		TaskContext(std::pmr::memory_resource* Resource);
 
@@ -143,14 +112,14 @@ export namespace Potato::Task
 		struct ReadyTaskT
 		{
 			TaskProperty Property;
-			Task::WPtr Task;
+			Task::Ptr Task;
 		};
 
 		struct DelayTaskT
 		{
 			std::chrono::system_clock::time_point DelayTimePoint;
 			TaskProperty Property;
-			Task::WPtr Task;
+			Task::Ptr Task;
 		};
 
 		std::mutex TaskMutex;
