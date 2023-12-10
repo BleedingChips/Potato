@@ -7,7 +7,7 @@ module PotatoTaskSystem;
 namespace Potato::Task
 {
 
-	void TaskContext::WeakRelease()
+	void TaskContext::ViewerRelease()
 	{
 		auto LastResource = Resource;
 		assert(LastResource != nullptr);
@@ -15,7 +15,7 @@ namespace Potato::Task
 		LastResource->deallocate(this, sizeof(TaskContext), alignof(TaskContext));
 	}
 
-	void TaskContext::StrongRelease()
+	void TaskContext::ControllerRelease()
 	{
 		{
 			std::lock_guard lg(TaskMutex);
@@ -50,17 +50,16 @@ namespace Potato::Task
 		if(Threads.empty())
 		{
 			Threads.reserve(TaskCount);
-			Ptr TempPtr{this};
-			WPtr ThisPtr{ TempPtr };
+			WPtr ThisPtr{this};
 			for(std::size_t I = 0; I < TaskCount; ++I)
 			{
-				Threads.emplace_back([ThisPtr, this](std::stop_token ST)
+				Threads.emplace_back([ThisPtr](std::stop_token ST)
 				{
 					assert(ThisPtr);
 					ExecuteContext Context;
-					while(!ST.stop_requested() && ThisPtr)
+					while(!ST.stop_requested())
 					{
-						ExecuteOnce(Context, std::chrono::system_clock::now());
+						ThisPtr->ExecuteOnce(Context, std::chrono::system_clock::now());
 						if(Context.Locked && Context.LastingTask == 0 && Context.Status == TaskContextStatus::Close)
 							break;
 						if(Context.Locked && Context.LastExecute)

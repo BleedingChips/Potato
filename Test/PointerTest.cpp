@@ -13,7 +13,10 @@ using namespace Potato::Pointer;
 struct Type1
 {
 	mutable Potato::Misc::AtomicRefCount Ref;
-	void AddRef() const{ return Ref.AddRef(); }
+	void AddRef() const
+	{
+		return Ref.AddRef();
+	}
 	void SubRef() const{
 		if (Ref.SubRef())
 		{
@@ -21,10 +24,31 @@ struct Type1
 		}
 	}
 	~Type1(){ 
-	GobalIndex = 100; 
+		GobalIndex = 100; 
 	}
 };
 
+struct Type2 : public Pointer::DefaultStrongWeakInterface
+{
+
+	virtual void StrongRelease() override { GobalIndex = 10000; }
+	virtual void WeakRelease() override { this->~Type2(); }
+	~Type2() {
+		GobalIndex = 100;
+	}
+};
+
+struct Type3 : public Pointer::DefaultControllerViewerInterface
+{
+
+	virtual void ControllerRelease() override { GobalIndex = 10000; }
+	virtual void ViewerRelease() override { this->~Type3(); }
+	~Type3() {
+		GobalIndex = 100;
+	}
+};
+
+/*
 struct Type23
 {
 	void Release(){ delete this;}
@@ -84,57 +108,16 @@ struct Type4
 	~Type4() { RefValue = 2; }
 };
 
-struct SWRef
-{
-	mutable Potato::Misc::AtomicRefCount SRef;
-	mutable Potato::Misc::AtomicRefCount WRef;
-
-	void AddStrongRef(Type4* Ptr)
-	{
-		assert(Ptr != nullptr);
-		SRef.AddRef();
-	}
-	void SubStrongRef(Type4* Ptr) {
-		assert(Ptr != nullptr);
-		if(SRef.SubRef())
-			delete Ptr;
-	}
-
-	void AddWeakRef(Type4* Ptr)
-	{
-		assert(Ptr != nullptr);
-		WRef.AddRef();
-	}
-
-	void SubWeakRef(Type4* Ptr)
-	{
-		if (WRef.SubRef())
-		{
-			delete this;
-		}
-	}
-
-	bool TryAddStrongRef(Type4* Ptr)
-	{
-		return SRef.TryAddRefNotFromZero();
-	}
-
-	~SWRef() {
-		volatile int i = 0;
-	}
-};
-
 struct K
 {
 	K(std::int32_t I) {}
 };
+*/
 
 int main()
 {
 
-	static_assert(std::is_constructible_v<K, std::int32_t&>, "Fuck");
 
-	/*
 	GobalIndex = 10086;
 
 
@@ -144,6 +127,37 @@ int main()
 
 	if (GobalIndex != 100)
 		return 1;
+
+	StrongPtr<Type2> P2 {new Type2};
+
+	auto iso = P2.Isomer();
+
+	P2.Reset();
+
+
+	if (GobalIndex != 10000)
+		return 1;
+
+	iso.Reset();
+
+	if (GobalIndex != 100)
+		return 1;
+
+	ControllerPtr<Type3> P3{ new Type3 };
+
+	auto iso2 = P3.Isomer();
+
+	P3.Reset();
+
+	if (GobalIndex != 10000)
+		return 1;
+
+	iso2.Reset();
+
+	if (GobalIndex != 100)
+		return 1;
+
+	/*
 
 	IntrusivePtr<Type2, Type2Wrapper> P2{ new Type2 };
 
@@ -156,7 +170,7 @@ int main()
 
 	int32_t State = 0;
 
-	StrongPtr<Type4, SWRef> Ptr{new Type4{ State }, new SWRef{}};
+	//StrongPtr<Type4, SWRef> Ptr{new Type4{ State }, new SWRef{}};
 
 	auto W = Ptr.Downgrade();
 

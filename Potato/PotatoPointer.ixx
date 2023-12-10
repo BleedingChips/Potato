@@ -13,176 +13,159 @@ import PotatoMisc;
 export namespace Potato::Pointer
 {
 
-	template<typename WrapperT, typename ...Par>
-	concept EnableEqual = requires(WrapperT T, Par...P)
+	struct DefaultIntrusiveWrapper
 	{
-		{T.Equal(P...)};
+		template<typename PtrT>
+		void AddRef(PtrT* p) { p->AddRef(); }
+		template<typename PtrT>
+		void SubRef(PtrT* p) { p->SubRef(); }
 	};
 
-	template<typename WrapperT, typename ...Par>
-	concept EnableAvailable = requires(WrapperT T, Par...P)
+	template<typename WrapperT, typename PtrT>
+	concept HasTryAddRef = requires(WrapperT wra)
 	{
-		{T.Available(P...)};
+		{wra.TryAddRef(std::declval<PtrT*>())} -> std::convertible_to<bool>;
 	};
 
-	template<typename WrapperT, typename ...Par>
-	concept ForbidGetPointer = requires(WrapperT T)
+	template<typename WrapperT>
+	concept ForbidPointerAccess = requires(WrapperT wra)
 	{
-		{WrapperT::ForbidGetPointerT};
+		typename WrapperT::PotatoPointerForbidPointerAccess;
 	};
 
-	template<typename PtrT>
-	struct PointerHolderT
+	template<typename WrapperT>
+	concept ForbidPointerConstruct = requires(WrapperT wra)
 	{
-		PtrT* Ptr = nullptr;
+		typename WrapperT::PotatoPointerForbidPointerConstruct;
 	};
 
-	template<typename PtrT, typename WrapperT>
-	struct SmartPtr : protected PointerHolderT<PtrT>, public WrapperT
+	template<typename WrapperT>
+	concept HasIsomer = requires(WrapperT wra)
+	{
+		typename WrapperT::PotatoPointerIsomer;
+	};
+
+	template<typename PtrT, typename WrapperT = DefaultIntrusiveWrapper>
+	struct IntrusivePtr : public WrapperT
 	{
 		static_assert(!std::is_reference_v<PtrT>, "SmartPtr : Type should not be reference Type");
 
 		using Type = PtrT;
 
-		template<typename PtrT2, typename ...AppendT>
-		SmartPtr(PtrT2* InputPtr, AppendT&& ...Append)
-			requires(std::is_convertible_v<PtrT2*, PtrT*> && std::is_constructible_v<WrapperT, PtrT*&, PtrT2*&, AppendT&&...>)
-		: PointerHolderT<PtrT>{}, WrapperT(this->Ptr, static_cast<PtrT*>(InputPtr), std::forward<AppendT>(Append)...)
-		{}
+		IntrusivePtr(PtrT* ptr) requires(!ForbidPointerConstruct<WrapperT>) : ptr(ptr)
+		{
+			if(ptr != nullptr)
+			{
+				WrapperT::AddRef(ptr);
+			}
+		}
 
-		template<typename ...AppendT>
-		SmartPtr(PtrT* InputPtr, AppendT&& ...Append)
-			requires(std::is_constructible_v<WrapperT, PtrT*&, PtrT*&, AppendT&&...>)
-		: PointerHolderT<PtrT>{}, WrapperT(this->Ptr, InputPtr, std::forward<AppendT>(Append)...)
-		{}
+		template<typename PtrT2>
+		IntrusivePtr(PtrT2* InputPtr)
+			requires(std::is_convertible_v<PtrT2*, PtrT*> && !std::is_same_v<std::remove_cvref_t<PtrT2>, std::remove_cvref_t<PtrT>> && !ForbidPointerConstruct<WrapperT>)
+		: IntrusivePtr(static_cast<PtrT*>(InputPtr)) {}
 
-		template<typename PtrT2, typename WrapperT2, typename ...AppendT>
-		SmartPtr(SmartPtr<PtrT2, WrapperT2> const& SPtr, AppendT&& ...Append)
-			requires(std::is_constructible_v<WrapperT, PtrT*&, PtrT2*&, WrapperT2 const&, AppendT&&...>)
-		: PointerHolderT<PtrT>{}, WrapperT(this->Ptr, SPtr.Ptr, static_cast<WrapperT2 const&>(SPtr), std::forward<AppendT>(Append)...)
-		{}
+		IntrusivePtr(IntrusivePtr const& iptr)
+		: WrapperT(static_cast<WrapperT const&>(iptr)), ptr(iptr.ptr)
+		{
+			if(ptr != nullptr)
+			{
+				WrapperT::AddRef(ptr);
+			}
+		}
 
-		SmartPtr(SmartPtr const& SPtr)
-			requires(std::is_constructible_v<WrapperT, PtrT*&, PtrT*&, WrapperT const&>)
-		: PointerHolderT<PtrT>{}, WrapperT(this->Ptr, SPtr.Ptr, static_cast<WrapperT const&>(SPtr))
-		{}
+		IntrusivePtr(IntrusivePtr && iptr)
+			: WrapperT(static_cast<WrapperT &&>(iptr)), ptr(iptr.ptr)
+		{
+			iptr.ptr = nullptr;
+		}
 
-		template<typename PtrT2, typename WrapperT2, typename ...AppendT>
-		SmartPtr(SmartPtr<PtrT2, WrapperT2>&& SPtr, AppendT&& ...Append)
-			requires(std::is_constructible_v<WrapperT, PtrT*&, PtrT2*&, WrapperT2&&, AppendT&&...>)
-		: PointerHolderT<PtrT>{}, WrapperT(this->Ptr, SPtr.Ptr, static_cast<WrapperT2&&>(SPtr), std::forward<AppendT>(Append)...)
-		{}
+		template<typename PtrT2, typename WrapperT2>
+		IntrusivePtr(IntrusivePtr<PtrT2, WrapperT2> const& iptr)
+			requires(std::is_convertible_v<PtrT2*, PtrT*> && std::is_constructible_v<WrapperT, WrapperT2 const&>)
+			: WrapperT(static_cast<WrapperT2 const&>(iptr)), ptr(iptr.ptr)
+		{
+			if(ptr != nullptr)
+			{
+				if constexpr (HasTryAddRef<WrapperT, PtrT>)
+				{
+					if (!WrapperT::TryAddRef(ptr))
+					{
+						ptr = nullptr;
+					}
+				}
+				else
+				{
+					WrapperT::AddRef(ptr);
+				}
+			}
+		}
 
-		SmartPtr(SmartPtr&& SPtr)
-			requires(std::is_constructible_v<WrapperT, PtrT*&, PtrT*&, WrapperT&&>)
-		: PointerHolderT<PtrT>{}, WrapperT(this->Ptr, SPtr.Ptr, static_cast<WrapperT&&>(SPtr))
-		{}
-
-		SmartPtr() requires(std::is_constructible_v<WrapperT>) {};
+		IntrusivePtr() : ptr(nullptr) {};
 
 		void Reset() {
-			WrapperT::Clear(this->Ptr);
+			if(ptr != nullptr)
+			{
+				WrapperT::SubRef(ptr);
+				ptr = nullptr;
+			}
 		}
 
-		~SmartPtr() {
+		~IntrusivePtr() {
 			Reset();
 		}
 
-		SmartPtr& operator=(SmartPtr const& SPtr) requires(EnableEqual<WrapperT, PtrT*&, PtrT*&, WrapperT const&>)
+		IntrusivePtr& operator=(IntrusivePtr iptr)
 		{
 			Reset();
-			WrapperT::Equal(this->Ptr, SPtr.Ptr, static_cast<WrapperT const&>(SPtr));
+			WrapperT::operator=(static_cast<WrapperT &&>(iptr));
+			ptr = iptr.ptr;
+			iptr.ptr = nullptr;
 			return *this;
 		}
 
-		SmartPtr& operator=(SmartPtr&& SPtr) requires(EnableEqual<WrapperT, PtrT*&, PtrT*&, WrapperT&&>)
+		template<typename Ptr2, typename Wrapper2>
+		IntrusivePtr& operator=(IntrusivePtr<Ptr2, Wrapper2> const& iptr)
 		{
 			Reset();
-			WrapperT::Equal(this->Ptr, SPtr.Ptr, static_cast<WrapperT&&>(SPtr));
+			WrapperT::operator=(static_cast<Wrapper2 const&>(iptr));
+			ptr = iptr.ptr;
+			if(ptr != nullptr)
+			{
+				if constexpr (HasTryAddRef<WrapperT, PtrT>)
+				{
+					if (!WrapperT::TryAddRef(ptr))
+					{
+						ptr = nullptr;
+					}
+				}
+				else
+				{
+					WrapperT::AddRef(ptr);
+				}
+			}
 			return *this;
 		}
 
 		constexpr operator bool() const {
-			if constexpr (EnableAvailable<WrapperT const&, PtrT*>)
-				return WrapperT::Available(this->Ptr);
-			else
-				return this->Ptr != nullptr;
+			return ptr != nullptr;
 		}
 
-		decltype(auto) GetPointer() requires(!ForbidGetPointer<WrapperT>) { return this->Ptr; }
-		decltype(auto) GetPointer() const requires(!ForbidGetPointer<WrapperT>) { return this->Ptr; }
-		constexpr decltype(auto) operator->() requires(!ForbidGetPointer<WrapperT>) { return this->Ptr; }
-		constexpr decltype(auto) operator->() const requires(!ForbidGetPointer<WrapperT>) { return this->Ptr; }
-		constexpr decltype(auto) operator*() requires(!ForbidGetPointer<WrapperT>) { return *this->Ptr; }
-		constexpr decltype(auto) operator*() const requires(!ForbidGetPointer<WrapperT>) { return *this->Ptr; }
+		decltype(auto) GetPointer() const requires(!ForbidPointerAccess<WrapperT>) { return ptr; }
+		constexpr decltype(auto) operator->() const requires(!ForbidPointerAccess<WrapperT>) { return ptr; }
+		constexpr decltype(auto) operator*() const requires(!ForbidPointerAccess<WrapperT>) { return *ptr; }
 
-		template<typename P, typename W>
-		friend struct SmartPtr;
-	};
-
-	template<typename SubWrapperT>
-	struct SmartPtrDefaultWrapper : public SubWrapperT
-	{
-		template<typename PtrT>
-		SmartPtrDefaultWrapper(PtrT*& Ptr, PtrT* Input)
+		constexpr decltype(auto) Isomer() const requires(HasIsomer<WrapperT>)
 		{
-			Ptr = Input;
-			if (Ptr != nullptr)
-			{
-				SubWrapperT::AddRef(Ptr);
-			}
-		};
-
-		template<typename PtrT>
-		explicit SmartPtrDefaultWrapper(PtrT*& Ptr, PtrT* InputPtr, SmartPtrDefaultWrapper const& SW)
-			: SmartPtrDefaultWrapper(Ptr, InputPtr)
-		{};
-
-		template<typename PtrT>
-		explicit SmartPtrDefaultWrapper(PtrT*& Ptr, PtrT*& InputPtr, SmartPtrDefaultWrapper&& SW)
-		{
-			Ptr = InputPtr;
-			InputPtr = nullptr;
-		};
-
-		template<typename PtrT>
-		void Clear(PtrT*& Ptr) {
-			if (Ptr != nullptr)
-			{
-				SubWrapperT::SubRef(Ptr);
-				Ptr = nullptr;
-			}
+			return IntrusivePtr<PtrT, typename WrapperT::PotatoPointerIsomer>{*this};
 		}
 
-		template<typename PtrT>
-		void Equal(PtrT*& Ptr, PtrT* InputPtr) {
-			Ptr = InputPtr;
-			if(Ptr != nullptr)
-				SubWrapperT::AddRef(Ptr);
-		}
+	protected:
 
-		template<typename PtrT>
-		void Equal(PtrT*& Ptr, PtrT* InputPtr, SmartPtrDefaultWrapper const& SW) {
-			Ptr = InputPtr;
-			if (Ptr != nullptr) {
-				SubWrapperT::AddRef(Ptr);
-			}
-		}
+		PtrT* ptr;
 
-		template<typename PtrT>
-		void Equal(PtrT*& Ptr, PtrT*& InputPtr, SmartPtrDefaultWrapper&& SW) {
-			Ptr = InputPtr;
-			InputPtr = nullptr;
-		}
-
-		SmartPtrDefaultWrapper() = default;
-	};
-
-	struct IntrusiveSubWrapperT {
-		template<typename PtrT>
-		void AddRef(PtrT* Ptr) { Ptr->AddRef(); }
-		template<typename PtrT>
-		void SubRef(PtrT* Ptr) { Ptr->SubRef(); }
+		template<typename Ptr2, typename Wrapper2>
+		friend struct IntrusivePtr;
 	};
 
 	struct DefaultIntrusiveInterface
@@ -191,11 +174,14 @@ export namespace Potato::Pointer
 
 		void AddRef() const { SRefCount.AddRef(); }
 		void SubRef() const { if (SRefCount.SubRef()) const_cast<DefaultIntrusiveInterface*>(this)->Release(); }
+
 		virtual void Release() = 0;
 		mutable Potato::Misc::AtomicRefCount SRefCount;
 
-		friend struct IntrusiveSubWrapperT;
+		friend struct DefaultIntrusiveWrapper;
 	};
+
+
 
 	struct ObserverSubWrapperT {
 		template<typename PtrT>
@@ -204,213 +190,27 @@ export namespace Potato::Pointer
 		template<typename PtrT>
 		void SubRef(PtrT* Ptr) {}
 	};
-	
-	template<typename PtrT>
-	using IntrusivePtr = SmartPtr<PtrT, SmartPtrDefaultWrapper<IntrusiveSubWrapperT>>;
 
-	template<typename PtrT>
-	using ObserverPtr = SmartPtr<PtrT, SmartPtrDefaultWrapper<ObserverSubWrapperT>>;
+	template<typename Type> using ObserverPtr = IntrusivePtr<Type, ObserverSubWrapperT>;
 
-	template<typename SubWrapperT>
-	struct UniqueDefaultWrapper : public SubWrapperT
+	struct DefaultUniqueWrapper
 	{
-		template<typename PtrT>
-		UniqueDefaultWrapper(PtrT*& Ptr, PtrT* Input)
-		{
-			Ptr = Input;
-		};
-
-		template<typename PtrT>
-		explicit UniqueDefaultWrapper(PtrT*& Ptr, PtrT* InputPtr, UniqueDefaultWrapper const& SW) = delete;
-
-		template<typename PtrT>
-		explicit UniqueDefaultWrapper(PtrT*& Ptr, PtrT*& InputPtr, UniqueDefaultWrapper&& SW)
-		{
-			Ptr = InputPtr;
-			InputPtr = nullptr;
-		};
-
-		template<typename PtrT>
-		void Clear(PtrT*& Ptr) {
-			if (Ptr != nullptr)
-			{
-				SubWrapperT::SubRef(Ptr);
-				Ptr = nullptr;
-			}
-		}
-
-		template<typename PtrT>
-		void Equal(PtrT*& Ptr, PtrT* InputPtr) {
-			Ptr = InputPtr;
-			if (Ptr != nullptr)
-				SubWrapperT::AddRef(Ptr);
-		}
-
-		template<typename PtrT>
-		void Equal(PtrT*& Ptr, PtrT* InputPtr, UniqueDefaultWrapper const& SW) = delete;
-
-		template<typename PtrT>
-		void Equal(PtrT*& Ptr, PtrT*& InputPtr, UniqueDefaultWrapper&& SW) {
-			Ptr = InputPtr;
-			InputPtr = nullptr;
-		}
-
-		UniqueDefaultWrapper() = default;
-	};
-
-	struct UniqueSubWrapperT {
 		template<typename PtrT>
 		void AddRef(PtrT* Ptr) {}
 
 		template<typename PtrT>
 		void SubRef(PtrT* Ptr) { Ptr->Release(); }
+
+		DefaultUniqueWrapper() = default;
+		DefaultUniqueWrapper(DefaultUniqueWrapper&&) = default;
+		DefaultUniqueWrapper(DefaultUniqueWrapper const&) = delete;
+		DefaultUniqueWrapper& operator=(DefaultUniqueWrapper&&) = default;
 	};
 
-	template<typename PtrT, typename SubWrapper = UniqueSubWrapperT>
-	using UniquePtr = SmartPtr<PtrT, UniqueDefaultWrapper<SubWrapper>>;
-
-	template<typename SubWrapperT>
-	struct WeakPtrWrapperT;
-
-	template<typename SubWrapperT>
-	struct StrongPtrWrapperT : public SubWrapperT
-	{
-		template<typename PtrT>
-		StrongPtrWrapperT(PtrT*& Ptr, PtrT* Input) {
-			Ptr = Input;
-			if (Ptr != nullptr)
-			{
-				SubWrapperT::AddWeakRef(Ptr);
-				SubWrapperT::AddStrongRef(Ptr);
-			}
-		};
-
-		template<typename PtrT>
-		explicit StrongPtrWrapperT(PtrT*& Ptr, PtrT* InputPtr, StrongPtrWrapperT const&)
-		{
-			Ptr = InputPtr;
-			if (Ptr != nullptr) {
-				SubWrapperT::AddWeakRef(Ptr);
-				SubWrapperT::AddStrongRef(Ptr);
-			}
-		};
-
-		template<typename PtrT>
-		explicit StrongPtrWrapperT(PtrT*& Ptr, PtrT*& InputPtr, StrongPtrWrapperT&&)
-		{
-			Ptr = InputPtr;
-			InputPtr = nullptr;
-		};
-
-		template<typename PtrT>
-		explicit StrongPtrWrapperT(PtrT*& Ptr, PtrT* InputPtr, WeakPtrWrapperT<SubWrapperT> const& OWra);
-
-		template<typename PtrT>
-		void Clear(PtrT*& Ptr) {
-			if (Ptr != nullptr)
-			{
-				SubWrapperT::SubStrongRef(Ptr);
-				SubWrapperT::SubWeakRef(Ptr);
-				Ptr = nullptr;
-			}
-		}
-
-		template<typename PtrT>
-		void Equal(PtrT*& Ptr, PtrT* InputPtr) {
-			Ptr = InputPtr;
-			if (Ptr != nullptr) {
-				SubWrapperT::AddWeakRef(Ptr);
-				SubWrapperT::AddStrongRef(Ptr);
-			}
-		}
-
-		template<typename PtrT>
-		void Equal(PtrT*& Ptr, PtrT* InputPtr, StrongPtrWrapperT const&) {
-			Ptr = InputPtr;
-			if (Ptr != nullptr) {
-				SubWrapperT::AddWeakRef(Ptr);
-				SubWrapperT::AddStrongRef(Ptr);
-			}
-		}
-
-		template<typename PtrT>
-		void Equal(PtrT*& Ptr, PtrT*& InputPtr, StrongPtrWrapperT&&) {
-			Ptr = InputPtr;
-			InputPtr = nullptr;
-		}
-
-		StrongPtrWrapperT() = default;
-	};
-
-	template<typename SubWrapperT>
-	struct WeakPtrWrapperT : public SubWrapperT
-	{
-
-		template<typename PtrT>
-		explicit WeakPtrWrapperT(PtrT*& Ptr, PtrT* InputPtr, WeakPtrWrapperT const&)
-		{
-			if (InputPtr != nullptr)
-			{
-				Ptr = InputPtr;
-				SubWrapperT::AddWeakRef(Ptr);
-			}
-		};
-
-		template<typename PtrT>
-		explicit WeakPtrWrapperT(PtrT*& Ptr, PtrT*& InputPtr, WeakPtrWrapperT&&)
-		{
-			Ptr = InputPtr;
-			InputPtr = nullptr;
-		};
-
-		template<typename PtrT>
-		explicit WeakPtrWrapperT(PtrT*& Ptr, PtrT* InputPtr, StrongPtrWrapperT<SubWrapperT> const& OWra)
-		{
-			if (InputPtr != nullptr)
-			{
-				Ptr = InputPtr;
-				SubWrapperT::AddWeakRef(Ptr);
-			}
-		};
-
-		template<typename PtrT>
-		void Clear(PtrT*& Ptr) {
-			if (Ptr != nullptr)
-			{
-				SubWrapperT::SubWeakRef(Ptr);
-				Ptr = nullptr;
-			}
-		}
-
-		template<typename PtrT>
-		void Equal(PtrT*& Ptr, PtrT* InputPtr, WeakPtrWrapperT const&) {
-			Ptr = InputPtr;
-			if (Ptr != nullptr) {
-				SubWrapperT::AddWeakRef(Ptr);
-			}
-		}
-
-		template<typename PtrT>
-		void Equal(PtrT*& Ptr, PtrT*& InputPtr, WeakPtrWrapperT&&) {
-			Ptr = InputPtr;
-			InputPtr = nullptr;
-		}
-
-		WeakPtrWrapperT() = default;
-	};
-
-	template<typename SubWrapperT>
 	template<typename PtrT>
-	StrongPtrWrapperT<SubWrapperT>::StrongPtrWrapperT(PtrT*& Ptr, PtrT* InputPtr, WeakPtrWrapperT<SubWrapperT> const& OWra)
-	{
-		if (InputPtr != nullptr && SubWrapperT::TryAddStrongRef(InputPtr))
-		{
-			Ptr = InputPtr;
-			SubWrapperT::AddWeakRef(Ptr);
-		}
-	}
+	using UniquePtr = IntrusivePtr<PtrT, DefaultUniqueWrapper>;
 
-	struct SWSubWrapperT
+	struct StrongWeakIntrusiveWrapperT
 	{
 		template<typename PtrT>
 		void AddWeakRef(PtrT* P) { P->AddWeakRef(); }
@@ -424,28 +224,207 @@ export namespace Potato::Pointer
 		bool TryAddStrongRef(PtrT* P) { return P->TryAddStrongRef(); }
 	};
 
+	struct StrongIntrusiveWrapperT;
+
+	struct WeakIntrusiveWrapperT : public StrongWeakIntrusiveWrapperT
+	{
+		template<typename PtrT>
+		void AddRef(PtrT* ptr)
+		{
+			StrongWeakIntrusiveWrapperT::AddWeakRef(ptr);
+		}
+
+		template<typename PtrT>
+		void SubRef(PtrT* ptr)
+		{
+			StrongWeakIntrusiveWrapperT::SubWeakRef(ptr);
+		}
+
+		WeakIntrusiveWrapperT() = default;
+		WeakIntrusiveWrapperT(WeakIntrusiveWrapperT const&) = default;
+		WeakIntrusiveWrapperT(WeakIntrusiveWrapperT&&) = default;
+		WeakIntrusiveWrapperT(StrongIntrusiveWrapperT const& wra) {}
+
+		WeakIntrusiveWrapperT& operator=(WeakIntrusiveWrapperT const&) = default;
+		WeakIntrusiveWrapperT& operator=(WeakIntrusiveWrapperT&&) = default;
+		WeakIntrusiveWrapperT& operator=(StrongIntrusiveWrapperT const&) { return *this; }
+
+		
+
+		using PotatoPointerForbidPointerAccess = void;
+		using PotatoPointerIsomer = StrongIntrusiveWrapperT;
+		using PotatoPointerForbidPointerConstruct = void;
+	};
+
+	struct StrongIntrusiveWrapperT : public StrongWeakIntrusiveWrapperT
+	{
+		template<typename PtrT>
+		void AddRef(PtrT* ptr)
+		{
+			StrongWeakIntrusiveWrapperT::AddWeakRef(ptr);
+			StrongWeakIntrusiveWrapperT::AddStrongRef(ptr);
+		}
+
+		template<typename PtrT>
+		void SubRef(PtrT* ptr)
+		{
+			StrongWeakIntrusiveWrapperT::SubStrongRef(ptr);
+			StrongWeakIntrusiveWrapperT::SubWeakRef(ptr);
+		}
+
+		template<typename PtrT>
+		bool TryAddRef(PtrT* ptr)
+		{
+			if(StrongWeakIntrusiveWrapperT::TryAddStrongRef(ptr))
+			{
+				StrongWeakIntrusiveWrapperT::AddWeakRef(ptr);
+				return true;
+			}
+			return false;
+		}
+
+		StrongIntrusiveWrapperT() = default;
+		StrongIntrusiveWrapperT(StrongIntrusiveWrapperT const&) = default;
+		StrongIntrusiveWrapperT(StrongIntrusiveWrapperT&&) = default;
+
+		StrongIntrusiveWrapperT(WeakIntrusiveWrapperT const&) {}
+
+		using PotatoPointerIsomer = WeakIntrusiveWrapperT;
+
+		StrongIntrusiveWrapperT& operator=(StrongIntrusiveWrapperT const&) = default;
+		StrongIntrusiveWrapperT& operator=(StrongIntrusiveWrapperT&&) = default;
+		StrongIntrusiveWrapperT& operator=(WeakIntrusiveWrapperT const&) { return *this; }
+	};
+
+	template<typename PtrT>
+	using StrongPtr = IntrusivePtr<PtrT, StrongIntrusiveWrapperT>;
+
+	template<typename PtrT>
+	using WeakPtr = IntrusivePtr<PtrT, WeakIntrusiveWrapperT>;
+
 	struct DefaultStrongWeakInterface
 	{
 	protected:
 
-		void AddWeakRef() const {  WRefCount.AddRef(); }
-		void SubWeakRef() const { if(WRefCount.SubRef()) const_cast<DefaultStrongWeakInterface*>(this)->WeakRelease(); }
+		void AddWeakRef() const { WRefCount.AddRef(); }
+		void SubWeakRef() const { if (WRefCount.SubRef()) const_cast<DefaultStrongWeakInterface*>(this)->WeakRelease(); }
 		void AddStrongRef() const { SRefCount.AddRef(); }
-		void SubStrongRef() const { if(SRefCount.SubRef()) const_cast<DefaultStrongWeakInterface*>(this)->StrongRelease(); }
+		void SubStrongRef() const { if (SRefCount.SubRef()) const_cast<DefaultStrongWeakInterface*>(this)->StrongRelease(); }
 		bool TryAddStrongRef() const { return SRefCount.TryAddRefNotFromZero(); }
 
 		virtual void WeakRelease() = 0;
 		virtual void StrongRelease() = 0;
+		virtual ~DefaultStrongWeakInterface() = default;
 
 		mutable Potato::Misc::AtomicRefCount SRefCount;
 		mutable Potato::Misc::AtomicRefCount WRefCount;
 
-		friend struct SWSubWrapperT;
+		friend struct StrongWeakIntrusiveWrapperT;
 	};
 
-	template<typename PtrT, typename SubWrapperT = SWSubWrapperT>
-	using StrongPtr = SmartPtr<PtrT, StrongPtrWrapperT<SubWrapperT>>;
 
-	template<typename PtrT, typename SubWrapperT = SWSubWrapperT>
-	using WeakPtr = SmartPtr<PtrT, WeakPtrWrapperT<SubWrapperT>>;
+	struct ControllerViewerIntrusiveWrapperT
+	{
+		template<typename PtrT>
+		void AddControllerRef(PtrT* P) { P->AddControllerRef(); }
+		template<typename PtrT>
+		void SubControllerRef(PtrT* P) { P->SubControllerRef(); }
+		template<typename PtrT>
+		void AddViewerRef(PtrT* P) { P->AddViewerRef(); }
+		template<typename PtrT>
+		void SubViewerRef(PtrT* P) { P->SubViewerRef(); }
+		template<typename PtrT>
+		bool TryAddControllerRef(PtrT* P) { return P->TryAddControllerRef(); }
+	};
+
+	struct ControllerIntrusiveWrapperT;
+
+	struct ViewerIntrusiveWrapperT : public ControllerViewerIntrusiveWrapperT
+	{
+		template<typename PtrT>
+		void AddRef(PtrT* ptr)
+		{
+			ControllerViewerIntrusiveWrapperT::AddViewerRef(ptr);
+		}
+
+		template<typename PtrT>
+		void SubRef(PtrT* ptr)
+		{
+			ControllerViewerIntrusiveWrapperT::SubViewerRef(ptr);
+		}
+
+		ViewerIntrusiveWrapperT() = default;
+		ViewerIntrusiveWrapperT(ViewerIntrusiveWrapperT const&) = default;
+		ViewerIntrusiveWrapperT(ViewerIntrusiveWrapperT&&) = default;
+		ViewerIntrusiveWrapperT(ControllerIntrusiveWrapperT const&) {}
+
+		ViewerIntrusiveWrapperT& operator=(ViewerIntrusiveWrapperT const&) = default;
+		ViewerIntrusiveWrapperT& operator=(ViewerIntrusiveWrapperT&&) = default;
+		ViewerIntrusiveWrapperT& operator=(ControllerIntrusiveWrapperT const&) { return *this; }
+
+	};
+
+	struct ControllerIntrusiveWrapperT : public ControllerViewerIntrusiveWrapperT
+	{
+		template<typename PtrT>
+		void AddRef(PtrT* ptr)
+		{
+			ControllerViewerIntrusiveWrapperT::AddViewerRef(ptr);
+			ControllerViewerIntrusiveWrapperT::AddControllerRef(ptr);
+		}
+
+		template<typename PtrT>
+		void SubRef(PtrT* ptr)
+		{
+			ControllerViewerIntrusiveWrapperT::SubControllerRef(ptr);
+			ControllerViewerIntrusiveWrapperT::SubViewerRef(ptr);
+		}
+
+		template<typename PtrT>
+		bool TryAddRef(PtrT* ptr)
+		{
+			if (ControllerViewerIntrusiveWrapperT::SubControllerRef(ptr))
+			{
+				ControllerViewerIntrusiveWrapperT::AddViewerRef(ptr);
+				return true;
+			}
+			return false;
+		}
+
+		ControllerIntrusiveWrapperT() = default;
+		ControllerIntrusiveWrapperT(ControllerIntrusiveWrapperT const&) = default;
+		ControllerIntrusiveWrapperT(ControllerIntrusiveWrapperT&&) = default;
+
+		using PotatoPointerIsomer = ViewerIntrusiveWrapperT;
+
+		ControllerIntrusiveWrapperT& operator=(ControllerIntrusiveWrapperT const&) = default;
+		ControllerIntrusiveWrapperT& operator=(ControllerIntrusiveWrapperT&&) = default;
+	};
+
+	struct DefaultControllerViewerInterface
+	{
+	protected:
+
+		void AddViewerRef() const { VRefCount.AddRef(); }
+		void SubViewerRef() const { if (VRefCount.SubRef()) const_cast<DefaultControllerViewerInterface*>(this)->ViewerRelease(); }
+		void AddControllerRef() const { CRefCount.AddRef(); }
+		void SubControllerRef() const { if (CRefCount.SubRef()) const_cast<DefaultControllerViewerInterface*>(this)->ControllerRelease(); }
+		bool TryAddControllerRef() const { return CRefCount.TryAddRefNotFromZero(); }
+		std::size_t GetControllerRef() const { return CRefCount.Count(); }
+
+		virtual void ControllerRelease() = 0;
+		virtual void ViewerRelease() = 0;
+		virtual ~DefaultControllerViewerInterface() = default;
+
+		mutable Potato::Misc::AtomicRefCount CRefCount;
+		mutable Potato::Misc::AtomicRefCount VRefCount;
+
+		friend struct ControllerViewerIntrusiveWrapperT;
+	};
+
+	template<typename PtrT>
+	using ControllerPtr = IntrusivePtr<PtrT, ControllerIntrusiveWrapperT>;
+
+	template<typename PtrT>
+	using ViewerPtr = IntrusivePtr<PtrT, ViewerIntrusiveWrapperT>;
 }

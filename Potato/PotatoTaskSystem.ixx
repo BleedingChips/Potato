@@ -48,7 +48,7 @@ export namespace Potato::Task
 		operator bool() const { return Status == TaskContextStatus::Normal; }
 	};
 
-	struct Task : public Pointer::DefaultIntrusiveInterface
+	struct Task
 	{
 		using Ptr = Pointer::IntrusivePtr<Task>;
 
@@ -58,16 +58,20 @@ export namespace Potato::Task
 		;
 
 	protected:
+		
+		virtual void AddRef() const = 0;
+		virtual void SubRef() const = 0;
 
 		virtual void operator()(ExecuteStatus& Status) = 0;
 		virtual ~Task() = default;
 
 		friend struct TaskContext;
+		friend struct Potato::Pointer::DefaultIntrusiveWrapper;
 	};
 
-	struct TaskContext : public Pointer::DefaultStrongWeakInterface
+	struct TaskContext : public Pointer::DefaultControllerViewerInterface
 	{
-		using Ptr = Pointer::StrongPtr<TaskContext>;
+		using Ptr = Pointer::ControllerPtr<TaskContext>;
 
 		static Ptr Create(std::pmr::memory_resource* Resource = std::pmr::get_default_resource());
 		bool FireThreads(std::size_t TaskCount = std::thread::hardware_concurrency() - 1);
@@ -87,10 +91,10 @@ export namespace Potato::Task
 
 	private:
 
-		void WeakRelease();
-		void StrongRelease();
+		virtual void ViewerRelease() override;
+		virtual void ControllerRelease() override;
 
-		using WPtr = Pointer::WeakPtr<TaskContext>;
+		using WPtr = Pointer::ViewerPtr<TaskContext>;
 
 		TaskContext(std::pmr::memory_resource* Resource);
 
@@ -130,80 +134,13 @@ export namespace Potato::Task
 		std::pmr::vector<ReadyTaskT> ReadyTasks;
 	};
 
-
-	struct DependenceTaskGraphic : protected Task
-	{
-
-		struct Node : public Pointer::DefaultIntrusiveInterface
-		{
-			using Ptr = Pointer::IntrusivePtr<Node>;
-
-			virtual ~Node() = default;
-		protected:
-			virtual void Release() = 0;
-			Node() = default;
-		};
-
-		struct Builder
-		{
-		protected:
-			Builder(DependenceTaskGraphic& Graphic)
-				: Graphic(Graphic) {}
-			DependenceTaskGraphic& Graphic;
-
-			friend DependenceTaskGraphic;
-		};
-
-		template<typename FunT>
-		bool CreateGraphic(FunT const& Func)
-			requires(std::is_invocable_v<FunT, Builder&>)
-		{
-			std::lock_guard lg(NodeMutex);
-			if(Nodes.empty())
-			{
-				Builder Build{ *this };
-				Func(Build);
-				return true;
-			}
-			return false;
-		}
-
-	protected:
-
-		DependenceTaskGraphic(TaskContext::Ptr Owner)
-			: Owner(Owner) {}
-
-		virtual void operator()(ExecuteStatus& Status) final override;
-
-		TaskContext::Ptr Owner;
-
-		struct NormalNode
-		{
-			TaskProperty Property;
-			Node::Ptr Node;
-			bool Done = false;
-		};
-
-		struct Dependence
-		{
-			std::size_t Require;
-			//std::size_t 
-		};
-
-		std::mutex NodeMutex;
-
-		std::pmr::vector<NormalNode> Nodes;
-		//std::pmr::vector<>
-	};
-
-
 }
 
 namespace Potato::Task
 {
 
 	template<typename TaskImpT>
-	struct TaskImp : public Task
+	struct TaskImp : public Task, public Potato::Pointer::DefaultIntrusiveInterface
 	{
 
 		virtual void Release() override
@@ -225,6 +162,11 @@ namespace Potato::Task
 			Task::Ptr ThisPtr{this};
 			TaskInstance.operator()(Status, std::move(ThisPtr));
 		}
+
+	protected:
+
+		virtual void AddRef() const override { DefaultIntrusiveInterface::AddRef(); }
+		virtual void SubRef() const override { DefaultIntrusiveInterface::SubRef(); }
 
 	private:
 
