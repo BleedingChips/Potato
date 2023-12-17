@@ -383,7 +383,7 @@ export namespace Potato::Pointer
 		template<typename PtrT>
 		bool TryAddRef(PtrT* ptr)
 		{
-			if (ControllerViewerIntrusiveWrapperT::SubControllerRef(ptr))
+			if (ControllerViewerIntrusiveWrapperT::TryAddControllerRef(ptr))
 			{
 				ControllerViewerIntrusiveWrapperT::AddViewerRef(ptr);
 				return true;

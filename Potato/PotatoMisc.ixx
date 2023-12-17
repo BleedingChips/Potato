@@ -278,8 +278,6 @@ export namespace Potato::Misc
 		return re;
 	}
 
-	
-
 }
 
 namespace Potato::Misc

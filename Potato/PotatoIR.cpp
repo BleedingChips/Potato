@@ -86,4 +86,31 @@ namespace Potato::IR
 		}
 		return {};
 	}
+
+	MemoryResourceRecord MemoryResourceRecord::Allocate(std::pmr::memory_resource* resource, Layout layout)
+	{
+		if(resource != nullptr)
+		{
+			auto adress = resource->allocate(layout.Size, layout.Align);
+			return { resource, layout, adress};
+		}
+		return {resource, layout, nullptr};
+	}
+
+	MemoryResourceRecord::operator bool() const
+	{
+		return resource != nullptr && adress != nullptr;
+	}
+
+	bool MemoryResourceRecord::Deallocate()
+	{
+		if(*this)
+		{
+			resource->deallocate(adress, layout.Size, layout.Align);
+			resource = nullptr;
+			adress = nullptr;
+			return true;
+		}
+		return false;
+	}
 }

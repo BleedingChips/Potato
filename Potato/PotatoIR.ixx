@@ -1,3 +1,7 @@
+module;
+
+#include <cassert>
+
 export module PotatoIR;
 
 import std;
@@ -13,6 +17,8 @@ export namespace Potato::IR
 
 		template<typename Type>
 		static constexpr Layout Get() { return { alignof(std::remove_cvref_t<Type>), sizeof(std::remove_cvref_t<Type>) }; }
+		template<typename Type>
+		static constexpr Layout GetArray(std::size_t array_count) { return { alignof(std::remove_cvref_t<Type>), sizeof(std::remove_cvref_t<Type>) * array_count }; }
 		bool operator==(Layout const& l) const { return Align == l.Align && Size == l.Size; }
 	};
 
@@ -124,6 +130,24 @@ export namespace Potato::IR
 
 		TypeT Type : 2;
 		std::uint32_t Value : 30;
+	};
+
+	struct MemoryResourceRecord
+	{
+		std::pmr::memory_resource* resource = nullptr;
+		Layout layout;
+		void* adress = nullptr;
+		void* Get() const { return adress; }
+
+		template<typename Type>
+		Type* Cast() const {  assert(sizeof(Type) <= layout.Size && alignof(Type) <= layout.Align); return static_cast<Type*>(adress); }
+
+		operator bool () const;
+		static MemoryResourceRecord Allocate(std::pmr::memory_resource* resource, Layout layout);
+
+		template<typename Type>
+		static MemoryResourceRecord Allocate(std::pmr::memory_resource* resource) { return  Allocate(resource, Layout::Get<Type>()); }
+		bool Deallocate();
 	};
 
 
