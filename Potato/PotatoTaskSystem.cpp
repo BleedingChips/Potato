@@ -206,27 +206,48 @@ namespace Potato::Task
 		assert(Record);
 	}
 
-	bool TaskContext::FireThreads(std::size_t ThreadCount, std::size_t FrontEndThreadCount)
+	bool TaskContext::FireThreads(ThreadCountSetting Setting)
 	{
 		std::lock_guard lg(ThreadMutex);
 		if(Threads.empty())
 		{
-			Threads.reserve(ThreadCount);
+			Threads.reserve(Setting.BackEndCount + Setting.DynamicBackEndCount + Setting.DynamicFrontEndCount + Setting.FrontEndCount);
 			WPtr ThisPtr{this};
 
-			{
-				std::lock_guard lg(TaskMutex);
-				this->FrontEndThreadCount = FrontEndThreadCount;
-				CurrentFrontEndThreadCount = 0;
-			}
-			
-			for(std::size_t I = 0; I < ThreadCount; ++I)
+			for(std::size_t I = 0; I < Setting.FrontEndCount; ++I)
 			{
 				Threads.emplace_back([ThisPtr](std::stop_token ST)
-				{
-					assert(ThisPtr);
-					ThisPtr->ThreadExecute(std::move(ST));
-				});
+					{
+						assert(ThisPtr);
+						ThisPtr->ThreadExecute(std::move(ST), ThreadType::FrontEnd);
+					});
+			}
+
+			for (std::size_t I = 0; I < Setting.DynamicFrontEndCount; ++I)
+			{
+				Threads.emplace_back([ThisPtr](std::stop_token ST)
+					{
+						assert(ThisPtr);
+						ThisPtr->ThreadExecute(std::move(ST), ThreadType::DynamicFrontEnd);
+					});
+			}
+
+			for (std::size_t I = 0; I < Setting.DynamicBackEndCount; ++I)
+			{
+				Threads.emplace_back([ThisPtr](std::stop_token ST)
+					{
+						assert(ThisPtr);
+						ThisPtr->ThreadExecute(std::move(ST), ThreadType::DynamicBackEnd);
+					});
+			}
+
+			for (std::size_t I = 0; I < Setting.BackEndCount; ++I)
+			{
+				Threads.emplace_back([ThisPtr](std::stop_token ST)
+					{
+						assert(ThisPtr);
+						ThisPtr->ThreadExecute(std::move(ST), ThreadType::BackEnd);
+					});
 			}
 			return true;
 		}
@@ -270,13 +291,12 @@ namespace Potato::Task
 		return false;
 	}
 
-	void TaskContext::ThreadExecute(std::stop_token ST)
+	void TaskContext::ThreadExecute(std::stop_token ST, ThreadType Type)
 	{
 		TaskQueue::Tuple CurrentTask;
 		TaskContextStatus LocStatus = TaskContextStatus::Normal;
 		bool LastExecute = false;
-		bool IsFrontEndTask = false;
-		while(!ST.stop_requested() || LastExecute)
+		while(LastExecute || !ST.stop_requested())
 		{
 			if(TaskMutex.try_lock())
 			{
@@ -285,39 +305,31 @@ namespace Potato::Task
 					if(LastExecute)
 					{
 						--LastingTask;
-						if(IsFrontEndTask)
-							--CurrentFrontEndThreadCount;
 						LastExecute = false;
-						IsFrontEndTask = false;
 						if (ST.stop_requested())
 						{
 							return;
 						}
 					}
 					DelayTasks.PopTask(ReadyTasks, std::chrono::system_clock::now());
-					if(CurrentFrontEndThreadCount < FrontEndThreadCount)
+					switch(Type)
 					{
+					case ThreadType::FrontEnd:
+						CurrentTask = ReadyTasks.PopFrontEndTask();
+						break;
+					case ThreadType::DynamicFrontEnd:
 						CurrentTask = ReadyTasks.PopFrontEndTask();
 						if(!CurrentTask.Task)
-						{
 							CurrentTask = ReadyTasks.PopBackEndTask();
-						}else
-						{
-							++CurrentFrontEndThreadCount;
-							IsFrontEndTask = true;
-						}
-					}else
-					{
+						break;
+					case ThreadType::DynamicBackEnd:
 						CurrentTask = ReadyTasks.PopBackEndTask();
-						if(!CurrentTask.Task)
-						{
+						if (!CurrentTask.Task)
 							CurrentTask = ReadyTasks.PopFrontEndTask();
-							if(CurrentTask.Task)
-							{
-								++CurrentFrontEndThreadCount;
-								IsFrontEndTask = true;
-							}
-						}
+						break;
+					case ThreadType::BackEnd:
+						CurrentTask = ReadyTasks.PopBackEndTask();
+						break;
 					}
 					LocStatus = Status;
 				}

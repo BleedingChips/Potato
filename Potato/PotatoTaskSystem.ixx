@@ -129,16 +129,30 @@ export namespace Potato::Task
 
 	};
 
+	struct ThreadCountSetting
+	{
+		std::size_t FrontEndCount = 0;
+		std::size_t DynamicFrontEndCount = 0;
+		std::size_t DynamicBackEndCount = 0;
+		std::size_t BackEndCount = 0;
+	};
+
 	export struct TaskContext : public Pointer::DefaultControllerViewerInterface
 	{
 		using Ptr = Pointer::ControllerPtr<TaskContext>;
 
 		static Ptr Create(std::pmr::memory_resource* Resource = std::pmr::get_default_resource());
-		bool FireThreads(std::size_t ThreadCount = std::thread::hardware_concurrency() - 1)
+		bool FireThreads(std::size_t DynamicThreadCount = std::thread::hardware_concurrency() - 1)
 		{
-			return FireThreads(ThreadCount, ThreadCount);
+			ThreadCountSetting TC{
+				0,
+				DynamicThreadCount,
+				0,
+				0
+			};
+			return FireThreads(TC);
 		}
-		bool FireThreads(std::size_t ThreadCount, std::size_t FrontEndThreadCount);
+		bool FireThreads(ThreadCountSetting Setting);
 
 		std::size_t CloseThreads();
 		void FlushTask(std::chrono::system_clock::time_point RequireTP = std::chrono::system_clock::time_point::max());
@@ -164,18 +178,15 @@ export namespace Potato::Task
 
 		using WPtr = Pointer::ViewerPtr<TaskContext>;
 
-		struct ExecuteContext
+		enum class ThreadType
 		{
-			std::size_t LastingTask = 1;
-			bool LastExecute = false;
-			bool Locked = false;
-			TaskContextStatus Status = TaskContextStatus::Normal;
-			bool IsFrontEndThread = false;
+			FrontEnd,
+			DynamicFrontEnd,
+			DynamicBackEnd,
+			BackEnd,
 		};
 
-		void ThreadExecute(std::stop_token ST);
-
-		void ExecuteOnce(ExecuteContext& Context, std::chrono::system_clock::time_point CurrentTime);
+		void ThreadExecute(std::stop_token ST, ThreadType ThreadT);
 
 		Potato::IR::MemoryResourceRecord Record;
 
@@ -183,8 +194,6 @@ export namespace Potato::Task
 		std::pmr::vector<std::jthread> Threads;
 
 		std::mutex TaskMutex;
-		std::size_t FrontEndThreadCount = 1;
-		std::size_t CurrentFrontEndThreadCount = 0;
 		TaskContextStatus Status = TaskContextStatus::Normal;
 		std::size_t LastingTask = 0;
 		
