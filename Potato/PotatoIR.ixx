@@ -139,6 +139,8 @@ export namespace Potato::IR
 		void* adress = nullptr;
 		void* Get() const { return adress; }
 
+		std::pmr::memory_resource* GetResource() const{ return resource; }
+
 		template<typename Type>
 		Type* Cast() const {  assert(sizeof(Type) <= layout.Size && alignof(Type) <= layout.Align); return static_cast<Type*>(adress); }
 

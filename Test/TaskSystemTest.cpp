@@ -17,6 +17,7 @@ int main()
 				Status.Context.CommitDelayTask(This, std::chrono::system_clock::now() + std::chrono::milliseconds{50});
 		});
 		Ptr->CommitTask(Lambda);
+		Ptr->WaitTask();
 	}
 
 	volatile int i = 0;

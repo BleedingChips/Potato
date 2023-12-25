@@ -7,6 +7,7 @@ export module PotatoTaskSystem;
 import std;
 import PotatoMisc;
 import PotatoPointer;
+import PotatoIR;
 
 
 export namespace Potato::Task
@@ -23,14 +24,16 @@ export namespace Potato::Task
 		return static_cast<std::size_t>(Priority);
 	}
 
-	struct TaskContext;
+	export struct TaskContext;
 
 	struct TaskProperty
 	{
 		std::size_t TaskPriority = *TaskPriority::Normal;
+		
 		std::u8string_view TaskName = u8"Unnamed Task";
 		std::size_t AppendData = 0;
 		std::size_t AppendData2 = 0;
+		bool FrontEndTask = true;
 	};
 
 	enum class TaskContextStatus : std::size_t
@@ -69,15 +72,76 @@ export namespace Potato::Task
 		friend struct Potato::Pointer::DefaultIntrusiveWrapper;
 	};
 
-	struct TaskContext : public Pointer::DefaultControllerViewerInterface
+	struct TaskQueue
+	{
+
+		struct Tuple
+		{
+			TaskProperty Property;
+			Task::Ptr Task;
+		};
+
+		Tuple PopFrontEndTask();
+		Tuple PopBackEndTask();
+
+		bool Insert(Task::Ptr Task, TaskProperty Property);
+
+		TaskQueue(std::pmr::memory_resource* resource)
+			: AllTask(resource)
+		{
+			
+		}
+
+		std::size_t Count() const;
+
+	protected:
+
+		Tuple TopFrontEnd;
+		Tuple TopBackEnd;
+		std::pmr::vector<Tuple> AllTask;
+	};
+
+	struct TimedTaskQueue
+	{
+
+		TimedTaskQueue(std::pmr::memory_resource* resource)
+			: TimedTasks(resource)
+		{
+			
+		}
+
+		bool Insert(Task::Ptr Task, TaskProperty Property, std::chrono::system_clock::time_point TimePoint);
+		std::size_t PopTask(TaskQueue& TaskQueue, std::chrono::system_clock::time_point CurrentTime);
+
+		std::size_t Count() const { return TimedTasks.size(); }
+
+	protected:
+
+		struct DelayTaskT
+		{
+			std::chrono::system_clock::time_point DelayTimePoint;
+			TaskProperty Property;
+			Task::Ptr Task;
+		};
+
+		std::chrono::system_clock::time_point ClosestTimePoint = std::chrono::system_clock::time_point::max();
+		std::pmr::vector<DelayTaskT> TimedTasks;
+
+	};
+
+	export struct TaskContext : public Pointer::DefaultControllerViewerInterface
 	{
 		using Ptr = Pointer::ControllerPtr<TaskContext>;
 
 		static Ptr Create(std::pmr::memory_resource* Resource = std::pmr::get_default_resource());
-		bool FireThreads(std::size_t TaskCount = std::thread::hardware_concurrency() - 1);
+		bool FireThreads(std::size_t ThreadCount = std::thread::hardware_concurrency() - 1)
+		{
+			return FireThreads(ThreadCount, ThreadCount);
+		}
+		bool FireThreads(std::size_t ThreadCount, std::size_t FrontEndThreadCount);
 
 		std::size_t CloseThreads();
-		void FlushTask();
+		void FlushTask(std::chrono::system_clock::time_point RequireTP = std::chrono::system_clock::time_point::max());
 		void WaitTask();
 
 		bool CommitTask(Task::Ptr TaskPtr, TaskProperty Property = {});
@@ -87,7 +151,11 @@ export namespace Potato::Task
 			return CommitDelayTask(std::move(TaskPtr), std::chrono::system_clock::now() + Duration, Property);
 		}
 
-		~TaskContext();
+		virtual ~TaskContext();
+
+	protected:
+
+		TaskContext(Potato::IR::MemoryResourceRecord record);
 
 	private:
 
@@ -96,42 +164,33 @@ export namespace Potato::Task
 
 		using WPtr = Pointer::ViewerPtr<TaskContext>;
 
-		TaskContext(std::pmr::memory_resource* Resource);
-
 		struct ExecuteContext
 		{
 			std::size_t LastingTask = 1;
 			bool LastExecute = false;
 			bool Locked = false;
 			TaskContextStatus Status = TaskContextStatus::Normal;
+			bool IsFrontEndThread = false;
 		};
+
+		void ThreadExecute(std::stop_token ST);
 
 		void ExecuteOnce(ExecuteContext& Context, std::chrono::system_clock::time_point CurrentTime);
 
-		std::pmr::memory_resource* Resource;
+		Potato::IR::MemoryResourceRecord Record;
 
 		std::mutex ThreadMutex;
 		std::pmr::vector<std::jthread> Threads;
 
-		struct ReadyTaskT
-		{
-			TaskProperty Property;
-			Task::Ptr Task;
-		};
-
-		struct DelayTaskT
-		{
-			std::chrono::system_clock::time_point DelayTimePoint;
-			TaskProperty Property;
-			Task::Ptr Task;
-		};
-
 		std::mutex TaskMutex;
+		std::size_t FrontEndThreadCount = 1;
+		std::size_t CurrentFrontEndThreadCount = 0;
 		TaskContextStatus Status = TaskContextStatus::Normal;
 		std::size_t LastingTask = 0;
-		std::chrono::system_clock::time_point ClosestTimePoint;
-		std::pmr::vector<DelayTaskT> DelayTasks;
-		std::pmr::vector<ReadyTaskT> ReadyTasks;
+		
+
+		TimedTaskQueue DelayTasks;
+		TaskQueue ReadyTasks;
 	};
 
 }
@@ -145,14 +204,14 @@ namespace Potato::Task
 
 		virtual void Release() override
 		{
-			auto OldResource = Resource;
+			auto Rec = Record;
 			this->~TaskImp();
-			OldResource->deallocate(const_cast<TaskImp*>(this), sizeof(TaskImp), alignof(TaskImp));
+			Rec.Deallocate();
 		}
 
 		template<typename FunT>
-		TaskImp(std::pmr::memory_resource* Resource, FunT&& Fun)
-			: Resource(Resource), TaskInstance(std::forward<FunT>(Fun))
+		TaskImp(Potato::IR::MemoryResourceRecord Record, FunT&& Fun)
+			: Record(Record), TaskInstance(std::forward<FunT>(Fun))
 		{
 			
 		}
@@ -170,7 +229,7 @@ namespace Potato::Task
 
 	private:
 
-		std::pmr::memory_resource* Resource;
+		Potato::IR::MemoryResourceRecord Record;
 		TaskImpT TaskInstance;
 	};
 
@@ -180,10 +239,10 @@ namespace Potato::Task
 	{
 		using Type = TaskImp<std::remove_cvref_t<FunT>>;
 		assert(Resource != nullptr);
-		auto Adress = Resource->allocate(sizeof(Type), alignof(Type));
-		if(Adress != nullptr)
+		auto Record = Potato::IR::MemoryResourceRecord::Allocate<Type>(Resource);
+		if(Record)
 		{
-			return new (Adress) Type{ Resource, std::forward<FunT>(Func)};
+			return new (Record.Get()) Type{ Record, std::forward<FunT>(Func)};
 		}
 		return {};
 	}
