@@ -11,16 +11,19 @@ namespace Potato::Task
 	{
 		if(Task)
 		{
-			Tuple NewTask
+			Storage NewTask
 			{
-				Property,
-				std::move(Task)
-			};
-			if(NewTask.Property.FrontEndTask)
-			{
-				if(TopFrontEnd.Task)
+				Property.TaskPriority,
 				{
-					if(TopFrontEnd.Property.TaskPriority < NewTask.Property.TaskPriority)
+					Property,
+					std::move(Task)
+				}
+			};
+			if(NewTask.IsFrontEndTask())
+			{
+				if(TopFrontEnd)
+				{
+					if(TopFrontEnd.CurrentPriority < NewTask.CurrentPriority)
 					{
 						std::swap(TopFrontEnd, NewTask);
 					}
@@ -32,9 +35,9 @@ namespace Potato::Task
 				
 			}else
 			{
-				if (TopBackEnd.Task)
+				if (TopBackEnd)
 				{
-					if (TopBackEnd.Property.TaskPriority < NewTask.Property.TaskPriority)
+					if (TopBackEnd.CurrentPriority < NewTask.CurrentPriority)
 					{
 						std::swap(TopBackEnd, NewTask);
 					}
@@ -52,66 +55,66 @@ namespace Potato::Task
 
 	TaskQueue::Tuple TaskQueue::PopFrontEndTask()
 	{
-		if(TopFrontEnd.Task)
+		if(TopFrontEnd)
 		{
 			auto Result = std::move(TopFrontEnd);
-			auto F1 = std::find_if(AllTask.begin(), AllTask.end(), [](Tuple& Task)
+			auto F1 = std::find_if(AllTask.begin(), AllTask.end(), [](Storage const& Task)
 			{
-				return Task.Property.FrontEndTask;
+				return Task.IsFrontEndTask();
 			});
 			if(F1 != AllTask.end())
 			{
 				TopFrontEnd = std::move(*F1);
 				std::swap(*F1, *AllTask.rbegin());
-				assert(TopFrontEnd.Property.TaskPriority >= Result.Property.TaskPriority);
-				TopFrontEnd.Property.TaskPriority -= Result.Property.TaskPriority;
+				assert(TopFrontEnd.CurrentPriority >= Result.CurrentPriority);
+				TopFrontEnd.CurrentPriority -= Result.CurrentPriority;
 				AllTask.pop_back();
 				for(auto Ite = F1; Ite != AllTask.end(); ++Ite)
 				{
-					if(Ite->Property.FrontEndTask)
+					if(Ite->IsFrontEndTask())
 					{
-						Ite->Property.TaskPriority -= Result.Property.TaskPriority;
-						if(Ite->Property.TaskPriority < TopFrontEnd.Property.TaskPriority)
+						Ite->CurrentPriority -= Result.CurrentPriority;
+						if(Ite->CurrentPriority < TopFrontEnd.CurrentPriority)
 						{
 							std::swap(TopFrontEnd, *Ite);
 						}
 					}
 				}
 			}
-			return Result;
+			return Result.TaskTuple;
 		}
 		return {};
 	}
 
 	TaskQueue::Tuple TaskQueue::PopBackEndTask()
 	{
-		if (TopBackEnd.Task)
+		if (TopBackEnd)
 		{
 			auto Result = std::move(TopBackEnd);
-			auto F1 = std::find_if(AllTask.begin(), AllTask.end(), [](Tuple& Task)
+			auto F1 = std::find_if(AllTask.begin(), AllTask.end(), [](Storage const& Task)
 				{
-					return !Task.Property.FrontEndTask;
+					return !Task.IsFrontEndTask();
 				});
 			if (F1 != AllTask.end())
 			{
 				TopBackEnd = std::move(*F1);
 				std::swap(*F1, *AllTask.rbegin());
-				assert(TopBackEnd.Property.TaskPriority >= Result.Property.TaskPriority);
-				TopBackEnd.Property.TaskPriority -= Result.Property.TaskPriority;
+				assert(TopBackEnd.CurrentPriority >= Result.CurrentPriority);
+				TopBackEnd.CurrentPriority -= Result.CurrentPriority;
 				AllTask.pop_back();
 				for (auto Ite = F1; Ite != AllTask.end(); ++Ite)
 				{
-					if (!Ite->Property.FrontEndTask)
+					if (!Ite->IsFrontEndTask())
 					{
-						Ite->Property.TaskPriority -= Result.Property.TaskPriority;
-						if (Ite->Property.TaskPriority < TopBackEnd.Property.TaskPriority)
+						Ite->CurrentPriority -= Result.CurrentPriority;
+						if (Ite->CurrentPriority < TopBackEnd.CurrentPriority)
 						{
 							std::swap(TopBackEnd, *Ite);
 						}
 					}
 				}
 			}
-			return Result;
+			return Result.TaskTuple;
 		}
 		return {};
 	}

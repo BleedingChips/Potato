@@ -81,6 +81,8 @@ export namespace Potato::Task
 			Task::Ptr Task;
 		};
 
+		
+
 		Tuple PopFrontEndTask();
 		Tuple PopBackEndTask();
 
@@ -96,9 +98,17 @@ export namespace Potato::Task
 
 	protected:
 
-		Tuple TopFrontEnd;
-		Tuple TopBackEnd;
-		std::pmr::vector<Tuple> AllTask;
+		struct Storage
+		{
+			std::size_t CurrentPriority = 0;
+			Tuple TaskTuple;
+			operator bool() const { return TaskTuple.Task; }
+			bool IsFrontEndTask() const { return TaskTuple.Property.FrontEndTask; }
+		};
+
+		Storage TopFrontEnd;
+		Storage TopBackEnd;
+		std::pmr::vector<Storage> AllTask;
 	};
 
 	struct TimedTaskQueue
