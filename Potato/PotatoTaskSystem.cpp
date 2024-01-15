@@ -7,455 +7,369 @@ module PotatoTaskSystem;
 namespace Potato::Task
 {
 
-	bool TaskQueue::Insert(Task::Ptr Task, TaskProperty Property)
+	TaskQueue::TaskQueue(std::pmr::memory_resource* resource)
+		: time_task(resource), line_up_task(resource)
 	{
-		if(Task)
+		
+	}
+
+	void TaskQueue::InsertTask(Task::Ptr task, TaskProperty property)
+	{
+		assert(task);
+
+		line_up_task.emplace_back(
+			TaskTuple{ property, std::move(task)},
+			static_cast<std::size_t>(property.priority)
+		);
+	}
+
+	void TaskQueue::InsertTask(Task::Ptr task, TaskProperty property, std::chrono::system_clock::time_point time_point)
+	{
+		assert(task);
+
+		min_time_point = std::min(min_time_point, time_point);
+
+		time_task.emplace_back(
+			TaskTuple{ property, std::move(task) },
+			time_point
+		);
+	}
+
+	bool TaskQueue::Accept(TaskProperty const& property, ThreadProperty const& thread_property, std::thread::id thread_id, bool accept_all_group)
+	{
+		switch (property.category)
 		{
-			Storage NewTask
-			{
-				Property.TaskPriority,
-				{
-					Property,
-					std::move(Task)
-				}
-			};
-			if(NewTask.IsFrontEndTask())
-			{
-				if(TopFrontEnd)
-				{
-					if(TopFrontEnd.CurrentPriority < NewTask.CurrentPriority)
-					{
-						std::swap(TopFrontEnd, NewTask);
-					}
-					AllTask.emplace_back(std::move(NewTask));
-				}else
-				{
-					TopFrontEnd = std::move(NewTask);
-				}
-				
-			}else
-			{
-				if (TopBackEnd)
-				{
-					if (TopBackEnd.CurrentPriority < NewTask.CurrentPriority)
-					{
-						std::swap(TopBackEnd, NewTask);
-					}
-					AllTask.emplace_back(std::move(NewTask));
-				}
-				else
-				{
-					TopBackEnd = std::move(NewTask);
-				}
-			}
-			return true;
+		case TaskProperty::Category::GLOBAL_TASK:
+			if (thread_property.execute_global_task)
+				return true;
+			break;
+		case TaskProperty::Category::GROUP_TASK:
+			if (accept_all_group || (thread_property.execute_group_task && thread_property.group_id == property.group_id))
+				return true;
+			break;
+		case TaskProperty::Category::THREAD_TASK:
+			if(thread_id == property.thread_id)
+				return true;
+			break;
 		}
 		return false;
 	}
 
-	TaskQueue::Tuple TaskQueue::PopFrontEndTask()
+	auto TaskQueue::PopTask(ThreadProperty property, std::thread::id thread_id, std::chrono::system_clock::time_point current_time, bool accept_all_group)
+		-> std::optional<TaskTuple>
 	{
-		if(TopFrontEnd)
+		if(min_time_point < current_time)
 		{
-			auto Result = std::move(TopFrontEnd);
-			auto F1 = std::find_if(AllTask.begin(), AllTask.end(), [](Storage const& Task)
+			min_time_point = std::chrono::system_clock::time_point::max();
+
+			auto ite = time_task.begin();
+			auto end = time_task.end();
+			for(; ite != end; )
 			{
-				return Task.IsFrontEndTask();
-			});
-			if(F1 != AllTask.end())
-			{
-				TopFrontEnd = std::move(*F1);
-				std::swap(*F1, *AllTask.rbegin());
-				assert(TopFrontEnd.CurrentPriority >= Result.CurrentPriority);
-				TopFrontEnd.CurrentPriority -= Result.CurrentPriority;
-				AllTask.pop_back();
-				for(auto Ite = F1; Ite != AllTask.end(); ++Ite)
+				if(ite->time_point <= current_time)
 				{
-					if(Ite->IsFrontEndTask())
+					auto priority = static_cast<std::size_t>(ite->tuple.property.priority);
+					line_up_task.emplace_back(
+						std::move(ite->tuple),
+						priority
+					);
+					auto last = end - 1;
+					if(ite != last)
 					{
-						Ite->CurrentPriority -= Result.CurrentPriority;
-						if(Ite->CurrentPriority < TopFrontEnd.CurrentPriority)
-						{
-							std::swap(TopFrontEnd, *Ite);
-						}
+						std::swap(*ite, *last);
 					}
-				}
-			}
-			return Result.TaskTuple;
-		}
-		return {};
-	}
-
-	TaskQueue::Tuple TaskQueue::PopBackEndTask()
-	{
-		if (TopBackEnd)
-		{
-			auto Result = std::move(TopBackEnd);
-			auto F1 = std::find_if(AllTask.begin(), AllTask.end(), [](Storage const& Task)
-				{
-					return !Task.IsFrontEndTask();
-				});
-			if (F1 != AllTask.end())
-			{
-				TopBackEnd = std::move(*F1);
-				std::swap(*F1, *AllTask.rbegin());
-				assert(TopBackEnd.CurrentPriority >= Result.CurrentPriority);
-				TopBackEnd.CurrentPriority -= Result.CurrentPriority;
-				AllTask.pop_back();
-				for (auto Ite = F1; Ite != AllTask.end(); ++Ite)
-				{
-					if (!Ite->IsFrontEndTask())
-					{
-						Ite->CurrentPriority -= Result.CurrentPriority;
-						if (Ite->CurrentPriority < TopBackEnd.CurrentPriority)
-						{
-							std::swap(TopBackEnd, *Ite);
-						}
-					}
-				}
-			}
-			return Result.TaskTuple;
-		}
-		return {};
-	}
-
-	bool TimedTaskQueue::Insert(Task::Ptr Task, TaskProperty Property, std::chrono::system_clock::time_point TimePoint)
-	{
-		if(Task)
-		{
-			DelayTaskT NewTask
-			{
-				TimePoint,
-				Property,
-				std::move(Task)
-			};
-			if(ClosestTimePoint > TimePoint)
-				ClosestTimePoint = TimePoint;
-			TimedTasks.emplace_back(std::move(NewTask));
-			return true;
-		}
-		return false;
-	}
-
-	std::size_t TimedTaskQueue::PopTask(TaskQueue& TaskQueue, std::chrono::system_clock::time_point CurrentTime)
-	{
-		if(CurrentTime >= ClosestTimePoint)
-		{
-			std::size_t Count = 0;
-			ClosestTimePoint = std::chrono::system_clock::time_point::max();
-
-			for(auto& Ite : TimedTasks)
-			{
-				if (Ite.DelayTimePoint <= CurrentTime)
-				{
-					TaskQueue.Insert(std::move(Ite.Task), Ite.Property);
-					Count += 1;
+					end = last;
 				}else
 				{
-					if(Ite.DelayTimePoint < ClosestTimePoint)
-					{
-						ClosestTimePoint = Ite.DelayTimePoint;
-					}
+					min_time_point = std::min(min_time_point, ite->time_point);
+					++ite;
 				}
 			}
-
-			if(Count != 0)
-			{
-				std::erase_if(
-					TimedTasks,
-					[](DelayTaskT const& Task)-> bool { return !Task.Task; }
-				);
-			}
-
-			return Count;
+			time_task.erase(end, time_task.end());
 		}
-		return 0;
+
+		std::size_t max_priority = 0;
+		auto max_ite = line_up_task.end();
+
+		for (auto ite = line_up_task.begin(); ite != line_up_task.end(); ++ite)
+		{
+			if(!already_add_priority)
+				ite->priority += static_cast<std::size_t>(ite->tuple.property.priority);
+			if(max_priority < ite->priority 
+				&& 
+				Accept(ite->tuple.property, property, thread_id, accept_all_group)
+				)
+			{
+				max_priority = ite->priority;
+				max_ite = ite;
+			}
+		}
+
+		already_add_priority = true;
+
+		if(max_ite != line_up_task.end())
+		{
+			already_add_priority = false;
+			auto next = line_up_task.end() - 1;
+			if(next != max_ite)
+			{
+				std::swap(*next, *max_ite);
+			}
+			TaskTuple result = std::move(next->tuple);
+			line_up_task.erase(next, line_up_task.end());
+			return result;
+		}
+		return std::nullopt;
+	}
+
+	std::size_t TaskQueue::CheckTimeTask(ThreadProperty property, std::thread::id thread_id, bool accept_all_group)
+	{
+		std::size_t count = 0;
+		for(auto& ite : time_task)
+		{
+			if(Accept(ite.tuple.property, property, thread_id, accept_all_group))
+				count += 1;
+		}
+		return count;
 	}
 
 	void TaskContext::ViewerRelease()
 	{
-		auto Rec = Record;
-		assert(Rec);
+		auto rec = record;
+		assert(rec);
 		this->~TaskContext();
-		Rec.Deallocate();
+		rec.Deallocate();
 	}
 
 	void TaskContext::ControllerRelease()
 	{
 		{
-			std::lock_guard lg(TaskMutex);
-			Status = TaskContextStatus::Close;
+			std::lock_guard lg(context_mutex);
+			status = Status::Close;
 		}
 
-		FlushTask();
-		CloseThreads();
+
+		{
+			std::lock_guard lg(thread_mutex);
+			for(auto& ite : thread)
+			{
+				ite.thread.request_stop();
+			}
+		}
 	}
 
-	auto TaskContext::Create(std::pmr::memory_resource* Resource)->Ptr
+	auto TaskContext::Create(std::pmr::memory_resource* resource)->Ptr
 	{
-		assert(Resource != nullptr);
-		auto Record = Potato::IR::MemoryResourceRecord::Allocate<TaskContext>(Resource);
-		if(Record)
+		assert(resource != nullptr);
+		auto record = Potato::IR::MemoryResourceRecord::Allocate<TaskContext>(resource);
+		if(record)
 		{
-			Ptr ptr = new (Record.Get()) TaskContext { Record };
+			Ptr ptr = new (record.Get()) TaskContext { record };
 			return ptr;
 		}
 		return {};
 	}
 
-	TaskContext::TaskContext(Potato::IR::MemoryResourceRecord Record)
-		: Record(Record), Threads(Record.GetResource()), DelayTasks(Record.GetResource()), ReadyTasks(Record.GetResource())
+	TaskContext::TaskContext(Potato::IR::MemoryResourceRecord record)
+		: record(record), thread(record.GetResource()), tasks(record.GetResource())
 	{
-		assert(Record);
+		assert(record);
 	}
 
-	bool TaskContext::FireThreads(ThreadCountSetting Setting)
+	std::size_t TaskContext::GetSuggestThreadCount()
 	{
-		std::lock_guard lg(ThreadMutex);
-		if(Threads.empty())
-		{
-			Threads.reserve(Setting.BackEndCount + Setting.DynamicBackEndCount + Setting.DynamicFrontEndCount + Setting.FrontEndCount);
-			WPtr ThisPtr{this};
-
-			for(std::size_t I = 0; I < Setting.FrontEndCount; ++I)
-			{
-				Threads.emplace_back([ThisPtr](std::stop_token ST)
-					{
-						assert(ThisPtr);
-						ThisPtr->ThreadExecute(std::move(ST), ThreadType::FrontEnd);
-					});
-			}
-
-			for (std::size_t I = 0; I < Setting.DynamicFrontEndCount; ++I)
-			{
-				Threads.emplace_back([ThisPtr](std::stop_token ST)
-					{
-						assert(ThisPtr);
-						ThisPtr->ThreadExecute(std::move(ST), ThreadType::DynamicFrontEnd);
-					});
-			}
-
-			for (std::size_t I = 0; I < Setting.DynamicBackEndCount; ++I)
-			{
-				Threads.emplace_back([ThisPtr](std::stop_token ST)
-					{
-						assert(ThisPtr);
-						ThisPtr->ThreadExecute(std::move(ST), ThreadType::DynamicBackEnd);
-					});
-			}
-
-			for (std::size_t I = 0; I < Setting.BackEndCount; ++I)
-			{
-				Threads.emplace_back([ThisPtr](std::stop_token ST)
-					{
-						assert(ThisPtr);
-						ThisPtr->ThreadExecute(std::move(ST), ThreadType::BackEnd);
-					});
-			}
-			return true;
-		}
-		return false;
+		return std::thread::hardware_concurrency() - 1;
 	}
 
-	std::size_t TaskContext::CloseThreads()
+	bool TaskContext::AddGroupThread(ThreadProperty property, std::size_t thread_count)
 	{
-		auto CurID = std::this_thread::get_id();
-		std::lock_guard lg(ThreadMutex);
-		std::size_t NowTaskCount = Threads.size();
-		for(auto& Ite : Threads)
+		std::lock_guard lg(thread_mutex);
+		thread.reserve(thread.size() + thread_count);
+		for(std::size_t o = 0; o < thread_count; ++o)
 		{
-			Ite.request_stop();
-			if(Ite.get_id() == CurID)
-				Ite.detach();
-		}
-		Threads.clear();
-		return NowTaskCount;
-	}
+			auto ind = thread.size();
 
-	bool TaskContext::CommitTask(Task::Ptr InTaskPtr, TaskProperty Property)
-	{
-		std::lock_guard lg(TaskMutex);
-		if (ReadyTasks.Insert(std::move(InTaskPtr), Property))
-		{
-			++LastingTask;
-			return true;
-		}
-		return false;
-	}
+			WPtr wptr{ this };
 
-	bool TaskContext::CommitDelayTask(Task::Ptr InTaskPtr, std::chrono::system_clock::time_point TimePoint, TaskProperty Property)
-	{
-		std::lock_guard lg(TaskMutex);
-		if(DelayTasks.Insert(std::move(InTaskPtr), Property, TimePoint))
-		{
-			++LastingTask;
-			return true;
-		}
-		return false;
-	}
-
-	void TaskContext::ThreadExecute(std::stop_token ST, ThreadType Type)
-	{
-		TaskQueue::Tuple CurrentTask;
-		TaskContextStatus LocStatus = TaskContextStatus::Normal;
-		bool LastExecute = false;
-		while(LastExecute || !ST.stop_requested())
-		{
-			if(TaskMutex.try_lock())
-			{
+			auto jthread = std::jthread{ [wptr = std::move(wptr), property, ind](std::stop_token token)
 				{
-					std::lock_guard lg(TaskMutex, std::adopt_lock);
-					if(LastExecute)
-					{
-						--LastingTask;
-						LastExecute = false;
-						if (ST.stop_requested())
-						{
-							return;
-						}
-					}
-					DelayTasks.PopTask(ReadyTasks, std::chrono::system_clock::now());
-					switch(Type)
-					{
-					case ThreadType::FrontEnd:
-						CurrentTask = ReadyTasks.PopFrontEndTask();
-						break;
-					case ThreadType::DynamicFrontEnd:
-						CurrentTask = ReadyTasks.PopFrontEndTask();
-						if(!CurrentTask.Task)
-							CurrentTask = ReadyTasks.PopBackEndTask();
-						break;
-					case ThreadType::DynamicBackEnd:
-						CurrentTask = ReadyTasks.PopBackEndTask();
-						if (!CurrentTask.Task)
-							CurrentTask = ReadyTasks.PopFrontEndTask();
-						break;
-					case ThreadType::BackEnd:
-						CurrentTask = ReadyTasks.PopBackEndTask();
-						break;
-					}
-					LocStatus = Status;
-				}
-				if(CurrentTask.Task)
-				{
-					ExecuteStatus Status{
-						LocStatus,
-						CurrentTask.Property,
-				*this
-					};
-					CurrentTask.Task->operator()(Status);
-					LastExecute = true;
-					CurrentTask.Task.Reset();
-					std::this_thread::yield();
-				}else
-					std::this_thread::sleep_for(std::chrono::milliseconds{1});
-			}else
-			{
-				std::this_thread::yield();
-			}
+					assert(wptr);
+					wptr->ThreadExecute(std::move(token), ind, property, std::this_thread::get_id());
+				} };
+			auto id = jthread.get_id();
+
+			thread.emplace_back(
+				property,
+				id,
+				std::move(jthread)
+			);
 		}
+		return true;
 	}
 
-	void TaskContext::WaitTask()
+	std::size_t TaskContext::CloseThread()
 	{
-		TaskQueue::Tuple CurrentTask;
-		TaskContextStatus LocStatus = TaskContextStatus::Normal;
-		bool LastExecute = false;
+		std::size_t count = 0;
+		std::lock_guard lg(thread_mutex);
+		for(auto& ite : thread)
+		{
+			if(ite.thread.joinable())
+			{
+				ite.thread.request_stop();
+				++count;
+			}
+		}
+		return count;
+	}
+
+	bool TaskContext::CommitTask(Task::Ptr task, TaskProperty property)
+	{
+		if(task)
+		{
+			std::lock_guard lg(context_mutex);
+			tasks.InsertTask(std::move(task), property);
+			task_count+= 1;
+			return true;
+		}
+		return false;
+	}
+
+	bool TaskContext::CommitDelayTask(Task::Ptr task, std::chrono::system_clock::time_point time_point, TaskProperty property)
+	{
+		if (task)
+		{
+			std::lock_guard lg(context_mutex);
+			tasks.InsertTask(std::move(task), property, time_point);
+			task_count += 1;
+			return true;
+		}
+		return false;
+	}
+
+	void TaskContext::ThreadExecute(std::stop_token ST, std::size_t index, ThreadProperty property, std::thread::id thread_id)
+	{
+		TaskQueue::TaskTuple current_task;
+		Status loc_status = Status::Normal;
+		bool last_execute = false;
 		while(true)
 		{
-			if(TaskMutex.try_lock())
+			auto stop_require = ST.stop_requested();
+
+			if(context_mutex.try_lock())
 			{
+				std::lock_guard lg(context_mutex, std::adopt_lock);
+				if(last_execute)
 				{
-					std::lock_guard lg(TaskMutex, std::adopt_lock);
-					if(LastExecute)
+					assert(task_count > 0);
+					task_count -= 1;
+					last_execute = false;
+				}
+				auto re = tasks.PopTask(property, thread_id, std::chrono::system_clock::now(), false);
+				if(re)
+				{
+					current_task = std::move(*re);
+				}else
+				{
+					if(stop_require)
 					{
-						LastingTask -= 1;
-						LastExecute = false;
-					}
-					DelayTasks.PopTask(ReadyTasks, std::chrono::system_clock::now());
-					if(LastingTask != 0)
-					{
-						LocStatus = Status;
-						CurrentTask = ReadyTasks.PopFrontEndTask();
-						if(!CurrentTask.Task)
-							CurrentTask = ReadyTasks.PopBackEndTask();
-					}else
-					{
-						return;
+						auto count = tasks.CheckTimeTask(property, thread_id, false);
+						if(count == 0)
+							break;
 					}
 				}
-				if(CurrentTask.Task)
-				{
-					ExecuteStatus Status{
-						LocStatus,
-						CurrentTask.Property,
-				*this
-					};
-					CurrentTask.Task->operator()(Status);
-					LastExecute = true;
-					CurrentTask.Task.Reset();
-				}else
-					std::this_thread::sleep_for(std::chrono::milliseconds{ 1 });
 			}else
 			{
 				std::this_thread::yield();
+				continue;
+			}
+			if(current_task.task)
+			{
+				ExecuteStatus status{
+						*this,
+						current_task.property,
+						stop_require ? Status::Close : Status::Normal,
+						thread_id,
+					property
+				};
+				current_task.task->operator()(status);
+				last_execute = true;
+				current_task.task.Reset();
+				std::this_thread::yield();
+			}else
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds{1});
 			}
 		}
 	}
 
-	void TaskContext::FlushTask(std::chrono::system_clock::time_point RequireTP)
+	void TaskContext::ProcessTask(std::optional<std::size_t> override_group_id, bool flush_timer)
 	{
-		TaskQueue::Tuple CurrentTask;
-		TaskContextStatus LocStatus = TaskContextStatus::Normal;
-		bool LastExecute = false;
+		TaskQueue::TaskTuple current_task;
+		Status loc_status = Status::Normal;
+		bool last_execute = false;
+		bool require_stop = false;
+		ThreadProperty property
+		{
+			0,
+			true,
+			override_group_id.has_value(),
+			u8"TaskContext::WaitTask"
+		};
+		if(override_group_id.has_value())
+		{
+			property.group_id = *override_group_id;
+		}
+		auto id = std::this_thread::get_id();
 		while (true)
 		{
-			if (TaskMutex.try_lock())
+			std::chrono::system_clock::time_point tp = std::chrono::system_clock::time_point::max();
+			if (!flush_timer)
 			{
+				tp = std::chrono::system_clock::now();
+			}
+
+			if (context_mutex.try_lock())
+			{
+				std::lock_guard lg(context_mutex, std::adopt_lock);
+				if (last_execute)
 				{
-					std::lock_guard lg(TaskMutex, std::adopt_lock);
-					if (LastExecute)
-					{
-						LastingTask -= 1;
-						LastExecute = false;
-					}
-					DelayTasks.PopTask(ReadyTasks, RequireTP);
-					if (LastingTask != 0)
-					{
-						LocStatus = Status;
-						CurrentTask = ReadyTasks.PopFrontEndTask();
-						if (!CurrentTask.Task)
-							CurrentTask = ReadyTasks.PopBackEndTask();
-					}
-					else
-					{
-						return;
-					}
+					assert(task_count > 0);
+					task_count -= 1;
+					last_execute = false;
 				}
-				if (CurrentTask.Task)
+				if(task_count != 0)
 				{
-					ExecuteStatus Status{
-						LocStatus,
-						CurrentTask.Property,
-				*this
-					};
-					CurrentTask.Task->operator()(Status);
-					LastExecute = true;
-					CurrentTask.Task.Reset();
+					auto re = tasks.PopTask(property, id, tp, !override_group_id.has_value());
+					if (re)
+						current_task = std::move(*re);
+				}else
+				{
+					break;
 				}
-				else
-					std::this_thread::sleep_for(std::chrono::milliseconds{ 1 });
 			}
 			else
 			{
 				std::this_thread::yield();
+				continue;
+			}
+			if (current_task.task)
+			{
+				ExecuteStatus status{
+						*this,
+						current_task.property,
+						 Status::Normal,
+						id,
+					property
+				};
+				current_task.task->operator()(status);
+				last_execute = true;
+				current_task.task.Reset();
+				std::this_thread::yield();
+			}
+			else
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds{ 1 });
 			}
 		}
-	}
-
-	TaskContext::~TaskContext()
-	{
-
-		assert(Threads.empty());
 	}
 }
