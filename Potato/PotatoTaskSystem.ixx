@@ -58,6 +58,7 @@ export namespace Potato::Task
 
 	struct ExecuteStatus
 	{
+		Status content_status = Status::Normal;
 		TaskContext& context;
 		TaskProperty task_property;
 		
@@ -88,7 +89,7 @@ export namespace Potato::Task
 	};
 
 
-
+	/*
 	struct TaskQueue
 	{
 
@@ -127,6 +128,7 @@ export namespace Potato::Task
 		bool already_add_priority = false;
 
 	};
+	*/
 
 	export struct TaskContext : public Pointer::DefaultControllerViewerInterface
 	{
@@ -148,13 +150,13 @@ export namespace Potato::Task
 
 		std::size_t CloseThread();
 		bool CommitTask(Task::Ptr task, TaskProperty property = {});
-		bool CommitDelayTask(Task::Ptr task, std::chrono::system_clock::time_point time_point, TaskProperty property = {});
-		bool CommitDelayTask(Task::Ptr task, std::chrono::system_clock::duration duration, TaskProperty property = {})
+		bool CommitDelayTask(Task::Ptr task, std::chrono::steady_clock::time_point time_point, TaskProperty property = {});
+		bool CommitDelayTask(Task::Ptr task, std::chrono::steady_clock::duration duration, TaskProperty property = {})
 		{
-			return CommitDelayTask(std::move(task), std::chrono::system_clock::now() + duration, property);
+			return CommitDelayTask(std::move(task), std::chrono::steady_clock::now() + duration, property);
 		}
 
-		virtual ~TaskContext() = default;
+		virtual ~TaskContext();
 
 	protected:
 
@@ -162,30 +164,58 @@ export namespace Potato::Task
 
 	private:
 
+		struct TaskTuple
+		{
+			TaskProperty property;
+			Task::Ptr task;
+		};
+
+		static bool Accept(TaskProperty const& property, ThreadProperty const& thread_property, std::thread::id thread_id, bool accept_all_group);
+		std::optional<TaskTuple> PopLineUpTask(ThreadProperty property, std::thread::id thread_id, std::chrono::system_clock::time_point current_time, bool accept_all_group);
+
 		virtual void ViewerRelease() override;
 		virtual void ControllerRelease() override;
 
-		using WPtr = Pointer::ViewerPtr<TaskContext>;
+		void TimerThreadExecute(std::stop_token ST);
+		void LineUpThreadExecute(std::stop_token ST, std::size_t index, ThreadProperty property, std::thread::id thread_id);
 
-		void ThreadExecute(std::stop_token ST, std::size_t index, ThreadProperty property, std::thread::id thread_id);
+		using WPtr = Pointer::ViewerPtr<TaskContext>;
 
 		Potato::IR::MemoryResourceRecord record;
 
-		std::mutex thread_mutex;
+		
 
+		std::shared_mutex thread_mutex;
+		
 		struct ThreadCore
 		{
 			ThreadProperty property;
 			std::thread::id thread_id;
 			std::jthread thread;
 		};
-
 		std::pmr::vector<ThreadCore> thread;
 
-		std::shared_mutex context_mutex;
+		std::mutex timer_mutex;
+		std::jthread timer_thread;
+		std::condition_variable timer_cv;
+		std::chrono::steady_clock::time_point last_time_point = std::chrono::steady_clock::time_point::max();
+		struct TimerTaskTuple
+		{
+			TaskTuple tuple;
+			std::chrono::steady_clock::time_point time_point;
+		};
+		std::pmr::vector<TimerTaskTuple> timed_task;
+
+		std::shared_mutex line_up_thread_mutex;
+		struct LineUpTuple
+		{
+			TaskTuple tuple;
+			std::size_t priority;
+		};
+		std::pmr::vector<LineUpTuple> line_up_task;
+		std::size_t total_task_count = 0;
 		Status status = Status::Normal;
-		std::size_t task_count = 0;
-		TaskQueue tasks;
+		bool already_add_priority = false;
 	};
 
 }

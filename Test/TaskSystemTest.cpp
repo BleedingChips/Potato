@@ -15,26 +15,28 @@ int main()
 			std::println("Count :{0} {1} {2}", Count, static_cast<std::size_t>(Status.thread_status), Status.thread_id);
 			Count++;
 			if(Count <= 20)
-				Status.context.CommitDelayTask(This, std::chrono::system_clock::now() + std::chrono::milliseconds{50}, Status.task_property);
+				Status.context.CommitDelayTask(This, std::chrono::milliseconds{50}, Status.task_property);
 		});
 
 		auto Lambda2 = Task::CreateLambdaTask([&Count](Potato::Task::ExecuteStatus Status, Potato::Task::Task::Ptr This) {
 			std::println("Count :{0} {1}", Count, static_cast<std::size_t>(Status.thread_status));
 			Count++;
 			if (Count <= 20)
-				Status.context.CommitDelayTask(This, std::chrono::system_clock::now() + std::chrono::milliseconds{ 50 }, Status.task_property);
+				Status.context.CommitDelayTask(This, std::chrono::milliseconds{ 50 }, Status.task_property);
 			});
 
-			TaskProperty tp;
-		tp.category = TaskProperty::Category::THREAD_TASK;
+		TaskProperty tp;
+		tp.category = TaskProperty::Category::GLOBAL_TASK;
 		tp.group_id = 1;
 		tp.thread_id = std::this_thread::get_id();
 
 		Ptr->CommitTask(Lambda, tp);
 		//Ptr->CommitTask(Lambda2);
 		Ptr->AddGroupThread({}, TaskContext::GetSuggestThreadCount());
-		Ptr->ProcessTask(2);
+		//Ptr->ProcessTask(2);
 	}
+
+	std::this_thread::sleep_for(std::chrono::seconds{20});
 
 	volatile int i = 0;
 }
