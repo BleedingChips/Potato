@@ -7,49 +7,28 @@ module PotatoTaskSystem;
 namespace Potato::Task
 {
 
-	/*
-	TaskQueue::TaskQueue(std::pmr::memory_resource* resource)
-		: time_task(resource), line_up_task(resource)
-	{
-		
-	}
-
-	void TaskQueue::InsertTask(Task::Ptr task, TaskProperty property)
-	{
-		assert(task);
-
-		line_up_task.emplace_back(
-			TaskTuple{ property, std::move(task)},
-			static_cast<std::size_t>(property.priority)
-		);
-	}
-
-	void TaskQueue::InsertTask(Task::Ptr task, TaskProperty property, std::chrono::system_clock::time_point time_point)
-	{
-		assert(task);
-
-		min_time_point = std::min(min_time_point, time_point);
-
-		time_task.emplace_back(
-			TaskTuple{ property, std::move(task) },
-			time_point
-		);
-	}
-	*/
-
-	bool TaskContext::Accept(TaskProperty const& property, ThreadProperty const& thread_property, std::thread::id thread_id, bool accept_all_group)
+	bool TaskContext::Accept(TaskProperty const& property, ThreadProperty const& thread_property, std::thread::id thread_id)
 	{
 		switch (property.category)
 		{
-		case TaskProperty::Category::GLOBAL_TASK:
-			if (thread_property.execute_global_task)
+		case Category::GLOBAL_TASK:
+			if (thread_property.global_accept != ThreadAcceptable::UnAccept)
 				return true;
 			break;
-		case TaskProperty::Category::GROUP_TASK:
-			if (accept_all_group || (thread_property.execute_group_task && thread_property.group_id == property.group_id))
-				return true;
+		case Category::GROUP_TASK:
+			{
+				switch(thread_property.global_accept)
+				{
+				case ThreadAcceptable::AcceptAll:
+					return true;
+				case ThreadAcceptable::SpecialAccept:
+					return thread_property.group_id == property.group_id;
+				default:
+					return false;
+				}
+			}
 			break;
-		case TaskProperty::Category::THREAD_TASK:
+		case Category::THREAD_TASK:
 			if(thread_id == property.thread_id)
 				return true;
 			break;
@@ -57,9 +36,42 @@ namespace Potato::Task
 		return false;
 	}
 
-	auto TaskContext::PopLineUpTask(ThreadProperty property, std::thread::id thread_id, std::chrono::system_clock::time_point current_time, bool accept_all_group)
+	auto TaskContext::PopLineUpTask(ThreadProperty property, std::thread::id thread_id, std::chrono::steady_clock::time_point current_time)
 		-> std::optional<TaskTuple>
 	{
+
+		if(last_time_point <= current_time)
+		{
+			last_time_point = std::chrono::steady_clock::time_point::max();
+
+			auto last = timed_task.end();
+			for(auto ite = timed_task.begin(); ite != last;)
+			{
+				if(ite->time_point <= current_time)
+				{
+					auto priority = static_cast<std::size_t>(ite->tuple.property.priority);
+					if(already_add_priority)
+						priority *= 2;
+					line_up_task.emplace_back(
+						std::move(ite->tuple),
+						priority
+					);
+					auto last2 = last - 1;
+					if(ite != last2)
+					{
+						std::swap(*ite, *last2);
+					}
+					last = last2;
+				}else
+				{
+					last_time_point = std::min(last_time_point, ite->time_point);
+					++ite;
+				}
+			}
+			timed_task.erase(last, timed_task.end());
+		}
+
+
 		std::size_t max_priority = 0;
 		auto max_ite = line_up_task.end();
 
@@ -69,7 +81,7 @@ namespace Potato::Task
 				ite->priority += static_cast<std::size_t>(ite->tuple.property.priority);
 			if (max_priority < ite->priority
 				&&
-				Accept(ite->tuple.property, property, thread_id, accept_all_group)
+				Accept(ite->tuple.property, property, thread_id)
 				)
 			{
 				max_priority = ite->priority;
@@ -94,86 +106,6 @@ namespace Potato::Task
 		return std::nullopt;
 	}
 
-	/*
-	auto TaskQueue::PopTask(ThreadProperty property, std::thread::id thread_id, std::chrono::system_clock::time_point current_time, bool accept_all_group)
-		-> std::optional<TaskTuple>
-	{
-		if(min_time_point < current_time)
-		{
-			min_time_point = std::chrono::system_clock::time_point::max();
-
-			auto ite = time_task.begin();
-			auto end = time_task.end();
-			for(; ite != end; )
-			{
-				if(ite->time_point <= current_time)
-				{
-					auto priority = static_cast<std::size_t>(ite->tuple.property.priority);
-					line_up_task.emplace_back(
-						std::move(ite->tuple),
-						priority
-					);
-					auto last = end - 1;
-					if(ite != last)
-					{
-						std::swap(*ite, *last);
-					}
-					end = last;
-				}else
-				{
-					min_time_point = std::min(min_time_point, ite->time_point);
-					++ite;
-				}
-			}
-			time_task.erase(end, time_task.end());
-		}
-
-		std::size_t max_priority = 0;
-		auto max_ite = line_up_task.end();
-
-		for (auto ite = line_up_task.begin(); ite != line_up_task.end(); ++ite)
-		{
-			if(!already_add_priority)
-				ite->priority += static_cast<std::size_t>(ite->tuple.property.priority);
-			if(max_priority < ite->priority 
-				&& 
-				Accept(ite->tuple.property, property, thread_id, accept_all_group)
-				)
-			{
-				max_priority = ite->priority;
-				max_ite = ite;
-			}
-		}
-
-		already_add_priority = true;
-
-		if(max_ite != line_up_task.end())
-		{
-			already_add_priority = false;
-			auto next = line_up_task.end() - 1;
-			if(next != max_ite)
-			{
-				std::swap(*next, *max_ite);
-			}
-			TaskTuple result = std::move(next->tuple);
-			line_up_task.erase(next, line_up_task.end());
-			return result;
-		}
-		return std::nullopt;
-	}
-
-	std::size_t TaskQueue::CheckTimeTask(ThreadProperty property, std::thread::id thread_id, bool accept_all_group)
-	{
-		std::size_t count = 0;
-		for(auto& ite : time_task)
-		{
-			if(Accept(ite.tuple.property, property, thread_id, accept_all_group))
-				count += 1;
-		}
-		return count;
-	}
-	*/
-
 	void TaskContext::ViewerRelease()
 	{
 		auto rec = record;
@@ -185,9 +117,18 @@ namespace Potato::Task
 	void TaskContext::ControllerRelease()
 	{
 		{
-			std::lock_guard lg(line_up_thread_mutex);
+			std::lock_guard lg(execute_thread_mutex);
 			status = Status::Close;
 		}
+		ThreadProperty property
+		{
+			0,
+			ThreadAcceptable::AcceptAll,
+			ThreadAcceptable::UnAccept,
+			u8"TaskContext::ControllerRelease"
+		};
+		ProcessTask(property, {});
+		CloseAllThreadAndWait();
 	}
 
 	auto TaskContext::Create(std::pmr::memory_resource* resource)->Ptr
@@ -217,21 +158,6 @@ namespace Potato::Task
 	{
 		auto id = std::this_thread::get_id();
 
-
-		{
-			std::lock_guard lg(timer_mutex);
-			if(timer_thread.joinable())
-			{
-				if (timer_thread.get_id() == id)
-					timer_thread.detach();
-				else
-					timer_thread.join();
-			}
-			
-		}
-
-		
-
 		{
 			std::lock_guard lg(thread_mutex);
 			while(!thread.empty())
@@ -255,14 +181,12 @@ namespace Potato::Task
 		thread.reserve(thread.size() + thread_count);
 		for(std::size_t o = 0; o < thread_count; ++o)
 		{
-			auto ind = thread.size();
-
 			WPtr wptr{ this };
 
-			auto jthread = std::jthread{ [wptr = std::move(wptr), property, ind](std::stop_token token)
+			auto jthread = std::jthread{ [wptr = std::move(wptr), property](std::stop_token token)
 				{
 					assert(wptr);
-					wptr->LineUpThreadExecute(std::move(token), ind, property, std::this_thread::get_id());
+					wptr->LineUpThreadExecute(std::move(token), property, std::this_thread::get_id());
 				} };
 			auto id = jthread.get_id();
 
@@ -275,7 +199,7 @@ namespace Potato::Task
 		return true;
 	}
 
-	std::size_t TaskContext::CloseThread()
+	std::size_t TaskContext::CloseAllThread()
 	{
 		std::size_t count = 0;
 		std::lock_guard lg(thread_mutex);
@@ -290,11 +214,48 @@ namespace Potato::Task
 		return count;
 	}
 
+	std::size_t TaskContext::CloseAllThreadAndWait()
+	{
+		std::size_t count = 0;
+
+		auto cid = std::this_thread::get_id();
+
+		while(true)
+		{
+			ThreadCore core;
+
+			{
+				std::lock_guard lg(thread_mutex);
+				if(!thread.empty())
+				{
+					core = std::move(*thread.rbegin());
+					thread.pop_back();
+					count += 1;
+				}else
+				{
+					return count;
+				}
+			}
+
+			if(core.thread.joinable())
+			{
+				core.thread.request_stop();
+				auto tid = core.thread.get_id();
+				if(tid == cid)
+					core.thread.detach();
+				else
+					core.thread.join();
+			}
+		}
+
+	}
+
+
 	bool TaskContext::CommitTask(Task::Ptr task, TaskProperty property)
 	{
 		if(task)
 		{
-			std::lock_guard lg(line_up_thread_mutex);
+			std::lock_guard lg(execute_thread_mutex);
 			line_up_task.push_back(
 				LineUpTuple{
 				TaskTuple{property, std::move(task)},
@@ -311,43 +272,19 @@ namespace Potato::Task
 	{
 		if (task)
 		{
-			if(!timer_thread.joinable())
-			{
-				WPtr wptr{ this };
-				timer_thread = std::jthread{[wptr = std::move(wptr)](std::stop_token ST)
-				{
-					assert(wptr);
-					wptr->TimerThreadExecute(std::move(ST));
-				}};
-			}
-
-			{
-				std::lock_guard lg(line_up_thread_mutex);
-				++total_task_count;
-			}
-
-			std::lock_guard lg(timer_mutex);
-			if (!timer_thread.joinable())
-			{
-				WPtr wptr{ this };
-				timer_thread = std::jthread{ [wptr = std::move(wptr)](std::stop_token ST)
-				{
-					assert(wptr);
-					wptr->TimerThreadExecute(std::move(ST));
-				} };
-			}
+			std::lock_guard lg(execute_thread_mutex);
 			timed_task.emplace_back(
 				TaskTuple{property, std::move(task)},
 				time_point
 			);
 			last_time_point = std::min(last_time_point, time_point);
-			timer_cv.notify_all();
+			++total_task_count;
 			return true;
 		}
 		return false;
 	}
 
-	void TaskContext::LineUpThreadExecute(std::stop_token ST, std::size_t index, ThreadProperty property, std::thread::id thread_id)
+	void TaskContext::LineUpThreadExecute(std::stop_token ST, ThreadProperty property, std::thread::id thread_id)
 	{
 		TaskTuple current_task;
 		Status loc_status = Status::Normal;
@@ -356,9 +293,9 @@ namespace Potato::Task
 		{
 			auto stop_require = ST.stop_requested();
 
-			if(line_up_thread_mutex.try_lock())
+			if(execute_thread_mutex.try_lock())
 			{
-				std::lock_guard lg(line_up_thread_mutex, std::adopt_lock);
+				std::lock_guard lg(execute_thread_mutex, std::adopt_lock);
 				loc_status = status;
 				if(last_execute)
 				{
@@ -366,7 +303,7 @@ namespace Potato::Task
 					total_task_count -= 1;
 					last_execute = false;
 				}
-				auto re = PopLineUpTask(property, thread_id, std::chrono::system_clock::now(), false);
+				auto re = PopLineUpTask(property, thread_id, std::chrono::steady_clock::now());
 				if(re)
 				{
 					current_task = std::move(*re);
@@ -378,13 +315,9 @@ namespace Potato::Task
 						if(thread_mutex.try_lock())
 						{
 							std::lock_guard lg(thread_mutex, std::adopt_lock);
-							auto new_property = property;
-							new_property.execute_global_task = false;
-							new_property.execute_group_task = false;
-
 							for(auto& ite : timed_task)
 							{
-								if(Accept(ite.tuple.property, new_property, thread_id, false))
+								if(Accept(ite.tuple.property, property, thread_id))
 								{
 									Exist = true;
 									break;
@@ -428,64 +361,24 @@ namespace Potato::Task
 				std::this_thread::sleep_for(std::chrono::milliseconds{1});
 			}
 		}
-
-		{
-			std::lock_guard lg(timer_mutex);
-			if(timer_thread.joinable())
-				timer_thread.request_stop();
-		}
-
-		timer_cv.notify_all();
 	}
 
-	void TaskContext::ProcessTask(std::optional<std::size_t> override_group_id, bool flush_timer)
+	void TaskContext::ProcessTask(ThreadProperty property, bool flush_timer)
 	{
 		TaskTuple current_task;
 		Status loc_status = Status::Normal;
 		bool last_execute = false;
 		bool require_stop = false;
-		ThreadProperty property
-		{
-			0,
-			true,
-			override_group_id.has_value(),
-			u8"TaskContext::WaitTask"
-		};
-		if(override_group_id.has_value())
-		{
-			property.group_id = *override_group_id;
-		}
 		auto id = std::this_thread::get_id();
 		while (true)
 		{
-			if(flush_timer)
-			{
-				if(timer_mutex.try_lock())
-				{
-					std::lock_guard lg(timer_mutex, std::adopt_lock);
-					if(!timed_task.empty())
-					{
-						if(line_up_thread_mutex.try_lock())
-						{
-							{
-								std::lock_guard lg(line_up_thread_mutex, std::adopt_lock);
-								for (auto& ite : timed_task)
-								{
-									auto pri = static_cast<std::size_t>(ite.tuple.property.priority);
-									line_up_task.emplace_back(
-										std::move(ite.tuple), pri
-									);
-								}
-							}
-							timed_task.clear();
-						}
-					}
-				}
-			}
+			auto cur_time = std::chrono::steady_clock::time_point::max();
+			if(!flush_timer)
+				cur_time = std::chrono::steady_clock::now();
 
-			if (line_up_thread_mutex.try_lock())
+			if (execute_thread_mutex.try_lock())
 			{
-				std::lock_guard lg(line_up_thread_mutex, std::adopt_lock);
+				std::lock_guard lg(execute_thread_mutex, std::adopt_lock);
 				loc_status = status;
 				if (last_execute)
 				{
@@ -495,7 +388,7 @@ namespace Potato::Task
 				}
 				if(total_task_count != 0)
 				{
-					auto re = PopLineUpTask(property, id, std::chrono::system_clock::now(), !override_group_id.has_value());
+					auto re = PopLineUpTask(property, id, cur_time);
 					if (re)
 						current_task = std::move(*re);
 				}else
@@ -526,93 +419,6 @@ namespace Potato::Task
 			else
 			{
 				std::this_thread::sleep_for(std::chrono::milliseconds{ 1 });
-			}
-		}
-		timer_cv.notify_all();
-	}
-
-	void TaskContext::TimerThreadExecute(std::stop_token ST)
-	{
-		bool yeid = false;
-		while(true)
-		{
-			if(yeid)
-			{
-				std::this_thread::yield();
-				yeid = false;
-			}
-			else
-				std::this_thread::sleep_for(std::chrono::microseconds{10});
-			bool require_stop = false;
-
-			std::unique_lock ul(timer_mutex);
-
-			while(true)
-			{
-				require_stop = ST.stop_requested();
-
-				if (!timed_task.empty())
-					break;
-
-				if(require_stop)
-					break;
-
-				timer_cv.wait_for(ul, std::chrono::milliseconds{100});
-
-				volatile int i = 0;
-			}
-
-			if(last_time_point <= std::chrono::steady_clock::now())
-			{
-				if(line_up_thread_mutex.try_lock())
-				{
-					std::lock_guard lg(line_up_thread_mutex, std::adopt_lock);
-
-					last_time_point = std::chrono::steady_clock::time_point::max();
-
-					auto now = std::chrono::steady_clock::now();
-
-					assert(!timed_task.empty());
-
-					auto be = timed_task.begin();
-					auto last = timed_task.end();
-
-					for(auto ite = timed_task.begin(); ite < last;)
-					{
-						if (ite->time_point <= now)
-						{
-							auto pri = static_cast<std::size_t>(ite->tuple.property.priority);
-							line_up_task.emplace_back(
-								std::move(ite->tuple),
-								pri
-							);
-							auto llast = last - 1;
-							if(ite != llast)
-							{
-								std::swap(*ite, *llast);
-							}
-							last = llast;
-						}else
-						{
-							last_time_point = std::min(last_time_point, ite->time_point);
-							++ite;
-						}
-					}
-
-					timed_task.erase(last, timed_task.end());
-				}else
-				{
-					yeid = true;
-				}
-				continue;
-			}
-			if(require_stop)
-			{
-				std::lock_guard lg(line_up_thread_mutex);
-				if (total_task_count == 0)
-				{
-					break;
-				}
 			}
 		}
 	}

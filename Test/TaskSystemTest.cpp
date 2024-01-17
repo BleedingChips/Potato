@@ -26,17 +26,15 @@ int main()
 			});
 
 		TaskProperty tp;
-		tp.category = TaskProperty::Category::GLOBAL_TASK;
+		tp.category = Category::GLOBAL_TASK;
 		tp.group_id = 1;
 		tp.thread_id = std::this_thread::get_id();
 
 		Ptr->CommitTask(Lambda, tp);
 		//Ptr->CommitTask(Lambda2);
 		Ptr->AddGroupThread({}, TaskContext::GetSuggestThreadCount());
-		//Ptr->ProcessTask(2);
+		Ptr->ProcessTask({});
 	}
-
-	std::this_thread::sleep_for(std::chrono::seconds{20});
 
 	volatile int i = 0;
 }

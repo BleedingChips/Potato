@@ -24,16 +24,17 @@ export namespace Potato::Task
 		VeryLow = 1,
 	};
 
+
+	enum class Category : std::size_t
+	{
+		GLOBAL_TASK,
+		GROUP_TASK,
+		THREAD_TASK
+	};
+
+
 	struct TaskProperty
 	{
-
-		enum class Category
-		{
-			GLOBAL_TASK,
-			GROUP_TASK,
-			THREAD_TASK
-		};
-
 		Priority priority = Priority::Normal;
 		std::u8string_view name = u8"Unnamed Task";
 		std::array<std::size_t, 2> user_data;
@@ -48,11 +49,18 @@ export namespace Potato::Task
 		Close
 	};
 
+	enum class ThreadAcceptable : std::size_t
+	{
+		UnAccept,
+		SpecialAccept,
+		AcceptAll
+	};
+
 	struct ThreadProperty
 	{
 		std::size_t group_id = 0;
-		bool execute_global_task = true;
-		bool execute_group_task = true;
+		ThreadAcceptable global_accept = ThreadAcceptable::AcceptAll;
+		ThreadAcceptable group_accept = ThreadAcceptable::SpecialAccept;
 		std::u8string_view name;
 	};
 
@@ -88,48 +96,6 @@ export namespace Potato::Task
 		friend struct Potato::Pointer::DefaultIntrusiveWrapper;
 	};
 
-
-	/*
-	struct TaskQueue
-	{
-
-		struct TaskTuple
-		{
-			TaskProperty property;
-			Task::Ptr task;
-		};
-
-		void InsertTask(Task::Ptr task, TaskProperty property);
-		void InsertTask(Task::Ptr task, TaskProperty property, std::chrono::system_clock::time_point time_point);
-		std::optional<TaskTuple> PopTask(ThreadProperty property, std::thread::id thread_id, std::chrono::system_clock::time_point current_time, bool accept_all_group);
-		std::size_t CheckTimeTask(ThreadProperty property, std::thread::id thread_id, bool accept_all_group);
-		TaskQueue(std::pmr::memory_resource* resource);
-
-	protected:
-
-		static bool Accept(TaskProperty const& property, ThreadProperty const& thread_property, std::thread::id thread_id, bool accept_all_group);
-
-		struct TimeTuple
-		{
-			TaskTuple tuple;
-			std::chrono::system_clock::time_point time_point;
-		};
-
-		struct LineUpTuple
-		{
-			TaskTuple tuple;
-			std::size_t priority;
-		};
-
-		std::chrono::system_clock::time_point min_time_point = std::chrono::system_clock::time_point::max();
-
-		std::pmr::vector<TimeTuple> time_task;
-		std::pmr::vector<LineUpTuple> line_up_task;
-		bool already_add_priority = false;
-
-	};
-	*/
-
 	export struct TaskContext : public Pointer::DefaultControllerViewerInterface
 	{
 		using Ptr = Pointer::ControllerPtr<TaskContext>;
@@ -146,9 +112,12 @@ export namespace Potato::Task
 		void RequestCloseGroupThread(std::size_t thread_id);
 		void RequestCloseAllThread();
 
-		void ProcessTask(std::optional<std::size_t> override_group_id = {}, bool flush_timer = false);
+		void ProcessTask(ThreadProperty property, bool flush_timer = false);
+		void WaitForEmptyTask();
 
-		std::size_t CloseThread();
+		std::size_t CloseAllThread();
+		std::size_t CloseAllThreadAndWait();
+
 		bool CommitTask(Task::Ptr task, TaskProperty property = {});
 		bool CommitDelayTask(Task::Ptr task, std::chrono::steady_clock::time_point time_point, TaskProperty property = {});
 		bool CommitDelayTask(Task::Ptr task, std::chrono::steady_clock::duration duration, TaskProperty property = {})
@@ -170,20 +139,19 @@ export namespace Potato::Task
 			Task::Ptr task;
 		};
 
-		static bool Accept(TaskProperty const& property, ThreadProperty const& thread_property, std::thread::id thread_id, bool accept_all_group);
-		std::optional<TaskTuple> PopLineUpTask(ThreadProperty property, std::thread::id thread_id, std::chrono::system_clock::time_point current_time, bool accept_all_group);
+		static bool Accept(TaskProperty const& property, ThreadProperty const& thread_property, std::thread::id thread_id);
+		std::optional<TaskTuple> PopLineUpTask(ThreadProperty property, std::thread::id thread_id, std::chrono::steady_clock::time_point current_time);
 
 		virtual void ViewerRelease() override;
 		virtual void ControllerRelease() override;
 
 		void TimerThreadExecute(std::stop_token ST);
-		void LineUpThreadExecute(std::stop_token ST, std::size_t index, ThreadProperty property, std::thread::id thread_id);
+		void LineUpThreadExecute(std::stop_token ST, ThreadProperty property, std::thread::id thread_id);
 
 		using WPtr = Pointer::ViewerPtr<TaskContext>;
 
 		Potato::IR::MemoryResourceRecord record;
 
-		
 
 		std::shared_mutex thread_mutex;
 		
@@ -195,9 +163,8 @@ export namespace Potato::Task
 		};
 		std::pmr::vector<ThreadCore> thread;
 
-		std::mutex timer_mutex;
-		std::jthread timer_thread;
-		std::condition_variable timer_cv;
+		std::shared_mutex execute_thread_mutex;
+
 		std::chrono::steady_clock::time_point last_time_point = std::chrono::steady_clock::time_point::max();
 		struct TimerTaskTuple
 		{
@@ -206,7 +173,6 @@ export namespace Potato::Task
 		};
 		std::pmr::vector<TimerTaskTuple> timed_task;
 
-		std::shared_mutex line_up_thread_mutex;
 		struct LineUpTuple
 		{
 			TaskTuple tuple;
