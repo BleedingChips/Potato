@@ -252,11 +252,12 @@ namespace Potato::Task
 
 	void TaskContext::LineUpThreadExecute(std::stop_token ST, ThreadProperty property, std::thread::id thread_id)
 	{
-		TaskTuple current_task;
+		
 		Status loc_status = Status::Normal;
 		bool last_execute = false;
 		while(true)
 		{
+			TaskTuple current_task;
 			auto stop_require = ST.stop_requested();
 
 			if(execute_thread_mutex.try_lock())
@@ -269,39 +270,14 @@ namespace Potato::Task
 					total_task_count -= 1;
 					last_execute = false;
 				}
+
+				if(stop_require || loc_status == Status::Close)
+					return;
+
 				auto re = PopLineUpTask(property, thread_id, std::chrono::steady_clock::now());
 				if(re)
 				{
 					current_task = std::move(*re);
-				}else
-				{
-					if(stop_require)
-					{
-						bool Exist = false;
-						if(thread_mutex.try_lock())
-						{
-							std::lock_guard lg(thread_mutex, std::adopt_lock);
-							for(auto& ite : timed_task)
-							{
-								if(Accept(ite.tuple.property, property, thread_id))
-								{
-									Exist = true;
-									break;
-								}
-							}
-						}else
-						{
-							Exist = true;
-						}
-						if(!Exist)
-							break;
-					}
-
-					if(loc_status == Status::Close)
-					{
-						if(total_task_count == 0)
-							break;
-					}
 				}
 			}else
 			{
