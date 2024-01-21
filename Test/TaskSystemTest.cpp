@@ -8,7 +8,8 @@ int main()
 {
 
 	{
-		auto Ptr = TaskContext::Create();
+
+		TaskContext context;
 
 		std::size_t Count = 0;
 		auto Lambda = Task::CreateLambdaTask([&Count](Potato::Task::ExecuteStatus Status, Potato::Task::Task::Ptr This){
@@ -30,10 +31,10 @@ int main()
 		tp.group_id = 1;
 		tp.thread_id = std::this_thread::get_id();
 
-		Ptr->CommitTask(Lambda, tp);
+		context.CommitTask(Lambda, tp);
 		//Ptr->CommitTask(Lambda2);
-		Ptr->AddGroupThread({}, TaskContext::GetSuggestThreadCount());
-		Ptr->ProcessTask({});
+		context.AddGroupThread({}, TaskContext::GetSuggestThreadCount());
+		context.ProcessTask({});
 	}
 
 	volatile int i = 0;

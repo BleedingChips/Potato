@@ -106,47 +106,9 @@ namespace Potato::Task
 		return std::nullopt;
 	}
 
-	void TaskContext::ViewerRelease()
+	TaskContext::TaskContext(std::pmr::memory_resource* resource)
+		: timed_task(resource), thread(resource), line_up_task(resource)
 	{
-		auto rec = record;
-		assert(rec);
-		this->~TaskContext();
-		rec.Deallocate();
-	}
-
-	void TaskContext::ControllerRelease()
-	{
-		{
-			std::lock_guard lg(execute_thread_mutex);
-			status = Status::Close;
-		}
-		ThreadProperty property
-		{
-			0,
-			ThreadAcceptable::AcceptAll,
-			ThreadAcceptable::UnAccept,
-			u8"TaskContext::ControllerRelease"
-		};
-		ProcessTask(property, {});
-		CloseAllThreadAndWait();
-	}
-
-	auto TaskContext::Create(std::pmr::memory_resource* resource)->Ptr
-	{
-		assert(resource != nullptr);
-		auto record = Potato::IR::MemoryResourceRecord::Allocate<TaskContext>(resource);
-		if(record)
-		{
-			Ptr ptr = new (record.Get()) TaskContext { record };
-			return ptr;
-		}
-		return {};
-	}
-
-	TaskContext::TaskContext(Potato::IR::MemoryResourceRecord record)
-		: record(record), timed_task(record.GetResource()), thread(record.GetResource()), line_up_task(record.GetResource())
-	{
-		assert(record);
 	}
 
 	std::size_t TaskContext::GetSuggestThreadCount()
@@ -156,21 +118,27 @@ namespace Potato::Task
 
 	TaskContext::~TaskContext()
 	{
-		auto id = std::this_thread::get_id();
-
 		{
-			std::lock_guard lg(thread_mutex);
-			while(!thread.empty())
+			std::lock_guard lg(execute_thread_mutex);
+			status = Status::Close;
+		}
+		CloseAllThreadAndWait();
+
+		while(!timed_task.empty() || !line_up_task.empty())
+		{
+			TaskTuple tup;
+			if(!timed_task.empty())
 			{
-				auto top = std::move(*thread.rbegin());
-				thread.pop_back();
-				if(top.thread.joinable())
-				{
-					if (top.thread.get_id() == id)
-						top.thread.detach();
-					else
-						top.thread.join();
-				}
+				tup = std::move(timed_task.rbegin()->tuple);
+				timed_task.pop_back();
+			}else if(!line_up_task.empty())
+			{
+				tup = std::move(line_up_task.rbegin()->tuple);
+				line_up_task.pop_back();
+			}
+			if(tup.task)
+			{
+				tup.task->Terminal(tup.property);
 			}
 		}
 	}
@@ -181,12 +149,10 @@ namespace Potato::Task
 		thread.reserve(thread.size() + thread_count);
 		for(std::size_t o = 0; o < thread_count; ++o)
 		{
-			WPtr wptr{ this };
 
-			auto jthread = std::jthread{ [wptr = std::move(wptr), property](std::stop_token token)
+			auto jthread = std::jthread{ [this, property](std::stop_token token)
 				{
-					assert(wptr);
-					wptr->LineUpThreadExecute(std::move(token), property, std::this_thread::get_id());
+					LineUpThreadExecute(std::move(token), property, std::this_thread::get_id());
 				} };
 			auto id = jthread.get_id();
 

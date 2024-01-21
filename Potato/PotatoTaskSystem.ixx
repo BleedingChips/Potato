@@ -90,17 +90,15 @@ export namespace Potato::Task
 		virtual void SubRef() const = 0;
 
 		virtual void operator()(ExecuteStatus& status) = 0;
+		virtual void Terminal(TaskProperty property) noexcept {};
 		virtual ~Task() = default;
 
 		friend struct TaskContext;
 		friend struct Potato::Pointer::DefaultIntrusiveWrapper;
 	};
 
-	export struct TaskContext : public Pointer::DefaultControllerViewerInterface
+	export struct TaskContext
 	{
-		using Ptr = Pointer::ControllerPtr<TaskContext>;
-
-		static Ptr Create(std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
 		static std::size_t GetSuggestThreadCount();
 
@@ -125,11 +123,11 @@ export namespace Potato::Task
 			return CommitDelayTask(std::move(task), std::chrono::steady_clock::now() + duration, property);
 		}
 
+
+		TaskContext(std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 		virtual ~TaskContext();
 
 	protected:
-
-		TaskContext(Potato::IR::MemoryResourceRecord record);
 
 	private:
 
@@ -142,16 +140,7 @@ export namespace Potato::Task
 		static bool Accept(TaskProperty const& property, ThreadProperty const& thread_property, std::thread::id thread_id);
 		std::optional<TaskTuple> PopLineUpTask(ThreadProperty property, std::thread::id thread_id, std::chrono::steady_clock::time_point current_time);
 
-		virtual void ViewerRelease() override;
-		virtual void ControllerRelease() override;
-
-		void TimerThreadExecute(std::stop_token ST);
 		void LineUpThreadExecute(std::stop_token ST, ThreadProperty property, std::thread::id thread_id);
-
-		using WPtr = Pointer::ViewerPtr<TaskContext>;
-
-		Potato::IR::MemoryResourceRecord record;
-
 
 		std::shared_mutex thread_mutex;
 		
