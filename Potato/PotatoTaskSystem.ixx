@@ -66,11 +66,9 @@ export namespace Potato::Task
 
 	struct ExecuteStatus
 	{
-		Status content_status = Status::Normal;
+		Status status = Status::Normal;
 		TaskContext& context;
 		TaskProperty task_property;
-		
-		Status thread_status = Status::Normal;
 		std::thread::id thread_id;
 		ThreadProperty thread_property;
 	};
@@ -110,8 +108,43 @@ export namespace Potato::Task
 		void RequestCloseGroupThread(std::size_t thread_id);
 		void RequestCloseAllThread();
 
-		void ProcessTask(ThreadProperty property, bool flush_timer = false);
-		void WaitForEmptyTask();
+		struct ContextStatus
+		{
+			std::size_t exist_task_count = 0;
+			bool executed = false;
+			bool has_acceptable_task = false;
+		};
+
+		template<typename Func>
+		std::size_t ProcessTask(ThreadProperty property, Func&& stop_condition, std::chrono::steady_clock::duration sleep_time = std::chrono::microseconds{10})
+			requires(std::is_invocable_r_v<bool, Func, ContextStatus>)
+		{
+			std::size_t count = 0;
+			auto id = std::this_thread::get_id();
+			while(true)
+			{
+				auto re = ProcessTaskOnce(property, id, std::chrono::steady_clock::now());
+				if(stop_condition(re))
+				{
+					if(!re.executed)
+					{
+						std::this_thread::sleep_for(sleep_time);
+					}else
+					{
+						count += 1;
+						std::this_thread::yield();
+					}
+				}else
+				{
+					return count;
+				}
+			}
+		}
+
+		std::size_t ProcessTaskUntillNoExitsTask(ThreadProperty property, std::chrono::steady_clock::duration sleep_time = std::chrono::microseconds{ 10 })
+		{
+			return ProcessTask(property, [](ContextStatus status)->bool{ return status.exist_task_count != 0; }, sleep_time);
+		}
 
 		std::size_t CloseAllThread();
 		std::size_t CloseAllThreadAndWait();
@@ -138,9 +171,11 @@ export namespace Potato::Task
 		};
 
 		static bool Accept(TaskProperty const& property, ThreadProperty const& thread_property, std::thread::id thread_id);
-		std::optional<TaskTuple> PopLineUpTask(ThreadProperty property, std::thread::id thread_id, std::chrono::steady_clock::time_point current_time);
+		std::tuple<std::optional<TaskTuple>, bool> PopLineUpTask(ThreadProperty property, std::thread::id thread_id, std::chrono::steady_clock::time_point current_time);
 
 		void LineUpThreadExecute(std::stop_token ST, ThreadProperty property, std::thread::id thread_id);
+
+		ContextStatus ProcessTaskOnce(ThreadProperty property, std::thread::id thread_id, std::chrono::steady_clock::time_point current);
 
 		std::shared_mutex thread_mutex;
 		
@@ -152,20 +187,13 @@ export namespace Potato::Task
 		};
 		std::pmr::vector<ThreadCore> thread;
 
-		std::shared_mutex execute_thread_mutex;
-
-		std::chrono::steady_clock::time_point last_time_point = std::chrono::steady_clock::time_point::max();
-		struct TimerTaskTuple
-		{
-			TaskTuple tuple;
-			std::chrono::steady_clock::time_point time_point;
-		};
-		std::pmr::vector<TimerTaskTuple> timed_task;
-
+		std::mutex execute_thread_mutex;
+		std::condition_variable cv;
 		struct LineUpTuple
 		{
 			TaskTuple tuple;
 			std::size_t priority;
+			std::optional<std::chrono::steady_clock::time_point> time_point;
 		};
 		std::pmr::vector<LineUpTuple> line_up_task;
 		std::size_t total_task_count = 0;
