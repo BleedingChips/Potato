@@ -113,6 +113,7 @@ export namespace Potato::Task
 			std::size_t exist_task_count = 0;
 			bool executed = false;
 			bool has_acceptable_task = false;
+			std::chrono::steady_clock::time_point next_waiting_task;
 		};
 
 		template<typename Func>
@@ -171,7 +172,7 @@ export namespace Potato::Task
 		};
 
 		static bool Accept(TaskProperty const& property, ThreadProperty const& thread_property, std::thread::id thread_id);
-		std::tuple<std::optional<TaskTuple>, bool> PopLineUpTask(ThreadProperty property, std::thread::id thread_id, std::chrono::steady_clock::time_point current_time);
+		std::tuple<std::optional<TaskTuple>, std::chrono::steady_clock::time_point> PopLineUpTask(ThreadProperty property, std::thread::id thread_id, std::chrono::steady_clock::time_point current_time);
 
 		void LineUpThreadExecute(std::stop_token ST, ThreadProperty property, std::thread::id thread_id);
 

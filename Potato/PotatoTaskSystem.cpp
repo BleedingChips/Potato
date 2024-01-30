@@ -37,13 +37,13 @@ namespace Potato::Task
 	}
 
 	auto TaskContext::PopLineUpTask(ThreadProperty property, std::thread::id thread_id, std::chrono::steady_clock::time_point current_time)
-		-> std::tuple<std::optional<TaskTuple>, bool>
+		-> std::tuple<std::optional<TaskTuple>, std::chrono::steady_clock::time_point>
 	{
 
 		std::size_t max_priority = 0;
 		auto max_ite = line_up_task.end();
 
-		bool has_require = false;
+		std::chrono::steady_clock::time_point min_time_point = std::chrono::steady_clock::time_point::max();
 
 		for (auto ite = line_up_task.begin(); ite != line_up_task.end(); ++ite)
 		{
@@ -53,7 +53,10 @@ namespace Potato::Task
 					ite->time_point.reset();
 				else
 				{
-					has_require = (has_require || Accept(ite->tuple.property, property, thread_id));
+					if((min_time_point > *ite->time_point) && Accept(ite->tuple.property, property, thread_id))
+					{
+						min_time_point = *ite->time_point;
+					}
 					continue;
 				}
 			}
@@ -69,10 +72,7 @@ namespace Potato::Task
 			{
 				max_priority = ite->priority;
 				max_ite = ite;
-				has_require = true;
 			}
-
-			has_require = (has_require || Accept(ite->tuple.property, property, thread_id));
 		}
 
 		already_add_priority = true;
@@ -87,9 +87,9 @@ namespace Potato::Task
 			}
 			TaskTuple result = std::move(next->tuple);
 			line_up_task.erase(next, line_up_task.end());
-			return {result, true};
+			return {result, min_time_point };
 		}
-		return {std::nullopt, true};
+		return {std::nullopt, min_time_point };
 	}
 
 	TaskContext::TaskContext(std::pmr::memory_resource* resource)
@@ -107,6 +107,7 @@ namespace Potato::Task
 		{
 			std::lock_guard lg(execute_thread_mutex);
 			status = Status::Close;
+			cv.notify_all();
 		}
 		
 		CloseAllThreadAndWait();
@@ -244,7 +245,6 @@ namespace Potato::Task
 
 	void TaskContext::LineUpThreadExecute(std::stop_token ST, ThreadProperty property, std::thread::id thread_id)
 	{
-		
 		Status loc_status = Status::Normal;
 		bool last_execute = false;
 		while(true)
@@ -271,22 +271,22 @@ namespace Potato::Task
 					if(stop_require || loc_status == Status::Close)
 						return;
 
-					auto [re, other] = PopLineUpTask(property, thread_id, std::chrono::steady_clock::now());
+					auto [re, tp] = PopLineUpTask(property, thread_id, std::chrono::steady_clock::now());
 
 					if(re.has_value())
 					{
 						current_task = std::move(*re);
 						break;
-					}else if(!other)
+					}else if(tp != std::chrono::steady_clock::time_point::max())
 					{
-						cv.wait_for(lg, std::chrono::seconds{1});
+						cv.wait_until(lg, tp);
 					}else
 					{
-						break;
+						cv.wait(lg);
 					}
 				}
 			}
-			
+			assert(current_task.task);
 			if(current_task.task)
 			{
 				ExecuteStatus status{
@@ -299,10 +299,6 @@ namespace Potato::Task
 				current_task.task->operator()(status);
 				last_execute = true;
 				current_task.task.Reset();
-				std::this_thread::yield();
-			}else
-			{
-				std::this_thread::sleep_for(std::chrono::milliseconds{1});
 			}
 		}
 	}
@@ -323,7 +319,8 @@ namespace Potato::Task
 			}
 			loc_status = status;
 			re_status.exist_task_count = total_task_count;
-			re_status.has_acceptable_task = exits;
+			re_status.has_acceptable_task = tuple.task;
+			re_status.next_waiting_task = exits;
 		}
 
 		if(tuple.task)
