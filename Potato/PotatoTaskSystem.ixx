@@ -32,9 +32,10 @@ export namespace Potato::Task
 		THREAD_TASK
 	};
 
-	struct UserData
+	struct AppendData
 	{
 		std::array<std::size_t, 2> datas;
+		std::size_t& operator[](std::size_t index) { return datas[index]; }
 	};
 
 
@@ -42,7 +43,6 @@ export namespace Potato::Task
 	{
 		Priority priority = Priority::Normal;
 		std::u8string_view name = u8"Unnamed Task";
-		UserData user_data;
 		Category category = Category::GLOBAL_TASK;
 		std::size_t group_id = 0;
 		std::thread::id thread_id;
@@ -76,27 +76,29 @@ export namespace Potato::Task
 		TaskProperty task_property;
 		std::thread::id thread_id;
 		ThreadProperty thread_property;
+		AppendData user_data;
+	};
+
+	struct PointerWrapper
+	{
+		void AddRef(struct Task* ptr);
+		void SubRef(struct Task* ptr);
+		void AddRef(struct TaskFlowNode* ptr);
+		void SubRef(struct TaskFlowNode* ptr);
+
+
+		PointerWrapper(PointerWrapper const&) = default;
+		PointerWrapper(PointerWrapper&&) = default;
+		PointerWrapper() = default;
+		PointerWrapper& operator=(PointerWrapper const&) = default;
+		PointerWrapper& operator=(PointerWrapper&&) = default;
+
 	};
 
 	struct Task
 	{
 
-		struct TaskWrapper
-		{
-			void AddRef(Task* ptr) { ptr->AddTaskRef(); }
-			void SubRef(Task* ptr) { ptr->SubTaskRef(); }
-
-			TaskWrapper(TaskWrapper&&) = default;
-			TaskWrapper(TaskWrapper const&) = default;
-			TaskWrapper() = default;
-			TaskWrapper& operator=(TaskWrapper&&) = default;
-			TaskWrapper& operator=(TaskWrapper const&) = default;
-
-			template<typename OT>
-			TaskWrapper(OT const&) {}
-		};
-
-		using Ptr = Pointer::IntrusivePtr<Task, TaskWrapper>;
+		using Ptr = Pointer::IntrusivePtr<Task, PointerWrapper>;
 
 		template<typename FunT>
 		static Ptr CreateLambdaTask(FunT&& func, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
@@ -113,7 +115,7 @@ export namespace Potato::Task
 		virtual ~Task() = default;
 
 		friend struct TaskContext;
-		friend struct Potato::Pointer::DefaultIntrusiveWrapper;
+		friend struct PointerWrapper;
 	};
 
 	export struct TaskContext
@@ -171,11 +173,11 @@ export namespace Potato::Task
 		std::size_t CloseAllThread();
 		std::size_t CloseAllThreadAndWait();
 
-		bool CommitTask(Task::Ptr task, TaskProperty property = {});
-		bool CommitDelayTask(Task::Ptr task, std::chrono::steady_clock::time_point time_point, TaskProperty property = {});
-		bool CommitDelayTask(Task::Ptr task, std::chrono::steady_clock::duration duration, TaskProperty property = {})
+		bool CommitTask(Task::Ptr task, TaskProperty property = {}, AppendData data = {});
+		bool CommitDelayTask(Task::Ptr task, std::chrono::steady_clock::time_point time_point, TaskProperty property = {}, AppendData data = {});
+		bool CommitDelayTask(Task::Ptr task, std::chrono::steady_clock::duration duration, TaskProperty property = {}, AppendData data = {})
 		{
-			return CommitDelayTask(std::move(task), std::chrono::steady_clock::now() + duration, property);
+			return CommitDelayTask(std::move(task), std::chrono::steady_clock::now() + duration, property, data);
 		}
 
 
@@ -190,6 +192,7 @@ export namespace Potato::Task
 		{
 			TaskProperty property;
 			Task::Ptr task;
+			AppendData data;
 		};
 
 		static bool Accept(TaskProperty const& property, ThreadProperty const& thread_property, std::thread::id thread_id);
@@ -228,75 +231,64 @@ export namespace Potato::Task
 
 	using TaskFlowPtr = Potato::Pointer::IntrusivePtr<TaskFlow>;
 
-	struct TaskFlowStatus
+	struct TaskFlowPause
 	{
 		TaskFlowPtr owner;
 		std::size_t self_index;
+		TaskProperty property;
+
+		void Continue(TaskContext& context);
 	};
 
-	struct TaskFlowNodeInterface
+	struct TaskFlowStatus
 	{
-		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlowNodeInterface>;
+		Status status = Status::Normal;
+		TaskContext& context;
+		TaskProperty task_property;
+		ThreadProperty thread_property;
+		TaskFlowPtr owner;
+		std::size_t self_index;
+
+		TaskFlowPause SetPause();
+	};
+
+	struct TaskFlowNode
+	{
+		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlowNode>;
+
+	protected:
 
 		virtual void AddTaskNodeRef() const = 0;
 		virtual void SubTaskNodeRef() const = 0;
 
-		virtual void operator()(ExecuteStatus& status, TaskFlowStatus& flow_status) = 0;
-		virtual void Terminal(std::optional<TaskProperty> property) {}
-		virtual bool TryLogin(TaskFlow& owner, std::size_t index) { return true; }
+		virtual void operator()(TaskFlowStatus& status) = 0;
+		virtual void Terminal() {}
 
+		friend struct TaskFlow;
+		friend struct PointerWrapper;
 		//virtual void Execute(ExecuteStatus status, Potato::Pointer::IntrusivePtr<> Owner, ) = 0;
 	};
 
 
-	export struct TaskFlow : public TaskFlowNodeInterface, public Task
+	struct TaskFlowGraphic
+	{
+		
+	};
+
+	export struct TaskFlow : public TaskFlowNode, public Task
 	{
 		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlow>;
-		TaskFlow(std::pmr::memory_resource* mr);
 
-		enum class Type
-		{
-			STATIC,
-			DYNAMIC,
-		};
-
-		struct Wrapper
-		{
-			Type type;
-			TaskFlow& flow;
-		};
-
-		struct NodeIndex
-		{
-			Type type = Type::STATIC;
-			std::size_t index = 0;
-		};
-
-
-		struct Builder
-		{
-			std::optional<std::size_t> AddNode(TaskFlowNodeInterface::Ptr node, std::optional<TaskProperty> property, std::optional<std::chrono::steady_clock::duration> delay);
-
-			bool AddDependence(std::size_t form, std::size_t to);
-			bool AddMutex(std::size_t form, std::size_t to);
-
-		protected:
-
-			Builder(TaskFlow& f) : flow(f) {}
-			TaskFlow& flow;
-
-			friend struct TaskFlow;
-		};
-
-		template<typename Func>
-		decltype(auto) Lock(Func&& func) requires(std::is_invocable_v<Func, Builder&>)
-		{
-			std::lock_guard lg(node_mutex);
-			Builder builder{*this};
-			return func(builder);
-		}
+		TaskFlow(TaskFlowGraphic graphic, std::pmr::memory_resource* mr);
 
 	protected:
+
+		virtual void operator()(ExecuteStatus& status) override;
+		virtual void operator()(TaskFlowStatus& status) override;
+		virtual void StartTaskFlow(TaskContext& context) {};
+		virtual void EndTaskFlow(TaskContext& context) {};
+
+		void FinishTask(TaskContext& context, std::size_t index, TaskProperty property);
 
 		enum class Status
 		{
@@ -307,7 +299,7 @@ export namespace Potato::Task
 
 		struct Node
 		{
-			TaskFlowNodeInterface::Ptr node;
+			TaskFlowNode::Ptr node;
 			std::size_t in_degree;
 			std::size_t mutex_degree;
 			Misc::IndexSpan<> edge_index;
@@ -320,23 +312,44 @@ export namespace Potato::Task
 			std::size_t to;
 		};
 
-		mutable std::mutex node_mutex;
+		mutable std::mutex flow_mutex;
 		std::pmr::vector<Node> static_nodes;
 		std::pmr::vector<Edge> static_edges;
+		std::pmr::vector<TaskFlowPause> pause;
 
 		friend struct Potato::Pointer::DefaultIntrusiveWrapper;
 		friend struct Builder;
 	};
 
-	struct TaskFlowNode : private TaskFlowNodeInterface
+	struct DefaultTaskFlow : public TaskFlow
 	{
 		
-	protected:
-		TaskFlow::Ptr owner;
-		std::size_t owner_id = 0;
-
-		friend struct Potato::Pointer::DefaultIntrusiveWrapper;
 	};
+
+	inline void PointerWrapper::AddRef(Task* ptr)
+	{
+		ptr->AddTaskRef();
+	}
+
+	inline void PointerWrapper::SubRef(Task* ptr)
+	{
+		ptr->SubTaskRef();
+	}
+
+	void PointerWrapper::AddRef(TaskFlowNode* ptr)
+	{
+		ptr->AddTaskNodeRef();
+	}
+
+	void PointerWrapper::SubRef(TaskFlowNode* ptr)
+	{
+		ptr->SubTaskNodeRef();
+	}
+
+
+
+
+
 
 }
 

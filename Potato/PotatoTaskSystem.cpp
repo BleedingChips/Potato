@@ -207,14 +207,14 @@ namespace Potato::Task
 	}
 
 
-	bool TaskContext::CommitTask(Task::Ptr task, TaskProperty property)
+	bool TaskContext::CommitTask(Task::Ptr task, TaskProperty property, AppendData data)
 	{
 		if(task)
 		{
 			std::lock_guard lg(execute_thread_mutex);
 			line_up_task.push_back(
 				LineUpTuple{
-				TaskTuple{property, std::move(task)},
+				TaskTuple{property, std::move(task), data},
 					static_cast<std::size_t>(property.priority),
 					std::nullopt
 				}
@@ -226,13 +226,13 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskContext::CommitDelayTask(Task::Ptr task, std::chrono::steady_clock::time_point time_point, TaskProperty property)
+	bool TaskContext::CommitDelayTask(Task::Ptr task, std::chrono::steady_clock::time_point time_point, TaskProperty property, AppendData data)
 	{
 		if (task)
 		{
 			std::lock_guard lg(execute_thread_mutex);
 			line_up_task.emplace_back(
-				TaskTuple{property, std::move(task)},
+				TaskTuple{property, std::move(task), data},
 				static_cast<std::size_t>(property.priority),
 				time_point
 			);
@@ -294,7 +294,8 @@ namespace Potato::Task
 						*this,
 						current_task.property,
 						thread_id,
-					property
+					property,
+					current_task.data
 				};
 				current_task.task->operator()(status);
 				last_execute = true;
@@ -331,7 +332,8 @@ namespace Potato::Task
 						*this,
 						tuple.property,
 						thread_id,
-					property
+					property,
+				tuple.data
 			};
 			tuple.task->operator()(status);
 
@@ -341,4 +343,68 @@ namespace Potato::Task
 		}
 		return re_status;
 	}
+
+	void TaskFlow::operator()(ExecuteStatus& status)
+	{
+		auto& ud = status.user_data;
+		auto ptr = reinterpret_cast<TaskFlowNode*>(ud[0]);
+		if(ptr == nullptr)
+		{
+			if(ud[1] == 0)
+			{
+				StartTaskFlow(status.context);
+			}else if(ud[1] == 1)
+			{
+				EndTaskFlow(status.context);
+				{
+					std::lock_guard lg(flow_mutex);
+					while (!pause.empty())
+					{
+						auto pau = std::move(*pause.rbegin());
+						pau.Continue(status.context);
+						pause.pop_back();
+					}
+				}
+			}else
+			{
+				assert(false);
+			}
+
+		}else
+		{
+			TaskFlowStatus TFS{
+				status.status,
+				status.context,
+				status.task_property,
+				status.thread_property,
+				this,
+				ud[1]
+			};
+
+			ptr->operator()(TFS);
+
+			FinishTask(status.context, ud[1], status.task_property);
+		}
+	}
+
+	void TaskFlow::operator()(TaskFlowStatus& status)
+	{
+		{
+			std::lock_guard lg(flow_mutex);
+			pause.push_back(status.SetPause());
+		}
+
+		AppendData data;
+		data[0] = 0;
+		data[1] = 0;
+
+		status.context.CommitTask(
+			this,
+			status.task_property,
+			data
+		);
+	}
+
+
+
 }
