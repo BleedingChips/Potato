@@ -79,26 +79,18 @@ export namespace Potato::Task
 		AppendData user_data;
 	};
 
-	struct PointerWrapper
-	{
-		void AddRef(struct Task* ptr);
-		void SubRef(struct Task* ptr);
-		void AddRef(struct TaskFlowNode* ptr);
-		void SubRef(struct TaskFlowNode* ptr);
-
-
-		PointerWrapper(PointerWrapper const&) = default;
-		PointerWrapper(PointerWrapper&&) = default;
-		PointerWrapper() = default;
-		PointerWrapper& operator=(PointerWrapper const&) = default;
-		PointerWrapper& operator=(PointerWrapper&&) = default;
-
-	};
+	
 
 	struct Task
 	{
 
-		using Ptr = Pointer::IntrusivePtr<Task, PointerWrapper>;
+		struct Wrapper
+		{
+			void AddRef(Task const* ptr) { ptr->AddTaskRef(); }
+			void SubRef(Task const* ptr) { ptr->SubTaskRef(); }
+		};
+
+		using Ptr = Pointer::IntrusivePtr<Task, Wrapper>;
 
 		template<typename FunT>
 		static Ptr CreateLambdaTask(FunT&& func, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
@@ -110,8 +102,8 @@ export namespace Potato::Task
 		virtual void AddTaskRef() const = 0;
 		virtual void SubTaskRef() const = 0;
 
-		virtual void operator()(ExecuteStatus& status) = 0;
-		virtual void Terminal(TaskProperty property) noexcept {};
+		virtual void TaskExecute(ExecuteStatus& status) = 0;
+		virtual void TaskTerminal(TaskProperty property) noexcept {};
 		virtual ~Task() = default;
 
 		friend struct TaskContext;
@@ -227,130 +219,6 @@ export namespace Potato::Task
 		bool already_add_priority = false;
 	};
 
-	export struct TaskFlow;
-
-	using TaskFlowPtr = Potato::Pointer::IntrusivePtr<TaskFlow>;
-
-	struct TaskFlowPause
-	{
-		TaskFlowPtr owner;
-		std::size_t self_index;
-		TaskProperty property;
-
-		void Continue(TaskContext& context);
-	};
-
-	struct TaskFlowStatus
-	{
-		Status status = Status::Normal;
-		TaskContext& context;
-		TaskProperty task_property;
-		ThreadProperty thread_property;
-		TaskFlowPtr owner;
-		std::size_t self_index;
-
-		TaskFlowPause SetPause();
-	};
-
-	struct TaskFlowNode
-	{
-		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlowNode>;
-
-	protected:
-
-		virtual void AddTaskNodeRef() const = 0;
-		virtual void SubTaskNodeRef() const = 0;
-
-		virtual void operator()(TaskFlowStatus& status) = 0;
-		virtual void Terminal() {}
-
-		friend struct TaskFlow;
-		friend struct PointerWrapper;
-		//virtual void Execute(ExecuteStatus status, Potato::Pointer::IntrusivePtr<> Owner, ) = 0;
-	};
-
-
-	struct TaskFlowGraphic
-	{
-		
-	};
-
-	export struct TaskFlow : public TaskFlowNode, public Task
-	{
-		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlow>;
-
-		TaskFlow(TaskFlowGraphic graphic, std::pmr::memory_resource* mr);
-
-	protected:
-
-		virtual void operator()(ExecuteStatus& status) override;
-		virtual void operator()(TaskFlowStatus& status) override;
-		virtual void StartTaskFlow(TaskContext& context) {};
-		virtual void EndTaskFlow(TaskContext& context) {};
-
-		void FinishTask(TaskContext& context, std::size_t index, TaskProperty property);
-
-		enum class Status
-		{
-			Waiting,
-			Baked,
-			Running
-		};
-
-		struct Node
-		{
-			TaskFlowNode::Ptr node;
-			std::size_t in_degree;
-			std::size_t mutex_degree;
-			Misc::IndexSpan<> edge_index;
-		};
-
-		struct Edge
-		{
-			bool is_mutex;
-			std::size_t from;
-			std::size_t to;
-		};
-
-		mutable std::mutex flow_mutex;
-		std::pmr::vector<Node> static_nodes;
-		std::pmr::vector<Edge> static_edges;
-		std::pmr::vector<TaskFlowPause> pause;
-
-		friend struct Potato::Pointer::DefaultIntrusiveWrapper;
-		friend struct Builder;
-	};
-
-	struct DefaultTaskFlow : public TaskFlow
-	{
-		
-	};
-
-	inline void PointerWrapper::AddRef(Task* ptr)
-	{
-		ptr->AddTaskRef();
-	}
-
-	inline void PointerWrapper::SubRef(Task* ptr)
-	{
-		ptr->SubTaskRef();
-	}
-
-	void PointerWrapper::AddRef(TaskFlowNode* ptr)
-	{
-		ptr->AddTaskNodeRef();
-	}
-
-	void PointerWrapper::SubRef(TaskFlowNode* ptr)
-	{
-		ptr->SubTaskNodeRef();
-	}
-
-
-
-
-
-
 }
 
 namespace Potato::Task
@@ -374,7 +242,7 @@ namespace Potato::Task
 			
 		}
 
-		virtual void operator()(ExecuteStatus& Status) override
+		virtual void TaskExecute(ExecuteStatus& Status) override
 		{
 			Task::Ptr ThisPtr{this};
 			TaskInstance.operator()(Status, std::move(ThisPtr));

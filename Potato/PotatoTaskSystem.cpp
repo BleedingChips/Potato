@@ -129,7 +129,7 @@ namespace Potato::Task
 			}
 
 			if(tup.task)
-				tup.task->Terminal(tup.property);
+				tup.task->TaskTerminal(tup.property);
 		}
 	}
 
@@ -297,7 +297,7 @@ namespace Potato::Task
 					property,
 					current_task.data
 				};
-				current_task.task->operator()(status);
+				current_task.task->TaskExecute(status);
 				last_execute = true;
 				current_task.task.Reset();
 			}
@@ -335,7 +335,7 @@ namespace Potato::Task
 					property,
 				tuple.data
 			};
-			tuple.task->operator()(status);
+			tuple.task->TaskExecute(status);
 
 			std::lock_guard lg(execute_thread_mutex);
 			total_task_count -= 1;
@@ -343,68 +343,5 @@ namespace Potato::Task
 		}
 		return re_status;
 	}
-
-	void TaskFlow::operator()(ExecuteStatus& status)
-	{
-		auto& ud = status.user_data;
-		auto ptr = reinterpret_cast<TaskFlowNode*>(ud[0]);
-		if(ptr == nullptr)
-		{
-			if(ud[1] == 0)
-			{
-				StartTaskFlow(status.context);
-			}else if(ud[1] == 1)
-			{
-				EndTaskFlow(status.context);
-				{
-					std::lock_guard lg(flow_mutex);
-					while (!pause.empty())
-					{
-						auto pau = std::move(*pause.rbegin());
-						pau.Continue(status.context);
-						pause.pop_back();
-					}
-				}
-			}else
-			{
-				assert(false);
-			}
-
-		}else
-		{
-			TaskFlowStatus TFS{
-				status.status,
-				status.context,
-				status.task_property,
-				status.thread_property,
-				this,
-				ud[1]
-			};
-
-			ptr->operator()(TFS);
-
-			FinishTask(status.context, ud[1], status.task_property);
-		}
-	}
-
-	void TaskFlow::operator()(TaskFlowStatus& status)
-	{
-		{
-			std::lock_guard lg(flow_mutex);
-			pause.push_back(status.SetPause());
-		}
-
-		AppendData data;
-		data[0] = 0;
-		data[1] = 0;
-
-		status.context.CommitTask(
-			this,
-			status.task_property,
-			data
-		);
-	}
-
-
 
 }
