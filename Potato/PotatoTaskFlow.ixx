@@ -66,7 +66,7 @@ export namespace Potato::Task
 		friend struct TaskFlow;
 	};
 
-
+	/*
 	struct TaskFlowGraphic
 	{
 		struct Edge
@@ -102,6 +102,7 @@ export namespace Potato::Task
 
 		std::pmr::vector<Edge> edges;
 	};
+	*/
 	/*
 	struct TaskFlowGraphic
 	{
@@ -140,10 +141,87 @@ export namespace Potato::Task
 
 		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlow, TaskFlowNode::Wrapper>;
 
+		/*
 		std::optional<std::size_t> AddStaticNode(TaskFlowNode::Ptr node, TaskProperty property = {});
 		std::optional<std::size_t> AddDynamicNode(TaskFlowNode::Ptr node, TaskProperty property = {});
+		*/
 
 		static Ptr CreateDefaultTaskFlow(std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+
+
+		struct TempEdge
+		{
+			bool is_mutex = false;
+			std::size_t form;
+			std::size_t to;
+		};
+
+		struct Graphic
+		{
+			void AddDirectedEdge(std::size_t form, std::size_t to);
+			void AddMutexEdge(std::size_t form, std::size_t to);
+
+		protected:
+
+			Graphic(std::pmr::memory_resource* resource)
+				: edges(resource) {}
+			std::pmr::vector<TempEdge> edges;
+
+			friend struct TaskFlow;
+		};
+
+		struct NodeGraphic : protected Graphic
+		{
+			void AddToEdge(std::size_t to)
+			{
+				++out_degree;
+				Graphic::AddDirectedEdge(std::numeric_limits<std::size_t>::max(), to);
+			}
+			void AddFormEdge(std::size_t form)
+			{
+				++in_degree;
+				Graphic::AddDirectedEdge(form, std::numeric_limits<std::size_t>::max());
+			}
+
+			void AddMutexEdge(std::size_t to)
+			{
+				Graphic::AddMutexEdge(to, std::numeric_limits<std::size_t>::max());
+			}
+
+		protected:
+
+			NodeGraphic(std::pmr::memory_resource* resource) : Graphic(resource) {}
+			std::size_t in_degree = 0;
+			std::size_t out_degree = 0;
+
+			friend struct TaskFlow;
+		};
+
+
+		std::optional<std::size_t> AddNode(TaskFlowNode::Ptr node, TaskProperty property = {}, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource());
+
+		template<typename Func>
+		std::optional<std::size_t> AddNode(Func&& func, TaskFlowNode::Ptr node, TaskProperty property = {}, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource())
+			requires(std::is_invocable_v<Func, NodeGraphic&>)
+		{
+			if(node)
+			{
+				NodeGraphic temp{ temp_resource };
+				func(temp);
+				std::lock_guard lg(flow_mutex);
+				return TryAddNode(std::move(node), property, temp, temp_resource);
+			}
+		}
+
+		template<typename Func>
+		bool ChangeGraphic(Func&& func, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource())
+			requires(std::is_invocable_v<Func, Graphic&>)
+		{
+			Graphic temp{ temp_resource };
+			func(temp);
+			std::lock_guard lg(flow_mutex);
+			return TryChangeGraphic(temp);
+		}
 
 	protected:
 
@@ -156,6 +234,9 @@ export namespace Potato::Task
 		virtual void TaskExecute(ExecuteStatus& status) override;
 		virtual bool TryLogin() override;
 		virtual void Logout() override;
+
+		std::optional<std::size_t> TryAddNode(TaskFlowNode::Ptr node, TaskProperty property, NodeGraphic const& graphic, std::pmr::memory_resource* temp_resource);
+		bool TryChangeGraphic(Graphic const& graphic);
 
 		virtual ~TaskFlow() = default;
 
@@ -187,6 +268,7 @@ export namespace Potato::Task
 		Status status = Status::Idle;
 		std::pmr::vector<Node> nodes;
 		std::pmr::vector<Edge> edges;
+		bool is_modified = false;
 
 		friend struct TaskFlowNode::Wrapper;
 	};

@@ -40,6 +40,22 @@ int main()
 		auto G1 = TaskFlow::CreateDefaultTaskFlow();
 
 
+		auto A1N = *G1->AddNode(A1);
+		auto A2N = G1->AddNode([=](TaskFlow::NodeGraphic& graphic)
+		{
+			graphic.AddFormEdge(A1N);
+		}, A2);
+
+		auto G2 = TaskFlow::CreateDefaultTaskFlow();
+
+		auto G2N = G1->AddNode([](TaskFlow::NodeGraphic& graphic) {}, G2);
+
+
+
+		auto A3N = *G2->AddNode([](TaskFlow::NodeGraphic& graphic) {}, A3);
+		auto A4N = G2->AddNode([](TaskFlow::NodeGraphic& graphic) {}, A4);
+
+		/*
 		auto A1N = *G1->AddStaticNode(A1);
 		auto A2N = *G1->AddStaticNode(A2);
 
@@ -55,6 +71,7 @@ int main()
 		auto A4N = *G2->AddStaticNode(A4);
 
 		auto G2N = *G1->AddStaticNode(G2);
+		*/
 
 
 		TaskProperty tp;

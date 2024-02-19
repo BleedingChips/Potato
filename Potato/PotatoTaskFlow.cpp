@@ -25,6 +25,64 @@ namespace Potato::Task
 		}
 	};
 
+	void TaskFlow::Graphic::AddDirectedEdge(std::size_t form, std::size_t to)
+	{
+		edges.emplace_back(
+			false,
+			form,
+			to
+		);
+	}
+
+	void TaskFlow::Graphic::AddMutexEdge(std::size_t form, std::size_t to)
+	{
+		edges.emplace_back(
+			true,
+			form,
+			to
+		);
+	}
+
+	std::optional<std::size_t> TaskFlow::AddNode(TaskFlowNode::Ptr node, TaskProperty property, std::pmr::memory_resource* temp_resource)
+	{
+		NodeGraphic temp{ temp_resource };
+		std::lock_guard lg(flow_mutex);
+		return TryAddNode(std::move(node), property, temp, temp_resource);
+	}
+
+	std::optional<std::size_t> TaskFlow::TryAddNode(TaskFlowNode::Ptr node, TaskProperty property, NodeGraphic const& graphic, std::pmr::memory_resource* temp_resource)
+	{
+		assert(node);
+		bool enable_insert = true;
+		if(graphic.in_degree != 0 && graphic.out_degree != 0)
+		{
+			
+		}
+		if(enable_insert)
+		{
+			if(status == Status::Idle || status == Status::SubTaskFlow)
+			{
+				auto size = nodes.size();
+				nodes.emplace_back(
+					std::move(node),
+					0,
+					0,
+					property
+				);
+				is_modified = true;
+				return size;
+			}
+		}
+		return std::nullopt;
+	}
+
+	bool TaskFlow::TryChangeGraphic(Graphic const& graphic)
+	{
+		return true;
+	}
+
+
+	/*
 	std::optional<std::size_t> TaskFlow::AddStaticNode(TaskFlowNode::Ptr node, TaskProperty property)
 	{
 		std::lock_guard lg(flow_mutex);
@@ -41,6 +99,7 @@ namespace Potato::Task
 		}
 		return std::nullopt;
 	}
+	*/
 
 	auto TaskFlow::CreateDefaultTaskFlow(std::pmr::memory_resource* resource)->Ptr
 	{
