@@ -129,7 +129,7 @@ namespace Potato::Task
 			}
 
 			if(tup.task)
-				tup.task->TaskTerminal(tup.property);
+				tup.task->TaskTerminal(tup.property, tup.data);
 		}
 	}
 

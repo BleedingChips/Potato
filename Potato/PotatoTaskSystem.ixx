@@ -86,8 +86,10 @@ export namespace Potato::Task
 
 		struct Wrapper
 		{
-			void AddRef(Task const* ptr) { ptr->AddTaskRef(); }
-			void SubRef(Task const* ptr) { ptr->SubTaskRef(); }
+			template<typename T>
+			void AddRef(T* ptr) { ptr->AddTaskRef(); }
+			template<typename T>
+			void SubRef(T* ptr) { ptr->SubTaskRef(); }
 		};
 
 		using Ptr = Pointer::IntrusivePtr<Task, Wrapper>;
@@ -103,7 +105,7 @@ export namespace Potato::Task
 		virtual void SubTaskRef() const = 0;
 
 		virtual void TaskExecute(ExecuteStatus& status) = 0;
-		virtual void TaskTerminal(TaskProperty property) noexcept {};
+		virtual void TaskTerminal(TaskProperty property, AppendData data) noexcept {};
 		virtual ~Task() = default;
 
 		friend struct TaskContext;
