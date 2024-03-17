@@ -20,6 +20,15 @@ export namespace Potato::IR
 		template<typename Type>
 		static constexpr Layout GetArray(std::size_t array_count) { return { alignof(std::remove_cvref_t<Type>), sizeof(std::remove_cvref_t<Type>) * array_count }; }
 		bool operator==(Layout const& l) const { return Align == l.Align && Size == l.Size; }
+		std::strong_ordering operator<=>(Layout const& l2) const
+		{
+			auto re = Align <=> l2.Align;
+			if(re == std::strong_ordering::equal)
+			{
+				return Size <=> l2.Size;
+			}
+			return re;
+		}
 	};
 
 	inline constexpr std::size_t InsertLayoutCPP(Layout& Target, Layout const Inserted)
@@ -62,6 +71,7 @@ export namespace Potato::IR
 		bool operator==(TypeID const& i) const { return ID == i.ID; }
 		TypeID(TypeID const&) = default;
 		TypeID& operator=(TypeID const& i) { ID.~type_index(); new (&ID) std::type_index{i.ID}; return *this; }
+		std::size_t HashCode() const noexcept { return ID.hash_code(); }
 	private:
 		TypeID(std::type_info const& ID) : ID(ID) {}
 		TypeID(std::type_index ID) : ID(ID) {}
@@ -143,6 +153,12 @@ export namespace Potato::IR
 
 		template<typename Type>
 		Type* Cast() const {  assert(sizeof(Type) <= layout.Size && alignof(Type) <= layout.Align); return static_cast<Type*>(adress); }
+
+		template<typename Type>
+		std::span<Type> GetArray(std::size_t element_size, std::size_t offset) const
+		{
+			return std::span<Type>{ reinterpret_cast<Type*>(static_cast<std::byte*>(adress) + offset), element_size };
+		}
 
 		operator bool () const;
 		static MemoryResourceRecord Allocate(std::pmr::memory_resource* resource, Layout layout);
