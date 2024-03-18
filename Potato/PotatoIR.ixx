@@ -19,16 +19,8 @@ export namespace Potato::IR
 		static constexpr Layout Get() { return { alignof(std::remove_cvref_t<Type>), sizeof(std::remove_cvref_t<Type>) }; }
 		template<typename Type>
 		static constexpr Layout GetArray(std::size_t array_count) { return { alignof(std::remove_cvref_t<Type>), sizeof(std::remove_cvref_t<Type>) * array_count }; }
-		bool operator==(Layout const& l) const { return Align == l.Align && Size == l.Size; }
-		std::strong_ordering operator<=>(Layout const& l2) const
-		{
-			auto re = Align <=> l2.Align;
-			if(re == std::strong_ordering::equal)
-			{
-				return Size <=> l2.Size;
-			}
-			return re;
-		}
+		bool operator==(Layout const& l) const noexcept = default;
+		std::strong_ordering operator<=>(Layout const& l2) const noexcept = default;
 	};
 
 	inline constexpr std::size_t InsertLayoutCPP(Layout& Target, Layout const Inserted)
