@@ -34,6 +34,7 @@ export namespace Potato::Task
 		ThreadProperty thread_property;
 		TaskFlow& owner;
 		std::size_t self_index = 0;
+		std::u8string_view display_name;
 	};
 
 	struct TaskFlowNode
@@ -91,7 +92,7 @@ export namespace Potato::Task
 			return {};
 		}
 
-		bool AddNode(TaskFlowNode::Ptr ptr, TaskProperty property = {});
+		bool AddNode(TaskFlowNode::Ptr ptr, TaskProperty property = {}, std::u8string_view display_name = {});
 
 		bool AddDirectEdges(TaskFlowNode::Ptr form, TaskFlowNode::Ptr direct_to);
 		bool AddMutexEdges(TaskFlowNode::Ptr form, TaskFlowNode::Ptr direct_to);
@@ -110,12 +111,14 @@ export namespace Potato::Task
 		std::optional<PausePoint> CreatePause(TaskFlowStatus const& status);
 		bool Update(bool reset_state = false, std::pmr::vector<TaskFlowNode::Ptr>* error_output = nullptr, std::pmr::memory_resource* temp = std::pmr::get_default_resource());
 		bool Commit(TaskContext& context, TaskProperty property = {});
+		bool CommitDelay(TaskContext& context, std::chrono::steady_clock::time_point time_point, TaskProperty property = {});
 		bool Remove(TaskFlowNode::Ptr form);
 
 		TaskFlow(std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
 	protected:
-		
+
+		virtual void OnPostCommit() {}
 		virtual void OnBeginTaskFlow(ExecuteStatus& status) {}
 		virtual void OnFinishTaskFlow(ExecuteStatus& status) {}
 
@@ -150,6 +153,7 @@ export namespace Potato::Task
 			std::size_t edge_count = 0;
 			bool updated = false;
 			bool require_remove = false;
+			std::u8string_view display_name;
 		};
 
 		enum class RunningState
@@ -162,7 +166,6 @@ export namespace Potato::Task
 
 		struct CompiledNode
 		{
-
 			TaskFlowNode::Ptr ptr;
 			RunningState status = RunningState::Idle;
 			std::size_t require_in_degree = 0;
@@ -172,6 +175,7 @@ export namespace Potato::Task
 			Misc::IndexSpan<> directed_span;
 			TaskProperty property;
 			std::size_t require_stop_record;
+			std::u8string_view display_name;
 		};
 
 		std::mutex pre_compiled_mutex;

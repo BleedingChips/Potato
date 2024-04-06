@@ -207,7 +207,7 @@ namespace Potato::Task
 	}
 
 
-	bool TaskContext::CommitTask(Task::Ptr task, TaskProperty property, AppendData data)
+	bool TaskContext::CommitTask(Task::Ptr task, TaskProperty property, AppendData data, std::u8string_view display_name)
 	{
 		if(task)
 		{
@@ -216,7 +216,8 @@ namespace Potato::Task
 				LineUpTuple{
 				TaskTuple{property, std::move(task), data},
 					static_cast<std::size_t>(property.priority),
-					std::nullopt
+					std::nullopt,
+					display_name
 				}
 			);
 			total_task_count += 1;
@@ -226,7 +227,7 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskContext::CommitDelayTask(Task::Ptr task, std::chrono::steady_clock::time_point time_point, TaskProperty property, AppendData data)
+	bool TaskContext::CommitDelayTask(Task::Ptr task, std::chrono::steady_clock::time_point time_point, TaskProperty property, AppendData data, std::u8string_view display_name)
 	{
 		if (task)
 		{
@@ -234,7 +235,8 @@ namespace Potato::Task
 			line_up_task.emplace_back(
 				TaskTuple{property, std::move(task), data},
 				static_cast<std::size_t>(property.priority),
-				time_point
+				time_point,
+				display_name
 			);
 			++total_task_count;
 			cv.notify_all();
@@ -295,7 +297,8 @@ namespace Potato::Task
 						current_task.property,
 						thread_id,
 					property,
-					current_task.data
+					current_task.data,
+					current_task.display_name
 				};
 				current_task.task->TaskExecute(status);
 				last_execute = true;
@@ -333,7 +336,8 @@ namespace Potato::Task
 						tuple.property,
 						thread_id,
 					property,
-				tuple.data
+				tuple.data,
+				tuple.display_name
 			};
 			tuple.task->TaskExecute(status);
 

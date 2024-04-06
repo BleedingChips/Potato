@@ -140,6 +140,7 @@ export namespace Potato::IR
 		Layout layout;
 		void* adress = nullptr;
 		void* Get() const { return adress; }
+		std::byte* GetByte() const { return static_cast<std::byte*>(adress); }
 
 		std::pmr::memory_resource* GetResource() const{ return resource; }
 

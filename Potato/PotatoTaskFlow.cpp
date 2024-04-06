@@ -392,16 +392,10 @@ namespace Potato::Task
 				}
 			}
 		}
-		/*
-		for(auto& ite : require_remove_node)
-		{
-			ite.node->TaskFlowNodeTerminal(ite.property);
-		}
-		*/
 		return HasUpdate;
 	}
 
-	bool TaskFlow::AddNode(TaskFlowNode::Ptr ptr, TaskProperty property)
+	bool TaskFlow::AddNode(TaskFlowNode::Ptr ptr, TaskProperty property, std::u8string_view display_name)
 	{
 		if(ptr)
 		{
@@ -421,7 +415,8 @@ namespace Potato::Task
 					0,
 					0,
 					false,
-					false
+					false,
+					display_name
 				);
 				return true;
 			}
@@ -519,7 +514,8 @@ namespace Potato::Task
 				status.task_property,
 				status.thread_property,
 				*this,
-				status.user_data[1]
+				status.user_data[1],
+				status.display_name
 			};
 			ptr->TaskFlowNodeExecute(tf_status);
 			FinishTaskFlowNode(status.context, status.user_data[1]);
@@ -537,11 +533,11 @@ namespace Potato::Task
 				return;
 			}
 		}
-		OnFinishTaskFlow(status);
 		{
 			std::lock_guard lg(compiled_mutex);
 			running_state = RunningState::Done;
 		}
+		OnFinishTaskFlow(status);
 	}
 
 	bool TaskFlow::Commit(TaskContext& context, TaskProperty property)
@@ -558,6 +554,21 @@ namespace Potato::Task
 		return false;
 	}
 
+	bool TaskFlow::CommitDelay(TaskContext& context, std::chrono::steady_clock::time_point time_point, TaskProperty property)
+	{
+		std::lock_guard lg(compiled_mutex);
+		if (running_state == RunningState::Idle)
+		{
+			if (context.CommitDelayTask(this, time_point, property, { 0, 0 }))
+			{
+				running_state = RunningState::Running;
+				OnPostCommit();
+				return true;
+			}
+		}
+		return false;
+	}
+
 	bool TaskFlow::TryStartSingleTaskFlowImp(TaskContext& context, std::size_t fast_index)
 	{
 		assert(fast_index < compiled_nodes.size());
@@ -568,7 +579,8 @@ namespace Potato::Task
 			if (context.CommitTask(
 				this,
 				ref.property,
-				{ reinterpret_cast<std::size_t>(ref.ptr.GetPointer()), fast_index }
+				{ reinterpret_cast<std::size_t>(ref.ptr.GetPointer()), fast_index },
+				ref.display_name
 			))
 			{
 				auto mutex_span = ref.mutex_span.Slice(std::span(compiled_edges));
@@ -600,20 +612,22 @@ namespace Potato::Task
 
 	void TaskFlow::TaskTerminal(TaskProperty property, AppendData data) noexcept
 	{
-		std::lock_guard lg(compiled_mutex);
-		auto ptr = reinterpret_cast<TaskFlowNode*>(data[0]);
-		if(ptr != nullptr)
 		{
-			auto& ref = compiled_nodes[data[1]];
-			assert(ref.status == RunningState::Running);
-			ref.status = RunningState::Done;
-			assert(exist_task >= 1);
-			exist_task -= 1;
-			run_task += 1;
-		}
-		if (exist_task == 0)
-		{
-			running_state = RunningState::Done;
+			std::lock_guard lg(compiled_mutex);
+			auto ptr = reinterpret_cast<TaskFlowNode*>(data[0]);
+			if (ptr != nullptr)
+			{
+				auto& ref = compiled_nodes[data[1]];
+				assert(ref.status == RunningState::Running);
+				ref.status = RunningState::Done;
+				assert(exist_task >= 1);
+				exist_task -= 1;
+				run_task += 1;
+			}
+			if (exist_task == 0)
+			{
+				running_state = RunningState::Done;
+			}
 		}
 	}
 
