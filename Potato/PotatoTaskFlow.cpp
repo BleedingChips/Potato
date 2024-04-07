@@ -250,6 +250,7 @@ namespace Potato::Task
 						CompiledNode new_node;
 						new_node.ptr = pnode.node;
 						new_node.property = pnode.property;
+						new_node.display_name = pnode.display_name;
 						auto old_edge_node = compiled_edges.size();
 
 						auto mutex_span = unode.mutex_edge.Slice(std::span(u_edges));
@@ -418,6 +419,7 @@ namespace Potato::Task
 					false,
 					display_name
 				);
+				need_update = true;
 				return true;
 			}
 		}
@@ -540,12 +542,12 @@ namespace Potato::Task
 		OnFinishTaskFlow(status);
 	}
 
-	bool TaskFlow::Commit(TaskContext& context, TaskProperty property)
+	bool TaskFlow::Commit(TaskContext& context, TaskProperty property, std::u8string_view display_name)
 	{
 		std::lock_guard lg(compiled_mutex);
 		if(running_state == RunningState::Idle)
 		{
-			if(context.CommitTask(this, property, {0, 0}))
+			if(context.CommitTask(this, property, {0, 0}, display_name))
 			{
 				running_state = RunningState::Running;
 				return true;
@@ -554,12 +556,12 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskFlow::CommitDelay(TaskContext& context, std::chrono::steady_clock::time_point time_point, TaskProperty property)
+	bool TaskFlow::CommitDelay(TaskContext& context, std::chrono::steady_clock::time_point time_point, TaskProperty property, std::u8string_view display_name)
 	{
 		std::lock_guard lg(compiled_mutex);
 		if (running_state == RunningState::Idle)
 		{
-			if (context.CommitDelayTask(this, time_point, property, { 0, 0 }))
+			if (context.CommitDelayTask(this, time_point, property, { 0, 0 }, display_name))
 			{
 				running_state = RunningState::Running;
 				OnPostCommit();

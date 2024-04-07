@@ -215,7 +215,6 @@ export namespace Potato::Task
 			TaskTuple tuple;
 			std::size_t priority;
 			std::optional<std::chrono::steady_clock::time_point> time_point;
-			std::u8string_view display_name;
 		};
 		std::pmr::vector<LineUpTuple> line_up_task;
 		std::size_t total_task_count = 0;

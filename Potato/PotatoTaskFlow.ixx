@@ -82,10 +82,10 @@ export namespace Potato::Task
 		static Ptr CreateDefaultTaskFlow(std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
 		template<typename Fun>
-		TaskFlowNode::Ptr AddLambda(Fun&& func, TaskProperty property = {}, std::pmr::memory_resource* resouce = std::pmr::get_default_resource()) requires(std::is_invocable_v<Fun, TaskFlowStatus&>)
+		TaskFlowNode::Ptr AddLambda(Fun&& func, TaskProperty property = {}, std::u8string_view display_name = {}, std::pmr::memory_resource* resouce = std::pmr::get_default_resource()) requires(std::is_invocable_v<Fun, TaskFlowStatus&>)
 		{
 			auto ptr = TaskFlowNode::CreateLambda(std::forward<Fun>(func), resouce);
-			if(AddNode(ptr, property))
+			if(AddNode(ptr, property, display_name))
 			{
 				return ptr;
 			}
@@ -110,8 +110,8 @@ export namespace Potato::Task
 
 		std::optional<PausePoint> CreatePause(TaskFlowStatus const& status);
 		bool Update(bool reset_state = false, std::pmr::vector<TaskFlowNode::Ptr>* error_output = nullptr, std::pmr::memory_resource* temp = std::pmr::get_default_resource());
-		bool Commit(TaskContext& context, TaskProperty property = {});
-		bool CommitDelay(TaskContext& context, std::chrono::steady_clock::time_point time_point, TaskProperty property = {});
+		bool Commit(TaskContext& context, TaskProperty property = {}, std::u8string_view display_name = {});
+		bool CommitDelay(TaskContext& context, std::chrono::steady_clock::time_point time_point, TaskProperty property = {}, std::u8string_view display_name = {});
 		bool Remove(TaskFlowNode::Ptr form);
 
 		TaskFlow(std::pmr::memory_resource* resource = std::pmr::get_default_resource());

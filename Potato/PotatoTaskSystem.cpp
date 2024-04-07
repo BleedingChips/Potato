@@ -214,10 +214,9 @@ namespace Potato::Task
 			std::lock_guard lg(execute_thread_mutex);
 			line_up_task.push_back(
 				LineUpTuple{
-				TaskTuple{property, std::move(task), data},
+				TaskTuple{property, std::move(task), data, display_name},
 					static_cast<std::size_t>(property.priority),
-					std::nullopt,
-					display_name
+					std::nullopt
 				}
 			);
 			total_task_count += 1;
@@ -233,10 +232,9 @@ namespace Potato::Task
 		{
 			std::lock_guard lg(execute_thread_mutex);
 			line_up_task.emplace_back(
-				TaskTuple{property, std::move(task), data},
+				TaskTuple{property, std::move(task), data, display_name },
 				static_cast<std::size_t>(property.priority),
-				time_point,
-				display_name
+				time_point
 			);
 			++total_task_count;
 			cv.notify_all();
