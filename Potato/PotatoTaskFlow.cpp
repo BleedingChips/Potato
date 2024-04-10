@@ -390,6 +390,7 @@ namespace Potato::Task
 				for(auto& ite : compiled_nodes)
 				{
 					ite.status = RunningState::Idle;
+					ite.current_in_degree = ite.require_in_degree;
 				}
 			}
 		}
