@@ -2,14 +2,31 @@ export module PotatoTMP;
 
 import std;
 
-namespace Potato::TMP::Implement
+namespace Implement
 {
-	template<size_t Index, typename ...InputType> struct TypeTupleIndex;
-	template<size_t Index, typename Cur, typename ...InputType> struct TypeTupleIndex<Index, Cur, InputType...> {
-		using Type = typename TypeTupleIndex<Index - 1, InputType...>::Type;
+
+	template<std::size_t index, typename T, typename ...AT>
+	struct LocateByTypeImp
+	{
+		static constexpr std::size_t Value = index + 1;
 	};
-	template<typename Cur, typename ...InputType> struct TypeTupleIndex<0, Cur, InputType...> {
-		using Type = Cur;
+
+	template<std::size_t index, typename T, typename CT, typename ...AT>
+	struct LocateByTypeImp<index, T, CT, AT...>
+	{
+		static constexpr std::size_t Value = LocateByTypeImp<index + 1, T, AT...>::value;
+	};
+
+	template<std::size_t index, typename T, typename ...AT>
+	struct LocateByTypeImp<index, T, T, AT...>
+	{
+		static constexpr std::size_t Value = index;
+	};
+
+	template<std::size_t index, typename T>
+	struct LocateByTypeImp<index, T, T>
+	{
+		static constexpr std::size_t Value = index;
 	};
 }
 
@@ -60,9 +77,42 @@ export namespace Potato::TMP
 	};
 	template<template<typename ...> class Output, typename ...Input> using InstantT = Output<Input...>;
 
+	/*
 	template<typename ...Type> struct TypeTuple {
 		static constexpr size_t Size = sizeof...(Type);
-		template<size_t Index> using Get = typename Implement::TypeTupleIndex<Index, Type...>::Type;
+		template<size_t Index> using Get = typename FindByIndex<Index, Type...>::Type;
+	};
+	*/
+
+	// FindByIndex
+
+	template<size_t index, typename ...AT>
+	struct FindByIndex;
+
+	template<std::size_t index, typename CT, typename ...AT>
+	struct FindByIndex<index, CT, AT...>
+	{
+		using Type = FindByIndex<index - 1, AT...>::Type;
+	};
+
+	template<typename CT>
+	struct FindByIndex<0, CT>
+	{
+		using Type = CT;
+	};
+
+	template<typename CT, typename ...AT>
+	struct FindByIndex<0, CT, AT...>
+	{
+		using Type = CT;
+	};
+
+	// LocateByType
+
+	template<typename T, typename ...AT>
+	struct LocateByType
+	{
+		static constexpr std::size_t Value = Implement::LocateByTypeImp<0, T, AT...>::Value;
 	};
 
 	// Replace
