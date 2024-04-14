@@ -192,6 +192,11 @@ export namespace Potato::Pointer
 
 		template<typename PtrT>
 		void SubRef(PtrT* Ptr) {}
+
+		template<typename T>
+		ObserverSubWrapperT(T t) {}
+		ObserverSubWrapperT(ObserverSubWrapperT const&) = default;
+		ObserverSubWrapperT() = default;
 	};
 
 	template<typename Type> using ObserverPtr = IntrusivePtr<Type, ObserverSubWrapperT>;
