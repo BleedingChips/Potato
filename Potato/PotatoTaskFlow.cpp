@@ -63,7 +63,7 @@ namespace Potato::Task
 							{
 								if(edge.from > *li)
 									edge.from -= 1;
-								else if(edge.to > *li)
+								if(edge.to > *li)
 									edge.to -= 1;
 								return false;
 							}
@@ -377,7 +377,7 @@ namespace Potato::Task
 			if(re)
 			{
 				auto ptr = new (re.Get()) IndependenceTaskFlowExecute{this, re, property};
-				ptr->Commit(context);
+				ptr->Commit(context, {});
 				return ptr;
 			}
 		}
@@ -400,7 +400,7 @@ namespace Potato::Task
 		record.Deallocate();
 	}
 
-	bool IndependenceTaskFlowExecute::Commit(TaskContext& context)
+	bool IndependenceTaskFlowExecute::Commit(TaskContext& context, std::optional<std::chrono::steady_clock::time_point> delay_point)
 	{
 		if(owner)
 		{
@@ -409,10 +409,20 @@ namespace Potato::Task
 			{
 				TaskProperty cur_pro = property;
 				cur_pro.user_data = { 0, 0 };
-				if (context.CommitTask(this, cur_pro))
+				if(!delay_point.has_value())
 				{
-					state = RunningState::Running;
-					return true;
+					if (context.CommitTask(this, cur_pro))
+					{
+						state = RunningState::Running;
+						return true;
+					}
+				}else
+				{
+					if (context.CommitDelayTask(this, *delay_point, cur_pro))
+					{
+						state = RunningState::Running;
+						return true;
+					}
 				}
 			}
 		}
@@ -429,6 +439,7 @@ namespace Potato::Task
 				status.task_property,
 				status.thread_property,
 				*this,
+				*owner,
 				status.task_property.user_data[1],
 			};
 			ptr->TaskFlowNodeExecute(tf_status);
@@ -452,23 +463,19 @@ namespace Potato::Task
 				{
 					owner->TaskFlowExecuteBegin(status, *this);
 				}
+
 				std::lock_guard lg(mutex);
 				StartupTaskFlow(status.context);
+				
 				if (run_task != nodes.nodes.size())
 				{
 					return;
 				}
 				else
 				{
-					{
-						std::lock_guard lg(mutex);
-						state = RunningState::Done;
-					}
-					if(owner)
-					{
-						owner->TaskFlowExecuteEnd(status, *this);
-					}
-					
+					TaskProperty pro = property;
+					pro.user_data = {0, 1};
+					status.context.CommitTask(this, pro);
 				}
 			}else
 			{
@@ -558,7 +565,35 @@ namespace Potato::Task
 		return count;
 	}
 
-	
+	bool IndependenceTaskFlowExecute::Reset()
+	{
+		std::lock_guard lg(mutex);
+		if(state == RunningState::Done)
+		{
+			for(auto& ite : nodes.nodes)
+			{
+				ite.current_in_degree = ite.require_in_degree;
+				ite.status = RunningState::Idle;
+			}
+			run_task = 0;
+			state = RunningState::Idle;
+			return true;
+		}
+		return false;
+	}
+
+	bool IndependenceTaskFlowExecute::ReCloneNode()
+	{
+		if(owner)
+		{
+			std::lock_guard lg(mutex);
+			if(state == RunningState::Done || state == RunningState::Idle)
+			{
+				return owner->CloneCompliedNodes(nodes, property.filter);
+			}
+		}
+		return false;
+	}
 
 	/*
 	void TaskFlow::TaskExecute(ExecuteStatus& status)

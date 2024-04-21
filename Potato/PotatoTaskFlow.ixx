@@ -28,7 +28,8 @@ export namespace Potato::Task
 		TaskContext& context;
 		TaskProperty task_property;
 		ThreadProperty thread_property;
-		TaskFlowExecute& owner;
+		TaskFlowExecute& executor;
+		TaskFlow& owner;
 		std::size_t self_index = 0;
 	};
 
@@ -69,8 +70,9 @@ export namespace Potato::Task
 
 		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlowExecute, Wrapper>;
 
-		virtual bool Commit(TaskContext& context) { return false; }
+		virtual bool Commit(TaskContext& context, std::optional<std::chrono::steady_clock::time_point> delay_point = std::nullopt) { return false; }
 		virtual bool Reset() { return false; };
+		virtual bool ReCloneNode() { return false; }
 
 	protected:
 
@@ -158,10 +160,10 @@ export namespace Potato::Task
 
 	protected:
 
-		std::optional<std::size_t> LocatePreCompliedNode(TaskFlowNode& node, std::lock_guard<std::mutex> const& lg) const;
-
 		virtual void AddTaskFlowRef() const {}
 		virtual void SubTaskFlowRef() const {}
+
+		std::optional<std::size_t> LocatePreCompliedNode(TaskFlowNode& node, std::lock_guard<std::mutex> const& lg) const;
 
 		enum class EdgeType
 		{
@@ -208,7 +210,9 @@ export namespace Potato::Task
 	
 	struct IndependenceTaskFlowExecute : public TaskFlowExecute, public Task, public Potato::Pointer::DefaultIntrusiveInterface
 	{
-		virtual bool Commit(TaskContext& context) override;
+		virtual bool Commit(TaskContext& context, std::optional<std::chrono::steady_clock::time_point> delay_point) override;
+		virtual bool Reset() override;
+		virtual bool ReCloneNode() override;
 	protected:
 
 		virtual void AddTaskFlowExecuteRef() const override { DefaultIntrusiveInterface::AddRef(); }
