@@ -27,9 +27,9 @@ int main()
 			});
 
 		TaskProperty tp;
-		tp.category = Category::GLOBAL_TASK;
-		tp.group_id = 1;
-		tp.thread_id = std::this_thread::get_id();
+		tp.filter.category = Category::GLOBAL_TASK;
+		tp.filter.group_id = 1;
+		tp.filter.thread_id = std::this_thread::get_id();
 
 		context.CommitTask(Lambda, tp);
 		//Ptr->CommitTask(Lambda2);

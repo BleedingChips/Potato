@@ -21,7 +21,6 @@ void Print(std::string_view str)
 	}
 }
 
-
 int main()
 {
 
@@ -47,23 +46,35 @@ int main()
 			Print("A4");
 			});
 
-		auto G1 = TaskFlow::CreateDefaultTaskFlow();
+		TaskFlow tf;
 
-		G1->AddNode(A1);
-		G1->AddNode(A2);
-		G1->AddNode(A3);
-		G1->AddNode(A4);
+		//auto G1 = TaskFlow::CreateDefaultTaskFlow();
 
-		G1->AddDirectEdges(A1, A2);
-		G1->AddDirectEdges(A1, A3);
-		G1->AddDirectEdges(A2, A3);
-		G1->AddMutexEdges(A1, A4);
+		tf.AddNode(A1, {u8"A1"});
+		tf.AddNode(A2, {u8"A2"});
+		tf.AddNode(A3, {u8"A3"});
+		tf.AddNode(A4, {u8"A4"});
 
-		std::pmr::vector<TaskFlowNode::Ptr> Error;
+		tf.AddDirectEdges(A1, A2);
+		//tf.AddDirectEdges(A2, A1);
+		tf.AddDirectEdges(A1, A2);
+		tf.AddDirectEdges(A1, A3);
+		tf.AddDirectEdges(A2, A3);
+		tf.AddMutexEdges(A1, A4);
+
+		std::pmr::vector<TaskFlow::ErrorNode> Error;
 
 		
-		G1->Update(true, &Error);
-		G1->Remove(A4);
+		tf.TryUpdate(&Error);
+		tf.Remove(A4);
+
+
+		tf.TryUpdate(&Error);
+
+		tf.Commit(context);
+		context.AddGroupThread({}, TaskContext::GetSuggestThreadCount());
+		context.ProcessTaskUntillNoExitsTask({});
+		//context.ProcessTaskUntillNoExitsTask({});
 
 		/*
 
@@ -116,17 +127,10 @@ int main()
 
 
 		TaskProperty tp;
-		tp.category = Category::GLOBAL_TASK;
-		tp.group_id = 1;
-		tp.thread_id = std::this_thread::get_id();
 
-		G1->Commit(context);
-		context.AddGroupThread({}, TaskContext::GetSuggestThreadCount());
-		context.ProcessTaskUntillNoExitsTask({});
-		G1->Update(true);
-		//G1->ResetState();
-		G1->Commit(context);
-		context.ProcessTaskUntillNoExitsTask({});
+		/*
+		
+		*/
 	}
 
 	volatile int i = 0;

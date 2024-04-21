@@ -38,13 +38,20 @@ export namespace Potato::Task
 		std::size_t& operator[](std::size_t index) { return datas[index]; }
 	};
 
-
-	struct TaskProperty
+	struct TaskFilter
 	{
 		Priority priority = Priority::Normal;
 		Category category = Category::GLOBAL_TASK;
 		std::size_t group_id = 0;
 		std::thread::id thread_id;
+	};
+
+
+	struct TaskProperty
+	{
+		std::u8string_view display_name;
+		AppendData user_data;
+		TaskFilter filter;
 	};
 
 	enum class Status : std::size_t
@@ -75,8 +82,6 @@ export namespace Potato::Task
 		TaskProperty task_property;
 		std::thread::id thread_id;
 		ThreadProperty thread_property;
-		AppendData user_data;
-		std::u8string_view display_name;
 	};
 
 	
@@ -105,7 +110,7 @@ export namespace Potato::Task
 		virtual void SubTaskRef() const = 0;
 
 		virtual void TaskExecute(ExecuteStatus& status) = 0;
-		virtual void TaskTerminal(TaskProperty property, AppendData data) noexcept {};
+		virtual void TaskTerminal(TaskProperty property) noexcept {};
 		virtual ~Task() = default;
 
 		friend struct TaskContext;
@@ -167,11 +172,11 @@ export namespace Potato::Task
 		std::size_t CloseAllThread();
 		std::size_t CloseAllThreadAndWait();
 
-		bool CommitTask(Task::Ptr task, TaskProperty property = {}, AppendData data = {}, std::u8string_view display_name = {});
-		bool CommitDelayTask(Task::Ptr task, std::chrono::steady_clock::time_point time_point, TaskProperty property = {}, AppendData data = {}, std::u8string_view display_name = {});
-		bool CommitDelayTask(Task::Ptr task, std::chrono::steady_clock::duration duration, TaskProperty property = {}, AppendData data = {}, std::u8string_view display_name = {})
+		bool CommitTask(Task::Ptr task, TaskProperty property = {});
+		bool CommitDelayTask(Task::Ptr task, std::chrono::steady_clock::time_point time_point, TaskProperty property = {});
+		bool CommitDelayTask(Task::Ptr task, std::chrono::steady_clock::duration duration, TaskProperty property = {})
 		{
-			return CommitDelayTask(std::move(task), std::chrono::steady_clock::now() + duration, property, data, display_name);
+			return CommitDelayTask(std::move(task), std::chrono::steady_clock::now() + duration, property);
 		}
 
 
@@ -186,8 +191,6 @@ export namespace Potato::Task
 		{
 			TaskProperty property;
 			Task::Ptr task;
-			AppendData data;
-			std::u8string_view display_name;
 		};
 
 		static bool Accept(TaskProperty const& property, ThreadProperty const& thread_property, std::thread::id thread_id);

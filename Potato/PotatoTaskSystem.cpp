@@ -9,7 +9,7 @@ namespace Potato::Task
 
 	bool TaskContext::Accept(TaskProperty const& property, ThreadProperty const& thread_property, std::thread::id thread_id)
 	{
-		switch (property.category)
+		switch (property.filter.category)
 		{
 		case Category::GLOBAL_TASK:
 			if (thread_property.global_accept != ThreadAcceptable::UnAccept)
@@ -22,14 +22,14 @@ namespace Potato::Task
 				case ThreadAcceptable::AcceptAll:
 					return true;
 				case ThreadAcceptable::SpecialAccept:
-					return thread_property.group_id == property.group_id;
+					return thread_property.group_id == property.filter.group_id;
 				default:
 					return false;
 				}
 			}
 			break;
 		case Category::THREAD_TASK:
-			if(thread_id == property.thread_id)
+			if(thread_id == property.filter.thread_id)
 				return true;
 			break;
 		}
@@ -62,7 +62,7 @@ namespace Potato::Task
 			}
 
 			if (!already_add_priority)
-				ite->priority += static_cast<std::size_t>(ite->tuple.property.priority);
+				ite->priority += static_cast<std::size_t>(ite->tuple.property.filter.priority);
 
 
 			if (max_priority < ite->priority
@@ -129,7 +129,7 @@ namespace Potato::Task
 			}
 
 			if(tup.task)
-				tup.task->TaskTerminal(tup.property, tup.data);
+				tup.task->TaskTerminal(tup.property);
 		}
 	}
 
@@ -207,15 +207,15 @@ namespace Potato::Task
 	}
 
 
-	bool TaskContext::CommitTask(Task::Ptr task, TaskProperty property, AppendData data, std::u8string_view display_name)
+	bool TaskContext::CommitTask(Task::Ptr task, TaskProperty property)
 	{
 		if(task)
 		{
 			std::lock_guard lg(execute_thread_mutex);
 			line_up_task.push_back(
 				LineUpTuple{
-				TaskTuple{property, std::move(task), data, display_name},
-					static_cast<std::size_t>(property.priority),
+				TaskTuple{property, std::move(task)},
+					static_cast<std::size_t>(property.filter.priority),
 					std::nullopt
 				}
 			);
@@ -226,14 +226,14 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskContext::CommitDelayTask(Task::Ptr task, std::chrono::steady_clock::time_point time_point, TaskProperty property, AppendData data, std::u8string_view display_name)
+	bool TaskContext::CommitDelayTask(Task::Ptr task, std::chrono::steady_clock::time_point time_point, TaskProperty property)
 	{
 		if (task)
 		{
 			std::lock_guard lg(execute_thread_mutex);
 			line_up_task.emplace_back(
-				TaskTuple{property, std::move(task), data, display_name },
-				static_cast<std::size_t>(property.priority),
+				TaskTuple{property, std::move(task) },
+				static_cast<std::size_t>(property.filter.priority),
 				time_point
 			);
 			++total_task_count;
@@ -294,9 +294,7 @@ namespace Potato::Task
 						*this,
 						current_task.property,
 						thread_id,
-					property,
-					current_task.data,
-					current_task.display_name
+					property
 				};
 				current_task.task->TaskExecute(status);
 				last_execute = true;
@@ -333,9 +331,7 @@ namespace Potato::Task
 						*this,
 						tuple.property,
 						thread_id,
-					property,
-				tuple.data,
-				tuple.display_name
+					property
 			};
 			tuple.task->TaskExecute(status);
 
