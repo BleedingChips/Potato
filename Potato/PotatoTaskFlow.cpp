@@ -385,7 +385,7 @@ namespace Potato::Task
 	}
 
 	IndependenceTaskFlowExecute::IndependenceTaskFlowExecute(TaskFlow::Ptr owner, Potato::IR::MemoryResourceRecord record, TaskProperty property)
-		: owner(std::move(owner)), record(record), property(property), nodes(record.GetResource())
+		: owner(std::move(owner)), record(record), property(property), nodes(record.GetMemoryResource())
 	{
 		if(this->owner)
 		{
