@@ -66,6 +66,7 @@ export namespace Potato::Pointer
 		: IntrusivePtr(static_cast<PtrT*>(InputPtr)) {}
 
 		IntrusivePtr(IntrusivePtr const& iptr)
+			requires(std::is_constructible_v<WrapperT, WrapperT const&>)
 		: WrapperT(static_cast<WrapperT const&>(iptr)), ptr(iptr.ptr)
 		{
 			if(ptr != nullptr)
@@ -183,7 +184,6 @@ export namespace Potato::Pointer
 
 		friend struct DefaultIntrusiveWrapper;
 	};
-
 
 
 	struct ObserverSubWrapperT {
