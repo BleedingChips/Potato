@@ -76,6 +76,7 @@ export namespace Potato::Pointer
 		}
 
 		IntrusivePtr(IntrusivePtr && iptr)
+			requires(std::is_constructible_v<WrapperT, WrapperT &&>)
 			: WrapperT(static_cast<WrapperT &&>(iptr)), ptr(iptr.ptr)
 		{
 			iptr.ptr = nullptr;
