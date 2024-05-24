@@ -123,8 +123,8 @@ export namespace Potato::Task
 		static std::size_t GetSuggestThreadCount();
 
 		bool AddGroupThread(ThreadProperty property, std::size_t thread_count = 1);
-		std::size_t GetRandomThreadID(std::size_t group_id);
-		std::size_t GetRandomThreadID();
+		std::optional<std::thread::id> GetRandomThreadIDFromGroup(std::size_t group_id, std::size_t random = std::chrono::steady_clock::now().time_since_epoch().count());
+		std::optional<std::thread::id> GetRandomThreadID(std::size_t random = std::chrono::steady_clock::now().time_since_epoch().count());
 
 		void RequestCloseThread(std::size_t thread_id);
 		void RequestCloseGroupThread(std::size_t thread_id);

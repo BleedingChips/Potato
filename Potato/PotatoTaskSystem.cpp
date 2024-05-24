@@ -303,6 +303,48 @@ namespace Potato::Task
 		}
 	}
 
+	std::optional<std::thread::id> TaskContext::GetRandomThreadIDFromGroup(std::size_t group_id, std::size_t rand)
+	{
+		std::shared_lock sl(thread_mutex);
+		std::size_t count = 0;
+		for(auto& ite : thread)
+		{
+			if(ite.property.group_id == group_id)
+			{
+				++count;
+			}
+		}
+		if(count > 0)
+		{
+			count = (rand % count);
+			for(auto& ite : thread)
+			{
+				if(ite.property.group_id == group_id)
+				{
+					if(count == 0)
+						return ite.thread_id;
+					else
+						--count;
+				}
+			}
+		}
+		return std::nullopt;
+	}
+
+	std::optional<std::thread::id> TaskContext::GetRandomThreadID(std::size_t random)
+	{
+		std::shared_lock sl(thread_mutex);
+		if(!thread.empty())
+		{
+			auto index = (random % thread.size());
+			if(index < thread.size())
+			{
+				return thread[index].thread_id;
+			}
+		}
+		return std::nullopt;
+	}
+
 	TaskContext::ContextStatus TaskContext::ProcessTaskOnce(ThreadProperty property, std::thread::id thread_id, std::chrono::steady_clock::time_point current)
 	{
 		ContextStatus re_status;
