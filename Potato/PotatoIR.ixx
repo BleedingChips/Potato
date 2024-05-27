@@ -34,6 +34,17 @@ export namespace Potato::IR
 		return Offset;
 	}
 
+	inline constexpr std::size_t InsertLayoutCPP(Layout& Target, Layout const Inserted, std::size_t ArrayCount)
+	{
+		if (Target.Align < Inserted.Align)
+			Target.Align = Inserted.Align;
+		if (Target.Size % Inserted.Align != 0)
+			Target.Size += Inserted.Align - (Target.Size % Inserted.Align);
+		std::size_t Offset = Target.Size;
+		Target.Size += Inserted.Size * ArrayCount;
+		return Offset;
+	}
+
 	inline constexpr bool FixLayoutCPP(Layout& Target)
 	{
 		auto ModedSize = (Target.Size % Target.Align);
@@ -69,6 +80,75 @@ export namespace Potato::IR
 		TypeID(std::type_index ID) : ID(ID) {}
 		std::type_index ID;
 	};
+
+	struct StructLayout
+	{
+		struct Wrapper
+		{
+			void AddRef(StructLayout const* ptr) const { ptr->AddStructLayoutRef(); }
+			void SubRef(StructLayout const* ptr) const { ptr->SubStructLayoutRef(); }
+		};
+
+		using Ptr = Pointer::IntrusivePtr<StructLayout, Wrapper>;
+
+		struct Member
+		{
+			StructLayout::Ptr type_id;
+			std::u8string_view name;
+			std::optional<std::size_t> array_count;
+		};
+
+		static Ptr CreateDynamicStructLayout(std::span<Member const> members, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+
+		virtual bool CopyConstruction(void* target, void* source) = 0;
+		virtual bool MoveConstruction(void* target, void* source) = 0;
+		virtual bool Destruction(void* target) = 0;
+
+		struct MemberView
+		{
+			StructLayout::Ptr type_id;
+			std::u8string_view name;
+			std::optional<std::size_t> array_count;
+			std::size_t offset;
+		};
+
+		virtual std::span<MemberView const> GetMemberView() const = 0;
+
+		virtual Layout GetLayout() const = 0;
+
+		Layout GetArrayLayout(std::size_t array_count) const
+		{
+			auto layout = GetLayout();
+			layout.Size *= array_count;
+			return layout;
+		}
+
+		Layout GetLayout(std::optional<std::size_t> array_count) const 
+		{
+			if(array_count)
+			{
+				return GetArrayLayout(*array_count);
+			}
+			return GetLayout();
+		}
+		
+
+		static void* GetData(MemberView const&, void* target);
+		static std::span<std::byte> GetDataSpan(MemberView const&, void* target);
+		//static bool MakeMemberView(std::span<Member const> in, std::span<MemberView> output);
+
+	protected:
+		
+		virtual void AddStructLayoutRef() const = 0;
+		virtual void SubStructLayoutRef() const = 0;
+	};
+
+	struct Struct
+	{
+		
+	};
+
+
 
 	struct SymbolTable
 	{
