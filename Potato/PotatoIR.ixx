@@ -155,7 +155,14 @@ export namespace Potato::IR
 			return static_cast<Type*>(GetData(view, target));
 		}
 		static std::span<std::byte> GetDataSpan(MemberView const&, void* target);
-		//static bool MakeMemberView(std::span<Member const> in, std::span<MemberView> output);
+		template<typename Type>
+		static std::span<Type> GetDataSpanAs(MemberView const& view, void* target)
+		{
+			return {
+				GetDataAs<Type>(view, target),
+				view.array_count.has_value() ? *view.array_count : 1
+			};
+		}
 
 	protected:
 		

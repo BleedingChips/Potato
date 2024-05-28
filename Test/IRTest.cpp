@@ -50,6 +50,8 @@ int main()
 	ref3[0] = 3;
 	ref3[1] = 4;
 
+	auto ref4 = P->GetDataSpanAs<std::size_t>(span[2], &i);
+
 
 	std::cout << "TMP Pass !" << std::endl;
 
