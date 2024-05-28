@@ -114,34 +114,6 @@ namespace Potato::IR
 		return false;
 	}
 
-	/*
-	std::optional<Layout> StructLayout::MakeMemberView(std::span<Member const> in, std::span<MemberView> output)
-	{
-		if(in.size() == output.size() && in.size() >= 1)
-		{
-			Layout cur_layout;
-			for(std::size_t index = 0; index < in.size(); ++index)
-			{
-				auto& cur = in[index];
-				auto& tar = output[index];
-				if(index == 0)
-				{
-					cur_layout = cur.type_id->GetLayout();
-					if(cur.array_count)
-					{
-						cur_layout.Size *= *cur.array_count;
-					}
-					tar.array_count = cur.array_count;
-					tar.
-				}else
-				{
-					
-				}
-			}
-		}
-	}
-	*/
-
 	void* StructLayout::GetData(MemberView const& view, void* target)
 	{
 		return static_cast<std::byte*>(target) + view.offset;
@@ -155,98 +127,109 @@ namespace Potato::IR
 		};
 	}
 
-	struct DynamicStructLayout : public StructLayout, public Pointer::DefaultIntrusiveInterface
+	auto StructLayout::FindMemberView(std::u8string_view member_name) const
+	-> std::optional<MemberView>
 	{
-
-		DynamicStructLayout(
-			Layout total_layout,
-			std::span<MemberView> member_view,
-			MemoryResourceRecord record
-		) : total_layout(total_layout), member_view(member_view), record(record)
+		auto span = GetMemberView();
+		auto ite = std::find_if(span.begin(), span.end(), [=](MemberView const& ref) -> bool { return ref.name == member_name; });
+		if(ite == span.end())
 		{
-			
+			return std::nullopt;
+		}else
+		{
+			return *ite;
 		}
+	}
 
-		Layout total_layout;
-		std::span<MemberView> member_view;
-		MemoryResourceRecord record;
-		
+	Layout StructLayout::GetArrayLayout(std::size_t array_count) const
+	{
+		auto layout = GetLayout();
+		layout.Size *= array_count;
+		return layout;
+	}
 
-		virtual void AddStructLayoutRef() const override { DefaultIntrusiveInterface::AddRef(); }
-		virtual void SubStructLayoutRef() const override { DefaultIntrusiveInterface::SubRef(); }
-
-		void Release() override
+	Layout StructLayout::GetLayout(std::optional<std::size_t> array_count) const 
+	{
+		if(array_count)
 		{
-			auto re = record;
-			auto span = member_view;
-			this->~DynamicStructLayout();
-			for(auto& ite : span)
+			return GetArrayLayout(*array_count);
+		}
+		return GetLayout();
+	}
+
+
+	void DynamicStructLayout::Release()
+	{
+		auto re = record;
+		auto span = member_view;
+		this->~DynamicStructLayout();
+		for(auto& ite : span)
+		{
+			ite.~MemberView();
+		}
+		re.Deallocate();
+	}
+
+	Layout DynamicStructLayout::GetLayout() const
+	{
+		return total_layout;
+	}
+
+	auto DynamicStructLayout::GetMemberView() const
+		->std::span<MemberView const>
+	{
+		return member_view;
+	}
+
+	bool DynamicStructLayout::CopyConstruction(void* target, void* source) const
+	{
+		if(target != source && target != nullptr)
+		{
+			for(auto& ite : member_view)
 			{
-				ite.~MemberView();
+				auto tar = GetData(ite, target);
+				auto sou = GetData(ite, source);
+				ite.type_id->CopyConstruction(tar, sou);
 			}
-			re.Deallocate();
+			return true;
 		}
+		return false;
+	}
 
-		Layout GetLayout() const override
+	bool DynamicStructLayout::MoveConstruction(void* target, void* source) const
+	{
+		if(target != source && target != nullptr)
 		{
-			return total_layout;
-		}
-
-		std::span<MemberView const> GetMemberView() const override
-		{
-			return member_view;
-		}
-
-		bool CopyConstruction(void* target, void* source) override
-		{
-			if(target != source && target != nullptr)
+			for(auto& ite : member_view)
 			{
-				for(auto& ite : member_view)
-				{
-					auto tar = GetData(ite, target);
-					auto sou = GetData(ite, source);
-					ite.type_id->CopyConstruction(tar, sou);
-				}
-				return true;
+				auto tar = GetData(ite, target);
+				auto sou = GetData(ite, source);
+				ite.type_id->MoveConstruction(tar, sou);
 			}
-			return false;
+			return true;
 		}
+		return false;
+	}
 
-		bool MoveConstruction(void* target, void* source) override
+	bool DynamicStructLayout::Destruction(void* target) const
+	{
+		if(target != nullptr)
 		{
-			if(target != source && target != nullptr)
+			for(auto& ite : member_view)
 			{
-				for(auto& ite : member_view)
-				{
-					auto tar = GetData(ite, target);
-					auto sou = GetData(ite, source);
-					ite.type_id->MoveConstruction(tar, sou);
-				}
-				return true;
+				auto tar = GetData(ite, target);
+				ite.type_id->Destruction(tar);
 			}
-			return false;
+			return true;
 		}
-
-		bool Destruction(void* target) override
-		{
-			if(target != nullptr)
-			{
-				for(auto& ite : member_view)
-				{
-					auto tar = GetData(ite, target);
-					ite.type_id->Destruction(tar);
-				}
-				return true;
-			}
-			return false;
-		}
-	};
+		return false;
+	}
 
 
-	auto StructLayout::CreateDynamicStructLayout(std::span<Member const> members, std::pmr::memory_resource* resource)
+	auto StructLayout::CreateDynamicStructLayout(std::u8string_view name, std::span<Member const> members, std::pmr::memory_resource* resource)
 		-> Ptr
 	{
-		std::size_t name_size = 0;
+		std::size_t name_size = name.size();
 		for(auto& ite : members)
 		{
 			name_size += ite.name.size();
@@ -262,11 +245,14 @@ namespace Potato::IR
 			Layout total_layout;
 			auto member_span = std::span(reinterpret_cast<MemberView*>(re.GetByte() + member_offset), members.size());
 			auto str_span = std::span(reinterpret_cast<char8_t*>(re.GetByte() + name_offset), name_size);
+			std::memcpy(str_span.data(), name.data(), name.size());
+			name = std::u8string_view{str_span.subspan(0, name.size())};
+			str_span = str_span.subspan(name.size());
 			for(std::size_t i = 0; i < members.size(); ++i)
 			{
 				auto& cur = members[i];
 				auto& tar = member_span[i];
-
+				
 				std::size_t offset = 0;
 				if(i == 0)
 				{
@@ -288,6 +274,7 @@ namespace Potato::IR
 			}
 			FixLayoutCPP(total_layout);
 			return new (re.Get()) DynamicStructLayout{
+				name,
 				total_layout,
 				member_span,
 				re
