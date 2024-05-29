@@ -110,6 +110,19 @@ export namespace Potato::IR
 
 	struct StructLayout
 	{
+
+		struct StructLayoutConstruction
+		{
+			bool enable_default = true;
+			bool enable_copy = true;
+			bool enable_move = true;
+			StructLayoutConstruction operator&&(StructLayoutConstruction const& i)
+			{
+				return {enable_default && i.enable_default, enable_copy && i.enable_copy, enable_move && i.enable_move};
+			}
+			operator bool() const { return enable_default || enable_copy || enable_move; }
+		};
+
 		struct Wrapper
 		{
 			void AddRef(StructLayout const* ptr) const { ptr->AddStructLayoutRef(); }
@@ -130,6 +143,8 @@ export namespace Potato::IR
 		template<typename AtomicType>
 		static Ptr CreateAtomicStructLayout(std::u8string_view name, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
+		virtual StructLayoutConstruction GetConstructProperty() const = 0;
+		virtual bool DefaultConstruction(void* target) const = 0;
 		virtual bool CopyConstruction(void* target, void* source) const = 0;
 		virtual bool MoveConstruction(void* target, void* source) const = 0;
 		virtual bool Destruction(void* target) const = 0;
@@ -170,6 +185,39 @@ export namespace Potato::IR
 		virtual void SubStructLayoutRef() const = 0;
 	};
 
+	struct StructLayoutObject : protected Pointer::DefaultIntrusiveInterface
+	{
+
+		using Ptr = Pointer::IntrusivePtr<StructLayoutObject>;
+
+
+		static Ptr DefaultConstruct(StructLayout::Ptr layout, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+		static Ptr CopyConstruct(StructLayout::Ptr layout, StructLayoutObject::Ptr source, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+		static Ptr MoveConstruct(StructLayout::Ptr layout, StructLayoutObject::Ptr source, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+
+		static Ptr CopyConstruct(StructLayout::Ptr layout, void* source, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+		static Ptr MoveConstruct(StructLayout::Ptr layout, void* source, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+
+
+		StructLayout::Ptr GetStructLayout() const { return layout; };
+		void* GetData() const { return start; }
+
+	protected:
+
+		virtual void Release() override;
+
+		StructLayoutObject(void* start, StructLayout::Ptr layout, MemoryResourceRecord record)
+			: start(start), layout(std::move(layout)), record(record) {}
+
+		virtual ~StructLayoutObject();
+
+		void* start;
+		StructLayout::Ptr layout;
+		MemoryResourceRecord record;
+
+		friend struct Pointer::DefaultIntrusiveWrapper;
+	};
+
 	struct DynamicStructLayout : public StructLayout, public Pointer::DefaultIntrusiveInterface
 	{
 		virtual std::u8string_view GetName() const override { return name; }
@@ -178,14 +226,16 @@ export namespace Potato::IR
 		virtual void Release() override;
 		Layout GetLayout() const override;
 		std::span<MemberView const> GetMemberView() const override;
+		StructLayoutConstruction GetConstructProperty() const override { return construct_property; }
+		bool DefaultConstruction(void* target) const override;
 		bool CopyConstruction(void* target, void* source) const override;
 		bool MoveConstruction(void* target, void* source) const override;
 		bool Destruction(void* target) const override;
 
 	protected:
 
-		DynamicStructLayout(std::u8string_view name, Layout total_layout, std::span<MemberView> member_view, MemoryResourceRecord record)
-			: total_layout(total_layout), member_view(member_view), record(record)
+		DynamicStructLayout(StructLayoutConstruction construct_property, std::u8string_view name, Layout total_layout, std::span<MemberView> member_view, MemoryResourceRecord record)
+			: total_layout(total_layout), member_view(member_view), record(record), construct_property(construct_property)
 		{
 			
 		}
@@ -194,6 +244,7 @@ export namespace Potato::IR
 		Layout total_layout;
 		std::span<MemberView> member_view;
 		MemoryResourceRecord record;
+		StructLayoutConstruction construct_property;
 
 		friend struct StructLayout;
 	};
@@ -207,12 +258,20 @@ export namespace Potato::IR
 		virtual void Release() override { auto re = record; this->~AtomicStructLayout(); re.Deallocate(); }
 		virtual std::u8string_view GetName() const override { return name; }
 		std::span<MemberView const> GetMemberView() const override { return {}; }
+		StructLayoutConstruction GetConstructProperty() const override
+		{
+			return {
+				std::is_constructible_v<AtomicType>,
+				 std::is_constructible_v<AtomicType, AtomicType const&>,
+				 std::is_constructible_v<AtomicType, AtomicType &&>
+			};
+		}
 
-		virtual bool CopyConstruction(void* target, void* source) const override
+		virtual bool DefaultConstruction(void* target) const override
 		{
 			if constexpr (std::is_constructible_v<AtomicType, AtomicType const&>)
 			{
-				new (target) AtomicType{ *static_cast<AtomicType const*>(source) };
+				new (target) AtomicType{  };
 				return true;
 			}else
 			{
@@ -220,8 +279,22 @@ export namespace Potato::IR
 			}
 		}
 
+		virtual bool CopyConstruction(void* target, void* source) const override
+		{
+			if constexpr (std::is_constructible_v<AtomicType, AtomicType const&>)
+			{
+				if(target != nullptr && source != nullptr)
+				{
+					new (target) AtomicType{ *static_cast<AtomicType const*>(source) };
+					return true;
+				}
+			}
+			return false;
+		}
+
 		virtual bool MoveConstruction(void* target, void* source) const override
 		{
+			assert(source != nullptr);
 			if constexpr (std::is_constructible_v<AtomicType, AtomicType &&>)
 			{
 				new (target) AtomicType{ std::move(*static_cast<AtomicType*>(source)) };

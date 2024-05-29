@@ -28,7 +28,7 @@ int main()
 			std::nullopt
 		},
 		{
-			StructLayout::CreateAtomicStructLayout<std::size_t>(u8"float"),
+			StructLayout::CreateAtomicStructLayout<std::size_t>(u8"size_t"),
 			u8"o",
 			2
 		},
@@ -52,6 +52,14 @@ int main()
 
 	auto ref4 = P->GetDataSpanAs<std::size_t>(span[2], &i);
 
+	auto so = StructLayoutObject::CopyConstruct(P, &i);
+
+	K* io = static_cast<K*>(so->GetData());
+
+	auto so2 = StructLayoutObject::CopyConstruct(P, so);
+
+
+	K* io2 = static_cast<K*>(so2->GetData());
 
 	std::cout << "TMP Pass !" << std::endl;
 
