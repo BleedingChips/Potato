@@ -14,23 +14,30 @@ using namespace Potato::IR;
 
 int main()
 {
+
+	std::size_t u = 100;
+	float icc = 100.0f;
+	std::size_t kl[2] = {288, 899};
 	
 	StructLayout::Member me[] = 
 	{
 		{
 			StructLayout::CreateAtomicStructLayout<std::size_t>(u8"size_t"),
 			u8"k",
-			std::nullopt
+			1,
+			&u
 		},
 		{
 			StructLayout::CreateAtomicStructLayout<float>(u8"float"),
 			u8"I",
-			std::nullopt
+			1,
+			&icc
 		},
 		{
 			StructLayout::CreateAtomicStructLayout<std::size_t>(u8"size_t"),
 			u8"o",
-			2
+			2,
+			kl
 		},
 	};
 
@@ -51,6 +58,11 @@ int main()
 	ref3[1] = 4;
 
 	auto ref4 = P->GetDataSpanAs<std::size_t>(span[2], &i);
+
+	auto iop = StructLayoutObject::DefaultConstruct(P, 2);
+
+	K* iop2 = static_cast<K*>(iop->GetData());
+	K* iop3 = static_cast<K*>(iop->GetData(1));
 
 	auto so = StructLayoutObject::CopyConstruct(P, &i);
 
