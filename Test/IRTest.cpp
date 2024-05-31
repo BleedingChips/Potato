@@ -45,6 +45,11 @@ int main()
 
 	K i;
 
+	K pp[2];
+	pp[0].I = 1;
+	pp[0].o[0] = 199;
+	pp[1].o[1] = 199;
+
 	auto span = P->GetMemberView();
 
 	auto ref1 = P->GetDataAs<std::size_t>(span[0], &i);
@@ -63,6 +68,11 @@ int main()
 
 	K* iop2 = static_cast<K*>(iop->GetData());
 	K* iop3 = static_cast<K*>(iop->GetData(1));
+
+	auto socc = StructLayoutObject::CopyConstruct(P, &pp, 2);
+
+	K* iop22 = static_cast<K*>(socc->GetData());
+	K* iop32 = static_cast<K*>(socc->GetData(1));
 
 	auto so = StructLayoutObject::CopyConstruct(P, &i);
 

@@ -150,7 +150,7 @@ namespace Potato::IR
 		auto layout = GetLayout();
 		return {
 			layout.Align,
-			layout.Size
+			layout.Size * array_count
 		};
 	}
 
@@ -331,21 +331,16 @@ namespace Potato::IR
 		assert(target != nullptr);
 		auto layout = GetLayout();
 		std::byte* tar = static_cast<std::byte*>(target);
+		std::byte* sou = static_cast<std::byte*>(source);
 		for(std::size_t i = 0; i < array_count; ++i)
 		{
 			std::byte* tar_ite = tar + layout.Size * i;
+			std::byte* sou_ite = sou + layout.Size * i;
 			for(auto& ite : member_view)
 			{
 				auto data = GetData(ite, tar_ite);
-				if(ite.init_object != nullptr)
-				{
-					auto re = ite.type_id->CopyConstruction(data, ite.init_object, ite.array_count);
-					assert(re);
-				}else
-				{
-					auto re = ite.type_id->DefaultConstruction(data, ite.array_count);
-					assert(re);
-				}
+				auto data2 = GetData(ite, sou_ite);
+				auto re = ite.type_id->CopyConstruction(data, data2, ite.array_count);
 			}
 		}
 		return true;
