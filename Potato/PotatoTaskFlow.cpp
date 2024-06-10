@@ -7,11 +7,234 @@ module PotatoTaskFlow;
 namespace Potato::Task
 {
 
-	TaskFlow::TaskFlow(std::pmr::memory_resource* resource)
-		: pre_complied_nodes(resource), pre_complied_edges(resource), complied_nodes(resource), complied_edges(resource)
+
+	auto TaskFlow::Node::Create(TaskFlow* owner, std::size_t index, std::pmr::memory_resource* resource)
+		-> Ptr
+	{
+		auto re = Potato::IR::MemoryResourceRecord::Allocate<Node>(resource);
+		if(re)
+		{
+			return new (re.Get()) Node(re, owner, index);
+		}
+		return {};
+	}
+
+	TaskFlow::Node::Node(IR::MemoryResourceRecord record, Pointer::ObserverPtr<TaskFlow> owner, std::size_t index)
+		: record(record), owner(owner), reference_id(index)
 	{
 		
 	}
+
+	void TaskFlow::Node::Release()
+	{
+		auto re = record;
+		this->~Node();
+		re.Deallocate();
+	}
+
+	TaskFlow::TaskFlow(std::pmr::memory_resource* task_flow_resource, MemorySetting memory_setting)
+		: resources(memory_setting)
+		, raw_nodes(task_flow_resource)
+		, raw_edges(task_flow_resource)
+		, process_nodes(task_flow_resource)
+		, process_edges(task_flow_resource)
+	{
+
+	}
+
+	auto TaskFlow::AddNode(TaskFlowNode::Ptr node, NodeProperty property)
+		->Node::Ptr
+	{
+		if(node)
+		{
+			std::lock_guard lg(raw_mutex);
+			auto tnode = Node::Create(this, raw_nodes.size(), resources.node_resource);
+			if(tnode)
+			{
+				raw_nodes.emplace_back(
+					std::move(node),
+					std::move(tnode),
+					property
+				);
+				need_update = true;
+				return tnode;
+			}
+		}
+		return {};
+	}
+
+	bool TaskFlow::RemoveDirectEdgeImp(std::size_t edge_index)
+	{
+		assert(edge_index < raw_edges.size() && raw_edges[edge_index].type == EdgeType::Direct);
+		auto cur = raw_edges[edge_index];
+		raw_edges.erase(raw_edges.begin() + edge_index);
+		raw_nodes[cur.from].out_degree -= 1;
+		auto& tcur = raw_nodes[cur.to];
+		if((tcur.in_degree -= 1) == 0)
+		{
+			auto trm = std::move(tcur);
+			raw_nodes.erase(raw_nodes.begin() + cur.to);
+			for(auto ite = raw_nodes.begin() + cur.to; ite < raw_nodes.end(); ++ite)
+			{
+				ite->reference_node->reference_id -= 1;
+			}
+			trm.reference_node->reference_id = raw_nodes.size();
+			raw_nodes.emplace_back(std::move(trm));
+			for(auto& ite : raw_edges)
+			{
+				if(ite.from == cur.to)
+					ite.from = raw_nodes.size();
+				else if(ite.from > cur.to)
+					ite.from -= 1;
+
+				if (ite.to == cur.to)
+					ite.to = raw_nodes.size();
+				else if (ite.to > cur.to)
+					ite.to -= 1;
+			}
+			return true;
+		}
+		return false;
+	}
+
+	bool TaskFlow::Remove(Node::Ptr node)
+	{
+		if(node && node->owner == this)
+		{
+			std::lock_guard lg(raw_mutex);
+			if(node->reference_id == std::numeric_limits<std::size_t>::max())
+				return false;
+
+			auto index = node->reference_id;
+			//raw_nodes.erase(raw_nodes.begin() + index);
+			raw_edges.erase(
+				std::remove_if(raw_edges.begin(), raw_edges.end(), [&](RawEdge& edge)
+				{
+					if(edge.from == index || edge.to == index)
+					{
+						if(edge.type == EdgeType::Mutex)
+						{
+							raw_nodes[edge.from].mutex_degree -= 1;
+							raw_nodes[edge.to].mutex_degree -= 1;
+						}else if(edge.type == EdgeType::Direct)
+						{
+							raw_nodes[edge.from].out_degree -= 1;
+							raw_nodes[edge.to].in_degree -= 1;
+						}
+						return true;
+					}else
+					{
+						if (edge.from > index)
+							edge.from -= 1;
+						if(edge.to > index)
+							edge.to -= 1;
+						return false;
+					}
+				}),
+				raw_edges.end()
+			);
+			raw_nodes.erase(raw_nodes.begin() + index);
+			for(auto ite = raw_nodes.begin() + index; ite < raw_nodes.end(); ++ite)
+			{
+				ite->reference_node->reference_id -= 1;
+			}
+			need_update = true;
+			return true;
+		}
+		return false;
+	}
+
+
+	bool TaskFlow::RemoveDirectEdge(Node::Ptr form, Node::Ptr direct_to)
+	{
+		if(form && direct_to && form != direct_to && form->owner == this && direct_to->owner == this)
+		{
+			std::lock_guard lg(raw_mutex);
+			auto f = form->reference_id;
+			auto t = direct_to->reference_id;
+			if(f == std::numeric_limits<std::size_t>::max() || t == std::numeric_limits<std::size_t>::max())
+				return false;
+
+			for(std::size_t i = 0; i < raw_edges.size(); ++i)
+			{
+				auto cur = raw_edges[i];
+				if(cur.type == EdgeType::Direct && cur.from == f && cur.to == t)
+				{
+					raw_nodes[cur.from].out_degree -= 1;
+					raw_nodes[cur.to].in_degree -= 1;
+					raw_edges.erase(raw_edges.begin() + i);
+					need_update = true;
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	bool TaskFlow::AddMutexEdge(Node::Ptr form, Node::Ptr direct_to)
+	{
+		if (form && direct_to && form != direct_to && form->owner == this && direct_to->owner == this)
+		{
+			std::lock_guard lg(raw_mutex);
+			auto f = form->reference_id;
+			auto t = direct_to->reference_id;
+			if (f == std::numeric_limits<std::size_t>::max() || t == std::numeric_limits<std::size_t>::max())
+				return false;
+			raw_edges.emplace_back(EdgeType::Mutex, f, t);
+			raw_edges.emplace_back(EdgeType::Mutex, t, f);
+			raw_nodes[f].mutex_degree += 2;
+			raw_nodes[t].mutex_degree += 2;
+			need_update = true;
+			return true;
+		}
+		return false;
+	}
+
+	bool TaskFlow::AddDirectEdge(Node::Ptr form, Node::Ptr direct_to, std::pmr::memory_resource* temp_resource)
+	{
+		if (form && direct_to && form != direct_to && form->owner == this && direct_to->owner == this)
+		{
+			std::lock_guard lg(raw_mutex);
+			auto f = form->reference_id;
+			auto t = direct_to->reference_id;
+			if (f == std::numeric_limits<std::size_t>::max() || t == std::numeric_limits<std::size_t>::max())
+				return false;
+			assert(f != t);
+			if(f > t)
+			{
+				raw_edges.emplace_back(EdgeType::Direct, f, t);
+				raw_nodes[f].out_degree += 1;
+				raw_nodes[t].in_degree += 1;
+				return true;
+			}else
+			{
+				auto& tref = raw_nodes[t];
+				if(tref.in_degree == 0)
+				{
+					raw_edges.emplace_back(EdgeType::Direct, f, t);
+					raw_nodes[f].out_degree += 1;
+					tref.in_degree += 1;
+					auto temp = std::move(tref);
+					raw_nodes.erase(raw_nodes.begin() + t);
+
+				}else
+				{
+					
+				}
+
+
+				if()
+			}
+			return true;
+		}
+		return false;
+	}
+
+
+	//TaskFlowNodeProcessor::Ptr TaskFlow::CreateProcessor();
+
+	/*
+	
 
 	std::optional<std::size_t> TaskFlow::LocatePreCompliedNode(TaskFlowNode& node, std::lock_guard<std::mutex> const& lg) const
 	{
@@ -158,24 +381,6 @@ namespace Potato::Task
 		return true;
 	}
 
-	/*
-	bool TaskFlow::ResetState()
-	{
-		std::lock_guard lg(compiled_mutex);
-		if(running_state == RunningState::Done)
-		{
-			running_state = RunningState::Idle;
-			for(auto& ite : compiled_nodes)
-			{
-				ite.status = RunningState::Idle;
-			}
-			exist_task = 0;
-			run_task = 0;
-			return true;
-		}
-		return false;
-	}
-	*/
 
 	bool TaskFlow::TryUpdate(std::pmr::vector<ErrorNode>* error_output, std::pmr::memory_resource* temp)
 	{

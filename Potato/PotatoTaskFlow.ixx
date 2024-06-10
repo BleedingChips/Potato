@@ -23,35 +23,25 @@ export namespace Potato::Task
 		std::optional<TaskFilter> filter;
 	};
 
-	struct TaskFlowStatus
-	{
-		TaskContext& context;
-		TaskProperty task_property;
-		ThreadProperty thread_property;
-		TaskFlowExecute& executor;
-		TaskFlow& owner;
-		std::size_t self_index = 0;
-	};
+	export struct TaskFlowContext;
 
 	struct TaskFlowNode
 	{
 		struct Wrapper
 		{
-			template<typename T>
-			void AddRef(T* ptr) { ptr->AddTaskFlowNodeRef(); }
-			template<typename T>
-			void SubRef(T* ptr) { ptr->SubTaskFlowNodeRef(); }
+			void AddRef(TaskFlowNode const* ptr) { ptr->AddTaskFlowNodeRef(); }
+			void SubRef(TaskFlowNode const* ptr) { ptr->SubTaskFlowNodeRef(); }
 		};
 
 		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlowNode, TaskFlowNode::Wrapper>;
 
 		template<typename Fun>
 		static auto CreateLambda(Fun&& func, std::pmr::memory_resource* resouce = std::pmr::get_default_resource())
-			-> Ptr requires(std::is_invocable_v<Fun, TaskFlowStatus&>);
+			-> Ptr requires(std::is_invocable_v<Fun, TaskFlowContext&>);
 
-		TaskFlowNode::Ptr Clone() { return this; }
+		virtual void Update() {}
 
-		virtual void TaskFlowNodeExecute(TaskFlowStatus& status) = 0;
+		virtual void TaskFlowNodeExecute(TaskFlowContext& status) = 0;
 		virtual void TaskFlowNodeTerminal(TaskProperty property) noexcept {}
 
 	protected:
@@ -60,26 +50,156 @@ export namespace Potato::Task
 		virtual void SubTaskFlowNodeRef() const = 0;
 	};
 
-	struct TaskFlowExecute
+	struct TaskFlowNodeProcessor
 	{
 		struct Wrapper
 		{
-			template<typename T> void AddRef(T* p) const { p->AddTaskFlowExecuteRef(); }
-			template<typename T> void SubRef(T* p) const { p->SubTaskFlowExecuteRef(); }
+			void AddRef(TaskFlowNodeProcessor const* p) const { p->AddTaskFlowNodeProcessorRef(); }
+			void SubRef(TaskFlowNodeProcessor const* p) const { p->SubTaskFlowNodeProcessorRef(); }
 		};
 
 		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlowExecute, Wrapper>;
 
 		virtual bool Commit(TaskContext& context, std::optional<std::chrono::steady_clock::time_point> delay_point = std::nullopt) { return false; }
-		virtual bool Reset() { return false; };
-		virtual bool ReCloneNode() { return false; }
 
 	protected:
 
-		virtual void AddTaskFlowExecuteRef() const = 0;
-		virtual void SubTaskFlowExecuteRef() const = 0;
+		virtual void AddTaskFlowNodeProcessorRef() const = 0;
+		virtual void SubTaskFlowNodeProcessorRef() const = 0;
 	};
 
+	export struct TaskFlow : public TaskFlowNode
+	{
+
+		struct Wrapper
+		{
+			void AddRef(TaskFlow const* ptr) { ptr->AddTaskFlowRef(); }
+			void SubRef(TaskFlow const* ptr) { ptr->SubTaskFlowRef(); }
+		};
+
+		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlow, Wrapper>;
+
+		struct Node : protected Pointer::DefaultIntrusiveInterface
+		{
+			using Ptr = Pointer::IntrusivePtr<Node>;
+
+			static Ptr Create(TaskFlow* owner, std::size_t index, std::pmr::memory_resource* resource);
+
+		protected:
+
+			Node(IR::MemoryResourceRecord record, Pointer::ObserverPtr<TaskFlow> owner, std::size_t index);
+
+			void Release() override;
+
+			IR::MemoryResourceRecord record;
+			Pointer::ObserverPtr<TaskFlow> owner;
+			std::mutex mutex;
+			std::size_t reference_id;
+
+			friend struct Pointer::DefaultIntrusiveWrapper;
+			friend struct TaskFlow;
+		};
+
+		TaskFlowNodeProcessor::Ptr CreateProcessor();
+
+		Node::Ptr AddNode(TaskFlowNode::Ptr node, NodeProperty property = {});
+		bool Remove(Node::Ptr node);
+
+		template<typename Fun>
+		TaskFlowNode::Ptr AddLambda(Fun&& func, std::u8string_view display_name = {}, std::optional<TaskProperty> property = std::nullopt, std::pmr::memory_resource* resouce = std::pmr::get_default_resource())
+			requires(std::is_invocable_v<Fun, TaskFlowContext&>)
+		{
+			auto ptr = TaskFlowNode::CreateLambda(std::forward<Fun>(func), resouce);
+			if (AddNode(ptr, property))
+			{
+				return ptr;
+			}
+			return {};
+		}
+
+		bool AddDirectEdge(Node::Ptr form, Node::Ptr direct_to, std::pmr::memory_resource* temp_resource);
+		bool AddMutexEdge(Node::Ptr form, Node::Ptr direct_to);
+		bool RemoveDirectEdge(Node::Ptr form, Node::Ptr direct_to);
+
+		void Update() override;
+
+		//bool TryUpdate(std::pmr::vector<ErrorNode>* error_output = nullptr, std::pmr::memory_resource* temp = std::pmr::get_default_resource());
+		//TaskFlowExecute::Ptr Commit(TaskContext& context, TaskProperty property = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+		//Ptr CommitDelay(TaskContext& context, std::u8string_view display_name = {}, std::chrono::steady_clock::time_point time_point, TaskProperty property = {});
+		bool Remove(TaskFlowNode::Ptr node);
+
+		struct MemorySetting
+		{
+			std::pmr::memory_resource* processor_resource = std::pmr::get_default_resource();
+			std::pmr::memory_resource* node_resource = std::pmr::get_default_resource();
+		};
+
+		TaskFlow(std::pmr::memory_resource* task_flow_resource, MemorySetting memory_setting = {});
+
+		virtual void TaskFlowExecuteBegin(ExecuteStatus& status, TaskFlowExecute& execute) {}
+		virtual void TaskFlowExecuteEnd(ExecuteStatus& status, TaskFlowExecute& execute) {}
+
+	protected:
+
+		virtual void AddTaskFlowRef() const = 0;
+		virtual void SubTaskFlowRef() const = 0;
+		void AddTaskFlowNodeRef() const override { AddTaskFlowRef(); }
+		void SubTaskFlowNodeRef() const override { SubTaskFlowNodeRef(); }
+		bool RemoveDirectEdgeImp(std::size_t edge_index);
+
+		enum class EdgeType
+		{
+			Direct,
+			//ReverseDirect,
+			Mutex,
+		};
+
+		struct RawEdge
+		{
+			EdgeType type = EdgeType::Direct;
+			std::size_t from;
+			std::size_t to;
+		};
+
+		struct RawNode
+		{
+			TaskFlowNode::Ptr node;
+			Node::Ptr reference_node;
+			NodeProperty property;
+			std::size_t in_degree = 0;
+			std::size_t out_degree = 0;
+			std::size_t mutex_degree = 0;
+		};
+
+		MemorySetting resources;
+
+		std::mutex raw_mutex;
+		std::pmr::vector<RawNode> raw_nodes;
+		std::pmr::vector<RawEdge> raw_edges;
+		bool need_update = false;
+
+		struct ProcessNode
+		{
+			RawNode pre_node;
+			std::size_t in_degree = 0;
+			Misc::IndexSpan<> direct_edges;
+			Misc::IndexSpan<> mutex_edges;
+		};
+
+		std::mutex process_mutex;
+		std::size_t reference_processor = 0;
+		std::pmr::vector<ProcessNode> process_nodes;
+		std::pmr::vector<std::size_t> process_edges;
+
+		friend struct Task::Wrapper;
+	};
+
+	struct TaskFlowProcessor
+	{
+		
+	};
+
+	/*
 	struct TaskNodeExecuteNodes
 	{
 		enum class RunningState
@@ -112,102 +232,12 @@ export namespace Potato::Task
 		}
 
 	};
+	*/
 
-
-	export struct TaskFlow
-	{
-
-		struct Wrapper
-		{
-			template<typename T> void AddRef(T* ptr) { ptr->AddTaskFlowRef(); }
-			template<typename T> void SubRef(T* ptr) { ptr->SubTaskFlowRef(); }
-		};
-
-		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlow, Wrapper>;
-
-		template<typename Fun>
-		TaskFlowNode::Ptr AddLambda(Fun&& func, std::u8string_view display_name = {}, std::optional<TaskProperty> property = std::nullopt, std::pmr::memory_resource* resouce = std::pmr::get_default_resource()) requires(std::is_invocable_v<Fun, TaskFlowStatus&>)
-		{
-			auto ptr = TaskFlowNode::CreateLambda(std::forward<Fun>(func), resouce);
-			if(AddNode(ptr, display_name, property))
-			{
-				return ptr;
-			}
-			return {};
-		}
-
-		bool AddNode(TaskFlowNode::Ptr node, NodeProperty property = {});
-
-		bool AddDirectEdges(TaskFlowNode::Ptr form, TaskFlowNode::Ptr direct_to);
-		bool AddMutexEdges(TaskFlowNode::Ptr form, TaskFlowNode::Ptr direct_to);
-
-		struct ErrorNode
-		{
-			TaskFlowNode::Ptr node;
-			std::u8string_view display_name;
-		};
-
-		bool TryUpdate(std::pmr::vector<ErrorNode>* error_output = nullptr, std::pmr::memory_resource* temp = std::pmr::get_default_resource());
-		TaskFlowExecute::Ptr Commit(TaskContext& context, TaskProperty property = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
-		//Ptr CommitDelay(TaskContext& context, std::u8string_view display_name = {}, std::chrono::steady_clock::time_point time_point, TaskProperty property = {});
-		bool Remove(TaskFlowNode::Ptr node);
-
-		TaskFlow(std::pmr::memory_resource* resource = std::pmr::get_default_resource());
-
-		bool CloneCompliedNodes(TaskNodeExecuteNodes& nodes, TaskFilter ref_filter = {});
-		virtual void TaskFlowExecuteBegin(ExecuteStatus& status, TaskFlowExecute& execute) {}
-		virtual void TaskFlowExecuteEnd(ExecuteStatus& status, TaskFlowExecute& execute) {}
-
-	protected:
-
-		virtual void AddTaskFlowRef() const {}
-		virtual void SubTaskFlowRef() const {}
-
-		std::optional<std::size_t> LocatePreCompliedNode(TaskFlowNode& node, std::lock_guard<std::mutex> const& lg) const;
-
-		enum class EdgeType
-		{
-			Direct,
-			//ReverseDirect,
-			Mutex,
-		};
-
-		struct PreCompiledEdge
-		{
-			EdgeType type = EdgeType::Direct;
-			std::size_t from;
-			std::size_t to;
-		};
-
-		struct PreCompiledNode
-		{
-			TaskFlowNode::Ptr node;
-			NodeProperty property;
-		};
-
-		std::mutex pre_compiled_mutex;
-		std::pmr::vector<PreCompiledNode> pre_complied_nodes;
-		std::pmr::vector<PreCompiledEdge> pre_complied_edges;
-		bool need_update = false;
-
-		struct CompiledNode
-		{
-			PreCompiledNode pre_node;
-			std::size_t in_degree = 0;
-			Misc::IndexSpan<> direct_edges;
-			Misc::IndexSpan<> mutex_edges;
-		};
-
-		std::mutex compiled_mutex;
-		std::pmr::vector<CompiledNode> complied_nodes;
-		std::pmr::vector<std::size_t> complied_edges;
-
-		std::atomic_size_t run_task = 0;
-
-		friend struct Task::Wrapper;
-	};
 
 	
+
+	/*
 	struct IndependenceTaskFlowExecute : public TaskFlowExecute, public Task, public Potato::Pointer::DefaultIntrusiveInterface
 	{
 		virtual bool Commit(TaskContext& context, std::optional<std::chrono::steady_clock::time_point> delay_point) override;
@@ -277,4 +307,5 @@ export namespace Potato::Task
 		}
 		return {};
 	}
+	*/
 }
