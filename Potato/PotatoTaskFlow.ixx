@@ -83,16 +83,24 @@ export namespace Potato::Task
 		{
 			using Ptr = Pointer::IntrusivePtr<Node>;
 
-			static Ptr Create(TaskFlow* owner, std::size_t index, std::pmr::memory_resource* resource);
+			static Ptr Create(
+				TaskFlow* owner,
+				TaskFlowNode::Ptr reference_node,
+				NodeProperty property,
+				std::size_t index, 
+				std::pmr::memory_resource* resource);
 
 		protected:
 
-			Node(IR::MemoryResourceRecord record, Pointer::ObserverPtr<TaskFlow> owner, std::size_t index);
+			Node(IR::MemoryResourceRecord record, Pointer::ObserverPtr<TaskFlow> owner, TaskFlowNode::Ptr reference_node, NodeProperty property, std::size_t index);
 
 			void Release() override;
 
 			IR::MemoryResourceRecord record;
 			Pointer::ObserverPtr<TaskFlow> owner;
+			TaskFlowNode::Ptr reference_node;
+			NodeProperty property;
+
 			std::mutex mutex;
 			std::size_t reference_id;
 
@@ -103,7 +111,7 @@ export namespace Potato::Task
 		TaskFlowNodeProcessor::Ptr CreateProcessor();
 
 		Node::Ptr AddNode(TaskFlowNode::Ptr node, NodeProperty property = {});
-		bool Remove(Node::Ptr node);
+		
 
 		template<typename Fun>
 		TaskFlowNode::Ptr AddLambda(Fun&& func, std::u8string_view display_name = {}, std::optional<TaskProperty> property = std::nullopt, std::pmr::memory_resource* resouce = std::pmr::get_default_resource())
@@ -117,11 +125,12 @@ export namespace Potato::Task
 			return {};
 		}
 
-		bool AddDirectEdge(Node::Ptr form, Node::Ptr direct_to, std::pmr::memory_resource* temp_resource);
-		bool AddMutexEdge(Node::Ptr form, Node::Ptr direct_to);
-		bool RemoveDirectEdge(Node::Ptr form, Node::Ptr direct_to);
+		bool Remove(Node& node);
+		bool AddDirectEdge(Node& form, Node& direct_to, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource());
+		bool AddMutexEdge(Node& form, Node& direct_to);
+		bool RemoveDirectEdge(Node& form, Node& direct_to);
 
-		void Update() override;
+		//void Update() override;
 
 		//bool TryUpdate(std::pmr::vector<ErrorNode>* error_output = nullptr, std::pmr::memory_resource* temp = std::pmr::get_default_resource());
 		//TaskFlowExecute::Ptr Commit(TaskContext& context, TaskProperty property = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
@@ -134,18 +143,19 @@ export namespace Potato::Task
 			std::pmr::memory_resource* node_resource = std::pmr::get_default_resource();
 		};
 
-		TaskFlow(std::pmr::memory_resource* task_flow_resource, MemorySetting memory_setting = {});
+		TaskFlow(std::pmr::memory_resource* task_flow_resource = std::pmr::get_default_resource(), MemorySetting memory_setting = {});
 
 		virtual void TaskFlowExecuteBegin(ExecuteStatus& status, TaskFlowExecute& execute) {}
 		virtual void TaskFlowExecuteEnd(ExecuteStatus& status, TaskFlowExecute& execute) {}
 
 	protected:
 
+		virtual void TaskFlowNodeExecute(TaskFlowContext& status) override;
+
 		virtual void AddTaskFlowRef() const = 0;
 		virtual void SubTaskFlowRef() const = 0;
 		void AddTaskFlowNodeRef() const override { AddTaskFlowRef(); }
 		void SubTaskFlowNodeRef() const override { SubTaskFlowNodeRef(); }
-		bool RemoveDirectEdgeImp(std::size_t edge_index);
 
 		enum class EdgeType
 		{
@@ -163,12 +173,8 @@ export namespace Potato::Task
 
 		struct RawNode
 		{
-			TaskFlowNode::Ptr node;
 			Node::Ptr reference_node;
-			NodeProperty property;
 			std::size_t in_degree = 0;
-			std::size_t out_degree = 0;
-			std::size_t mutex_degree = 0;
 		};
 
 		MemorySetting resources;
@@ -195,6 +201,11 @@ export namespace Potato::Task
 	};
 
 	struct TaskFlowProcessor
+	{
+		
+	};
+
+	struct TaskFlowContext
 	{
 		
 	};
@@ -271,6 +282,7 @@ export namespace Potato::Task
 		std::size_t FinishTaskFlowNode(TaskContext& context, std::size_t fast_index);
 		friend struct TaskFlow;
 	};
+	*/
 
 
 	template<typename Func>
@@ -289,14 +301,14 @@ export namespace Potato::Task
 			re.Deallocate();
 		}
 
-		void TaskFlowNodeExecute(TaskFlowStatus& status) override { func(status); }
+		void TaskFlowNodeExecute(TaskFlowContext& status) override { func(status); }
 
 		LambdaTaskFlowNode(IR::MemoryResourceRecord record, Func func)
 			: record(record), func(std::move(func)) {}
 	};
 
 	template<typename Fun>
-	auto TaskFlowNode::CreateLambda(Fun&& func, std::pmr::memory_resource* resouce) ->TaskFlowNode::Ptr requires(std::is_invocable_v<Fun, TaskFlowStatus&>)
+	auto TaskFlowNode::CreateLambda(Fun&& func, std::pmr::memory_resource* resouce) ->TaskFlowNode::Ptr requires(std::is_invocable_v<Fun, TaskFlowContext&>)
 	{
 		using Type = LambdaTaskFlowNode<std::remove_cvref_t<Fun>>;
 		assert(resouce != nullptr);
@@ -307,5 +319,4 @@ export namespace Potato::Task
 		}
 		return {};
 	}
-	*/
 }
