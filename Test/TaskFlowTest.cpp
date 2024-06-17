@@ -68,6 +68,11 @@ int main()
 		bool l41 = tf.AddDirectEdge(*a4, *a1);
 		bool r41 = tf.RemoveDirectEdge(*a2, *a3);
 		bool l41_2 = tf.AddDirectEdge(*a4, *a1);
+
+		tf.Update();
+
+		//auto pro = tf.CreateProcessor();
+
 		volatile int i = 0;
 
 		/*

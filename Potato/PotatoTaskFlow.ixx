@@ -13,14 +13,13 @@ import PotatoTaskSystem;
 
 export namespace Potato::Task
 {
-	struct TaskFlowExecute;
 
 	export struct TaskFlow;
 
 	struct NodeProperty
 	{
 		std::u8string_view display_name;
-		std::optional<TaskFilter> filter;
+		TaskFilter filter;
 	};
 
 	export struct TaskFlowContext;
@@ -39,7 +38,7 @@ export namespace Potato::Task
 		static auto CreateLambda(Fun&& func, std::pmr::memory_resource* resouce = std::pmr::get_default_resource())
 			-> Ptr requires(std::is_invocable_v<Fun, TaskFlowContext&>);
 
-		virtual void Update() {}
+		virtual bool Update() { return true; }
 
 		virtual void TaskFlowNodeExecute(TaskFlowContext& status) = 0;
 		virtual void TaskFlowNodeTerminal(TaskProperty property) noexcept {}
@@ -58,7 +57,7 @@ export namespace Potato::Task
 			void SubRef(TaskFlowNodeProcessor const* p) const { p->SubTaskFlowNodeProcessorRef(); }
 		};
 
-		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlowExecute, Wrapper>;
+		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlowNodeProcessor, Wrapper>;
 
 		virtual bool Commit(TaskContext& context, std::optional<std::chrono::steady_clock::time_point> delay_point = std::nullopt) { return false; }
 
@@ -68,13 +67,31 @@ export namespace Potato::Task
 		virtual void SubTaskFlowNodeProcessorRef() const = 0;
 	};
 
-	export struct TaskFlow : public TaskFlowNode
+	export struct TaskFlowProcessor;
+
+	export struct TaskFlow : public TaskFlowNode, protected Task
 	{
 
 		struct Wrapper
 		{
 			void AddRef(TaskFlow const* ptr) { ptr->AddTaskFlowRef(); }
 			void SubRef(TaskFlow const* ptr) { ptr->SubTaskFlowRef(); }
+		};
+
+		struct UserData
+		{
+			struct Wrapper
+			{
+				void AddRef(UserData const* p) const { p->AddUserDataRef(); }
+				void SubRef(UserData const* p) const { p->SubUserDataRef(); }
+			};
+
+			using Ptr = Pointer::IntrusivePtr<UserData, Wrapper>;
+
+		protected:
+
+			virtual void AddUserDataRef() const = 0;
+			virtual void SubUserDataRef() const = 0;
 		};
 
 		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlow, Wrapper>;
@@ -84,22 +101,34 @@ export namespace Potato::Task
 			using Ptr = Pointer::IntrusivePtr<Node>;
 
 			static Ptr Create(
-				TaskFlow* owner,
+				TaskFlow* owner, 
 				TaskFlowNode::Ptr reference_node,
-				NodeProperty property,
+				UserData::Ptr user_data,
+				NodeProperty property, 
 				std::size_t index, 
-				std::pmr::memory_resource* resource);
+				std::pmr::memory_resource* resource
+			);
 
 		protected:
 
-			Node(IR::MemoryResourceRecord record, Pointer::ObserverPtr<TaskFlow> owner, TaskFlowNode::Ptr reference_node, NodeProperty property, std::size_t index);
+			Node(
+				IR::MemoryResourceRecord record, 
+				Pointer::ObserverPtr<TaskFlow> owner, 
+				TaskFlowNode::Ptr reference_node,
+				UserData::Ptr user_data,
+				TaskFilter filter, 
+				std::u8string_view display_name, 
+				std::size_t index
+			);
 
 			void Release() override;
 
 			IR::MemoryResourceRecord record;
 			Pointer::ObserverPtr<TaskFlow> owner;
 			TaskFlowNode::Ptr reference_node;
-			NodeProperty property;
+			TaskFilter filter;
+			std::u8string_view display_name;
+			UserData::Ptr user_data;
 
 			std::mutex mutex;
 			std::size_t reference_id;
@@ -108,9 +137,7 @@ export namespace Potato::Task
 			friend struct TaskFlow;
 		};
 
-		TaskFlowNodeProcessor::Ptr CreateProcessor();
-
-		Node::Ptr AddNode(TaskFlowNode::Ptr node, NodeProperty property = {});
+		Node::Ptr AddNode(TaskFlowNode::Ptr node, NodeProperty property = {}, UserData::Ptr user_data = {});
 		
 
 		template<typename Fun>
@@ -130,13 +157,6 @@ export namespace Potato::Task
 		bool AddMutexEdge(Node& form, Node& direct_to);
 		bool RemoveDirectEdge(Node& form, Node& direct_to);
 
-		//void Update() override;
-
-		//bool TryUpdate(std::pmr::vector<ErrorNode>* error_output = nullptr, std::pmr::memory_resource* temp = std::pmr::get_default_resource());
-		//TaskFlowExecute::Ptr Commit(TaskContext& context, TaskProperty property = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
-		//Ptr CommitDelay(TaskContext& context, std::u8string_view display_name = {}, std::chrono::steady_clock::time_point time_point, TaskProperty property = {});
-		bool Remove(TaskFlowNode::Ptr node);
-
 		struct MemorySetting
 		{
 			std::pmr::memory_resource* processor_resource = std::pmr::get_default_resource();
@@ -145,17 +165,24 @@ export namespace Potato::Task
 
 		TaskFlow(std::pmr::memory_resource* task_flow_resource = std::pmr::get_default_resource(), MemorySetting memory_setting = {});
 
-		virtual void TaskFlowExecuteBegin(ExecuteStatus& status, TaskFlowExecute& execute) {}
-		virtual void TaskFlowExecuteEnd(ExecuteStatus& status, TaskFlowExecute& execute) {}
+		virtual void TaskFlowExecuteBegin(TaskFlowContext& context) {}
+		virtual void TaskFlowExecuteEnd(TaskFlowContext& context) {}
+
+		bool Update() override;
+		virtual bool Commited(TaskContext& context, NodeProperty property);
 
 	protected:
 
 		virtual void TaskFlowNodeExecute(TaskFlowContext& status) override;
+		virtual void TaskExecute(ExecuteStatus& status) override;
 
 		virtual void AddTaskFlowRef() const = 0;
 		virtual void SubTaskFlowRef() const = 0;
+		virtual void AddTaskRef() const override { AddTaskFlowRef(); }
+		virtual void SubTaskRef() const override { SubTaskFlowRef(); }
 		void AddTaskFlowNodeRef() const override { AddTaskFlowRef(); }
 		void SubTaskFlowNodeRef() const override { SubTaskFlowNodeRef(); }
+		
 
 		enum class EdgeType
 		{
@@ -184,106 +211,55 @@ export namespace Potato::Task
 		std::pmr::vector<RawEdge> raw_edges;
 		bool need_update = false;
 
-		struct ProcessNode
+		enum class Status
 		{
-			RawNode pre_node;
-			std::size_t in_degree = 0;
-			Misc::IndexSpan<> direct_edges;
-			Misc::IndexSpan<> mutex_edges;
+			READY,
+			RUNNING,
+			PAUSE,
+			PAUSE_RUNNING,
+			DONE
 		};
 
+		struct ProcessNode
+		{
+			Status status = Status::READY;
+			std::size_t in_degree = 0;
+			std::size_t mutex_degree = 0;
+			Misc::IndexSpan<> direct_edges;
+			Misc::IndexSpan<> mutex_edges;
+			std::size_t init_in_degree = 0;
+			Node::Ptr reference_node;
+		};
+
+		bool TryStartupNode(TaskContext& context, ProcessNode& node, std::size_t index);
+
 		std::mutex process_mutex;
-		std::size_t reference_processor = 0;
+		Status current_status = Status::READY;
 		std::pmr::vector<ProcessNode> process_nodes;
 		std::pmr::vector<std::size_t> process_edges;
+		std::size_t finished_task = 0;
+		NodeProperty property;
+
+		std::mutex pause_mutex;
+		TaskFlow::Ptr pause_owner;
+		std::size_t pause_index = 0;
+
 
 		friend struct Task::Wrapper;
-	};
-
-	struct TaskFlowProcessor
-	{
-		
+		friend struct TaskFlowProcessor;
 	};
 
 	struct TaskFlowContext
 	{
-		
+		TaskContext& context;
+		Status status = Status::Normal;
+		std::u8string_view display_name;
+		TaskFilter filter;
+		ThreadProperty thread_property;
+		TaskFlow::Ptr flow_node;
+		TaskFlowNode::Ptr current_node;
+		std::size_t reference_index = 0;
 	};
-
-	/*
-	struct TaskNodeExecuteNodes
-	{
-		enum class RunningState
-		{
-			Idle,
-			Running,
-			Done,
-			RequireStop,
-		};
-
-		struct ExecuteNode
-		{
-			TaskFlowNode::Ptr node;
-			TaskProperty property;
-			std::size_t require_in_degree = 0;
-			std::size_t current_in_degree = 0;
-			std::size_t mutex_count = 0;
-			Misc::IndexSpan<> mutex_span;
-			Misc::IndexSpan<> directed_span;
-			RunningState status = RunningState::Idle;
-		};
-
-		std::pmr::vector<ExecuteNode> nodes;
-		std::pmr::vector<std::size_t> edges;
-
-		TaskNodeExecuteNodes(std::pmr::memory_resource* resource)
-			: nodes(resource), edges(resource)
-		{
-			
-		}
-
-	};
-	*/
-
-
-	
-
-	/*
-	struct IndependenceTaskFlowExecute : public TaskFlowExecute, public Task, public Potato::Pointer::DefaultIntrusiveInterface
-	{
-		virtual bool Commit(TaskContext& context, std::optional<std::chrono::steady_clock::time_point> delay_point) override;
-		virtual bool Reset() override;
-		virtual bool ReCloneNode() override;
-	protected:
-
-		virtual void AddTaskFlowExecuteRef() const override { DefaultIntrusiveInterface::AddRef(); }
-		virtual void SubTaskFlowExecuteRef() const override { DefaultIntrusiveInterface::SubRef(); }
-		virtual void AddTaskRef() const override { DefaultIntrusiveInterface::AddRef(); }
-		virtual void SubTaskRef() const override { DefaultIntrusiveInterface::SubRef(); }
-		virtual void Release() override;
-		std::size_t StartupTaskFlow(TaskContext& context);
-
-		IndependenceTaskFlowExecute(TaskFlow::Ptr owner, Potato::IR::MemoryResourceRecord record, TaskProperty property);
-		
-		void TaskExecute(ExecuteStatus& status) override;
-
-		using RunningState = TaskNodeExecuteNodes::RunningState;
-
-		TaskFlow::Ptr owner;
-		Potato::IR::MemoryResourceRecord record;
-		TaskProperty property;
-
-		std::mutex mutex;
-		TaskNodeExecuteNodes nodes;
-		std::size_t run_task = 0;
-		RunningState state = RunningState::Idle;
-
-		bool TryStartSingleTaskFlowImp(TaskContext& context, std::size_t fast_index);
-		std::size_t FinishTaskFlowNode(TaskContext& context, std::size_t fast_index);
-		friend struct TaskFlow;
-	};
-	*/
-
 
 	template<typename Func>
 	struct LambdaTaskFlowNode : public TaskFlowNode, protected Pointer::DefaultIntrusiveInterface

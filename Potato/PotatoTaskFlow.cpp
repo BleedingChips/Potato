@@ -8,21 +8,42 @@ namespace Potato::Task
 {
 
 
-	auto TaskFlow::Node::Create(TaskFlow* owner, TaskFlowNode::Ptr reference_node,
-				NodeProperty property, std::size_t index, std::pmr::memory_resource* resource)
+	auto TaskFlow::Node::Create(
+		TaskFlow* owner, 
+		TaskFlowNode::Ptr reference_node,
+		UserData::Ptr user_data,
+		NodeProperty property, 
+		std::size_t index, 
+		std::pmr::memory_resource* resource
+	)
 		-> Ptr
 	{
-		auto re = Potato::IR::MemoryResourceRecord::Allocate<Node>(resource);
+		auto cur_layout = IR::Layout::Get<Node>();
+		auto str_name = IR::Layout::GetArray<char8_t>(property.display_name.size());
+
+		auto offset = IR::InsertLayoutCPP(cur_layout, str_name);
+		IR::FixLayoutCPP(cur_layout);
+
+		auto re = Potato::IR::MemoryResourceRecord::Allocate(resource, cur_layout);
 		if(re)
 		{
-			return new (re.Get()) Node(re, owner, std::move(reference_node), property, index);
+			auto str = re.GetByte() + offset;
+			std::memcpy(str, property.display_name.data(), property.display_name.size());
+			return new (re.Get()) Node(re, owner, std::move(reference_node), std::move(user_data),  property.filter, std::u8string_view{reinterpret_cast<char8_t*>(str), property.display_name.size()},  index);
 		}
 		return {};
 	}
 
-	TaskFlow::Node::Node(IR::MemoryResourceRecord record, Pointer::ObserverPtr<TaskFlow> owner, TaskFlowNode::Ptr reference_node,
-				NodeProperty property, std::size_t index)
-		: record(record), owner(owner), reference_node(std::move(reference_node)), property(std::move(property)), reference_id(index)
+	TaskFlow::Node::Node(
+		IR::MemoryResourceRecord record, 
+		Pointer::ObserverPtr<TaskFlow> owner, 
+		TaskFlowNode::Ptr reference_node,
+		UserData::Ptr user_data,
+		TaskFilter filter, 
+		std::u8string_view display_name, 
+		std::size_t index
+	)
+		: record(record), owner(owner), reference_node(std::move(reference_node)), filter(std::move(filter)), reference_id(index),display_name(display_name), user_data(std::move(user_data))
 	{
 		
 	}
@@ -44,13 +65,13 @@ namespace Potato::Task
 
 	}
 
-	auto TaskFlow::AddNode(TaskFlowNode::Ptr node, NodeProperty property)
+	auto TaskFlow::AddNode(TaskFlowNode::Ptr node, NodeProperty property, UserData::Ptr user_data)
 		->Node::Ptr
 	{
 		if(node)
 		{
 			std::lock_guard lg(raw_mutex);
-			auto tnode = Node::Create(this, std::move(node), std::move(property), raw_nodes.size(), resources.node_resource);
+			auto tnode = Node::Create(this, std::move(node), std::move(user_data), std::move(property),  raw_nodes.size(), resources.node_resource);
 			if(tnode)
 			{
 				raw_nodes.emplace_back(
@@ -386,675 +407,252 @@ namespace Potato::Task
 		return false;
 	}
 
-	void TaskFlow::TaskFlowNodeExecute(TaskFlowContext& status)
+	bool TaskFlow::Update()
 	{
-		
-	}
-
-
-
-
-	//TaskFlowNodeProcessor::Ptr TaskFlow::CreateProcessor();
-
-	/*
-	
-
-	std::optional<std::size_t> TaskFlow::LocatePreCompliedNode(TaskFlowNode& node, std::lock_guard<std::mutex> const& lg) const
-	{
-		std::size_t i = 0;
-		for(auto ite : pre_complied_nodes)
+		std::lock_guard lg(process_mutex);
+		if(current_status == Status::DONE || current_status == Status::READY)
 		{
-			if(&node == ite.node.GetPointer())
-				return i;
-			++i;
-		}
-		return std::nullopt;
-	}
-
-	bool TaskFlow::AddNode(TaskFlowNode::Ptr node, NodeProperty property)
-	{
-		if (node)
-		{
-			std::lock_guard lg1(pre_compiled_mutex);
-			auto li = LocatePreCompliedNode(*node, lg1);
-			if(!li.has_value())
+			current_status = Status::READY;
+			bool need_process_update = true;
+			finished_task = 0;
 			{
-				pre_complied_nodes.emplace_back(
-					std::move(node),
-					property
-				);
-				need_update = true;
-				return true;
-			}
-		}
-		return false;
-	}
-
-	bool TaskFlow::Remove(TaskFlowNode::Ptr node)
-	{
-		if(node)
-		{
-			std::lock_guard lg1(pre_compiled_mutex);
-			auto li = LocatePreCompliedNode(*node, lg1);
-			if(li.has_value())
-			{
-				
-				pre_complied_edges.erase(
-					std::ranges::remove_if(pre_complied_edges, [&](PreCompiledEdge& edge)->bool
-						{
-							if(edge.from == *li || edge.to == *li)
-							{
-								return true;
-							}else
-							{
-								if(edge.from > *li)
-									edge.from -= 1;
-								if(edge.to > *li)
-									edge.to -= 1;
-								return false;
-							}
-						}).begin(),
-						pre_complied_edges.end()
+				std::lock_guard lg2(raw_mutex);
+				if(need_update)
+				{
+					need_process_update = false;
+					need_update = false;
+					process_nodes.clear();
+					process_edges.clear();
+					for(auto& ite : raw_nodes)
+					{
+						process_nodes.emplace_back(
+							Status::READY,
+							ite.in_degree,
+							0,
+							Misc::IndexSpan<>{},
+							Misc::IndexSpan<>{},
+							ite.reference_node
 						);
-				pre_complied_nodes.erase(pre_complied_nodes.begin() + *li);
-				need_update = true;
-				return true;
-			}
-		}
-		return false;
-	}
-
-	bool TaskFlow::AddDirectEdges(TaskFlowNode::Ptr form, TaskFlowNode::Ptr direct_to)
-	{
-		if(form && direct_to)
-		{
-			std::lock_guard lg(pre_compiled_mutex);
-			auto l1 = LocatePreCompliedNode(*form, lg);
-			auto l2 = LocatePreCompliedNode(*direct_to, lg);
-			if(l1 && l2 && *l1 != *l2)
-			{
-				pre_complied_edges.emplace_back(
-					EdgeType::Direct, *l1, *l2
-				);
-				need_update = true;
-				return true;
-			}
-		}
-		return false;
-	}
-
-	bool TaskFlow::AddMutexEdges(TaskFlowNode::Ptr form, TaskFlowNode::Ptr direct_to)
-	{
-		if(form && direct_to)
-		{
-			std::lock_guard lg(pre_compiled_mutex);
-			auto l1 = LocatePreCompliedNode(*form, lg);
-			auto l2 = LocatePreCompliedNode(*direct_to, lg);
-			if (l1 && l2 && *l1 != *l2)
-			{
-				pre_complied_edges.emplace_back(
-					EdgeType::Mutex, *l1, *l2
-				);
-				pre_complied_edges.emplace_back(
-					EdgeType::Mutex, *l2, *l1
-				);
-				need_update = true;
-				return true;
-			}
-		}
-		return false;
-	}
-
-	bool TaskFlow::CloneCompliedNodes(TaskNodeExecuteNodes& nodes, TaskFilter ref_filter)
-	{
-		std::lock_guard lg(compiled_mutex);
-		nodes.edges = complied_edges;
-		nodes.nodes.clear();
-		for(auto& ite : complied_nodes)
-		{
-			TaskProperty property;
-			if(ite.pre_node.property.filter.has_value())
-			{
-				property.filter = *ite.pre_node.property.filter;
-			}else
-			{
-				property.filter = ref_filter;
-			}
-			property.display_name = ite.pre_node.property.display_name;
-			auto ref_ptr = ite.pre_node.node->Clone();
-			if(ref_ptr)
-			{
-				nodes.nodes.emplace_back(
-					std::move(ref_ptr),
-					property,
-					ite.in_degree,
-					ite.in_degree,
-					0,
-					ite.mutex_edges,
-					ite.direct_edges,
-					TaskNodeExecuteNodes::RunningState::Idle
-				);
-			}else
-			{
-				nodes.edges.clear();
-				nodes.nodes.clear();
-				return false;
-			}
-		}
-		return true;
-	}
-
-
-	bool TaskFlow::TryUpdate(std::pmr::vector<ErrorNode>* error_output, std::pmr::memory_resource* temp)
-	{
-
-		std::lock_guard lg(pre_compiled_mutex);
-		if(need_update)
-		{
-			std::ranges::sort(pre_complied_edges, [](PreCompiledEdge const& l1, PreCompiledEdge const& l2)
-			{
-				auto so = l1.from <=> l2.from;
-				if(so == std::strong_ordering::less)
-				{
-					return true;
-				}else if(so == std::strong_ordering::greater)
-				{
-					return false;
-				}else
-				{
-					return false;
+						ite.reference_node->reference_node->Update();
+					}
+					for(std::size_t i = 0; i < process_nodes.size(); ++i)
+					{
+						auto& ref = process_nodes[i];
+						auto s = process_edges.size();
+						for(auto& ite : raw_edges)
+						{
+							if(ite.type == EdgeType::Mutex && ite.from == i)
+							{
+								process_edges.emplace_back(ite.to);
+							}
+						}
+						ref.mutex_edges = {s, process_edges.size()};
+						s = process_edges.size();
+						for(auto& ite : raw_edges)
+						{
+							if(ite.type == EdgeType::Direct && ite.from == i)
+							{
+								process_edges.emplace_back(ite.to);
+							}
+						}
+						ref.direct_edges = {s, process_edges.size()};
+					}
 				}
-			});
-
-			struct UpdateNode
+			}
+			if(need_process_update)
 			{
-				std::size_t in_degree = 0;
-				std::size_t temp_degree = 0;
-				std::size_t touch_count = 0;
-				std::optional<std::size_t> compiled_node_mapping;
-				Misc::IndexSpan<> pre_compile_edge;
+				for(auto& ite : process_nodes)
+				{
+					ite.status = Status::READY;
+					ite.in_degree = ite.init_in_degree;
+					ite.mutex_degree = 0;
+					ite.reference_node->reference_node->Update();
+				}
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool TaskFlow::Commited(TaskContext& context, NodeProperty property)
+	{
+		std::lock_guard lg(process_mutex);
+		if(current_status == Status::READY)
+		{
+			this->property = property;
+			TaskProperty tem_property
+			{
+				property.display_name,
+				{0, 0},
+				property.filter
 			};
-
-			std::pmr::vector<UpdateNode> update_nodes(temp);
-
-			update_nodes.resize(pre_complied_nodes.size());
-
-			Misc::IndexSpan<> total_span = {0, pre_complied_edges.size()};
-
-			std::size_t cur_index = 0;
-			for(auto& ite : update_nodes)
+			if(context.CommitTask(this, tem_property))
 			{
-				auto last_span = total_span.Slice(std::span(pre_complied_edges));
-				auto find = std::ranges::find_if(last_span, [=](PreCompiledEdge const& edge) { return edge.from != cur_index; });
-				auto offset = std::distance(last_span.begin(), find);
-				ite.pre_compile_edge = total_span.SubIndex(0, offset);
-				total_span = total_span.SubIndex(offset);
-				cur_index++;
-			}
-
-			for(auto& ite : pre_complied_edges)
-			{
-				if(ite.type == EdgeType::Direct)
-				{
-					update_nodes[ite.to].in_degree += 1;
-				}
-			}
-
-			std::pmr::vector<std::size_t> temp_complied_edges(temp);
-			std::pmr::vector<CompiledNode> temp_complied_nodes(temp);
-			std::pmr::vector<std::size_t> search_stack(temp);
-			while(temp_complied_nodes.size() < update_nodes.size())
-			{
-				std::size_t startup_index = 0;
-				bool Find = false;
-				for(auto& ite : update_nodes)
-				{
-					if(!ite.compiled_node_mapping.has_value() && ite.in_degree == 0)
-					{
-						break;
-					}else
-					{
-						++startup_index;
-					}
-				}
-
-				for(auto& ite : update_nodes)
-				{
-					ite.touch_count = 0;
-				}
-
-				if(startup_index < update_nodes.size())
-				{
-					search_stack.clear();
-					auto& ref = update_nodes[startup_index];
-					ref.compiled_node_mapping = temp_complied_nodes.size();
-					auto edges = ref.pre_compile_edge.Slice(std::span(pre_complied_edges));
-					auto old_size = temp_complied_edges.size();
-
-					for (auto& ite : edges)
-					{
-						assert(ite.from == startup_index);
-						if (ite.type == EdgeType::Mutex)
-						{
-							temp_complied_edges.push_back(ite.to);
-						}
-					}
-
-					auto old_size2 = temp_complied_edges.size();
-
-					for (auto& ite : edges)
-					{
-						assert(ite.from == startup_index);
-						if (ite.type == EdgeType::Direct)
-						{
-							auto& ref = update_nodes[ite.to];
-							if(ref.touch_count == 0)
-							{
-								temp_complied_edges.push_back(ite.to);
-								search_stack.emplace_back(ite.to);
-								++ref.touch_count;
-							}
-							ref.in_degree -= 1;
-						}
-					}
-
-					while(!search_stack.empty())
-					{
-						auto top = *search_stack.rbegin();
-						search_stack.pop_back();
-						auto& tem_ref = update_nodes[top];
-						if(tem_ref.touch_count == 1)
-						{
-							auto span_edge = tem_ref.pre_compile_edge.Slice(std::span(pre_complied_edges));
-							for (auto& ite : span_edge)
-							{
-								assert(ite.from == top);
-								if (ite.type == EdgeType::Direct)
-								{
-									update_nodes[ite.to].touch_count += 1;
-									search_stack.push_back(ite.to);
-								}
-							}
-						}else if(tem_ref.touch_count >= 2)
-						{
-							temp_complied_edges.erase(
-								std::remove_if(temp_complied_edges.begin() + old_size2, temp_complied_edges.end(), [=](std::size_t i)
-									{
-										return i == top;
-									}),
-								temp_complied_edges.end()
-							);
-						}
-					}
-
-					CompiledNode new_one;
-					new_one.pre_node = pre_complied_nodes[startup_index];
-					new_one.mutex_edges = { old_size, old_size2 };
-					new_one.direct_edges = { old_size2, temp_complied_edges.size()};
-					temp_complied_nodes.emplace_back(std::move(new_one));
-				}else
-				{
-					if(error_output != nullptr)
-					{
-						std::size_t index = 0;
-						for(auto& ite : update_nodes)
-						{
-							if (!ite.compiled_node_mapping.has_value())
-							{
-								error_output->emplace_back(
-									pre_complied_nodes[index].node,
-									pre_complied_nodes[index].property.display_name
-									);
-							}
-							++index;
-						}
-					}
-					return false;
-				}
-			}
-
-			for(auto& ite : temp_complied_edges)
-			{
-				assert(update_nodes[ite].compiled_node_mapping);
-				ite = *update_nodes[ite].compiled_node_mapping;
-			}
-
-			for(auto& ite : temp_complied_nodes)
-			{
-				auto span = ite.direct_edges.Slice(std::span(temp_complied_edges));
-				for(auto& ite2 : span)
-				{
-					temp_complied_nodes[ite2].in_degree += 1;
-				}
-			}
-
-			std::lock_guard lg2(compiled_mutex);
-			complied_nodes = temp_complied_nodes;
-			complied_edges = temp_complied_edges;
-			need_update = false;
-			return true;
-		}
-		return false;
-	}
-
-	TaskFlowExecute::Ptr TaskFlow::Commit(TaskContext& context, TaskProperty property, std::pmr::memory_resource* resource)
-	{
-		if(resource != nullptr)
-		{
-			auto re = Potato::IR::MemoryResourceRecord::Allocate<IndependenceTaskFlowExecute>(resource);
-			if(re)
-			{
-				auto ptr = new (re.Get()) IndependenceTaskFlowExecute{this, re, property};
-				ptr->Commit(context, {});
-				return ptr;
-			}
-		}
-		return {};
-	}
-
-	IndependenceTaskFlowExecute::IndependenceTaskFlowExecute(TaskFlow::Ptr owner, Potato::IR::MemoryResourceRecord record, TaskProperty property)
-		: owner(std::move(owner)), record(record), property(property), nodes(record.GetMemoryResource())
-	{
-		if(this->owner)
-		{
-			this->owner->CloneCompliedNodes(nodes, property.filter);
-		}
-	}
-
-	void IndependenceTaskFlowExecute::Release()
-	{
-		auto re = record;
-		this->~IndependenceTaskFlowExecute();
-		record.Deallocate();
-	}
-
-	bool IndependenceTaskFlowExecute::Commit(TaskContext& context, std::optional<std::chrono::steady_clock::time_point> delay_point)
-	{
-		if(owner)
-		{
-			std::lock_guard lg(mutex);
-			if(state == RunningState::Idle)
-			{
-				TaskProperty cur_pro = property;
-				cur_pro.user_data = { 0, 0 };
-				if(!delay_point.has_value())
-				{
-					if (context.CommitTask(this, cur_pro))
-					{
-						state = RunningState::Running;
-						return true;
-					}
-				}else
-				{
-					if (context.CommitDelayTask(this, *delay_point, cur_pro))
-					{
-						state = RunningState::Running;
-						return true;
-					}
-				}
-			}
-		}
-		return false;
-	}
-
-	void IndependenceTaskFlowExecute::TaskExecute(ExecuteStatus& status)
-	{
-		auto ptr = reinterpret_cast<TaskFlowNode*>(status.task_property.user_data[0]);
-		if (ptr != nullptr)
-		{
-			TaskFlowStatus tf_status{
-				status.context,
-				status.task_property,
-				status.thread_property,
-				*this,
-				*owner,
-				status.task_property.user_data[1],
-			};
-			ptr->TaskFlowNodeExecute(tf_status);
-			std::lock_guard lg(mutex);
-			FinishTaskFlowNode(status.context, status.task_property.user_data[1]);
-			if (run_task != nodes.nodes.size())
-			{
-				return;
-			}else
-			{
-				TaskProperty pro = property;
-				pro.user_data = {0, 1};
-				status.context.CommitTask(this, pro);
-			}
-		}
-		else
-		{
-			if(status.task_property.user_data.datas[1] == 0)
-			{
-				if(owner)
-				{
-					owner->TaskFlowExecuteBegin(status, *this);
-				}
-
-				std::lock_guard lg(mutex);
-				StartupTaskFlow(status.context);
-				
-				if (run_task != nodes.nodes.size())
-				{
-					return;
-				}
-				else
-				{
-					TaskProperty pro = property;
-					pro.user_data = {0, 1};
-					status.context.CommitTask(this, pro);
-				}
-			}else
-			{
-				{
-					std::lock_guard lg(mutex);
-					state = RunningState::Done;
-				}
-				if (owner)
-				{
-					owner->TaskFlowExecuteEnd(status, *this);
-				}
-			}
-		}
-	}
-
-	std::size_t IndependenceTaskFlowExecute::StartupTaskFlow(TaskContext& context)
-	{
-		//std::lock_guard lg(mutex);
-		std::size_t count = 0;
-		for (std::size_t i = 0; i < nodes.nodes.size(); ++i)
-		{
-			if (TryStartSingleTaskFlowImp(context, i))
-			{
-				count += 1;
-			}
-		}
-		return count;
-	}
-
-	bool IndependenceTaskFlowExecute::TryStartSingleTaskFlowImp(TaskContext& context, std::size_t fast_index)
-	{
-		assert(fast_index < nodes.nodes.size());
-		auto& ref = nodes.nodes[fast_index];
-		assert(ref.node);
-		if (ref.current_in_degree == 0 && ref.mutex_count == 0 && ref.status == RunningState::Idle)
-		{
-			auto pro = ref.property;
-			pro.user_data = { reinterpret_cast<std::size_t>(ref.node.GetPointer()), fast_index };
-
-			if (context.CommitTask(
-				this,
-				pro
-			))
-			{
-				auto mutex_span = ref.mutex_span.Slice(std::span(nodes.edges));
-				for (auto ite : mutex_span)
-				{
-					nodes.nodes[ite].mutex_count += 1;
-				}
-				ref.status = RunningState::Running;
+				current_status = Status::RUNNING;
 				return true;
 			}
 		}
 		return false;
 	}
 
-	std::size_t IndependenceTaskFlowExecute::FinishTaskFlowNode(TaskContext& context, std::size_t fast_index)
-	{
-		std::size_t count = 0;
-		//std::lock_guard lg(mutex);
-		run_task += 1;
-		assert(fast_index < nodes.nodes.size());
-		auto& ref = nodes.nodes[fast_index];
-
-		auto mutex_span = ref.mutex_span.Slice(std::span(nodes.edges));
-		for (auto ite : mutex_span)
-		{
-			auto& ref2 = nodes.nodes[ite];
-			ref2.mutex_count -= 1;
-			if (TryStartSingleTaskFlowImp(context, ite))
-			{
-				count += 1;
-			}
-		}
-
-		auto directed_span = ref.directed_span.Slice(std::span(nodes.edges));
-		for (auto ite : directed_span)
-		{
-			auto& ref2 = nodes.nodes[ite];
-			assert(ref2.current_in_degree >= 1);
-			ref2.current_in_degree -= 1;
-			if (TryStartSingleTaskFlowImp(context, ite))
-			{
-				count += 1;
-			}
-		}
-		return count;
-	}
-
-	bool IndependenceTaskFlowExecute::Reset()
-	{
-		std::lock_guard lg(mutex);
-		if(state == RunningState::Done)
-		{
-			for(auto& ite : nodes.nodes)
-			{
-				ite.current_in_degree = ite.require_in_degree;
-				ite.status = RunningState::Idle;
-			}
-			run_task = 0;
-			state = RunningState::Idle;
-			return true;
-		}
-		return false;
-	}
-
-	bool IndependenceTaskFlowExecute::ReCloneNode()
-	{
-		if(owner)
-		{
-			std::lock_guard lg(mutex);
-			if(state == RunningState::Done || state == RunningState::Idle)
-			{
-				return owner->CloneCompliedNodes(nodes, property.filter);
-			}
-		}
-		return false;
-	}
-
-	/*
 	void TaskFlow::TaskExecute(ExecuteStatus& status)
 	{
-		auto ptr = reinterpret_cast<TaskFlowNode*>(status.user_data[0]);
-		if (ptr != nullptr)
+		auto node = reinterpret_cast<TaskFlowNode*>(status.task_property.user_data[0]);
+		auto index = status.task_property.user_data[1];
+		if(node == nullptr)
 		{
-			TaskFlowStatus tf_status{
+			TaskFlowContext context{
 				status.context,
-				status.task_property,
+				status.status,
+				status.task_property.display_name,
+				status.task_property.filter,
 				status.thread_property,
-				*this,
-				status.user_data[1],
-				status.display_name
+				this,
+				{},
+				0
 			};
-			ptr->TaskFlowNodeExecute(tf_status);
-			FinishTaskFlowNode(status.context, status.user_data[1]);
-			if (run_task != compiled_nodes.size())
+			if(index == 0)
 			{
+				TaskFlowExecuteBegin(context);
+
+				{
+					std::lock_guard lg(process_mutex);
+					current_status = Status::DONE;
+					if(process_nodes.size() == 0)
+					{
+						status.task_property.user_data[1] = 1;
+						status.context.CommitTask(this, status.task_property);
+						return;
+					}else
+					{
+						for(std::size_t i = 0; i < process_nodes.size(); ++i)
+						{
+							auto& ite = process_nodes[i];
+							TryStartupNode(status.context, ite, i);
+						}
+					}
+				}
+				
+			}else if(index == 1)
+			{
+				{
+					std::lock_guard lg(process_mutex);
+					current_status = Status::DONE;
+				}
+				TaskFlowExecuteEnd(context);
+				std::lock_guard lg(pause_mutex);
+				if(pause_owner)
+				{
+					if(pause_owner->process_nodes.size() > pause_index)
+					{
+						auto& ref = pause_owner->process_nodes[pause_index];
+						if(ref.status == Status::PAUSE)
+						{
+							ref.status = Status::DONE;
+							auto mutex_span = ref.mutex_edges.Slice(std::span(pause_owner->process_edges));
+							for(auto ite : mutex_span)
+							{
+								auto& tref = pause_owner->process_nodes[ite];
+								tref.mutex_degree -= 1;
+								pause_owner->TryStartupNode(status.context, tref, ite);
+							}
+							auto edge_span = ref.direct_edges.Slice(std::span(pause_owner->process_edges));
+							for(auto ite : edge_span)
+							{
+								auto& tref = pause_owner->process_nodes[ite];
+								tref.in_degree -= 1;
+								pause_owner->TryStartupNode(status.context, tref, ite);
+							}
+						}
+					}
+				}
+			}else
+			{
+				assert(false);
+			}
+			return;
+		}else
+		{
+			TaskFlowContext context{
+				status.context,
+				status.status,
+				status.task_property.display_name,
+				status.task_property.filter,
+				status.thread_property,
+				this,
+				node,
+				index
+			};
+
+			node->TaskFlowNodeExecute(context);
+			std::lock_guard lg(process_mutex);
+			finished_task += 1;
+			if(finished_task == process_nodes.size())
+			{
+				TaskProperty tem_pro{
+					property.display_name,
+					{0, 1},
+					property.filter
+				};
+				status.context.CommitTask(this, tem_pro);
 				return;
 			}
-		}
-		else
-		{
-			OnBeginTaskFlow(status);
-			StartupTaskFlow(status.context);
-			if (run_task != compiled_nodes.size())
+			auto& ref = process_nodes[index];
+			ref.status = Status::DONE;
+			auto mutex_span = ref.mutex_edges.Slice(std::span(process_edges));
+			for(auto ite : mutex_span)
 			{
-				return;
+				auto& tref = process_nodes[ite];
+				tref.mutex_degree -= 1;
+				TryStartupNode(status.context, tref, ite);
 			}
+			auto edge_span = ref.direct_edges.Slice(std::span(process_edges));
+			for(auto ite : edge_span)
+			{
+				auto& tref = process_nodes[ite];
+				tref.in_degree -= 1;
+				TryStartupNode(status.context, tref, ite);
+			}
+			return;
 		}
-		{
-			std::lock_guard lg(compiled_mutex);
-			running_state = RunningState::Done;
-		}
-		OnFinishTaskFlow(status);
 	}
 
-	bool TaskFlow::Commit(TaskContext& context, TaskProperty property, std::u8string_view display_name)
+	bool TaskFlow::TryStartupNode(TaskContext& context, ProcessNode& node, std::size_t index)
 	{
-		std::lock_guard lg(compiled_mutex);
-		if(running_state == RunningState::Idle)
+		if(node.status == Status::READY && node.mutex_degree == 0 && node.in_degree == 0)
 		{
-			if(context.CommitTask(this, property, {0, 0}, display_name))
+			TaskProperty pro{
+				node.reference_node->display_name,
+				{node.reference_node->reference_node, index},
+				node.reference_node->filter
+			};
+			if(context.CommitTask(this, pro))
 			{
-				running_state = RunningState::Running;
+				auto mutex_span = node.mutex_edges.Slice(std::span(process_edges));
+				for(auto ite : mutex_span)
+				{
+					process_nodes[ite].mutex_degree += 1;
+				}
+				node.status = Status::RUNNING;
 				return true;
 			}
 		}
 		return false;
 	}
 
-	bool TaskFlow::CommitDelay(TaskContext& context, std::chrono::steady_clock::time_point time_point, TaskProperty property, std::u8string_view display_name)
+	void TaskFlow::TaskFlowNodeExecute(TaskFlowContext& status)
 	{
-		std::lock_guard lg(compiled_mutex);
-		if (running_state == RunningState::Idle)
+		std::lock_guard lg(pause_mutex);
+		if(!pause_owner)
 		{
-			if (context.CommitDelayTask(this, time_point, property, { 0, 0 }, display_name))
+			if(Commited(status.context, {status.display_name, status.filter}))
 			{
-				running_state = RunningState::Running;
-				OnPostCommit();
-				return true;
-			}
-		}
-		return false;
-	}
-
-	
-
-	
-
-	void TaskFlow::TaskTerminal(TaskProperty property, AppendData data) noexcept
-	{
-		{
-			std::lock_guard lg(compiled_mutex);
-			auto ptr = reinterpret_cast<TaskFlowNode*>(data[0]);
-			if (ptr != nullptr)
-			{
-				auto& ref = compiled_nodes[data[1]];
-				assert(ref.status == RunningState::Running);
-				ref.status = RunningState::Done;
-				assert(exist_task >= 1);
-				exist_task -= 1;
-				run_task += 1;
-			}
-			if (exist_task == 0)
-			{
-				running_state = RunningState::Done;
+				pause_owner = std::move(status.flow_node);
+				pause_index = status.reference_index;
+				std::lock_guard lg(pause_owner->process_mutex);
+				pause_owner->process_nodes[status.reference_index].status = Status::PAUSE;
 			}
 		}
 	}
-
-	
-	*/
 
 }
