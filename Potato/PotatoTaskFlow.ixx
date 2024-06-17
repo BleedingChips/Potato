@@ -49,27 +49,15 @@ export namespace Potato::Task
 		virtual void SubTaskFlowNodeRef() const = 0;
 	};
 
-	struct TaskFlowNodeProcessor
+	struct TaskFlowNodeProcessor : public Task
 	{
-		struct Wrapper
-		{
-			void AddRef(TaskFlowNodeProcessor const* p) const { p->AddTaskFlowNodeProcessorRef(); }
-			void SubRef(TaskFlowNodeProcessor const* p) const { p->SubTaskFlowNodeProcessorRef(); }
-		};
-
-		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlowNodeProcessor, Wrapper>;
-
-		virtual bool Commit(TaskContext& context, std::optional<std::chrono::steady_clock::time_point> delay_point = std::nullopt) { return false; }
-
+		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlowNodeProcessor, Task::Wrapper>;
 	protected:
-
-		virtual void AddTaskFlowNodeProcessorRef() const = 0;
-		virtual void SubTaskFlowNodeProcessorRef() const = 0;
 	};
 
 	export struct TaskFlowProcessor;
 
-	export struct TaskFlow : public TaskFlowNode, protected Task
+	export struct TaskFlow : public TaskFlowNode
 	{
 
 		struct Wrapper
@@ -173,13 +161,18 @@ export namespace Potato::Task
 
 	protected:
 
+		TaskFlowNodeProcessor::Ptr CreateProcessor(TaskFlow::Ptr parent_node = {}, std::size_t parent_index = 0);
+
 		virtual void TaskFlowNodeExecute(TaskFlowContext& status) override;
-		virtual void TaskExecute(ExecuteStatus& status) override;
+
+		virtual bool ExecuteTaskFlowNode(ExecuteStatus& status, TaskFlowNodeProcessor& processor);
+
+		//virtual void TaskExecute(ExecuteStatus& status) override;
 
 		virtual void AddTaskFlowRef() const = 0;
 		virtual void SubTaskFlowRef() const = 0;
-		virtual void AddTaskRef() const override { AddTaskFlowRef(); }
-		virtual void SubTaskRef() const override { SubTaskFlowRef(); }
+		//virtual void AddTaskRef() const override { AddTaskFlowRef(); }
+		//virtual void SubTaskRef() const override { SubTaskFlowRef(); }
 		void AddTaskFlowNodeRef() const override { AddTaskFlowRef(); }
 		void SubTaskFlowNodeRef() const override { SubTaskFlowNodeRef(); }
 		
@@ -231,7 +224,7 @@ export namespace Potato::Task
 			Node::Ptr reference_node;
 		};
 
-		bool TryStartupNode(TaskContext& context, ProcessNode& node, std::size_t index);
+		bool TryStartupNode(TaskContext& context, ProcessNode& node, std::size_t index, TaskFlowNodeProcessor& processor);
 
 		std::mutex process_mutex;
 		Status current_status = Status::READY;
@@ -240,13 +233,41 @@ export namespace Potato::Task
 		std::size_t finished_task = 0;
 		NodeProperty property;
 
-		std::mutex pause_mutex;
-		TaskFlow::Ptr pause_owner;
-		std::size_t pause_index = 0;
-
-
 		friend struct Task::Wrapper;
 		friend struct TaskFlowProcessor;
+	};
+
+	export struct TaskFlowProcessor : public TaskFlowNodeProcessor, public Pointer::DefaultIntrusiveInterface
+	{
+
+		TaskFlowProcessor(
+			IR::MemoryResourceRecord record, 
+			TaskFlow::Ptr reference_node, 
+			TaskFlow::Ptr parent_node,
+			std::size_t parent_index
+		)
+			: record(record), reference_node(std::move(reference_node)),
+			parent_node(std::move(parent_node)), parent_index(parent_index)
+		{
+			
+		}
+
+	protected:
+
+		virtual void TaskExecute(ExecuteStatus& status) override;
+
+		void AddTaskRef() const override { DefaultIntrusiveInterface::AddRef(); }
+		void SubTaskRef() const override { DefaultIntrusiveInterface::SubRef(); }
+
+		void Release() override;
+
+		IR::MemoryResourceRecord record;
+		TaskFlow::Ptr reference_node;
+		TaskFlow::Ptr parent_node;
+		std::size_t parent_index;
+
+		friend struct Task::Ptr;
+		friend struct TaskFlowNodeProcessor::Ptr;
 	};
 
 	struct TaskFlowContext

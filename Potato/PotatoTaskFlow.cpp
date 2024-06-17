@@ -479,15 +479,16 @@ namespace Potato::Task
 		std::lock_guard lg(process_mutex);
 		if(current_status == Status::READY)
 		{
-			this->property = property;
 			TaskProperty tem_property
 			{
 				property.display_name,
 				{0, 0},
 				property.filter
 			};
-			if(context.CommitTask(this, tem_property))
+			auto pro = CreateProcessor({}, 0);
+			if(pro && context.CommitTask(pro, tem_property))
 			{
+				this->property = property;
 				current_status = Status::RUNNING;
 				return true;
 			}
@@ -495,7 +496,7 @@ namespace Potato::Task
 		return false;
 	}
 
-	void TaskFlow::TaskExecute(ExecuteStatus& status)
+	bool TaskFlow::ExecuteTaskFlowNode(ExecuteStatus& status, TaskFlowNodeProcessor& processor)
 	{
 		auto node = reinterpret_cast<TaskFlowNode*>(status.task_property.user_data[0]);
 		auto index = status.task_property.user_data[1];
@@ -517,18 +518,16 @@ namespace Potato::Task
 
 				{
 					std::lock_guard lg(process_mutex);
-					current_status = Status::DONE;
 					if(process_nodes.size() == 0)
 					{
 						status.task_property.user_data[1] = 1;
-						status.context.CommitTask(this, status.task_property);
-						return;
+						status.context.CommitTask(&processor, status.task_property);
 					}else
 					{
 						for(std::size_t i = 0; i < process_nodes.size(); ++i)
 						{
 							auto& ite = process_nodes[i];
-							TryStartupNode(status.context, ite, i);
+							TryStartupNode(status.context, ite, i, processor);
 						}
 					}
 				}
@@ -540,37 +539,13 @@ namespace Potato::Task
 					current_status = Status::DONE;
 				}
 				TaskFlowExecuteEnd(context);
-				std::lock_guard lg(pause_mutex);
-				if(pause_owner)
-				{
-					if(pause_owner->process_nodes.size() > pause_index)
-					{
-						auto& ref = pause_owner->process_nodes[pause_index];
-						if(ref.status == Status::PAUSE)
-						{
-							ref.status = Status::DONE;
-							auto mutex_span = ref.mutex_edges.Slice(std::span(pause_owner->process_edges));
-							for(auto ite : mutex_span)
-							{
-								auto& tref = pause_owner->process_nodes[ite];
-								tref.mutex_degree -= 1;
-								pause_owner->TryStartupNode(status.context, tref, ite);
-							}
-							auto edge_span = ref.direct_edges.Slice(std::span(pause_owner->process_edges));
-							for(auto ite : edge_span)
-							{
-								auto& tref = pause_owner->process_nodes[ite];
-								tref.in_degree -= 1;
-								pause_owner->TryStartupNode(status.context, tref, ite);
-							}
-						}
-					}
-				}
+				return false;
 			}else
 			{
 				assert(false);
+				return false;
 			}
-			return;
+			return true;
 		}else
 		{
 			TaskFlowContext context{
@@ -594,8 +569,8 @@ namespace Potato::Task
 					{0, 1},
 					property.filter
 				};
-				status.context.CommitTask(this, tem_pro);
-				return;
+				status.context.CommitTask(&processor, tem_pro);
+				return true;
 			}
 			auto& ref = process_nodes[index];
 			ref.status = Status::DONE;
@@ -604,20 +579,20 @@ namespace Potato::Task
 			{
 				auto& tref = process_nodes[ite];
 				tref.mutex_degree -= 1;
-				TryStartupNode(status.context, tref, ite);
+				TryStartupNode(status.context, tref, ite, processor);
 			}
 			auto edge_span = ref.direct_edges.Slice(std::span(process_edges));
 			for(auto ite : edge_span)
 			{
 				auto& tref = process_nodes[ite];
 				tref.in_degree -= 1;
-				TryStartupNode(status.context, tref, ite);
+				TryStartupNode(status.context, tref, ite, processor);
 			}
-			return;
 		}
+		return true;
 	}
 
-	bool TaskFlow::TryStartupNode(TaskContext& context, ProcessNode& node, std::size_t index)
+	bool TaskFlow::TryStartupNode(TaskContext& context, ProcessNode& node, std::size_t index, TaskFlowNodeProcessor& processor)
 	{
 		if(node.status == Status::READY && node.mutex_degree == 0 && node.in_degree == 0)
 		{
@@ -626,7 +601,7 @@ namespace Potato::Task
 				{node.reference_node->reference_node, index},
 				node.reference_node->filter
 			};
-			if(context.CommitTask(this, pro))
+			if(context.CommitTask(&processor, pro))
 			{
 				auto mutex_span = node.mutex_edges.Slice(std::span(process_edges));
 				for(auto ite : mutex_span)
@@ -642,6 +617,7 @@ namespace Potato::Task
 
 	void TaskFlow::TaskFlowNodeExecute(TaskFlowContext& status)
 	{
+		/*
 		std::lock_guard lg(pause_mutex);
 		if(!pause_owner)
 		{
@@ -653,6 +629,38 @@ namespace Potato::Task
 				pause_owner->process_nodes[status.reference_index].status = Status::PAUSE;
 			}
 		}
+		*/
 	}
+
+	TaskFlowNodeProcessor::Ptr TaskFlow::CreateProcessor(TaskFlow::Ptr parent_node, std::size_t parent_index)
+	{
+		auto re = IR::MemoryResourceRecord::Allocate<TaskFlowProcessor>(resources.processor_resource);
+		if(re)
+		{
+			return new (re.Get()) TaskFlowProcessor{re, this, {}, 0};
+		}
+		return {};
+	}
+
+	void TaskFlowProcessor::TaskExecute(ExecuteStatus& status)
+	{
+		if(reference_node)
+		{
+			auto count = reference_node->ExecuteTaskFlowNode(status, *this);
+			if(!count)
+			{
+				//
+			}
+		}
+	}
+
+	void TaskFlowProcessor::Release()
+	{
+		auto re = record;
+		this->~TaskFlowProcessor();
+		re.Deallocate();
+	}
+
+	
 
 }
