@@ -49,15 +49,17 @@ export namespace Potato::Task
 		virtual void SubTaskFlowNodeRef() const = 0;
 	};
 
+	/*
 	struct TaskFlowNodeProcessor : public Task
 	{
 		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlowNodeProcessor, Task::Wrapper>;
 	protected:
 	};
+	*/
 
-	export struct TaskFlowProcessor;
+	export struct TaskFlowListener;
 
-	export struct TaskFlow : public TaskFlowNode
+	export struct TaskFlow : protected TaskFlowNode, protected Task
 	{
 
 		struct Wrapper
@@ -125,7 +127,11 @@ export namespace Potato::Task
 			friend struct TaskFlow;
 		};
 
-		Node::Ptr AddNode(TaskFlowNode::Ptr node, NodeProperty property = {}, UserData::Ptr user_data = {});
+		Node::Ptr AddNode(TaskFlowNode::Ptr node, NodeProperty property = {}, UserData::Ptr user_data = {})
+		{
+			std::lock_guard lg(raw_mutex);
+			return AddNode_AssumedLock(std::move(node), std::move(property), std::move(user_data));
+		}
 		
 
 		template<typename Fun>
@@ -140,10 +146,10 @@ export namespace Potato::Task
 			return {};
 		}
 
-		bool Remove(Node& node);
-		bool AddDirectEdge(Node& form, Node& direct_to, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource());
-		bool AddMutexEdge(Node& form, Node& direct_to);
-		bool RemoveDirectEdge(Node& form, Node& direct_to);
+		bool Remove(Node& node) { std::lock_guard lg(raw_mutex); return Remove(node); }
+		bool AddDirectEdge(Node& from, Node& direct_to, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource()) { std::lock_guard lg(raw_mutex); return AddDirectEdge_AssumedLock(from, direct_to , temp_resource); }
+		bool AddMutexEdge(Node& from, Node& direct_to) { std::lock_guard lg(raw_mutex); return AddMutexEdge_AssumedLock(from, direct_to); }
+		bool RemoveDirectEdge(Node& from, Node& direct_to) { std::lock_guard lg(raw_mutex); return RemoveDirectEdge_AssumedLock(from, direct_to); }
 
 		struct MemorySetting
 		{
@@ -151,7 +157,7 @@ export namespace Potato::Task
 			std::pmr::memory_resource* node_resource = std::pmr::get_default_resource();
 		};
 
-		TaskFlow(std::pmr::memory_resource* task_flow_resource = std::pmr::get_default_resource(), MemorySetting memory_setting = {});
+		TaskFlow(std::chrono::steady_clock::duration listen_duration = std::chrono::microseconds{100}, std::pmr::memory_resource* task_flow_resource = std::pmr::get_default_resource(), MemorySetting memory_setting = {});
 
 		virtual void TaskFlowExecuteBegin(TaskFlowContext& context) {}
 		virtual void TaskFlowExecuteEnd(TaskFlowContext& context) {}
@@ -161,18 +167,21 @@ export namespace Potato::Task
 
 	protected:
 
-		TaskFlowNodeProcessor::Ptr CreateProcessor(TaskFlow::Ptr parent_node = {}, std::size_t parent_index = 0);
+		Node::Ptr AddNode_AssumedLock(TaskFlowNode::Ptr node, NodeProperty property = {}, UserData::Ptr user_data = {});
+		bool Remove_AssumedLock(Node& node);
+		bool AddDirectEdge_AssumedLock(Node& from, Node& direct_to, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource());
+		bool AddMutexEdge_AssumedLock(Node& from, Node& direct_to);
+		bool RemoveDirectEdge_AssumedLock(Node& from, Node& direct_to);
+		virtual bool MarkNodePause(std::size_t node_identity);
+		virtual bool ContinuePauseNode(ExecuteStatus& status, std::size_t node_identity);
 
 		virtual void TaskFlowNodeExecute(TaskFlowContext& status) override;
-
-		virtual bool ExecuteTaskFlowNode(ExecuteStatus& status, TaskFlowNodeProcessor& processor);
-
-		//virtual void TaskExecute(ExecuteStatus& status) override;
+		virtual void TaskExecute(ExecuteStatus& status) override;
 
 		virtual void AddTaskFlowRef() const = 0;
 		virtual void SubTaskFlowRef() const = 0;
-		//virtual void AddTaskRef() const override { AddTaskFlowRef(); }
-		//virtual void SubTaskRef() const override { SubTaskFlowRef(); }
+		virtual void AddTaskRef() const override { AddTaskFlowRef(); }
+		virtual void SubTaskRef() const override { SubTaskFlowRef(); }
 		void AddTaskFlowNodeRef() const override { AddTaskFlowRef(); }
 		void SubTaskFlowNodeRef() const override { SubTaskFlowNodeRef(); }
 		
@@ -213,6 +222,8 @@ export namespace Potato::Task
 			DONE
 		};
 
+		//virtual Status ExecuteTaskFlowNode(ExecuteStatus& status, TaskFlowNodeProcessor& processor, NodeProperty property);
+
 		struct ProcessNode
 		{
 			Status status = Status::READY;
@@ -224,30 +235,37 @@ export namespace Potato::Task
 			Node::Ptr reference_node;
 		};
 
-		bool TryStartupNode(TaskContext& context, ProcessNode& node, std::size_t index, TaskFlowNodeProcessor& processor);
+		bool TryStartupNode(TaskContext& context, ProcessNode& node, std::size_t index);
+		bool FinishNode_AssumedLock(TaskContext& context, ProcessNode& node);
 
 		std::mutex process_mutex;
 		Status current_status = Status::READY;
 		std::pmr::vector<ProcessNode> process_nodes;
 		std::pmr::vector<std::size_t> process_edges;
 		std::size_t finished_task = 0;
-		NodeProperty property;
+		NodeProperty running_property;
+		std::chrono::steady_clock::duration listen_duration;
+
+		std::mutex parent_mutex;
+		TaskFlow::Ptr parent_node;
+		std::size_t current_identity = 0;
 
 		friend struct Task::Wrapper;
-		friend struct TaskFlowProcessor;
 	};
 
+	/*
 	export struct TaskFlowProcessor : public TaskFlowNodeProcessor, public Pointer::DefaultIntrusiveInterface
 	{
 
 		TaskFlowProcessor(
 			IR::MemoryResourceRecord record, 
 			TaskFlow::Ptr reference_node, 
-			TaskFlow::Ptr parent_node,
-			std::size_t parent_index
+			TaskFlowProcessor::Ptr parent_processor,
+			std::size_t parent_index,
+			NodeProperty property
 		)
 			: record(record), reference_node(std::move(reference_node)),
-			parent_node(std::move(parent_node)), parent_index(parent_index)
+			parent_node(std::move(parent_node)), parent_index(parent_index), property(property)
 		{
 			
 		}
@@ -263,23 +281,25 @@ export namespace Potato::Task
 
 		IR::MemoryResourceRecord record;
 		TaskFlow::Ptr reference_node;
+		NodeProperty property;
 		TaskFlow::Ptr parent_node;
 		std::size_t parent_index;
+
 
 		friend struct Task::Ptr;
 		friend struct TaskFlowNodeProcessor::Ptr;
 	};
+	*/
 
 	struct TaskFlowContext
 	{
 		TaskContext& context;
 		Status status = Status::Normal;
-		std::u8string_view display_name;
-		TaskFilter filter;
+		NodeProperty node_property;
 		ThreadProperty thread_property;
-		TaskFlow::Ptr flow_node;
 		TaskFlowNode::Ptr current_node;
-		std::size_t reference_index = 0;
+		TaskFlow::Ptr flow;
+		std::size_t node_identity = 0;
 	};
 
 	template<typename Func>

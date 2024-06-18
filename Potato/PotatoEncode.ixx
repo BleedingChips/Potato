@@ -415,8 +415,8 @@ export namespace Potato::Encode
 
 		static EncodeInfo EncodeUnSafe(std::span<wchar_t const> Source, std::span<char> Target, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
 
-		template<typename CharTraits, typename AllocatorT = std::allocator<wchar_t>>
-		static auto EncodeToString(std::basic_string_view<wchar_t, CharTraits> Source, AllocatorT Allocator = {}) -> std::optional<std::basic_string<char, std::char_traits<wchar_t>, AllocatorT>>
+		template<typename CharTraits, typename AllocatorT = std::allocator<char>>
+		static auto EncodeToString(std::basic_string_view<wchar_t, CharTraits> Source, AllocatorT Allocator = {}) -> std::optional<std::basic_string<char, std::char_traits<char>, AllocatorT>>
 		{
 			auto Info = RequireSpaceUnSafe(Source);
 			if (Info)
