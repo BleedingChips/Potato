@@ -588,23 +588,26 @@ namespace Potato::Task
 
 	bool TaskFlow::FinishNode_AssumedLock(TaskContext& context, ProcessNode& node)
 	{
-		assert(node.status == Status::RUNNING || node.status == Status::PAUSE);
-		node.status = Status::DONE;
-		auto mutex_span = node.mutex_edges.Slice(std::span(process_edges));
-		for(auto ite : mutex_span)
+		if(node.status == Status::RUNNING)
 		{
-			auto& tref = process_nodes[ite];
-			tref.mutex_degree -= 1;
-			TryStartupNode(context, tref, ite);
+			node.status = Status::DONE;
+			auto mutex_span = node.mutex_edges.Slice(std::span(process_edges));
+			for(auto ite : mutex_span)
+			{
+				auto& tref = process_nodes[ite];
+				tref.mutex_degree -= 1;
+				TryStartupNode(context, tref, ite);
+			}
+			auto edge_span = node.direct_edges.Slice(std::span(process_edges));
+			for(auto ite : edge_span)
+			{
+				auto& tref = process_nodes[ite];
+				tref.in_degree -= 1;
+				TryStartupNode(context, tref, ite);
+			}
+			return true;
 		}
-		auto edge_span = node.direct_edges.Slice(std::span(process_edges));
-		for(auto ite : edge_span)
-		{
-			auto& tref = process_nodes[ite];
-			tref.in_degree -= 1;
-			TryStartupNode(context, tref, ite);
-		}
-		return true;
+		return false;
 	}
 
 
@@ -655,7 +658,7 @@ namespace Potato::Task
 			auto& ref = process_nodes[node_identity];
 			if(ref.status == Status::PAUSE)
 			{
-				ref.status = Status::DONE;
+				ref.status = Status::RUNNING;
 				auto re = FinishNode_AssumedLock(status.context, ref);
 				assert(re);
 				return true;

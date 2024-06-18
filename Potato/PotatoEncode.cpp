@@ -347,118 +347,169 @@ namespace Potato::Encode
 #ifdef _WIN32
 	EncodeInfo StrEncoder<char, wchar_t>::RequireSpaceUnSafe(std::span<char const> Source, std::size_t MaxCharacter)
 	{
-		int nWideLen = MultiByteToWideChar(CP_ACP, 0, Source.data(), Source.size(), NULL, 0);
-		if (nWideLen > 0)
+		if(!Source.empty())
 		{
-			bool GoodString = true;
-			std::size_t CharacterCount = 0;
-			std::size_t SourceSpace = 0;
-			std::size_t TargetSpace = 0;
+			int nWideLen = MultiByteToWideChar(CP_ACP, 0, Source.data(), Source.size(), NULL, 0);
+			if (nWideLen > 0)
+			{
+				bool GoodString = true;
+				std::size_t CharacterCount = 0;
+				std::size_t SourceSpace = 0;
+				std::size_t TargetSpace = 0;
+				return EncodeInfo{
+					true,
+					0,
+					Source.size(),
+					static_cast<std::size_t>(nWideLen)
+				};
+			}
+			else {
+				return EncodeInfo{
+					false,
+					0,
+					Source.size(),
+					0
+				};
+			}
+		}else
+		{
 			return EncodeInfo{
-				true,
-				0,
-				Source.size(),
-				static_cast<std::size_t>(nWideLen)
+					true,
+					0,
+					0,
+					0
 			};
 		}
-		else {
-			return EncodeInfo{
-				false,
-				0,
-				Source.size(),
-				0
-			};
-		}
+		
 	}
 
+	/*
 	EncodeInfo StrEncoder<char, wchar_t>::RequireSpace(std::span<char const> Source, std::size_t MaxCharacter)
 	{
 		return RequireSpaceUnSafe(Source, MaxCharacter);
 	}
+	*/
 
 	EncodeInfo StrEncoder<char, wchar_t>::EncodeUnSafe(std::span<char const> Source, std::span<wchar_t> Target, std::size_t MaxCharacter)
 	{
-		int nWideLen = MultiByteToWideChar(CP_ACP, 0, Source.data(), Source.size(), Target.data(), Target.size());
-		if (nWideLen > 0)
+		if(!Source.empty())
 		{
-			bool GoodString = true;
-			std::size_t CharacterCount = 0;
-			std::size_t SourceSpace = 0;
-			std::size_t TargetSpace = 0;
+			int nWideLen = MultiByteToWideChar(CP_ACP, 0, Source.data(), Source.size(), Target.data(), Target.size());
+			if (nWideLen > 0)
+			{
+				bool GoodString = true;
+				std::size_t CharacterCount = 0;
+				std::size_t SourceSpace = 0;
+				std::size_t TargetSpace = 0;
+				return EncodeInfo{
+					true,
+					0,
+					Source.size(),
+					static_cast<std::size_t>(nWideLen)
+				};
+			}
+			else {
+				return EncodeInfo{
+					false,
+					0,
+					Source.size(),
+					0
+				};
+			}
+		}else
+		{
 			return EncodeInfo{
-				true,
-				0,
-				Source.size(),
-				static_cast<std::size_t>(nWideLen)
-			};
+					true,
+					0,
+					0,
+					0
+				};
 		}
-		else {
-			return EncodeInfo{
-				false,
-				0,
-				Source.size(),
-				0
-			};
-		}
+		
 	}
 
 	EncodeInfo StrEncoder<wchar_t, char>::RequireSpaceUnSafe(std::span<wchar_t const> Source, std::size_t MaxCharacter)
 	{
-		int nWideLen = WideCharToMultiByte(CP_ACP, 0, Source.data(), Source.size(), NULL, 0, NULL, NULL);
-
-		if (nWideLen > 0)
+		if(!Source.empty())
 		{
-			bool GoodString = true;
-			std::size_t CharacterCount = 0;
-			std::size_t SourceSpace = 0;
-			std::size_t TargetSpace = 0;
+			int nWideLen = WideCharToMultiByte(CP_ACP, 0, Source.data(), Source.size(), NULL, 0, NULL, NULL);
+
+			if (nWideLen > 0)
+			{
+				bool GoodString = true;
+				std::size_t CharacterCount = 0;
+				std::size_t SourceSpace = 0;
+				std::size_t TargetSpace = 0;
+				return EncodeInfo{
+					true,
+					0,
+					Source.size(),
+					static_cast<std::size_t>(nWideLen)
+				};
+			}
+			else {
+				return EncodeInfo{
+					false,
+					0,
+					Source.size(),
+					0
+				};
+			}
+		}else
+		{
 			return EncodeInfo{
-				true,
-				0,
-				Source.size(),
-				static_cast<std::size_t>(nWideLen)
+					true,
+					0,
+					0,
+					0
 			};
 		}
-		else {
-			return EncodeInfo{
-				false,
-				0,
-				Source.size(),
-				0
-			};
-		}
+		
 	}
 
+	/*
 	EncodeInfo StrEncoder<wchar_t, char>::RequireSpace(std::span<wchar_t const> Source, std::size_t MaxCharacter)
 	{
 		return RequireSpaceUnSafe(Source, MaxCharacter);
 	}
+	*/
 
 	EncodeInfo StrEncoder<wchar_t, char>::EncodeUnSafe(std::span<wchar_t const> Source, std::span<char> Target, std::size_t MaxCharacter)
 	{
-		
-		int nWideLen = WideCharToMultiByte(CP_ACP, 0, Source.data(), Source.size(), Target.data(), Target.size(), NULL, NULL);
-		if (nWideLen > 0)
+		if(!Source.empty())
 		{
-			bool GoodString = true;
-			std::size_t CharacterCount = 0;
-			std::size_t SourceSpace = 0;
-			std::size_t TargetSpace = 0;
+			int nWideLen = WideCharToMultiByte(CP_ACP, 0, Source.data(), Source.size(), Target.data(), Target.size(), NULL, NULL);
+			if (nWideLen > 0)
+			{
+				bool GoodString = true;
+				std::size_t CharacterCount = 0;
+				std::size_t SourceSpace = 0;
+				std::size_t TargetSpace = 0;
+				return EncodeInfo{
+					true,
+					0,
+					Source.size(),
+					static_cast<std::size_t>(nWideLen)
+				};
+			}
+			else {
+				return EncodeInfo{
+					false,
+					0,
+					Source.size(),
+					0
+				};
+			}
+		}else
+		{
 			return EncodeInfo{
-				true,
-				0,
-				Source.size(),
-				static_cast<std::size_t>(nWideLen)
-			};
+					true,
+					0,
+					0,
+					0
+				};
 		}
-		else {
-			return EncodeInfo{
-				false,
-				0,
-				Source.size(),
-				0
-			};
-		}
+		
 	}
 
 #else

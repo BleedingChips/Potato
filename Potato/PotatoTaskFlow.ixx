@@ -59,7 +59,7 @@ export namespace Potato::Task
 
 	export struct TaskFlowListener;
 
-	export struct TaskFlow : protected TaskFlowNode, protected Task
+	export struct TaskFlow : public TaskFlowNode, protected Task
 	{
 
 		struct Wrapper
@@ -183,7 +183,7 @@ export namespace Potato::Task
 		virtual void AddTaskRef() const override { AddTaskFlowRef(); }
 		virtual void SubTaskRef() const override { SubTaskFlowRef(); }
 		void AddTaskFlowNodeRef() const override { AddTaskFlowRef(); }
-		void SubTaskFlowNodeRef() const override { SubTaskFlowNodeRef(); }
+		void SubTaskFlowNodeRef() const override { SubTaskFlowRef(); }
 		
 
 		enum class EdgeType
