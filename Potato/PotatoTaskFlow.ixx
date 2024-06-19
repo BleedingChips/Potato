@@ -164,6 +164,8 @@ export namespace Potato::Task
 
 		bool Update() override;
 		virtual bool Commited(TaskContext& context, NodeProperty property);
+		virtual bool MarkNodePause(std::size_t node_identity);
+		virtual bool ContinuePauseNode(TaskContext& context, std::size_t node_identity);
 
 	protected:
 
@@ -172,8 +174,6 @@ export namespace Potato::Task
 		bool AddDirectEdge_AssumedLock(Node& from, Node& direct_to, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource());
 		bool AddMutexEdge_AssumedLock(Node& from, Node& direct_to);
 		bool RemoveDirectEdge_AssumedLock(Node& from, Node& direct_to);
-		virtual bool MarkNodePause(std::size_t node_identity);
-		virtual bool ContinuePauseNode(ExecuteStatus& status, std::size_t node_identity);
 
 		virtual void TaskFlowNodeExecute(TaskFlowContext& status) override;
 		virtual void TaskExecute(ExecuteStatus& status) override;
@@ -252,44 +252,6 @@ export namespace Potato::Task
 
 		friend struct Task::Wrapper;
 	};
-
-	/*
-	export struct TaskFlowProcessor : public TaskFlowNodeProcessor, public Pointer::DefaultIntrusiveInterface
-	{
-
-		TaskFlowProcessor(
-			IR::MemoryResourceRecord record, 
-			TaskFlow::Ptr reference_node, 
-			TaskFlowProcessor::Ptr parent_processor,
-			std::size_t parent_index,
-			NodeProperty property
-		)
-			: record(record), reference_node(std::move(reference_node)),
-			parent_node(std::move(parent_node)), parent_index(parent_index), property(property)
-		{
-			
-		}
-
-	protected:
-
-		virtual void TaskExecute(ExecuteStatus& status) override;
-
-		void AddTaskRef() const override { DefaultIntrusiveInterface::AddRef(); }
-		void SubTaskRef() const override { DefaultIntrusiveInterface::SubRef(); }
-
-		void Release() override;
-
-		IR::MemoryResourceRecord record;
-		TaskFlow::Ptr reference_node;
-		NodeProperty property;
-		TaskFlow::Ptr parent_node;
-		std::size_t parent_index;
-
-
-		friend struct Task::Ptr;
-		friend struct TaskFlowNodeProcessor::Ptr;
-	};
-	*/
 
 	struct TaskFlowContext
 	{

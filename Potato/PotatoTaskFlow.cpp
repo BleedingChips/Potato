@@ -548,7 +548,7 @@ namespace Potato::Task
 				TaskFlowExecuteEnd(context);
 				if(parent)
 				{
-					parent->ContinuePauseNode(status, cur_node_identity);
+					parent->ContinuePauseNode(status.context, cur_node_identity);
 				}
 			}else
 			{
@@ -650,7 +650,7 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskFlow::ContinuePauseNode(ExecuteStatus& status, std::size_t node_identity)
+	bool TaskFlow::ContinuePauseNode(TaskContext& context, std::size_t node_identity)
 	{
 		std::lock_guard lg(process_mutex);
 		if(node_identity < process_nodes.size())
@@ -659,7 +659,7 @@ namespace Potato::Task
 			if(ref.status == Status::PAUSE)
 			{
 				ref.status = Status::RUNNING;
-				auto re = FinishNode_AssumedLock(status.context, ref);
+				auto re = FinishNode_AssumedLock(context, ref);
 				assert(re);
 				return true;
 			}
@@ -702,42 +702,4 @@ namespace Potato::Task
 			}
 		}
 	}
-
-	/*
-	TaskFlowNodeProcessor::Ptr TaskFlow::CreateProcessor(NodeProperty property, TaskFlow::Ptr parent_node, std::size_t parent_index)
-	{
-		auto re = IR::MemoryResourceRecord::Allocate<TaskFlowProcessor>(resources.processor_resource);
-		if(re)
-		{
-			return new (re.Get()) TaskFlowProcessor{re, this, {}, 0, property};
-		}
-		return {};
-	}
-
-	void TaskFlowProcessor::TaskExecute(ExecuteStatus& status)
-	{
-		if(reference_node)
-		{
-			auto task_status = reference_node->ExecuteTaskFlowNode(status, *this, property);
-			if(task_status == TaskFlow::Status::DONE)
-			{
-				if()
-			}
-			if(!count)
-			{
-				//
-			}
-		}
-	}
-
-	void TaskFlowProcessor::Release()
-	{
-		auto re = record;
-		this->~TaskFlowProcessor();
-		re.Deallocate();
-	}
-	*/
-
-	
-
 }
