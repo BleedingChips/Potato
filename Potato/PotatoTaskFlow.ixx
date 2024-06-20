@@ -162,13 +162,29 @@ export namespace Potato::Task
 		virtual void TaskFlowExecuteBegin(TaskFlowContext& context) {}
 		virtual void TaskFlowExecuteEnd(TaskFlowContext& context) {}
 
-		bool Update() override;
-		virtual bool Commited(TaskContext& context, NodeProperty property);
+		bool Update() override
+		{
+			std::lock_guard lg(process_mutex);
+			return Update_AssumedLock();
+		}
+		virtual bool Commited(TaskContext& context, NodeProperty property)
+		{
+			std::lock_guard lg(process_mutex);
+			return Commited_AssumedLock(context, std::move(property));
+		}
+		virtual bool Commited(TaskContext& context, std::chrono::steady_clock::time_point time_point, NodeProperty property)
+		{
+			std::lock_guard lg(process_mutex);
+			return Commited_AssumedLock(context, std::move(property), time_point);
+		}
 		virtual bool MarkNodePause(std::size_t node_identity);
 		virtual bool ContinuePauseNode(TaskContext& context, std::size_t node_identity);
 
 	protected:
 
+		bool Update_AssumedLock();
+		bool Commited_AssumedLock(TaskContext& context, NodeProperty property, std::chrono::steady_clock::time_point time_point);
+		bool Commited_AssumedLock(TaskContext& context, NodeProperty property);
 		Node::Ptr AddNode_AssumedLock(TaskFlowNode::Ptr node, NodeProperty property = {}, UserData::Ptr user_data = {});
 		bool Remove_AssumedLock(Node& node);
 		bool AddDirectEdge_AssumedLock(Node& from, Node& direct_to, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource());

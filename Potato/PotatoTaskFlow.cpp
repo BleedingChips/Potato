@@ -405,19 +405,16 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskFlow::Update()
+	bool TaskFlow::Update_AssumedLock()
 	{
-		std::lock_guard lg(process_mutex);
 		if(current_status == Status::DONE || current_status == Status::READY)
 		{
 			current_status = Status::READY;
-			bool need_process_update = true;
 			finished_task = 0;
 			{
 				std::lock_guard lg2(raw_mutex);
 				if(need_update)
 				{
-					need_process_update = false;
 					need_update = false;
 					process_nodes.clear();
 					process_edges.clear();
@@ -456,26 +453,23 @@ namespace Potato::Task
 						}
 						ref.direct_edges = {s, process_edges.size()};
 					}
+					return true;
 				}
 			}
-			if(need_process_update)
+			for(auto& ite : process_nodes)
 			{
-				for(auto& ite : process_nodes)
-				{
-					ite.status = Status::READY;
-					ite.in_degree = ite.init_in_degree;
-					ite.mutex_degree = 0;
-					ite.reference_node->reference_node->Update();
-				}
-				return true;
+				ite.status = Status::READY;
+				ite.in_degree = ite.init_in_degree;
+				ite.mutex_degree = 0;
+				ite.reference_node->reference_node->Update();
 			}
+			return true;
 		}
 		return false;
 	}
 
-	bool TaskFlow::Commited(TaskContext& context, NodeProperty property)
+	bool TaskFlow::Commited_AssumedLock(TaskContext& context, NodeProperty property)
 	{
-		std::lock_guard lg(process_mutex);
 		if(current_status == Status::READY)
 		{
 			TaskProperty tem_property
@@ -484,13 +478,37 @@ namespace Potato::Task
 				{0, 0},
 				property.filter
 			};
-
 			if(context.CommitTask(this, tem_property))
 			{
 				current_status = Status::RUNNING;
 				running_property = property;
 				return true;
 			}
+			
+		}else if(current_status != Status::DONE)
+		{
+			assert(false);
+		}
+		return false;
+	}
+
+	bool TaskFlow::Commited_AssumedLock(TaskContext& context, NodeProperty property, std::chrono::steady_clock::time_point time_point)
+	{
+		if(current_status == Status::READY)
+		{
+			TaskProperty tem_property
+			{
+				property.display_name,
+				{0, 0},
+				property.filter
+			};
+			if(context.CommitDelayTask(this, time_point, tem_property))
+			{
+				current_status = Status::RUNNING;
+				running_property = property;
+				return true;
+			}
+			
 		}else if(current_status != Status::DONE)
 		{
 			assert(false);
