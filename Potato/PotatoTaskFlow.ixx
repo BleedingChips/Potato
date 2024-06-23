@@ -120,7 +120,7 @@ export namespace Potato::Task
 			std::u8string_view display_name;
 			UserData::Ptr user_data;
 
-			std::mutex mutex;
+			//std::mutex mutex;
 			std::size_t reference_id;
 
 			friend struct Pointer::DefaultIntrusiveWrapper;
@@ -209,9 +209,14 @@ export namespace Potato::Task
 			Mutex,
 		};
 
-		struct RawEdge
+		struct RawMutexEdge
 		{
-			EdgeType type = EdgeType::Direct;
+			std::size_t node1;
+			std::size_t node2;
+		};
+
+		struct RawDirectEdge
+		{
 			std::size_t from;
 			std::size_t to;
 		};
@@ -220,13 +225,15 @@ export namespace Potato::Task
 		{
 			Node::Ptr reference_node;
 			std::size_t in_degree = 0;
+			std::size_t topology_degree = 0;
 		};
 
 		MemorySetting resources;
 
 		std::mutex raw_mutex;
 		std::pmr::vector<RawNode> raw_nodes;
-		std::pmr::vector<RawEdge> raw_edges;
+		std::pmr::vector<RawMutexEdge> raw_mutex_edges;
+		std::pmr::vector<RawDirectEdge> raw_direct_edges;
 		bool need_update = false;
 
 		enum class Status

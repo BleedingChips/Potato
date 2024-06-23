@@ -58,7 +58,8 @@ namespace Potato::Task
 	TaskFlow::TaskFlow(std::chrono::steady_clock::duration, std::pmr::memory_resource* task_flow_resource, MemorySetting memory_setting)
 		: resources(memory_setting)
 		, raw_nodes(task_flow_resource)
-		, raw_edges(task_flow_resource)
+		, raw_mutex_edges(task_flow_resource)
+		, raw_direct_edges(task_flow_resource)
 		, process_nodes(task_flow_resource)
 		, process_edges(task_flow_resource)
 		, listen_duration(listen_duration)
@@ -76,7 +77,8 @@ namespace Potato::Task
 			{
 				raw_nodes.emplace_back(
 					tnode,
-					0
+					0,
+					raw_nodes.size()
 				);
 				need_update = true;
 				return tnode;
@@ -93,15 +95,23 @@ namespace Potato::Task
 				return false;
 
 			auto index = node.reference_id;
-			raw_edges.erase(
-				std::remove_if(raw_edges.begin(), raw_edges.end(), [&](RawEdge& edge)
+			auto& remove_ref = raw_nodes[index];
+			remove_ref.reference_node->reference_id = std::numeric_limits<std::size_t>::max();
+			auto tar = remove_ref.in_degree;
+			raw_mutex_edges.erase(
+				std::remove_if(raw_mutex_edges.begin(), raw_mutex_edges.end(), [&](RawMutexEdge& edge)
+					{
+						return (edge.node1 == index || edge.node2 == index);
+					}),
+				raw_mutex_edges.end()
+			);
+
+			raw_direct_edges.erase(
+				std::remove_if(raw_direct_edges.begin(), raw_direct_edges.end(), [&](RawDirectEdge& edge)
 				{
 					if(edge.from == index || edge.to == index)
 					{
-						if(edge.type == EdgeType::Direct && edge.from == index)
-						{
-							raw_nodes[edge.to].in_degree -= 1;
-						}
+						raw_nodes[edge.to].in_degree -= 1;
 						return true;
 					}else
 					{
@@ -112,13 +122,20 @@ namespace Potato::Task
 					}
 					return false;
 				}),
-				raw_edges.end()
+				raw_direct_edges.end()
 			);
-			raw_nodes[index].reference_node->reference_id = std::numeric_limits<std::size_t>::max();
+			
 			raw_nodes.erase(raw_nodes.begin() + index);
-			for(std::size_t i = index; i < raw_nodes.size(); ++i)
+
+			for(std::size_t i = 0; i < raw_nodes.size(); ++i)
 			{
-				raw_nodes[i].reference_node->reference_id = i;
+				auto& ref = raw_nodes[i];
+				if(ref.topology_degree >= tar)
+					ref.topology_degree -= 1;
+				if(i > index)
+				{
+					ref.reference_node->reference_id = i;
+				}
 			}
 			need_update = true;
 			return true;
@@ -136,13 +153,13 @@ namespace Potato::Task
 			if(f == t || f == std::numeric_limits<std::size_t>::max() || t == std::numeric_limits<std::size_t>::max())
 				return false;
 
-			for(std::size_t i = 0; i < raw_edges.size(); ++i)
+			for(std::size_t i = 0; i < raw_direct_edges.size(); ++i)
 			{
-				auto cur = raw_edges[i];
-				if(cur.type == EdgeType::Direct && cur.from == f && cur.to == t)
+				auto cur = raw_direct_edges[i];
+				if(cur.from == f && cur.to == t)
 				{
 					raw_nodes[cur.to].in_degree -= 1;
-					raw_edges.erase(raw_edges.begin() + i);
+					raw_direct_edges.erase(raw_direct_edges.begin() + i);
 					need_update = true;
 					return true;
 				}
@@ -159,8 +176,7 @@ namespace Potato::Task
 			auto t = direct_to.reference_id;
 			if (f == t || f == std::numeric_limits<std::size_t>::max() || t == std::numeric_limits<std::size_t>::max())
 				return false;
-			raw_edges.emplace_back(EdgeType::Mutex, f, t);
-			raw_edges.emplace_back(EdgeType::Mutex, t, f);
+			raw_mutex_edges.emplace_back(f, t);
 			need_update = true;
 			return true;
 		}
@@ -175,141 +191,78 @@ namespace Potato::Task
 			auto t = direct_to.reference_id;
 			if (f == t || f == std::numeric_limits<std::size_t>::max() || t == std::numeric_limits<std::size_t>::max())
 				return false;
-			if(f > t)
+
+			auto& node_f = raw_nodes[f];
+			auto& node_t = raw_nodes[t];
+			auto node_f_topology_degree = node_f.topology_degree;
+			auto node_t_topology_degree = node_t.topology_degree;
+
+			if(node_f_topology_degree > node_t_topology_degree)
 			{
-				raw_edges.emplace_back(EdgeType::Direct, f, t);
-				raw_nodes[t].in_degree += 1;
+				raw_direct_edges.emplace_back(f, t);
+				node_t.in_degree += 1;
 				need_update = true;
 				return true;
 			}else
 			{
-				std::optional<std::size_t> min_to_from_node;
-				std::optional<std::size_t> max_from_to_node;
+				std::size_t min_topology_degree_to_from_node = raw_nodes.size() + 1;
+				std::size_t max_topology_degree_from_to_node = 0;
 
-				for(auto& ite : raw_edges)
+				for(auto& ite : raw_direct_edges)
 				{
-					if(ite.type == EdgeType::Direct)
+					if(ite.to == f)
 					{
-						if(ite.to == f)
-						{
-							min_to_from_node = 
-								min_to_from_node.has_value() ?
-								std::min(*min_to_from_node, ite.from)
-								:  ite.from;
-						}
+						min_topology_degree_to_from_node = std::min(min_topology_degree_to_from_node, raw_nodes[ite.from].topology_degree + 1);
+					}
 
-						if(ite.from == t)
-						{
-							max_from_to_node = 
-								max_from_to_node.has_value() ?
-								std::max(*max_from_to_node, ite.to)
-								:  ite.to;
-						}
+					if (ite.from == t)
+					{
+						max_topology_degree_from_to_node = std::max(max_topology_degree_from_to_node, raw_nodes[ite.to].topology_degree + 1);
 					}
 				}
 
-				bool move_left = (!min_to_from_node.has_value() || *min_to_from_node > t);
-				bool move_right = (!max_from_to_node.has_value() || *max_from_to_node < f);
+				bool move_left = (min_topology_degree_to_from_node > t + 1);
+				bool move_right = (max_topology_degree_from_to_node < f + 1);
 
 
 				if(move_left && move_right)
 				{
-					auto& fn = raw_nodes[f];
-					auto& tn = raw_nodes[t];
 
-					tn.in_degree += 1;
-
-					raw_edges.emplace_back(
-						EdgeType::Direct,
-						f, t
-					);
-
-					std::swap(raw_nodes[f], raw_nodes[t]);
-
-					fn.reference_node->reference_id = f;
-					tn.reference_node->reference_id = t;
-
-					auto Fix = [=](std::size_t& ref)
-					{
-						if(ref == f)
-							ref = t;
-						else if(ref == t)
-							ref = f;
-					};
-
-					for(auto& ite : raw_edges)
-					{
-						Fix(ite.from);
-						Fix(ite.to);
-					}
+					node_t.in_degree += 1;
+					std::swap(node_f.topology_degree, node_t.topology_degree);
 
 					return true;
 				}else if(move_left)
 				{
-					raw_nodes[t].in_degree += 1;
-					raw_edges.emplace_back(
-						EdgeType::Direct,
-						f, t
-					);
-					auto fn = std::move(raw_nodes[f]);
-					raw_nodes.erase(raw_nodes.begin() + f);
-					raw_nodes.insert(raw_nodes.begin() + t, std::move(fn));
-
-					for(std::size_t i = f; i < t + 1; ++i)
+					node_t.in_degree += 1;
+					raw_direct_edges.emplace_back(f, t);
+					for(auto& ite : raw_nodes)
 					{
-						raw_nodes[i].reference_node->reference_id = i;
-					}
-
-					auto Fix = [=](std::size_t& ref)
-					{
-						if(ref == f)
-							ref = t;
-						else if(ref > f && ref <= t)
+						if(ite.topology_degree == node_f_topology_degree)
 						{
-							ref -= 1;
+							ite.topology_degree = node_t_topology_degree;
+						}else if(ite.topology_degree > node_f_topology_degree && ite.topology_degree <= node_t_topology_degree)
+						{
+							ite.topology_degree -= 1;
 						}
-					};
-
-					for(auto& ite : raw_edges)
-					{
-						Fix(ite.from);
-						Fix(ite.to);
 					}
-
 					need_update = true;
 					return true;
 				}else if(move_right)
 				{
-					auto tn = std::move(raw_nodes[t]);
-					tn.in_degree += 1;
-					raw_edges.emplace_back(
-						EdgeType::Direct,
-						f, t
-					);
-					raw_nodes.erase(raw_nodes.begin() + t);
-					raw_nodes.insert(raw_nodes.begin() + f, std::move(tn));
-
-					for(std::size_t i = f; i < t + 1; ++i)
+					node_t.in_degree += 1;
+					raw_direct_edges.emplace_back(f, t);
+					for (auto& ite : raw_nodes)
 					{
-						raw_nodes[i].reference_node->reference_id = i;
-					}
-
-					auto Fix = [=](std::size_t& ref)
-					{
-						if(ref == t)
-							ref = f;
-						else if(ref >= f && ref < t)
+						if (ite.topology_degree == node_t_topology_degree)
 						{
-							ref += 1;
+							ite.topology_degree = node_f_topology_degree;
 						}
-					};
-
-					for(auto& ite : raw_edges)
-					{
-						Fix(ite.from);
-						Fix(ite.to);
+						else if (ite.topology_degree >= node_f_topology_degree && ite.topology_degree < node_t_topology_degree)
+						{
+							ite.topology_degree += 1;
+						}
 					}
-
 					need_update = true;
 					return true;
 				}else
@@ -326,6 +279,7 @@ namespace Potato::Task
 					cur_in_degree.reserve(raw_nodes.size());
 					std::pmr::vector<std::size_t> mapping_array(temp_resource);
 					mapping_array.resize(raw_nodes.size(), 0);
+
 					std::size_t total_node = 0;
 
 					std::size_t index = 0;
@@ -354,9 +308,9 @@ namespace Potato::Task
 									{
 										cur_in_degree[t].in_degree -= 1;
 									}
-									for(auto& ite2 : raw_edges)
+									for(auto& ite2 : raw_direct_edges)
 									{
-										if(ite2.type == EdgeType::Direct && ite2.from == ite.ref_index)
+										if(ite2.from == ite.ref_index)
 										{
 											cur_in_degree[ite2.to].in_degree -= 1;
 										}
@@ -372,29 +326,13 @@ namespace Potato::Task
 
 					raw_nodes[t].in_degree += 1;
 
-					for(auto& ite : mapping_array)
-						ite = total_node - ite;
-
-					raw_edges.emplace_back(EdgeType::Direct, f, t);
-
-					for(auto& ite : raw_edges)
-					{
-						ite.from = mapping_array[ite.from];
-						ite.to = mapping_array[ite.to];
-					}
+					raw_direct_edges.emplace_back(f, t);
 
 					assert(!raw_nodes.empty());
 
-					for(std::size_t i = 0; i < mapping_array.size(); ++i)
+					for(std::size_t i = 0; i < raw_nodes.size(); ++i)
 					{
-						auto tar = mapping_array[i];
-						while(i != tar)
-						{
-							std::swap(mapping_array[i], mapping_array[tar]);
-							std::swap(raw_nodes[i], raw_nodes[tar]);
-							tar = mapping_array[i];
-						}
-						raw_nodes[i].reference_node->reference_id = i;
+						raw_nodes[i].topology_degree = total_node - mapping_array[i];
 					}
 					need_update = true;
 
@@ -435,18 +373,21 @@ namespace Potato::Task
 					{
 						auto& ref = process_nodes[i];
 						auto s = process_edges.size();
-						for(auto& ite : raw_edges)
+						for(auto& ite : raw_mutex_edges)
 						{
-							if(ite.type == EdgeType::Mutex && ite.from == i)
+							if(ite.node1 == i)
 							{
-								process_edges.emplace_back(ite.to);
+								process_edges.emplace_back(ite.node2);
+							}else if(ite.node2 == i)
+							{
+								process_edges.emplace_back(ite.node1);
 							}
 						}
 						ref.mutex_edges = {s, process_edges.size()};
 						s = process_edges.size();
-						for(auto& ite : raw_edges)
+						for(auto& ite : raw_direct_edges)
 						{
-							if(ite.type == EdgeType::Direct && ite.from == i)
+							if(ite.from == i)
 							{
 								process_edges.emplace_back(ite.to);
 							}
