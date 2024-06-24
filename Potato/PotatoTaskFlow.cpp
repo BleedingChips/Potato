@@ -8,9 +8,8 @@ namespace Potato::Task
 {
 
 
-	auto TaskFlow::Node::Create(
+	auto TaskFlow::Socket::Create(
 		TaskFlow* owner, 
-		TaskFlowNode::Ptr reference_node,
 		UserData::Ptr user_data,
 		NodeProperty property, 
 		std::size_t index, 
@@ -18,7 +17,7 @@ namespace Potato::Task
 	)
 		-> Ptr
 	{
-		auto cur_layout = IR::Layout::Get<Node>();
+		auto cur_layout = IR::Layout::Get<Socket>();
 		auto str_name = IR::Layout::GetArray<char8_t>(property.display_name.size());
 
 		auto offset = IR::InsertLayoutCPP(cur_layout, str_name);
@@ -29,29 +28,28 @@ namespace Potato::Task
 		{
 			auto str = re.GetByte() + offset;
 			std::memcpy(str, property.display_name.data(), property.display_name.size());
-			return new (re.Get()) Node(re, owner, std::move(reference_node), std::move(user_data),  property.filter, std::u8string_view{reinterpret_cast<char8_t*>(str), property.display_name.size()},  index);
+			return new (re.Get()) Socket(re, owner, std::move(user_data),  property.filter, std::u8string_view{reinterpret_cast<char8_t*>(str), property.display_name.size()},  index);
 		}
 		return {};
 	}
 
-	TaskFlow::Node::Node(
+	TaskFlow::Socket::Socket(
 		IR::MemoryResourceRecord record, 
 		Pointer::ObserverPtr<TaskFlow> owner, 
-		TaskFlowNode::Ptr reference_node,
 		UserData::Ptr user_data,
 		TaskFilter filter, 
 		std::u8string_view display_name, 
 		std::size_t index
 	)
-		: record(record), owner(owner), reference_node(std::move(reference_node)), filter(std::move(filter)), reference_id(index),display_name(display_name), user_data(std::move(user_data))
+		: record(record), owner(owner), filter(std::move(filter)), index(index),display_name(display_name), user_data(std::move(user_data))
 	{
 		
 	}
 
-	void TaskFlow::Node::Release()
+	void TaskFlow::Socket::Release()
 	{
 		auto re = record;
-		this->~Node();
+		this->~Socket();
 		re.Deallocate();
 	}
 
@@ -68,15 +66,16 @@ namespace Potato::Task
 	}
 
 	auto TaskFlow::AddNode_AssumedLock(TaskFlowNode::Ptr node, NodeProperty property, UserData::Ptr user_data)
-		->Node::Ptr
+		->Socket::Ptr
 	{
 		if(node)
 		{
-			auto tnode = Node::Create(this, std::move(node), std::move(user_data), std::move(property),  raw_nodes.size(), resources.node_resource);
+			auto tnode = Socket::Create(this, std::move(user_data), std::move(property),  raw_nodes.size(), resources.node_resource);
 			if(tnode)
 			{
 				raw_nodes.emplace_back(
 					tnode,
+					std::move(node),
 					0,
 					raw_nodes.size()
 				);
@@ -87,16 +86,16 @@ namespace Potato::Task
 		return {};
 	}
 
-	bool TaskFlow::Remove_AssumedLock(Node& node)
+	bool TaskFlow::Remove_AssumedLock(Socket& node)
 	{
 		if(node.owner == this)
 		{
-			if(node.reference_id == std::numeric_limits<std::size_t>::max())
+			if(node.index == std::numeric_limits<std::size_t>::max())
 				return false;
 
-			auto index = node.reference_id;
+			auto index = node.index;
 			auto& remove_ref = raw_nodes[index];
-			remove_ref.reference_node->reference_id = std::numeric_limits<std::size_t>::max();
+			remove_ref.socket->index = std::numeric_limits<std::size_t>::max();
 			auto tar = remove_ref.in_degree;
 			raw_mutex_edges.erase(
 				std::remove_if(raw_mutex_edges.begin(), raw_mutex_edges.end(), [&](RawMutexEdge& edge)
@@ -134,7 +133,7 @@ namespace Potato::Task
 					ref.topology_degree -= 1;
 				if(i > index)
 				{
-					ref.reference_node->reference_id = i;
+					ref.socket->index = i;
 				}
 			}
 			need_update = true;
@@ -144,12 +143,12 @@ namespace Potato::Task
 	}
 
 
-	bool TaskFlow::RemoveDirectEdge_AssumedLock(Node& from, Node& direct_to)
+	bool TaskFlow::RemoveDirectEdge_AssumedLock(Socket& from, Socket& direct_to)
 	{
 		if(from.owner == this && direct_to.owner == this)
 		{
-			auto f = from.reference_id;
-			auto t = direct_to.reference_id;
+			auto f = from.index;
+			auto t = direct_to.index;
 			if(f == t || f == std::numeric_limits<std::size_t>::max() || t == std::numeric_limits<std::size_t>::max())
 				return false;
 
@@ -168,12 +167,12 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskFlow::AddMutexEdge_AssumedLock(Node& from, Node& direct_to)
+	bool TaskFlow::AddMutexEdge_AssumedLock(Socket& from, Socket& direct_to)
 	{
 		if (from.owner == this && direct_to.owner == this)
 		{
-			auto f = from.reference_id;
-			auto t = direct_to.reference_id;
+			auto f = from.index;
+			auto t = direct_to.index;
 			if (f == t || f == std::numeric_limits<std::size_t>::max() || t == std::numeric_limits<std::size_t>::max())
 				return false;
 			raw_mutex_edges.emplace_back(f, t);
@@ -183,12 +182,12 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskFlow::AddDirectEdge_AssumedLock(Node& from, Node& direct_to, std::pmr::memory_resource* temp_resource)
+	bool TaskFlow::AddDirectEdge_AssumedLock(Socket& from, Socket& direct_to, std::pmr::memory_resource* temp_resource)
 	{
 		if (from.owner == this && direct_to.owner == this)
 		{
-			auto f = from.reference_id;
-			auto t = direct_to.reference_id;
+			auto f = from.index;
+			auto t = direct_to.index;
 			if (f == t || f == std::numeric_limits<std::size_t>::max() || t == std::numeric_limits<std::size_t>::max())
 				return false;
 
@@ -221,13 +220,13 @@ namespace Potato::Task
 					}
 				}
 
-				bool move_left = (min_topology_degree_to_from_node > t + 1);
-				bool move_right = (max_topology_degree_from_to_node < f + 1);
+				bool move_left = (min_topology_degree_to_from_node > node_t_topology_degree + 1);
+				bool move_right = (max_topology_degree_from_to_node < node_f_topology_degree + 1);
 
 
 				if(move_left && move_right)
 				{
-
+					raw_direct_edges.emplace_back(f, t);
 					node_t.in_degree += 1;
 					std::swap(node_f.topology_degree, node_t.topology_degree);
 
@@ -365,9 +364,10 @@ namespace Potato::Task
 							Misc::IndexSpan<>{},
 							Misc::IndexSpan<>{},
 							ite.in_degree,
-							ite.reference_node
+							ite.node,
+							ite.socket
 						);
-						ite.reference_node->reference_node->Update();
+						ite.node->Update();
 					}
 					for(std::size_t i = 0; i < process_nodes.size(); ++i)
 					{
@@ -402,7 +402,7 @@ namespace Potato::Task
 				ite.status = Status::READY;
 				ite.in_degree = ite.init_in_degree;
 				ite.mutex_degree = 0;
-				ite.reference_node->reference_node->Update();
+				ite.node->Update();
 			}
 			return true;
 		}
@@ -575,9 +575,9 @@ namespace Potato::Task
 		if(node.status == Status::READY && node.mutex_degree == 0 && node.in_degree == 0)
 		{
 			TaskProperty pro{
-				node.reference_node->display_name,
-				{reinterpret_cast<std::size_t>(node.reference_node->reference_node.GetPointer()), index},
-				node.reference_node->filter
+				node.socket->display_name,
+				{reinterpret_cast<std::size_t>(node.node.GetPointer()), index},
+				node.socket->filter
 			};
 			if(context.CommitTask(this, pro))
 			{

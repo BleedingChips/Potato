@@ -86,25 +86,25 @@ export namespace Potato::Task
 
 		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlow, Wrapper>;
 
-		struct Node : protected Pointer::DefaultIntrusiveInterface
+		struct Socket : protected Pointer::DefaultIntrusiveInterface
 		{
-			using Ptr = Pointer::IntrusivePtr<Node>;
+			using Ptr = Pointer::IntrusivePtr<Socket>;
 
 			static Ptr Create(
-				TaskFlow* owner, 
-				TaskFlowNode::Ptr reference_node,
+				TaskFlow* owner,
 				UserData::Ptr user_data,
 				NodeProperty property, 
 				std::size_t index, 
 				std::pmr::memory_resource* resource
 			);
 
+			UserData::Ptr GetUserData() const { return user_data; }
+
 		protected:
 
-			Node(
+			Socket(
 				IR::MemoryResourceRecord record, 
-				Pointer::ObserverPtr<TaskFlow> owner, 
-				TaskFlowNode::Ptr reference_node,
+				Pointer::ObserverPtr<TaskFlow> owner,
 				UserData::Ptr user_data,
 				TaskFilter filter, 
 				std::u8string_view display_name, 
@@ -115,19 +115,18 @@ export namespace Potato::Task
 
 			IR::MemoryResourceRecord record;
 			Pointer::ObserverPtr<TaskFlow> owner;
-			TaskFlowNode::Ptr reference_node;
 			TaskFilter filter;
 			std::u8string_view display_name;
 			UserData::Ptr user_data;
 
 			//std::mutex mutex;
-			std::size_t reference_id;
+			std::size_t index;
 
 			friend struct Pointer::DefaultIntrusiveWrapper;
 			friend struct TaskFlow;
 		};
 
-		Node::Ptr AddNode(TaskFlowNode::Ptr node, NodeProperty property = {}, UserData::Ptr user_data = {})
+		Socket::Ptr AddNode(TaskFlowNode::Ptr node, NodeProperty property = {}, UserData::Ptr user_data = {})
 		{
 			std::lock_guard lg(raw_mutex);
 			return AddNode_AssumedLock(std::move(node), std::move(property), std::move(user_data));
@@ -146,10 +145,10 @@ export namespace Potato::Task
 			return {};
 		}
 
-		bool Remove(Node& node) { std::lock_guard lg(raw_mutex); return Remove(node); }
-		bool AddDirectEdge(Node& from, Node& direct_to, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource()) { std::lock_guard lg(raw_mutex); return AddDirectEdge_AssumedLock(from, direct_to , temp_resource); }
-		bool AddMutexEdge(Node& from, Node& direct_to) { std::lock_guard lg(raw_mutex); return AddMutexEdge_AssumedLock(from, direct_to); }
-		bool RemoveDirectEdge(Node& from, Node& direct_to) { std::lock_guard lg(raw_mutex); return RemoveDirectEdge_AssumedLock(from, direct_to); }
+		bool Remove(Socket& node) { std::lock_guard lg(raw_mutex); return Remove(node); }
+		bool AddDirectEdge(Socket& from, Socket& direct_to, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource()) { std::lock_guard lg(raw_mutex); return AddDirectEdge_AssumedLock(from, direct_to , temp_resource); }
+		bool AddMutexEdge(Socket& from, Socket& direct_to) { std::lock_guard lg(raw_mutex); return AddMutexEdge_AssumedLock(from, direct_to); }
+		bool RemoveDirectEdge(Socket& from, Socket& direct_to) { std::lock_guard lg(raw_mutex); return RemoveDirectEdge_AssumedLock(from, direct_to); }
 
 		struct MemorySetting
 		{
@@ -185,11 +184,11 @@ export namespace Potato::Task
 		bool Update_AssumedLock();
 		bool Commited_AssumedLock(TaskContext& context, NodeProperty property, std::chrono::steady_clock::time_point time_point);
 		bool Commited_AssumedLock(TaskContext& context, NodeProperty property);
-		Node::Ptr AddNode_AssumedLock(TaskFlowNode::Ptr node, NodeProperty property = {}, UserData::Ptr user_data = {});
-		bool Remove_AssumedLock(Node& node);
-		bool AddDirectEdge_AssumedLock(Node& from, Node& direct_to, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource());
-		bool AddMutexEdge_AssumedLock(Node& from, Node& direct_to);
-		bool RemoveDirectEdge_AssumedLock(Node& from, Node& direct_to);
+		Socket::Ptr AddNode_AssumedLock(TaskFlowNode::Ptr node, NodeProperty property = {}, UserData::Ptr user_data = {});
+		bool Remove_AssumedLock(Socket& node);
+		bool AddDirectEdge_AssumedLock(Socket& from, Socket& direct_to, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource());
+		bool AddMutexEdge_AssumedLock(Socket& from, Socket& direct_to);
+		bool RemoveDirectEdge_AssumedLock(Socket& from, Socket& direct_to);
 
 		virtual void TaskFlowNodeExecute(TaskFlowContext& status) override;
 		virtual void TaskExecute(ExecuteStatus& status) override;
@@ -223,7 +222,8 @@ export namespace Potato::Task
 
 		struct RawNode
 		{
-			Node::Ptr reference_node;
+			Socket::Ptr socket;
+			TaskFlowNode::Ptr node;
 			std::size_t in_degree = 0;
 			std::size_t topology_degree = 0;
 		};
@@ -255,7 +255,8 @@ export namespace Potato::Task
 			Misc::IndexSpan<> direct_edges;
 			Misc::IndexSpan<> mutex_edges;
 			std::size_t init_in_degree = 0;
-			Node::Ptr reference_node;
+			TaskFlowNode::Ptr node;
+			Socket::Ptr socket;
 		};
 
 		bool TryStartupNode(TaskContext& context, ProcessNode& node, std::size_t index);

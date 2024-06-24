@@ -80,6 +80,7 @@ int main()
 		bool l23 = tf.AddDirectEdge(*a2, *a3);
 		bool l34 = tf.AddDirectEdge(*a3, *a4);
 		bool l41 = tf.AddDirectEdge(*a4, *a1);
+		bool m35 = tf.AddMutexEdge(*a3, *a5);
 		
 		bool r41 = tf.RemoveDirectEdge(*a2, *a3);
 		bool l41_2 = tf.AddDirectEdge(*a4, *a1);
