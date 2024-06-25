@@ -55,9 +55,9 @@ namespace Potato::Task
 
 	TaskFlow::TaskFlow(std::chrono::steady_clock::duration, std::pmr::memory_resource* task_flow_resource, MemorySetting memory_setting)
 		: resources(memory_setting)
-		, raw_nodes(task_flow_resource)
-		, raw_mutex_edges(task_flow_resource)
-		, raw_direct_edges(task_flow_resource)
+		, preprocess_nodes(task_flow_resource)
+		, preprocess_mutex_edges(task_flow_resource)
+		, preprocess_direct_edges(task_flow_resource)
 		, process_nodes(task_flow_resource)
 		, process_edges(task_flow_resource)
 		, listen_duration(listen_duration)
@@ -70,14 +70,14 @@ namespace Potato::Task
 	{
 		if(node)
 		{
-			auto tnode = Socket::Create(this, std::move(user_data), std::move(property),  raw_nodes.size(), resources.node_resource);
+			auto tnode = Socket::Create(this, std::move(user_data), std::move(property),  preprocess_nodes.size(), resources.node_resource);
 			if(tnode)
 			{
-				raw_nodes.emplace_back(
+				preprocess_nodes.emplace_back(
 					tnode,
 					std::move(node),
 					0,
-					raw_nodes.size()
+					preprocess_nodes.size()
 				);
 				need_update = true;
 				return tnode;
@@ -94,23 +94,23 @@ namespace Potato::Task
 				return false;
 
 			auto index = node.index;
-			auto& remove_ref = raw_nodes[index];
+			auto& remove_ref = preprocess_nodes[index];
 			remove_ref.socket->index = std::numeric_limits<std::size_t>::max();
 			auto tar = remove_ref.in_degree;
-			raw_mutex_edges.erase(
-				std::remove_if(raw_mutex_edges.begin(), raw_mutex_edges.end(), [&](RawMutexEdge& edge)
+			preprocess_mutex_edges.erase(
+				std::remove_if(preprocess_mutex_edges.begin(), preprocess_mutex_edges.end(), [&](PreprocessMutexEdge& edge)
 					{
 						return (edge.node1 == index || edge.node2 == index);
 					}),
-				raw_mutex_edges.end()
+				preprocess_mutex_edges.end()
 			);
 
-			raw_direct_edges.erase(
-				std::remove_if(raw_direct_edges.begin(), raw_direct_edges.end(), [&](RawDirectEdge& edge)
+			preprocess_direct_edges.erase(
+				std::remove_if(preprocess_direct_edges.begin(), preprocess_direct_edges.end(), [&](PreprocessDirectEdge& edge)
 				{
 					if(edge.from == index || edge.to == index)
 					{
-						raw_nodes[edge.to].in_degree -= 1;
+						preprocess_nodes[edge.to].in_degree -= 1;
 						return true;
 					}else
 					{
@@ -121,14 +121,14 @@ namespace Potato::Task
 					}
 					return false;
 				}),
-				raw_direct_edges.end()
+				preprocess_direct_edges.end()
 			);
 			
-			raw_nodes.erase(raw_nodes.begin() + index);
+			preprocess_nodes.erase(preprocess_nodes.begin() + index);
 
-			for(std::size_t i = 0; i < raw_nodes.size(); ++i)
+			for(std::size_t i = 0; i < preprocess_nodes.size(); ++i)
 			{
-				auto& ref = raw_nodes[i];
+				auto& ref = preprocess_nodes[i];
 				if(ref.topology_degree >= tar)
 					ref.topology_degree -= 1;
 				if(i > index)
@@ -152,13 +152,13 @@ namespace Potato::Task
 			if(f == t || f == std::numeric_limits<std::size_t>::max() || t == std::numeric_limits<std::size_t>::max())
 				return false;
 
-			for(std::size_t i = 0; i < raw_direct_edges.size(); ++i)
+			for(std::size_t i = 0; i < preprocess_direct_edges.size(); ++i)
 			{
-				auto cur = raw_direct_edges[i];
+				auto cur = preprocess_direct_edges[i];
 				if(cur.from == f && cur.to == t)
 				{
-					raw_nodes[cur.to].in_degree -= 1;
-					raw_direct_edges.erase(raw_direct_edges.begin() + i);
+					preprocess_nodes[cur.to].in_degree -= 1;
+					preprocess_direct_edges.erase(preprocess_direct_edges.begin() + i);
 					need_update = true;
 					return true;
 				}
@@ -175,7 +175,7 @@ namespace Potato::Task
 			auto t = direct_to.index;
 			if (f == t || f == std::numeric_limits<std::size_t>::max() || t == std::numeric_limits<std::size_t>::max())
 				return false;
-			raw_mutex_edges.emplace_back(f, t);
+			preprocess_mutex_edges.emplace_back(f, t);
 			need_update = true;
 			return true;
 		}
@@ -191,32 +191,32 @@ namespace Potato::Task
 			if (f == t || f == std::numeric_limits<std::size_t>::max() || t == std::numeric_limits<std::size_t>::max())
 				return false;
 
-			auto& node_f = raw_nodes[f];
-			auto& node_t = raw_nodes[t];
+			auto& node_f = preprocess_nodes[f];
+			auto& node_t = preprocess_nodes[t];
 			auto node_f_topology_degree = node_f.topology_degree;
 			auto node_t_topology_degree = node_t.topology_degree;
 
 			if(node_f_topology_degree > node_t_topology_degree)
 			{
-				raw_direct_edges.emplace_back(f, t);
+				preprocess_direct_edges.emplace_back(f, t);
 				node_t.in_degree += 1;
 				need_update = true;
 				return true;
 			}else
 			{
-				std::size_t min_topology_degree_to_from_node = raw_nodes.size() + 1;
+				std::size_t min_topology_degree_to_from_node = preprocess_nodes.size() + 1;
 				std::size_t max_topology_degree_from_to_node = 0;
 
-				for(auto& ite : raw_direct_edges)
+				for(auto& ite : preprocess_direct_edges)
 				{
 					if(ite.to == f)
 					{
-						min_topology_degree_to_from_node = std::min(min_topology_degree_to_from_node, raw_nodes[ite.from].topology_degree + 1);
+						min_topology_degree_to_from_node = std::min(min_topology_degree_to_from_node, preprocess_nodes[ite.from].topology_degree + 1);
 					}
 
 					if (ite.from == t)
 					{
-						max_topology_degree_from_to_node = std::max(max_topology_degree_from_to_node, raw_nodes[ite.to].topology_degree + 1);
+						max_topology_degree_from_to_node = std::max(max_topology_degree_from_to_node, preprocess_nodes[ite.to].topology_degree + 1);
 					}
 				}
 
@@ -226,7 +226,7 @@ namespace Potato::Task
 
 				if(move_left && move_right)
 				{
-					raw_direct_edges.emplace_back(f, t);
+					preprocess_direct_edges.emplace_back(f, t);
 					node_t.in_degree += 1;
 					std::swap(node_f.topology_degree, node_t.topology_degree);
 
@@ -234,8 +234,8 @@ namespace Potato::Task
 				}else if(move_left)
 				{
 					node_t.in_degree += 1;
-					raw_direct_edges.emplace_back(f, t);
-					for(auto& ite : raw_nodes)
+					preprocess_direct_edges.emplace_back(f, t);
+					for(auto& ite : preprocess_nodes)
 					{
 						if(ite.topology_degree == node_f_topology_degree)
 						{
@@ -250,8 +250,8 @@ namespace Potato::Task
 				}else if(move_right)
 				{
 					node_t.in_degree += 1;
-					raw_direct_edges.emplace_back(f, t);
-					for (auto& ite : raw_nodes)
+					preprocess_direct_edges.emplace_back(f, t);
+					for (auto& ite : preprocess_nodes)
 					{
 						if (ite.topology_degree == node_t_topology_degree)
 						{
@@ -275,14 +275,14 @@ namespace Potato::Task
 					};
 
 					std::pmr::vector<NodePro> cur_in_degree(temp_resource);
-					cur_in_degree.reserve(raw_nodes.size());
+					cur_in_degree.reserve(preprocess_nodes.size());
 					std::pmr::vector<std::size_t> mapping_array(temp_resource);
-					mapping_array.resize(raw_nodes.size(), 0);
+					mapping_array.resize(preprocess_nodes.size(), 0);
 
 					std::size_t total_node = 0;
 
 					std::size_t index = 0;
-					for(auto& ite : raw_nodes)
+					for(auto& ite : preprocess_nodes)
 					{
 						cur_in_degree.emplace_back(ite.in_degree, index++);
 					}
@@ -307,7 +307,7 @@ namespace Potato::Task
 									{
 										cur_in_degree[t].in_degree -= 1;
 									}
-									for(auto& ite2 : raw_direct_edges)
+									for(auto& ite2 : preprocess_direct_edges)
 									{
 										if(ite2.from == ite.ref_index)
 										{
@@ -323,15 +323,15 @@ namespace Potato::Task
 						return false;
 					}
 
-					raw_nodes[t].in_degree += 1;
+					preprocess_nodes[t].in_degree += 1;
 
-					raw_direct_edges.emplace_back(f, t);
+					preprocess_direct_edges.emplace_back(f, t);
 
-					assert(!raw_nodes.empty());
+					assert(!preprocess_nodes.empty());
 
-					for(std::size_t i = 0; i < raw_nodes.size(); ++i)
+					for(std::size_t i = 0; i < preprocess_nodes.size(); ++i)
 					{
-						raw_nodes[i].topology_degree = total_node - mapping_array[i];
+						preprocess_nodes[i].topology_degree = total_node - mapping_array[i];
 					}
 					need_update = true;
 
@@ -349,13 +349,13 @@ namespace Potato::Task
 			current_status = Status::READY;
 			finished_task = 0;
 			{
-				std::lock_guard lg2(raw_mutex);
+				std::lock_guard lg2(preprocess_mutex);
 				if(need_update)
 				{
 					need_update = false;
 					process_nodes.clear();
 					process_edges.clear();
-					for(auto& ite : raw_nodes)
+					for(auto& ite : preprocess_nodes)
 					{
 						process_nodes.emplace_back(
 							Status::READY,
@@ -373,7 +373,7 @@ namespace Potato::Task
 					{
 						auto& ref = process_nodes[i];
 						auto s = process_edges.size();
-						for(auto& ite : raw_mutex_edges)
+						for(auto& ite : preprocess_mutex_edges)
 						{
 							if(ite.node1 == i)
 							{
@@ -385,7 +385,7 @@ namespace Potato::Task
 						}
 						ref.mutex_edges = {s, process_edges.size()};
 						s = process_edges.size();
-						for(auto& ite : raw_direct_edges)
+						for(auto& ite : preprocess_direct_edges)
 						{
 							if(ite.from == i)
 							{
@@ -488,7 +488,7 @@ namespace Potato::Task
 						for(std::size_t i = 0; i < process_nodes.size(); ++i)
 						{
 							auto& ite = process_nodes[i];
-							TryStartupNode(status.context, ite, i);
+							TryStartupNode_AssumedLock(status.context, ite, i);
 						}
 					}
 					return;
@@ -528,17 +528,6 @@ namespace Potato::Task
 
 			node->TaskFlowNodeExecute(context);
 			std::lock_guard lg(process_mutex);
-			finished_task += 1;
-			if(finished_task == process_nodes.size())
-			{
-				TaskProperty tem_pro{
-					running_property.display_name,
-					{0, 1},
-					running_property.filter
-				};
-				status.context.CommitTask(this, tem_pro);
-				return;
-			}
 			auto& ref = process_nodes[index];
 			FinishNode_AssumedLock(status.context, ref);
 			return;
@@ -555,14 +544,24 @@ namespace Potato::Task
 			{
 				auto& tref = process_nodes[ite];
 				tref.mutex_degree -= 1;
-				TryStartupNode(context, tref, ite);
+				TryStartupNode_AssumedLock(context, tref, ite);
 			}
 			auto edge_span = node.direct_edges.Slice(std::span(process_edges));
 			for(auto ite : edge_span)
 			{
 				auto& tref = process_nodes[ite];
 				tref.in_degree -= 1;
-				TryStartupNode(context, tref, ite);
+				TryStartupNode_AssumedLock(context, tref, ite);
+			}
+			finished_task += 1;
+			if(finished_task == process_nodes.size())
+			{
+				TaskProperty tem_pro{
+					running_property.display_name,
+					{0, 1},
+					running_property.filter
+				};
+				context.CommitTask(this, tem_pro);
 			}
 			return true;
 		}
@@ -570,7 +569,7 @@ namespace Potato::Task
 	}
 
 
-	bool TaskFlow::TryStartupNode(TaskContext& context, ProcessNode& node, std::size_t index)
+	bool TaskFlow::TryStartupNode_AssumedLock(TaskContext& context, ProcessNode& node, std::size_t index)
 	{
 		if(node.status == Status::READY && node.mutex_degree == 0 && node.in_degree == 0)
 		{

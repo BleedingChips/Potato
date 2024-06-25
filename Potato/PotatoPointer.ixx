@@ -162,8 +162,11 @@ export namespace Potato::Pointer
 			return IntrusivePtr<PtrT, typename WrapperT::PotatoPointerIsomer>{*this};
 		}
 
-		std::strong_ordering operator<=>(IntrusivePtr const& i) const noexcept { return ptr <=> i.ptr; }
+		template<typename OP, typename OW>
+		std::strong_ordering operator<=>(IntrusivePtr<OP, OW> const& i) const noexcept { return ptr <=> i.ptr; }
 		bool operator==(IntrusivePtr const& i) const noexcept { return this->operator<=>(i) == std::strong_ordering::equal; }
+		template<typename OP, typename OW>
+		bool operator!=(IntrusivePtr<OP, OW> const& i) const noexcept { return (ptr <=> i.ptr) != std::strong_ordering::equal; };
 
 	protected:
 

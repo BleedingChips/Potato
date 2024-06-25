@@ -128,7 +128,7 @@ export namespace Potato::Task
 
 		Socket::Ptr AddNode(TaskFlowNode::Ptr node, NodeProperty property = {}, UserData::Ptr user_data = {})
 		{
-			std::lock_guard lg(raw_mutex);
+			std::lock_guard lg(preprocess_mutex);
 			return AddNode_AssumedLock(std::move(node), std::move(property), std::move(user_data));
 		}
 		
@@ -145,10 +145,10 @@ export namespace Potato::Task
 			return {};
 		}
 
-		bool Remove(Socket& node) { std::lock_guard lg(raw_mutex); return Remove(node); }
-		bool AddDirectEdge(Socket& from, Socket& direct_to, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource()) { std::lock_guard lg(raw_mutex); return AddDirectEdge_AssumedLock(from, direct_to , temp_resource); }
-		bool AddMutexEdge(Socket& from, Socket& direct_to) { std::lock_guard lg(raw_mutex); return AddMutexEdge_AssumedLock(from, direct_to); }
-		bool RemoveDirectEdge(Socket& from, Socket& direct_to) { std::lock_guard lg(raw_mutex); return RemoveDirectEdge_AssumedLock(from, direct_to); }
+		bool Remove(Socket& node) { std::lock_guard lg(preprocess_mutex); return Remove(node); }
+		bool AddDirectEdge(Socket& from, Socket& direct_to, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource()) { std::lock_guard lg(preprocess_mutex); return AddDirectEdge_AssumedLock(from, direct_to , temp_resource); }
+		bool AddMutexEdge(Socket& from, Socket& direct_to) { std::lock_guard lg(preprocess_mutex); return AddMutexEdge_AssumedLock(from, direct_to); }
+		bool RemoveDirectEdge(Socket& from, Socket& direct_to) { std::lock_guard lg(preprocess_mutex); return RemoveDirectEdge_AssumedLock(from, direct_to); }
 
 		struct MemorySetting
 		{
@@ -208,19 +208,19 @@ export namespace Potato::Task
 			Mutex,
 		};
 
-		struct RawMutexEdge
+		struct PreprocessMutexEdge
 		{
 			std::size_t node1;
 			std::size_t node2;
 		};
 
-		struct RawDirectEdge
+		struct PreprocessDirectEdge
 		{
 			std::size_t from;
 			std::size_t to;
 		};
 
-		struct RawNode
+		struct PreprocessNode
 		{
 			Socket::Ptr socket;
 			TaskFlowNode::Ptr node;
@@ -230,10 +230,10 @@ export namespace Potato::Task
 
 		MemorySetting resources;
 
-		std::mutex raw_mutex;
-		std::pmr::vector<RawNode> raw_nodes;
-		std::pmr::vector<RawMutexEdge> raw_mutex_edges;
-		std::pmr::vector<RawDirectEdge> raw_direct_edges;
+		std::mutex preprocess_mutex;
+		std::pmr::vector<PreprocessNode> preprocess_nodes;
+		std::pmr::vector<PreprocessMutexEdge> preprocess_mutex_edges;
+		std::pmr::vector<PreprocessDirectEdge> preprocess_direct_edges;
 		bool need_update = false;
 
 		enum class Status
@@ -259,7 +259,7 @@ export namespace Potato::Task
 			Socket::Ptr socket;
 		};
 
-		bool TryStartupNode(TaskContext& context, ProcessNode& node, std::size_t index);
+		bool TryStartupNode_AssumedLock(TaskContext& context, ProcessNode& node, std::size_t index);
 		bool FinishNode_AssumedLock(TaskContext& context, ProcessNode& node);
 
 		std::mutex process_mutex;
