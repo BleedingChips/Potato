@@ -136,13 +136,8 @@ export namespace Potato::IR
 			StructLayout::Ptr type_id;
 			std::u8string_view name;
 			std::size_t array_count = 1;
-			void* init_oject = nullptr;
+			void* init_object = nullptr;
 		};
-
-		static Ptr CreateDynamicStructLayout(std::u8string_view name, std::span<Member const> members, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
-
-		template<typename AtomicType>
-		static Ptr CreateAtomicStructLayout(std::u8string_view name, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
 		virtual StructLayoutConstruction GetConstructProperty() const = 0;
 		virtual bool DefaultConstruction(void* target, std::size_t array_count = 1) const = 0;
@@ -179,6 +174,8 @@ export namespace Potato::IR
 				view.array_count
 			};
 		}
+		virtual std::size_t GetHashCode() const = 0;
+		virtual ~StructLayout() = default;
 
 	protected:
 		
@@ -224,6 +221,8 @@ export namespace Potato::IR
 
 	struct DynamicStructLayout : public StructLayout, public Pointer::DefaultIntrusiveInterface
 	{
+		static StructLayout::Ptr Create(std::u8string_view name, std::span<Member const> members, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+
 		virtual std::u8string_view GetName() const override { return name; }
 		virtual void AddStructLayoutRef() const override { DefaultIntrusiveInterface::AddRef(); }
 		virtual void SubStructLayoutRef() const override { DefaultIntrusiveInterface::SubRef(); }
@@ -235,11 +234,12 @@ export namespace Potato::IR
 		bool CopyConstruction(void* target, void* source, std::size_t array_count) const override;
 		bool MoveConstruction(void* target, void* source, std::size_t array_count) const override;
 		bool Destruction(void* target, std::size_t array_count) const override;
+		virtual std::size_t GetHashCode() const override { return hash_code; }
 
 	protected:
 
-		DynamicStructLayout(StructLayoutConstruction construct_property, std::u8string_view name, Layout total_layout, std::span<MemberView> member_view, MemoryResourceRecord record)
-			: total_layout(total_layout), member_view(member_view), record(record), construct_property(construct_property)
+		DynamicStructLayout(StructLayoutConstruction construct_property, std::u8string_view name, Layout total_layout, std::span<MemberView> member_view, std::size_t hash_code, MemoryResourceRecord record)
+			: total_layout(total_layout), hash_code(hash_code), member_view(member_view), record(record), construct_property(construct_property)
 		{
 			
 		}
@@ -249,18 +249,27 @@ export namespace Potato::IR
 		std::span<MemberView> member_view;
 		MemoryResourceRecord record;
 		StructLayoutConstruction construct_property;
+		std::size_t hash_code;
 
 		friend struct StructLayout;
 	};
 
 	template<typename AtomicType>
-	struct AtomicStructLayout : public StructLayout, public Pointer::DefaultIntrusiveInterface
+	struct StaticAtomicStructLayout : public StructLayout
 	{
+		static StructLayout::Ptr Create()
+		{
+			static StaticAtomicStructLayout<AtomicType> layout;
+			return &layout;
+		}
 		virtual Layout GetLayout() const override { return Layout::Get<AtomicType>(); }
-		virtual void AddStructLayoutRef() const override { DefaultIntrusiveInterface::AddRef(); }
-		virtual void SubStructLayoutRef() const override { DefaultIntrusiveInterface::SubRef(); }
-		virtual void Release() override { auto re = record; this->~AtomicStructLayout(); re.Deallocate(); }
-		virtual std::u8string_view GetName() const override { return name; }
+		virtual void AddStructLayoutRef() const override { }
+		virtual void SubStructLayoutRef() const override {  }
+		virtual std::u8string_view GetName() const override
+		{
+			static std::string_view str = typeid(AtomicType).name();
+			return std::u8string_view{reinterpret_cast<char8_t const*>(str.data()), str.size()};
+		}
 		std::span<MemberView const> GetMemberView() const override { return {}; }
 		StructLayoutConstruction GetConstructProperty() const override
 		{
@@ -320,6 +329,8 @@ export namespace Potato::IR
 			return false;
 		}
 
+		std::size_t GetHashCode() const override { return typeid(AtomicType).hash_code(); }
+
 		virtual bool Destruction(void* target, std::size_t array_count = 1) const override
 		{
 			assert(target != nullptr);
@@ -330,41 +341,7 @@ export namespace Potato::IR
 			}
 			return true;
 		}
-
-	protected:
-
-		AtomicStructLayout(std::u8string_view name, MemoryResourceRecord record)
-			: name(name), record(record) {}
-		
-
-		std::u8string_view name;
-		MemoryResourceRecord record;
-
-		friend struct StructLayout;
 	};
-
-	template<typename AtomicType>
-	auto StructLayout::CreateAtomicStructLayout(std::u8string_view name, std::pmr::memory_resource* resource)
-		-> Ptr
-	{
-		std::size_t name_size = name.size();
-
-		auto cur_layout = Layout::Get<AtomicStructLayout<AtomicType>>();
-		std::size_t name_offset = InsertLayoutCPP(cur_layout, Layout::GetArray<char8_t>(name_size));
-		FixLayoutCPP(cur_layout);
-		auto re = MemoryResourceRecord::Allocate(resource, cur_layout);
-		if(re)
-		{
-			auto str_span = std::span(reinterpret_cast<char8_t*>(re.GetByte() + name_offset), name_size);
-			std::memcpy(str_span.data(), name.data(), name.size());
-			name = std::u8string_view{str_span.subspan(0, name.size())};
-			return new (re.Get()) AtomicStructLayout<AtomicType>{
-				name,
-				re
-			};
-		}
-		return {};
-	}
 
 	struct SymbolTable
 	{

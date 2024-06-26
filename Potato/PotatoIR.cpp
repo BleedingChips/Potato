@@ -390,18 +390,21 @@ namespace Potato::IR
 	}
 
 
-	auto StructLayout::CreateDynamicStructLayout(std::u8string_view name, std::span<Member const> members, std::pmr::memory_resource* resource)
+	auto DynamicStructLayout::Create(std::u8string_view name, std::span<Member const> members, std::pmr::memory_resource* resource)
 		-> Ptr
 	{
-
+		std::size_t hash_code = 0;
 		StructLayoutConstruction construct_pro;
 
 		std::size_t name_size = name.size();
+		std::size_t index = 0;
 		for(auto& ite : members)
 		{
+			//hash_id += ite.type_id->GetHashID();
+			// todo hash_code
 			name_size += ite.name.size();
 			auto tem_layout = ite.type_id->GetConstructProperty();
-			if(!tem_layout.enable_default && ite.init_oject != nullptr && tem_layout.enable_copy)
+			if(!tem_layout.enable_default && ite.init_object != nullptr && tem_layout.enable_copy)
 			{
 				tem_layout.enable_default = true;
 			}
@@ -419,7 +422,7 @@ namespace Potato::IR
 
 		for(auto& ite : members)
 		{
-			if(ite.init_oject != nullptr)
+			if(ite.init_object != nullptr)
 				InsertLayoutCPP(cur_layout, ite.type_id->GetLayout(ite.array_count));
 		}
 
@@ -452,11 +455,11 @@ namespace Potato::IR
 
 				void* init_object = nullptr;
 
-				if(cur.init_oject != nullptr)
+				if(cur.init_object != nullptr)
 				{
 					auto init_offset = InsertLayoutCPP(record_layout, cur.type_id->GetLayout(cur.array_count));
 					init_object = static_cast<std::byte*>(re.Get()) + init_offset;
-					auto re2 = cur.type_id->CopyConstruction(init_object, cur.init_oject, cur.array_count);
+					auto re2 = cur.type_id->CopyConstruction(init_object, cur.init_object, cur.array_count);
 					assert(re2);
 				}
 
@@ -475,6 +478,7 @@ namespace Potato::IR
 				name,
 				total_layout,
 				member_span,
+				hash_code,
 				re
 			};
 		}

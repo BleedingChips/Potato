@@ -22,26 +22,26 @@ int main()
 	StructLayout::Member me[] = 
 	{
 		{
-			StructLayout::CreateAtomicStructLayout<std::size_t>(u8"size_t"),
+			StaticAtomicStructLayout<std::size_t>::Create(),
 			u8"k",
 			1,
 			&u
 		},
 		{
-			StructLayout::CreateAtomicStructLayout<float>(u8"float"),
+			StaticAtomicStructLayout<float>::Create(),
 			u8"I",
 			1,
 			&icc
 		},
 		{
-			StructLayout::CreateAtomicStructLayout<std::size_t>(u8"size_t"),
+			StaticAtomicStructLayout<std::size_t>::Create(),
 			u8"o",
 			2,
 			kl
 		},
 	};
 
-	auto P = StructLayout::CreateDynamicStructLayout(u8"K", me);
+	auto P = DynamicStructLayout::Create(u8"K", me);
 
 	K i;
 
