@@ -7,17 +7,34 @@ module PotatoIR;
 
 namespace Potato::IR
 {
-
-	std::strong_ordering TypeID::operator<=>(TypeID const& i) const
+	std::strong_ordering StructLayout::operator<=>(StructLayout const& layout) const
 	{
-		if(ID == i.ID)
+		auto re = (this <=> &layout);
+		if(re == std::strong_ordering::equal)
+			return re;
+		re = GetHashCode() <=> layout.GetHashCode();
+		if(re != std::strong_ordering::equal)
+			return re;
+		auto mem = GetMemberView();
+		auto mem2 = layout.GetMemberView();
+		re = (mem.size() <=> mem2.size());
+		if(re != std::strong_ordering::equal)
+			return re;
+		for(std::size_t i = 0; i < mem.size();++i)
 		{
-			return std::strong_ordering::equal;
-		}else if(ID < i.ID)
-		{
-			return std::strong_ordering::less;
-		}else
-			return std::strong_ordering::greater;
+			auto& ref = mem[i];
+			auto& ref2 = mem2[i];
+			re = (ref.offset <=> ref2.offset);
+			if(re != std::strong_ordering::equal)
+				return re;
+			re = (ref.array_count <=> ref2.array_count);
+			if(re != std::strong_ordering::equal)
+				return re;
+			re = (*ref.struct_layout) <=> (*ref2.struct_layout);
+			if(re != std::strong_ordering::equal)
+				return re;
+		}
+		return std::strong_ordering::equal;
 	}
 
 	auto SymbolTable::InsertSymbol(std::u32string Name, std::size_t FeedbackIndex, std::any Data) -> std::size_t
@@ -127,7 +144,7 @@ namespace Potato::IR
 	{
 		return {
 			static_cast<std::byte*>(target) + view.offset,
-			view.type_id->GetLayout(view.array_count).Size
+			view.struct_layout->GetLayout(view.array_count).Size
 		};
 	}
 
@@ -297,9 +314,11 @@ namespace Potato::IR
 		return member_view;
 	}
 
-	bool DynamicStructLayout::DefaultConstruction(void* target, std::size_t array_count) const
+	bool StructLayout::DefaultConstruction(void* target, std::size_t array_count) const
 	{
 		assert(target != nullptr);
+		auto construct_property = GetConstructProperty();
+		auto member_view = GetMemberView();
 		if(construct_property.enable_default)
 		{
 			auto layout = GetLayout();
@@ -312,11 +331,11 @@ namespace Potato::IR
 					auto data = GetData(ite, tar_ite);
 					if(ite.init_object != nullptr)
 					{
-						auto re = ite.type_id->CopyConstruction(data, ite.init_object, ite.array_count);
+						auto re = ite.struct_layout->CopyConstruction(data, ite.init_object, ite.array_count);
 						assert(re);
 					}else
 					{
-						auto re = ite.type_id->DefaultConstruction(data, ite.array_count);
+						auto re = ite.struct_layout->DefaultConstruction(data, ite.array_count);
 						assert(re);
 					}
 				}
@@ -326,31 +345,13 @@ namespace Potato::IR
 		return false;
 	}
 
-	bool DynamicStructLayout::CopyConstruction(void* target, void* source, std::size_t array_count) const
+	bool StructLayout::CopyConstruction(void* target, void* source, std::size_t array_count) const
 	{
 		assert(target != nullptr);
-		auto layout = GetLayout();
-		std::byte* tar = static_cast<std::byte*>(target);
-		std::byte* sou = static_cast<std::byte*>(source);
-		for(std::size_t i = 0; i < array_count; ++i)
+		auto construct_property = GetConstructProperty();
+		if(construct_property.enable_copy)
 		{
-			std::byte* tar_ite = tar + layout.Size * i;
-			std::byte* sou_ite = sou + layout.Size * i;
-			for(auto& ite : member_view)
-			{
-				auto data = GetData(ite, tar_ite);
-				auto data2 = GetData(ite, sou_ite);
-				auto re = ite.type_id->CopyConstruction(data, data2, ite.array_count);
-			}
-		}
-		return true;
-	}
-
-	bool DynamicStructLayout::MoveConstruction(void* target, void* source, std::size_t array_count) const
-	{
-		assert(target != source && target != nullptr && source != nullptr);
-		if(construct_property.enable_move)
-		{
+			auto member_view = GetMemberView();
 			auto layout = GetLayout();
 			std::byte* tar = static_cast<std::byte*>(target);
 			std::byte* sou = static_cast<std::byte*>(source);
@@ -362,7 +363,33 @@ namespace Potato::IR
 				{
 					auto data = GetData(ite, tar_ite);
 					auto data2 = GetData(ite, sou_ite);
-					auto re = ite.type_id->MoveConstruction(data, data2, ite.array_count);
+					auto re = ite.struct_layout->CopyConstruction(data, data2, ite.array_count);
+				}
+			}
+			return true;
+		}
+		return false;
+	}
+
+	bool StructLayout::MoveConstruction(void* target, void* source, std::size_t array_count) const
+	{
+		assert(target != source && target != nullptr && source != nullptr);
+		auto construct_property = GetConstructProperty();
+		if(construct_property.enable_move)
+		{
+			auto member_view = GetMemberView();
+			auto layout = GetLayout();
+			std::byte* tar = static_cast<std::byte*>(target);
+			std::byte* sou = static_cast<std::byte*>(source);
+			for(std::size_t i = 0; i < array_count; ++i)
+			{
+				std::byte* tar_ite = tar + layout.Size * i;
+				std::byte* sou_ite = sou + layout.Size * i;
+				for(auto& ite : member_view)
+				{
+					auto data = GetData(ite, tar_ite);
+					auto data2 = GetData(ite, sou_ite);
+					auto re = ite.struct_layout->MoveConstruction(data, data2, ite.array_count);
 					assert(re);
 				}
 			}
@@ -371,9 +398,10 @@ namespace Potato::IR
 		return false;
 	}
 
-	bool DynamicStructLayout::Destruction(void* target, std::size_t array_count) const
+	bool StructLayout::Destruction(void* target, std::size_t array_count) const
 	{
 		assert(target != nullptr);
+		auto member_view = GetMemberView();
 		auto layout = GetLayout();
 		std::byte* tar = static_cast<std::byte*>(target);
 		for(std::size_t i = 0; i < array_count; ++i)
@@ -382,7 +410,7 @@ namespace Potato::IR
 			for(auto& ite : member_view)
 			{
 				auto data = GetData(ite, tar_ite);
-				auto re = ite.type_id->Destruction(data, ite.array_count);
+				auto re = ite.struct_layout->Destruction(data, ite.array_count);
 				assert(re);
 			}
 		}
@@ -397,11 +425,11 @@ namespace Potato::IR
 		StructLayoutConstruction construct_pro;
 
 		std::size_t name_size = name.size();
-		std::size_t index = 0;
+		std::size_t index = 1;
 		for(auto& ite : members)
 		{
-			//hash_id += ite.type_id->GetHashID();
-			// todo hash_code
+			auto cur_hash_code = ite.type_id->GetHashCode();
+			hash_code += (cur_hash_code - (cur_hash_code % index)) * ite.array_count + (cur_hash_code % index);
 			name_size += ite.name.size();
 			auto tem_layout = ite.type_id->GetConstructProperty();
 			if(!tem_layout.enable_default && ite.init_object != nullptr && tem_layout.enable_copy)
@@ -409,6 +437,7 @@ namespace Potato::IR
 				tem_layout.enable_default = true;
 			}
 			construct_pro =  construct_pro && tem_layout;
+			++index;
 		}
 
 		if(!construct_pro)
@@ -433,7 +462,7 @@ namespace Potato::IR
 			Layout total_layout;
 			auto member_span = std::span(reinterpret_cast<MemberView*>(re.GetByte() + member_offset), members.size());
 			auto str_span = std::span(reinterpret_cast<char8_t*>(re.GetByte() + name_offset), name_size);
-			std::memcpy(str_span.data(), name.data(), name.size());
+			std::memcpy(str_span.data(), name.data(), name.size() * sizeof(char8_t));
 			name = std::u8string_view{str_span.subspan(0, name.size())};
 			str_span = str_span.subspan(name.size());
 			for(std::size_t i = 0; i < members.size(); ++i)
@@ -451,7 +480,7 @@ namespace Potato::IR
 					offset = InsertLayoutCPP(total_layout, new_layout);
 				}
 
-				std::memcpy(str_span.data(), cur.name.data(), cur.name.size());
+				std::memcpy(str_span.data(), cur.name.data(), cur.name.size() * sizeof(char8_t));
 
 				void* init_object = nullptr;
 

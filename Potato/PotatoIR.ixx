@@ -92,22 +92,6 @@ export namespace Potato::IR
 		bool Deallocate();
 	};
 
-	struct TypeID
-	{
-		template<typename Type>
-		static TypeID CreateTypeID() { return typeid(Type); }
-		
-		std::strong_ordering operator<=>(TypeID const& i) const;
-		bool operator==(TypeID const& i) const { return ID == i.ID; }
-		TypeID(TypeID const&) = default;
-		TypeID& operator=(TypeID const& i) { ID.~type_index(); new (&ID) std::type_index{i.ID}; return *this; }
-		std::size_t HashCode() const noexcept { return ID.hash_code(); }
-	private:
-		TypeID(std::type_info const& ID) : ID(ID) {}
-		TypeID(std::type_index ID) : ID(ID) {}
-		std::type_index ID;
-	};
-
 	struct StructLayout
 	{
 
@@ -129,7 +113,7 @@ export namespace Potato::IR
 			void SubRef(StructLayout const* ptr) const { ptr->SubStructLayoutRef(); }
 		};
 
-		using Ptr = Pointer::IntrusivePtr<StructLayout, Wrapper>;
+		using Ptr = Pointer::IntrusivePtr<StructLayout const, Wrapper>;
 
 		struct Member
 		{
@@ -140,14 +124,14 @@ export namespace Potato::IR
 		};
 
 		virtual StructLayoutConstruction GetConstructProperty() const = 0;
-		virtual bool DefaultConstruction(void* target, std::size_t array_count = 1) const = 0;
-		virtual bool CopyConstruction(void* target, void* source, std::size_t array_count = 1) const = 0;
-		virtual bool MoveConstruction(void* target, void* source, std::size_t array_count = 1) const = 0;
-		virtual bool Destruction(void* target, std::size_t array_count = 1) const = 0;
+		virtual bool DefaultConstruction(void* target, std::size_t array_count = 1) const;
+		virtual bool CopyConstruction(void* target, void* source, std::size_t array_count = 1) const;
+		virtual bool MoveConstruction(void* target, void* source, std::size_t array_count = 1) const;
+		virtual bool Destruction(void* target, std::size_t array_count = 1) const;
 
 		struct MemberView
 		{
-			StructLayout::Ptr type_id;
+			StructLayout::Ptr struct_layout;
 			std::u8string_view name;
 			std::size_t array_count;
 			std::size_t offset;
@@ -155,6 +139,7 @@ export namespace Potato::IR
 		};
 
 		virtual std::span<MemberView const> GetMemberView() const = 0;
+		MemberView operator[](std::size_t index) const { auto span = GetMemberView(); assert(span.size() > index);  return span[index]; }
 		virtual std::u8string_view GetName() const = 0;
 		std::optional<MemberView> FindMemberView(std::u8string_view member_name) const;
 		virtual Layout GetLayout() const = 0;
@@ -176,6 +161,9 @@ export namespace Potato::IR
 		}
 		virtual std::size_t GetHashCode() const = 0;
 		virtual ~StructLayout() = default;
+		virtual std::strong_ordering operator<=>(StructLayout const& layout) const;
+		bool operator==(StructLayout const& layout) const { return operator<=>(layout) == std::strong_ordering::equal; }
+		bool operator<(StructLayout const& layout) const { return operator<=>(layout) == std::strong_ordering::less; }
 
 	protected:
 		
@@ -230,10 +218,6 @@ export namespace Potato::IR
 		Layout GetLayout() const override;
 		std::span<MemberView const> GetMemberView() const override;
 		StructLayoutConstruction GetConstructProperty() const override { return construct_property; }
-		bool DefaultConstruction(void* target, std::size_t array_count) const override;
-		bool CopyConstruction(void* target, void* source, std::size_t array_count) const override;
-		bool MoveConstruction(void* target, void* source, std::size_t array_count) const override;
-		bool Destruction(void* target, std::size_t array_count) const override;
 		virtual std::size_t GetHashCode() const override { return hash_code; }
 
 	protected:
@@ -340,6 +324,16 @@ export namespace Potato::IR
 				(tar + i)->~AtomicType();
 			}
 			return true;
+		}
+
+		virtual std::strong_ordering operator<=>(StructLayout const& layout) const
+		{
+			auto re = StructLayout::operator<=>(layout);
+			if(re == std::strong_ordering::equal && this != &layout)
+			{
+				return GetName() <=> layout.GetName();
+			}
+			return re;
 		}
 	};
 

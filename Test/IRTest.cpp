@@ -12,9 +12,22 @@ struct K
 using namespace Potato;
 using namespace Potato::IR;
 
+namespace IOP
+{
+	struct ÄãºÃ
+{
+	
+};
+}
+
+
+
 int main()
 {
 
+
+	auto j = StaticAtomicStructLayout<IOP::ÄãºÃ>::Create();
+	auto n = j->GetName();
 	std::size_t u = 100;
 	float icc = 100.0f;
 	std::size_t kl[2] = {288, 899};
