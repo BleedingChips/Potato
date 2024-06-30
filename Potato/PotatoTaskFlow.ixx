@@ -145,7 +145,7 @@ export namespace Potato::Task
 			return {};
 		}
 
-		bool Remove(Socket& node) { std::lock_guard lg(preprocess_mutex); return Remove(node); }
+		bool Remove(Socket& node) { std::lock_guard lg(preprocess_mutex); return Remove_AssumedLock(node); }
 		bool AddDirectEdge(Socket& from, Socket& direct_to, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource()) { std::lock_guard lg(preprocess_mutex); return AddDirectEdge_AssumedLock(from, direct_to , temp_resource); }
 		bool AddMutexEdge(Socket& from, Socket& direct_to) { std::lock_guard lg(preprocess_mutex); return AddMutexEdge_AssumedLock(from, direct_to); }
 		bool RemoveDirectEdge(Socket& from, Socket& direct_to) { std::lock_guard lg(preprocess_mutex); return RemoveDirectEdge_AssumedLock(from, direct_to); }
