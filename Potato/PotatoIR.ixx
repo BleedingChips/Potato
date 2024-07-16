@@ -89,6 +89,25 @@ export namespace Potato::IR
 
 		template<typename Type>
 		static MemoryResourceRecord Allocate(std::pmr::memory_resource* resource) { return  Allocate(resource, Layout::Get<Type>()); }
+		
+		template<typename Type, typename ...OT>
+		static Type* AllocateAndConstruct(std::pmr::memory_resource* resource, OT&&... ot)
+			requires(std::is_constructible_v<Type, MemoryResourceRecord, OT&&...>)
+		{
+			auto re = Allocate<Type>(resource);
+			if(re)
+			{
+				try{
+					return new (re.Get()) Type{re, std::forward<OT>(ot)...};
+				}catch(...)
+				{
+					re.Deallocate();
+					throw;
+				}
+			}
+			return nullptr;
+		}
+		
 		bool Deallocate();
 	};
 
