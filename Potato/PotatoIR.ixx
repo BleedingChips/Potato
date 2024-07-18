@@ -408,6 +408,16 @@ export namespace Potato::IR
 	};
 
 	
-
+	struct MemoryResourceRecordIntrusiveInterface
+	{
+		void AddRef() const { ref_count.AddRef(); }
+		void SubRef() const;
+	protected:
+		MemoryResourceRecordIntrusiveInterface(MemoryResourceRecord record)
+			: record(record) {}
+		virtual ~MemoryResourceRecordIntrusiveInterface() = default;
+		MemoryResourceRecord record;
+		mutable Misc::AtomicRefCount ref_count;
+	};
 
 }

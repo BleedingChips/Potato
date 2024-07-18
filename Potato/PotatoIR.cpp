@@ -514,4 +514,14 @@ namespace Potato::IR
 
 		return {};
 	}
+
+	void MemoryResourceRecordIntrusiveInterface::SubRef() const
+	{
+		if(ref_count.SubRef())
+		{
+			auto re = record;
+			this->~MemoryResourceRecordIntrusiveInterface();
+			re.Deallocate();
+		}
+	}
 }
