@@ -345,8 +345,6 @@ export namespace Potato::Pointer
 		void AddViewerRef(PtrT* P) { P->AddViewerRef(); }
 		template<typename PtrT>
 		void SubViewerRef(PtrT* P) { P->SubViewerRef(); }
-		template<typename PtrT>
-		bool TryAddControllerRef(PtrT* P) { return P->TryAddControllerRef(); }
 	};
 
 	struct ControllerIntrusiveWrapperT;
@@ -392,17 +390,6 @@ export namespace Potato::Pointer
 			ControllerViewerIntrusiveWrapperT::SubViewerRef(ptr);
 		}
 
-		template<typename PtrT>
-		bool TryAddRef(PtrT* ptr)
-		{
-			if (ControllerViewerIntrusiveWrapperT::TryAddControllerRef(ptr))
-			{
-				ControllerViewerIntrusiveWrapperT::AddViewerRef(ptr);
-				return true;
-			}
-			return false;
-		}
-
 		ControllerIntrusiveWrapperT() = default;
 		ControllerIntrusiveWrapperT(ControllerIntrusiveWrapperT const&) = default;
 		ControllerIntrusiveWrapperT(ControllerIntrusiveWrapperT&&) = default;
@@ -421,8 +408,8 @@ export namespace Potato::Pointer
 		void SubViewerRef() const { if (VRefCount.SubRef()) const_cast<DefaultControllerViewerInterface*>(this)->ViewerRelease(); }
 		void AddControllerRef() const { CRefCount.AddRef(); }
 		void SubControllerRef() const { if (CRefCount.SubRef()) const_cast<DefaultControllerViewerInterface*>(this)->ControllerRelease(); }
-		bool TryAddControllerRef() const { return CRefCount.TryAddRefNotFromZero(); }
-		std::size_t GetControllerRef() const { return CRefCount.Count(); }
+
+		std::size_t GetViewerRef() const { return CRefCount.Count(); }
 
 		virtual void ControllerRelease() = 0;
 		virtual void ViewerRelease() = 0;
