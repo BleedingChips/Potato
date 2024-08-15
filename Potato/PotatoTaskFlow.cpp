@@ -7,7 +7,7 @@ module PotatoTaskFlow;
 namespace Potato::Task
 {
 
-
+	/*
 	auto TaskFlow::Socket::Create(
 		TaskFlow* owner, 
 		UserData::Ptr user_data,
@@ -52,50 +52,66 @@ namespace Potato::Task
 		this->~Socket();
 		re.Deallocate();
 	}
+	*/
 
-	TaskFlow::TaskFlow(std::chrono::steady_clock::duration, std::pmr::memory_resource* task_flow_resource, MemorySetting memory_setting)
-		: resources(memory_setting)
-		, preprocess_nodes(task_flow_resource)
+	TaskFlow::TaskFlow(std::pmr::memory_resource* task_flow_resource)
+			:
+		 preprocess_nodes(task_flow_resource)
 		, preprocess_mutex_edges(task_flow_resource)
 		, preprocess_direct_edges(task_flow_resource)
 		, process_nodes(task_flow_resource)
 		, process_edges(task_flow_resource)
-		, listen_duration(listen_duration)
 	{
 
 	}
 
-	auto TaskFlow::AddNode_AssumedLock(TaskFlowNode::Ptr node, NodeProperty property, UserData::Ptr user_data)
-		->Socket::Ptr
+	TaskFlow::~TaskFlow()
 	{
-		if(node)
 		{
-			auto tnode = Socket::Create(this, std::move(user_data), std::move(property),  preprocess_nodes.size(), resources.node_resource);
-			if(tnode)
+			std::lock_guard lg(preprocess_mutex);
+			for(auto& ite : preprocess_nodes)
 			{
-				preprocess_nodes.emplace_back(
-					tnode,
-					std::move(node),
-					0,
-					preprocess_nodes.size()
-				);
-				need_update = true;
-				return tnode;
+				ite.node->owner = 0;
+				ite.node->index = std::numeric_limits<std::size_t>::max();
 			}
+			preprocess_nodes.clear();
+			preprocess_direct_edges.clear();
+			preprocess_mutex_edges.clear();
 		}
-		return {};
+		
+		{
+			std::lock_guard lg(process_mutex);
+			process_edges.clear();
+			process_nodes.clear();
+		}
 	}
 
-	bool TaskFlow::Remove_AssumedLock(Socket& node)
+	bool TaskFlow::AddNode_AssumedLocked(TaskFlowNode& node, TaskFlowNodeProperty property)
 	{
-		if(node.owner == this)
+		auto owner_id = reinterpret_cast<std::size_t>(this);
+		std::size_t old_size = 0;
+		if(node.owner.compare_exchange_strong(old_size, owner_id))
 		{
-			if(node.index == std::numeric_limits<std::size_t>::max())
-				return false;
+			node.index = preprocess_nodes.size();
+			preprocess_nodes.emplace_back(&node,
+			0,
+			preprocess_nodes.size(),
+				property
+			);
+			return true;
+		}
 
+		return false;
+	}
+
+	bool TaskFlow::Remove_AssumedLock(TaskFlowNode& node)
+	{
+		if(node.owner == reinterpret_cast<std::size_t>(this))
+		{
 			auto index = node.index;
 			auto& remove_ref = preprocess_nodes[index];
-			remove_ref.socket->index = std::numeric_limits<std::size_t>::max();
+			node.index = std::numeric_limits<std::size_t>::max();
+			node.owner = 0;
 			auto tar = remove_ref.in_degree;
 			preprocess_mutex_edges.erase(
 				std::remove_if(preprocess_mutex_edges.begin(), preprocess_mutex_edges.end(), [&](PreprocessMutexEdge& edge)
@@ -131,9 +147,9 @@ namespace Potato::Task
 				auto& ref = preprocess_nodes[i];
 				if(ref.topology_degree >= tar)
 					ref.topology_degree -= 1;
-				if(i > index)
+				if(ref.node->index > index)
 				{
-					ref.socket->index = i;
+					ref.node->index = i;
 				}
 			}
 			need_update = true;
@@ -143,9 +159,9 @@ namespace Potato::Task
 	}
 
 
-	bool TaskFlow::RemoveDirectEdge_AssumedLock(Socket& from, Socket& direct_to)
+	bool TaskFlow::RemoveDirectEdge_AssumedLock(TaskFlowNode& from, TaskFlowNode& direct_to)
 	{
-		if(from.owner == this && direct_to.owner == this)
+		if(from.owner == reinterpret_cast<std::size_t>(this) && direct_to.owner == reinterpret_cast<std::size_t>(this))
 		{
 			auto f = from.index;
 			auto t = direct_to.index;
@@ -167,9 +183,9 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskFlow::AddMutexEdge_AssumedLock(Socket& from, Socket& direct_to)
+	bool TaskFlow::AddMutexEdge_AssumedLock(TaskFlowNode& from, TaskFlowNode& direct_to)
 	{
-		if (from.owner == this && direct_to.owner == this)
+		if (from.owner == reinterpret_cast<std::size_t>(this) && direct_to.owner == reinterpret_cast<std::size_t>(this))
 		{
 			auto f = from.index;
 			auto t = direct_to.index;
@@ -182,9 +198,9 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskFlow::AddDirectEdge_AssumedLock(Socket& from, Socket& direct_to, std::pmr::memory_resource* temp_resource)
+	bool TaskFlow::AddDirectEdge_AssumedLock(TaskFlowNode& from, TaskFlowNode& direct_to, std::pmr::memory_resource* temp_resource)
 	{
-		if (from.owner == this && direct_to.owner == this)
+		if (from.owner == reinterpret_cast<std::size_t>(this) && direct_to.owner == reinterpret_cast<std::size_t>(this))
 		{
 			auto f = from.index;
 			auto t = direct_to.index;
@@ -365,7 +381,7 @@ namespace Potato::Task
 							Misc::IndexSpan<>{},
 							ite.in_degree,
 							ite.node,
-							ite.socket
+							ite.property
 						);
 						ite.node->Update();
 					}
@@ -409,7 +425,7 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskFlow::Commited_AssumedLock(TaskContext& context, NodeProperty property)
+	bool TaskFlow::Commited_AssumedLock(TaskContext& context, TaskFlowNodeProperty property)
 	{
 		if(current_status == Status::READY)
 		{
@@ -422,7 +438,6 @@ namespace Potato::Task
 			if(context.CommitTask(this, tem_property))
 			{
 				current_status = Status::RUNNING;
-				running_property = property;
 				return true;
 			}
 			
@@ -433,7 +448,7 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskFlow::Commited_AssumedLock(TaskContext& context, NodeProperty property, std::chrono::steady_clock::time_point time_point)
+	bool TaskFlow::Commited_AssumedLock(TaskContext& context, TaskFlowNodeProperty property, std::chrono::steady_clock::time_point time_point)
 	{
 		if(current_status == Status::READY)
 		{
@@ -574,9 +589,9 @@ namespace Potato::Task
 		if(node.status == Status::READY && node.mutex_degree == 0 && node.in_degree == 0)
 		{
 			TaskProperty pro{
-				node.socket->display_name,
+				node.property.display_name,
 				{reinterpret_cast<std::size_t>(node.node.GetPointer()), index},
-				node.socket->filter
+				node.property.filter
 			};
 			if(context.CommitTask(this, pro))
 			{

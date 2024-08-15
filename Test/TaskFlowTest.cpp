@@ -54,27 +54,34 @@ int main()
 {
 
 	{
+		DefaultTaskFlow tf2;
+		DefaultTaskFlow tf;
+		
 
 		TaskContext context;
 
 		std::size_t Count = 0;
-		auto A1 = TaskFlowNode::CreateLambda([](Potato::Task::TaskFlowContext& status){
+		auto A1 = TaskFlow::CreateLambdaTask([](Potato::Task::TaskFlowContext& status){
 			Print(status.node_property.display_name, std::this_thread::get_id());
 		});
 
-		DefaultTaskFlow tf;
+		auto lambda = [](Potato::Task::TaskFlowContext& status){
+			Print(status.node_property.display_name, std::this_thread::get_id());
+		};
 
-		DefaultTaskFlow tf2;
+		
 
-		auto a1 = tf.AddNode(A1, {u8"A1"});
-		auto a2 = tf.AddNode(A1, {u8"A2"});
-		auto a3 = tf.AddNode(A1, {u8"A3"});
-		auto a4 = tf.AddNode(A1, {u8"A4"});
-		auto a5 = tf.AddNode(A1, {u8"A5"});
-		auto a6 = tf.AddNode(&tf2, {u8"SubTask"});
+		
 
-		auto a21 = tf2.AddNode(A1, {u8"SubTask A1"});
-		auto a22 = tf2.AddNode(A1, {u8"SubTask A2"});
+		auto a1 = tf.AddLambda(lambda, {u8"A1"});
+		auto a2 = tf.AddLambda(lambda, {u8"A2"});
+		auto a3 = tf.AddLambda(lambda, {u8"A3"});
+		auto a4 = tf.AddLambda(lambda, {u8"A4"});
+		auto a5 = tf.AddLambda(lambda, {u8"A5"});
+		auto a6 = tf.AddNode(tf2, {u8"SubTask"});
+
+		auto a21 = tf2.AddLambda(lambda, {u8"SubTask A1"});
+		auto a22 = tf2.AddLambda(lambda, {u8"SubTask A2"});
 
 		bool l12 = tf.AddDirectEdge(*a1, *a2);
 		bool l23 = tf.AddDirectEdge(*a2, *a3);
@@ -84,8 +91,8 @@ int main()
 		
 		bool r41 = tf.RemoveDirectEdge(*a2, *a3);
 		bool l41_2 = tf.AddDirectEdge(*a4, *a1);
-		bool l61 = tf.AddDirectEdge(*a6, *a1);
-		bool l46 = tf.AddDirectEdge(*a4, *a6);
+		bool l61 = tf.AddDirectEdge(tf2, *a1);
+		bool l46 = tf.AddDirectEdge(*a4, tf2);
 
 		auto l_12 = tf2.AddDirectEdge(*a21, *a22);
 
