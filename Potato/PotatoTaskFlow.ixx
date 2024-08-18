@@ -113,10 +113,10 @@ export namespace Potato::Task
 			return {};
 		}
 
-		bool Remove(TaskFlowNode& node) { std::lock_guard lg(preprocess_mutex); return Remove_AssumedLock(node); }
-		bool AddDirectEdge(TaskFlowNode& from, TaskFlowNode& direct_to, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource()) { std::lock_guard lg(preprocess_mutex); return AddDirectEdge_AssumedLock(from, direct_to , temp_resource); }
-		bool AddMutexEdge(TaskFlowNode& from, TaskFlowNode& direct_to) { std::lock_guard lg(preprocess_mutex); return AddMutexEdge_AssumedLock(from, direct_to); }
-		bool RemoveDirectEdge(TaskFlowNode& from, TaskFlowNode& direct_to) { std::lock_guard lg(preprocess_mutex); return RemoveDirectEdge_AssumedLock(from, direct_to); }
+		bool Remove(TaskFlowNode& node) { std::lock_guard lg(preprocess_mutex); return Remove_AssumedLocked(node); }
+		bool AddDirectEdge(TaskFlowNode& from, TaskFlowNode& direct_to, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource()) { std::lock_guard lg(preprocess_mutex); return AddDirectEdge_AssumedLocked(from, direct_to , temp_resource); }
+		bool AddMutexEdge(TaskFlowNode& from, TaskFlowNode& direct_to) { std::lock_guard lg(preprocess_mutex); return AddMutexEdge_AssumedLocked(from, direct_to); }
+		bool RemoveDirectEdge(TaskFlowNode& from, TaskFlowNode& direct_to) { std::lock_guard lg(preprocess_mutex); return RemoveDirectEdge_AssumedLocked(from, direct_to); }
 
 		virtual void TaskFlowExecuteBegin(TaskFlowContext& context) {}
 		virtual void TaskFlowExecuteEnd(TaskFlowContext& context) {}
@@ -124,21 +124,25 @@ export namespace Potato::Task
 		bool Update() override
 		{
 			std::lock_guard lg(process_mutex);
-			return Update_AssumedLock();
+			return Update_AssumedLocked();
 		}
 		virtual bool Commited(TaskContext& context, TaskFlowNodeProperty property)
 		{
 			std::lock_guard lg(process_mutex);
-			return Commited_AssumedLock(context, std::move(property));
+			return Commited_AssumedLocked(context, std::move(property));
 		}
 		virtual bool Commited(TaskContext& context, std::chrono::steady_clock::time_point time_point, TaskFlowNodeProperty property)
 		{
 			std::lock_guard lg(process_mutex);
-			return Commited_AssumedLock(context, std::move(property), time_point);
+			return Commited_AssumedLocked(context, std::move(property), time_point);
 		}
 		virtual bool MarkNodePause(std::size_t node_identity);
 		virtual bool ContinuePauseNode(TaskContext& context, std::size_t node_identity);
 		~TaskFlow();
+
+		virtual bool AddTemporaryNode(TaskFlowNode& node, TaskFlowNodeProperty property, Func&& func);
+		template<typename Func>
+		virtual bool AddTemporaryNode(TaskFlowNode& node, TaskFlowNodeProperty property, Func&& func);
 
 	protected:
 			
@@ -146,13 +150,15 @@ export namespace Potato::Task
 
 		bool AddNode_AssumedLocked(TaskFlowNode& node, TaskFlowNodeProperty property);
 
-		bool Update_AssumedLock();
-		bool Commited_AssumedLock(TaskContext& context, TaskFlowNodeProperty property, std::chrono::steady_clock::time_point time_point);
-		bool Commited_AssumedLock(TaskContext& context, TaskFlowNodeProperty property);
-		bool Remove_AssumedLock(TaskFlowNode& node);
-		bool AddDirectEdge_AssumedLock(TaskFlowNode& from, TaskFlowNode& direct_to, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource());
-		bool AddMutexEdge_AssumedLock(TaskFlowNode& from, TaskFlowNode& direct_to);
-		bool RemoveDirectEdge_AssumedLock(TaskFlowNode& from, TaskFlowNode& direct_to);
+		bool Update_AssumedLocked();
+		bool Commited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property, std::chrono::steady_clock::time_point time_point);
+		bool Commited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property);
+		bool AddTemporaryNode_AssumedLocked(TaskFlowNode& node, TaskFlowNodeProperty property, bool(*Detect)(void* append_data, TaskFlowNode const&, TaskFlowNodeProperty property), void* append_data);
+		bool SubTaskCommited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property);
+		bool Remove_AssumedLocked(TaskFlowNode& node);
+		bool AddDirectEdge_AssumedLocked(TaskFlowNode& from, TaskFlowNode& direct_to, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource());
+		bool AddMutexEdge_AssumedLocked(TaskFlowNode& from, TaskFlowNode& direct_to);
+		bool RemoveDirectEdge_AssumedLocked(TaskFlowNode& from, TaskFlowNode& direct_to);
 
 		virtual void TaskFlowNodeExecute(TaskFlowContext& status) override;
 		virtual void TaskExecute(ExecuteStatus& status) override;
@@ -230,6 +236,21 @@ export namespace Potato::Task
 		std::pmr::vector<std::size_t> process_edges;
 		std::size_t finished_task = 0;
 		TaskFlowNodeProperty running_property;
+
+		struct TemporaryNode
+		{
+			Status status = Status::READY;
+			std::size_t in_degree = 0;
+			std::size_t mutex_degree = 0;
+			Misc::IndexSpan<> direct_edges;
+			Misc::IndexSpan<> mutex_edges;
+			TaskFlowNode::Ptr node;
+			TaskFlowNodeProperty property;
+		};
+
+		std::pmr::vector<TemporaryNode> temporary_process_node;
+		std::pmr::vector<std::size_t> temporary_process_edges;
+		std::size_t finished_temporary_node = 0;
 
 		std::mutex parent_mutex;
 		TaskFlow::Ptr parent_node;

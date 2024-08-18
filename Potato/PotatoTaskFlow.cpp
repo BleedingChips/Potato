@@ -98,13 +98,14 @@ namespace Potato::Task
 			preprocess_nodes.size(),
 				property
 			);
+			need_update = true;
 			return true;
 		}
 
 		return false;
 	}
 
-	bool TaskFlow::Remove_AssumedLock(TaskFlowNode& node)
+	bool TaskFlow::Remove_AssumedLocked(TaskFlowNode& node)
 	{
 		if(node.owner == reinterpret_cast<std::size_t>(this))
 		{
@@ -159,7 +160,7 @@ namespace Potato::Task
 	}
 
 
-	bool TaskFlow::RemoveDirectEdge_AssumedLock(TaskFlowNode& from, TaskFlowNode& direct_to)
+	bool TaskFlow::RemoveDirectEdge_AssumedLocked(TaskFlowNode& from, TaskFlowNode& direct_to)
 	{
 		if(from.owner == reinterpret_cast<std::size_t>(this) && direct_to.owner == reinterpret_cast<std::size_t>(this))
 		{
@@ -183,7 +184,7 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskFlow::AddMutexEdge_AssumedLock(TaskFlowNode& from, TaskFlowNode& direct_to)
+	bool TaskFlow::AddMutexEdge_AssumedLocked(TaskFlowNode& from, TaskFlowNode& direct_to)
 	{
 		if (from.owner == reinterpret_cast<std::size_t>(this) && direct_to.owner == reinterpret_cast<std::size_t>(this))
 		{
@@ -198,7 +199,7 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskFlow::AddDirectEdge_AssumedLock(TaskFlowNode& from, TaskFlowNode& direct_to, std::pmr::memory_resource* temp_resource)
+	bool TaskFlow::AddDirectEdge_AssumedLocked(TaskFlowNode& from, TaskFlowNode& direct_to, std::pmr::memory_resource* temp_resource)
 	{
 		if (from.owner == reinterpret_cast<std::size_t>(this) && direct_to.owner == reinterpret_cast<std::size_t>(this))
 		{
@@ -358,7 +359,7 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskFlow::Update_AssumedLock()
+	bool TaskFlow::Update_AssumedLocked()
 	{
 		if(current_status == Status::DONE || current_status == Status::READY)
 		{
@@ -425,9 +426,9 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskFlow::Commited_AssumedLock(TaskContext& context, TaskFlowNodeProperty property)
+	bool TaskFlow::Commited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property)
 	{
-		if(current_status == Status::READY)
+		if(current_status == Status::READY && owner == 0)
 		{
 			TaskProperty tem_property
 			{
@@ -448,9 +449,33 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskFlow::Commited_AssumedLock(TaskContext& context, TaskFlowNodeProperty property, std::chrono::steady_clock::time_point time_point)
+	bool TaskFlow::SubTaskCommited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property)
 	{
-		if(current_status == Status::READY)
+		if (current_status == Status::READY)
+		{
+			TaskProperty tem_property
+			{
+				property.display_name,
+				{0, 0},
+				property.filter
+			};
+			if (context.CommitTask(this, tem_property))
+			{
+				current_status = Status::RUNNING;
+				return true;
+			}
+
+		}
+		else if (current_status != Status::DONE)
+		{
+			assert(false);
+		}
+		return false;
+	}
+
+	bool TaskFlow::Commited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property, std::chrono::steady_clock::time_point time_point)
+	{
+		if(current_status == Status::READY && owner == 0)
 		{
 			TaskProperty tem_property
 			{
@@ -656,7 +681,7 @@ namespace Potato::Task
 					status.node_property.filter
 				};
 
-				if(status.context.CommitTask(this, pro))
+				if(SubTaskCommited_AssumedLocked(status.context, status.node_property))
 				{
 					running_property = status.node_property;
 					current_status = Status::RUNNING;
