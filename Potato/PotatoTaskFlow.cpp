@@ -7,53 +7,6 @@ module PotatoTaskFlow;
 namespace Potato::Task
 {
 
-	/*
-	auto TaskFlow::Socket::Create(
-		TaskFlow* owner, 
-		UserData::Ptr user_data,
-		NodeProperty property, 
-		std::size_t index, 
-		std::pmr::memory_resource* resource
-	)
-		-> Ptr
-	{
-		auto cur_layout = IR::Layout::Get<Socket>();
-		auto str_name = IR::Layout::GetArray<char8_t>(property.display_name.size());
-
-		auto offset = IR::InsertLayoutCPP(cur_layout, str_name);
-		IR::FixLayoutCPP(cur_layout);
-
-		auto re = Potato::IR::MemoryResourceRecord::Allocate(resource, cur_layout);
-		if(re)
-		{
-			auto str = re.GetByte() + offset;
-			std::memcpy(str, property.display_name.data(), property.display_name.size());
-			return new (re.Get()) Socket(re, owner, std::move(user_data),  property.filter, std::u8string_view{reinterpret_cast<char8_t*>(str), property.display_name.size()},  index);
-		}
-		return {};
-	}
-
-	TaskFlow::Socket::Socket(
-		IR::MemoryResourceRecord record, 
-		Pointer::ObserverPtr<TaskFlow> owner, 
-		UserData::Ptr user_data,
-		TaskFilter filter, 
-		std::u8string_view display_name, 
-		std::size_t index
-	)
-		: record(record), owner(owner), filter(std::move(filter)), index(index),display_name(display_name), user_data(std::move(user_data))
-	{
-		
-	}
-
-	void TaskFlow::Socket::Release()
-	{
-		auto re = record;
-		this->~Socket();
-		re.Deallocate();
-	}
-	*/
-
 	TaskFlow::TaskFlow(std::pmr::memory_resource* task_flow_resource)
 			:
 		 preprocess_nodes(task_flow_resource)
@@ -105,9 +58,92 @@ namespace Potato::Task
 		return false;
 	}
 
+	bool TaskFlow::AddTemporaryNode_AssumedLocked(TaskFlowNode& node, TaskFlowNodeProperty property, bool(*detect_func)(void* append_data, TaskFlowNode const&, TaskFlowNodeProperty, TemporaryNodeIndex), void* append_data)
+	{
+		auto owner_id = reinterpret_cast<std::size_t>(this);
+		std::size_t old_size = 0;
+		if(node.owner.compare_exchange_strong(old_size, owner_id))
+		{
+			auto old_edge = process_edges.size();
+			std::size_t cur_index = process_nodes.size();
+			node.index = (std::numeric_limits<std::size_t>::max() / 2) + cur_index;
+			std::size_t init_in_degree = 0;
+
+			if(detect_func != nullptr)
+			{
+				std::vector<std::size_t> search_index;
+				std::size_t index = 0;
+				for(auto& ite : process_nodes)
+				{
+					if(ite.init_in_degree == 0)
+					{
+						search_index.emplace_back(index);
+					}
+					++index;
+				}
+
+				while(!search_index.empty())
+				{
+					auto top = *search_index.rend();
+					search_index.pop_back();
+
+					auto& ref = process_nodes[top];
+
+					if(ref.status != Status::DONE)
+					{
+						if((*detect_func)(append_data, *ref.node, ref.property, {top, temporary_node_offset}))
+						{
+							if(top < temporary_node_offset && ref.status == Status::READY)
+							{
+								process_edges.push_back(top);
+								ref.in_degree += 1;
+								continue;
+							}else
+							{
+								ref.need_append_mutex = true;
+								append_direct_edge.push_back({top, cur_index});
+								init_in_degree += 1;
+							}
+						}
+					}
+
+					if(ref.status != Status::READY)
+					{
+						auto Misc = ref.direct_edges.Slice(std::span(process_edges));
+						search_index.insert(search_index.end(), Misc.begin(), Misc.end());
+						if(ref.need_append_mutex)
+						{
+							for(auto& ite : append_direct_edge)
+							{
+								if(ite.from == top)
+									search_index.push_back(ite.to);
+							}
+						}
+					}
+				}
+			}
+
+			process_nodes.emplace_back(
+				Status::READY,
+				init_in_degree,
+				0,
+				Misc::IndexSpan<>{old_edge, process_edges.size()},
+				Misc::IndexSpan<>{process_edges.size(), process_edges.size()},
+				init_in_degree,
+				&node,
+				property,
+				false
+			);
+
+			return true;
+		}
+		return false;
+	}
+
+
 	bool TaskFlow::Remove_AssumedLocked(TaskFlowNode& node)
 	{
-		if(node.owner == reinterpret_cast<std::size_t>(this))
+		if(node.owner == reinterpret_cast<std::size_t>(this) && node.index < (std::numeric_limits<std::size_t>::max() / 2))
 		{
 			auto index = node.index;
 			auto& remove_ref = preprocess_nodes[index];
@@ -382,7 +418,8 @@ namespace Potato::Task
 							Misc::IndexSpan<>{},
 							ite.in_degree,
 							ite.node,
-							ite.property
+							ite.property,
+							false
 						);
 						ite.node->Update();
 					}
@@ -411,16 +448,24 @@ namespace Potato::Task
 						}
 						ref.direct_edges = {s, process_edges.size()};
 					}
+					temporary_node_offset = process_nodes.size();
+					temporary_edge_offset = process_edges.size();
+					append_direct_edge.clear();
 					return true;
 				}
 			}
+			process_nodes.resize(temporary_node_offset);
+			process_edges.resize(temporary_edge_offset);
 			for(auto& ite : process_nodes)
 			{
 				ite.status = Status::READY;
 				ite.in_degree = ite.init_in_degree;
 				ite.mutex_degree = 0;
+				ite.need_append_mutex = false;
 				ite.node->Update();
 			}
+			append_direct_edge.clear();
+			
 			return true;
 		}
 		return false;
@@ -569,16 +614,39 @@ namespace Potato::Task
 			node->TaskFlowNodeExecute(context);
 			std::lock_guard lg(process_mutex);
 			auto& ref = process_nodes[index];
-			FinishNode_AssumedLock(status.context, ref);
+			FinishNode_AssumedLock(status.context, ref, index);
 			return;
 		}
 	}
 
-	bool TaskFlow::FinishNode_AssumedLock(TaskContext& context, ProcessNode& node)
+	bool TaskFlow::FinishNode_AssumedLock(TaskContext& context, ProcessNode& node, std::size_t index)
 	{
 		if(node.status == Status::RUNNING)
 		{
 			node.status = Status::DONE;
+
+			{
+				auto temp_span = std::span(process_nodes).subspan(temporary_node_offset);
+				std::size_t index = temporary_node_offset;
+				for(auto& ite : temp_span)
+				{
+					TryStartupNode_AssumedLock(context, ite, temporary_node_offset);
+					++index;
+				}
+			}
+
+			if(node.need_append_mutex)
+			{
+				for(auto& ite : append_direct_edge)
+				{
+					if(ite.from == index)
+					{
+						auto& tref = process_nodes[ite.to];
+						tref.in_degree -= 1;
+						TryStartupNode_AssumedLock(context, tref, ite.to);
+					}
+				}
+			}
 			auto mutex_span = node.mutex_edges.Slice(std::span(process_edges));
 			for(auto ite : mutex_span)
 			{
@@ -593,6 +661,7 @@ namespace Potato::Task
 				tref.in_degree -= 1;
 				TryStartupNode_AssumedLock(context, tref, ite);
 			}
+			
 			finished_task += 1;
 			if(finished_task == process_nodes.size())
 			{
@@ -657,7 +726,7 @@ namespace Potato::Task
 			if(ref.status == Status::PAUSE)
 			{
 				ref.status = Status::RUNNING;
-				auto re = FinishNode_AssumedLock(context, ref);
+				auto re = FinishNode_AssumedLock(context, ref, node_identity);
 				assert(re);
 				return true;
 			}

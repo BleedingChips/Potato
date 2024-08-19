@@ -24,12 +24,6 @@ export namespace Potato::Task
 
 	export struct TaskFlowContext;
 
-	struct TaskFlowNodeInitializer
-	{
-		std::size_t owner;
-		std::size_t reference_id;
-	};
-
 	struct TaskFlowNode
 	{
 		struct Wrapper
@@ -87,6 +81,13 @@ export namespace Potato::Task
 
 		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlow, Wrapper>;
 
+		enum class EdgeType
+		{
+			Direct,
+			//ReverseDirect,
+			Mutex,
+		};
+
 		static TaskFlow::Ptr CreateTaskFlow(std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
 		template<typename Func>
@@ -140,9 +141,28 @@ export namespace Potato::Task
 		virtual bool ContinuePauseNode(TaskContext& context, std::size_t node_identity);
 		~TaskFlow();
 
-		virtual bool AddTemporaryNode(TaskFlowNode& node, TaskFlowNodeProperty property, Func&& func);
+		virtual bool AddTemporaryNode(TaskFlowNode& node, TaskFlowNodeProperty property)
+		{
+			std::lock_guard lg(process_mutex);
+			return AddTemporaryNode_AssumedLocked(node, property, nullptr, nullptr);
+		}
+
+		struct TemporaryNodeIndex
+		{
+			std::size_t current_index;
+			std::size_t process_node_count;
+		};
+
 		template<typename Func>
-		virtual bool AddTemporaryNode(TaskFlowNode& node, TaskFlowNodeProperty property, Func&& func);
+		bool AddTemporaryNode(TaskFlowNode& node, TaskFlowNodeProperty property, Func&& func)
+			requires(std::is_invocable_r_v<bool, Func, TaskFlowNode const&, TaskFlowNodeProperty, TemporaryNodeIndex>)
+		{
+			std::lock_guard lg(process_mutex);
+			return AddTemporaryNode_AssumedLocked(node, property, [](void* append_data, TaskFlowNode const& node, TaskFlowNodeProperty property, TemporaryNodeIndex index) -> bool
+			{
+				return (*static_cast<Func*>(append_data))(node, property, index);
+			}, &func);
+		}
 
 	protected:
 			
@@ -153,7 +173,7 @@ export namespace Potato::Task
 		bool Update_AssumedLocked();
 		bool Commited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property, std::chrono::steady_clock::time_point time_point);
 		bool Commited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property);
-		bool AddTemporaryNode_AssumedLocked(TaskFlowNode& node, TaskFlowNodeProperty property, bool(*Detect)(void* append_data, TaskFlowNode const&, TaskFlowNodeProperty property), void* append_data);
+		bool AddTemporaryNode_AssumedLocked(TaskFlowNode& node, TaskFlowNodeProperty property, bool(*detect_func)(void* append_data, TaskFlowNode const&, TaskFlowNodeProperty, TemporaryNodeIndex), void* append_data);
 		bool SubTaskCommited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property);
 		bool Remove_AssumedLocked(TaskFlowNode& node);
 		bool AddDirectEdge_AssumedLocked(TaskFlowNode& from, TaskFlowNode& direct_to, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource());
@@ -169,14 +189,6 @@ export namespace Potato::Task
 		virtual void SubTaskRef() const override { SubTaskFlowRef(); }
 		void AddTaskFlowNodeRef() const override { AddTaskFlowRef(); }
 		void SubTaskFlowNodeRef() const override { SubTaskFlowRef(); }
-		
-
-		enum class EdgeType
-		{
-			Direct,
-			//ReverseDirect,
-			Mutex,
-		};
 
 		struct PreprocessMutexEdge
 		{
@@ -209,7 +221,6 @@ export namespace Potato::Task
 			READY,
 			RUNNING,
 			PAUSE,
-			PAUSE_RUNNING,
 			DONE
 		};
 
@@ -225,32 +236,29 @@ export namespace Potato::Task
 			std::size_t init_in_degree = 0;
 			TaskFlowNode::Ptr node;
 			TaskFlowNodeProperty property;
+			bool need_append_mutex = false;
 		};
 
 		bool TryStartupNode_AssumedLock(TaskContext& context, ProcessNode& node, std::size_t index);
-		bool FinishNode_AssumedLock(TaskContext& context, ProcessNode& node);
+		bool FinishNode_AssumedLock(TaskContext& context, ProcessNode& node, std::size_t index);
 
 		std::mutex process_mutex;
 		Status current_status = Status::READY;
 		std::pmr::vector<ProcessNode> process_nodes;
 		std::pmr::vector<std::size_t> process_edges;
-		std::size_t finished_task = 0;
-		TaskFlowNodeProperty running_property;
 
-		struct TemporaryNode
+		struct AppendEdge
 		{
-			Status status = Status::READY;
-			std::size_t in_degree = 0;
-			std::size_t mutex_degree = 0;
-			Misc::IndexSpan<> direct_edges;
-			Misc::IndexSpan<> mutex_edges;
-			TaskFlowNode::Ptr node;
-			TaskFlowNodeProperty property;
+			std::size_t from;
+			std::size_t to;
 		};
 
-		std::pmr::vector<TemporaryNode> temporary_process_node;
-		std::pmr::vector<std::size_t> temporary_process_edges;
-		std::size_t finished_temporary_node = 0;
+		std::pmr::vector<AppendEdge> append_direct_edge;
+
+		std::size_t finished_task = 0;
+		std::size_t temporary_node_offset = 0;
+		std::size_t temporary_edge_offset = 0;
+		TaskFlowNodeProperty running_property;
 
 		std::mutex parent_mutex;
 		TaskFlow::Ptr parent_node;
