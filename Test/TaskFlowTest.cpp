@@ -69,7 +69,11 @@ int main()
 			Print(status.node_property.display_name, std::this_thread::get_id());
 		};
 
-		
+		auto lambda2 = [&](Potato::Task::TaskFlowContext& context)
+		{
+			auto nodex = TaskFlow::CreateLambdaTask(lambda);
+			context.flow->AddTemporaryNode(*nodex, {});
+		};
 
 		
 
@@ -79,7 +83,8 @@ int main()
 		auto a4 = tf.AddLambda(lambda, {u8"A4"});
 		auto a5 = tf.AddLambda(lambda, {u8"A5"});
 		auto a6 = tf.AddNode(tf2, {u8"SubTask"});
-
+		auto a7 = tf.AddLambda(lambda2, {u8"temporary"});
+		
 		auto a21 = tf2.AddLambda(lambda, {u8"SubTask A1"});
 		auto a22 = tf2.AddLambda(lambda, {u8"SubTask A2"});
 

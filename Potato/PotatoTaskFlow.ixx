@@ -34,12 +34,6 @@ export namespace Potato::Task
 
 		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlowNode, TaskFlowNode::Wrapper>;
 
-		/*
-		template<typename Fun>
-		static auto CreateLambda(Fun&& func, std::pmr::memory_resource* resouce = std::pmr::get_default_resource())
-			-> Ptr requires(std::is_invocable_v<Fun, TaskFlowContext&>);
-			*/
-
 		virtual bool Update() { return true; }
 
 		virtual void TaskFlowNodeExecute(TaskFlowContext& status) = 0;
@@ -59,14 +53,6 @@ export namespace Potato::Task
 
 		friend struct TaskFlow;
 	};
-
-	/*
-	struct TaskFlowNodeProcessor : public Task
-	{
-		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlowNodeProcessor, Task::Wrapper>;
-	protected:
-	};
-	*/
 
 	export struct TaskFlowListener;
 
@@ -141,12 +127,6 @@ export namespace Potato::Task
 		virtual bool ContinuePauseNode(TaskContext& context, std::size_t node_identity);
 		~TaskFlow();
 
-		virtual bool AddTemporaryNode(TaskFlowNode& node, TaskFlowNodeProperty property)
-		{
-			std::lock_guard lg(process_mutex);
-			return AddTemporaryNode_AssumedLocked(node, property, nullptr, nullptr);
-		}
-
 		struct TemporaryNodeIndex
 		{
 			std::size_t current_index;
@@ -158,10 +138,7 @@ export namespace Potato::Task
 			requires(std::is_invocable_r_v<bool, Func, TaskFlowNode const&, TaskFlowNodeProperty, TemporaryNodeIndex>)
 		{
 			std::lock_guard lg(process_mutex);
-			return AddTemporaryNode_AssumedLocked(node, property, [](void* append_data, TaskFlowNode const& node, TaskFlowNodeProperty property, TemporaryNodeIndex index) -> bool
-			{
-				return (*static_cast<Func*>(append_data))(node, property, index);
-			}, &func);
+			return this->AddTemporaryNode_AssumedLocked(node, property, std::forward<Func>(func));
 		}
 
 	protected:
@@ -170,9 +147,20 @@ export namespace Potato::Task
 
 		bool AddNode_AssumedLocked(TaskFlowNode& node, TaskFlowNodeProperty property);
 
-		bool Update_AssumedLocked();
+		virtual bool Update_AssumedLocked();
 		bool Commited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property, std::chrono::steady_clock::time_point time_point);
 		bool Commited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property);
+
+		template<typename Func>
+		bool AddTemporaryNode_AssumedLocked(TaskFlowNode& node, TaskFlowNodeProperty property, Func&& func)
+			requires(std::is_invocable_r_v<bool, Func, TaskFlowNode const&, TaskFlowNodeProperty, TemporaryNodeIndex>)
+		{
+			return this->AddTemporaryNode_AssumedLocked(node, property, [](void* append_data, TaskFlowNode const& node, TaskFlowNodeProperty pro, TemporaryNodeIndex index) -> bool
+			{
+				return (*static_cast<Func*>(append_data))(node, pro, index);
+			}, &func);
+		}
+
 		bool AddTemporaryNode_AssumedLocked(TaskFlowNode& node, TaskFlowNodeProperty property, bool(*detect_func)(void* append_data, TaskFlowNode const&, TaskFlowNodeProperty, TemporaryNodeIndex), void* append_data);
 		bool SubTaskCommited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property);
 		bool Remove_AssumedLocked(TaskFlowNode& node);
@@ -223,8 +211,6 @@ export namespace Potato::Task
 			PAUSE,
 			DONE
 		};
-
-		//virtual Status ExecuteTaskFlowNode(ExecuteStatus& status, TaskFlowNodeProcessor& processor, NodeProperty property);
 
 		struct ProcessNode
 		{

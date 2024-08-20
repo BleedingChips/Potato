@@ -34,6 +34,12 @@ namespace Potato::Task
 		
 		{
 			std::lock_guard lg(process_mutex);
+			for(std::size_t index = temporary_node_offset; index < process_nodes.size(); ++index)
+			{
+				auto& ref = process_nodes[index];
+				ref.node->owner = 0;
+				ref.node->index = std::numeric_limits<std::size_t>::max();
+			}
 			process_edges.clear();
 			process_nodes.clear();
 		}
@@ -84,7 +90,7 @@ namespace Potato::Task
 
 				while(!search_index.empty())
 				{
-					auto top = *search_index.rend();
+					auto top = *search_index.rbegin();
 					search_index.pop_back();
 
 					auto& ref = process_nodes[top];
@@ -454,6 +460,14 @@ namespace Potato::Task
 					return true;
 				}
 			}
+
+			for(std::size_t index = temporary_node_offset; index < process_nodes.size(); ++index)
+			{
+				auto& ref = process_nodes[index];
+				ref.node->owner = 0;
+				ref.node->index = std::numeric_limits<std::size_t>::max();
+			}
+
 			process_nodes.resize(temporary_node_offset);
 			process_edges.resize(temporary_edge_offset);
 			for(auto& ite : process_nodes)
