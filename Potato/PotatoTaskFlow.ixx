@@ -208,6 +208,7 @@ export namespace Potato::Task
 		{
 			READY,
 			RUNNING,
+			RUNNING_NEED_PAUSE,
 			PAUSE,
 			DONE
 		};

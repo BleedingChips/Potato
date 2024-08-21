@@ -687,6 +687,10 @@ namespace Potato::Task
 				context.CommitTask(this, tem_pro);
 			}
 			return true;
+		}else if(node.status == Status::RUNNING_NEED_PAUSE)
+		{
+			node.status = Status::PAUSE;
+			return true;
 		}
 		return false;
 	}
@@ -723,7 +727,7 @@ namespace Potato::Task
 			auto& ref = process_nodes[node_identity];
 			if(ref.status == Status::RUNNING)
 			{
-				ref.status = Status::PAUSE;
+				ref.status = Status::RUNNING_NEED_PAUSE;
 				return true;
 			}
 		}
@@ -737,7 +741,11 @@ namespace Potato::Task
 		if(node_identity < process_nodes.size())
 		{
 			auto& ref = process_nodes[node_identity];
-			if(ref.status == Status::PAUSE)
+			if(ref.status == Status::RUNNING_NEED_PAUSE)
+			{
+				ref.status = Status::RUNNING;
+				return true;
+			}else if(ref.status == Status::PAUSE)
 			{
 				ref.status = Status::RUNNING;
 				auto re = FinishNode_AssumedLock(context, ref, node_identity);
