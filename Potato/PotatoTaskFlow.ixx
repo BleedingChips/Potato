@@ -61,8 +61,10 @@ export namespace Potato::Task
 
 		struct Wrapper
 		{
-			void AddRef(TaskFlow const* ptr) { ptr->AddTaskFlowRef(); }
-			void SubRef(TaskFlow const* ptr) { ptr->SubTaskFlowRef(); }
+			template<typename T>
+			void AddRef(T* ptr) { ptr->AddTaskFlowRef(); }
+			template<typename T>
+			void SubRef(T* ptr) { ptr->SubTaskFlowRef(); }
 		};
 
 		using Ptr = Potato::Pointer::IntrusivePtr<TaskFlow, Wrapper>;
@@ -139,6 +141,12 @@ export namespace Potato::Task
 		{
 			std::lock_guard lg(process_mutex);
 			return this->AddTemporaryNode_AssumedLocked(node, property, std::forward<Func>(func));
+		}
+
+		bool AddTemporaryNode(TaskFlowNode& node, TaskFlowNodeProperty property)
+		{
+			std::lock_guard lg(process_mutex);
+			return this->AddTemporaryNode_AssumedLocked(node, property, nullptr, nullptr);
 		}
 
 	protected:
@@ -223,6 +231,7 @@ export namespace Potato::Task
 			std::size_t init_in_degree = 0;
 			TaskFlowNode::Ptr node;
 			TaskFlowNodeProperty property;
+			std::size_t pause_count = 0;
 			bool need_append_mutex = false;
 		};
 

@@ -138,6 +138,7 @@ namespace Potato::Task
 				init_in_degree,
 				&node,
 				property,
+				0,
 				false
 			);
 
@@ -425,6 +426,7 @@ namespace Potato::Task
 							ite.in_degree,
 							ite.node,
 							ite.property,
+							0,
 							false
 						);
 						ite.node->Update();
@@ -637,6 +639,7 @@ namespace Potato::Task
 	{
 		if(node.status == Status::RUNNING)
 		{
+			assert(node.pause_count == 0);
 			node.status = Status::DONE;
 
 			{
@@ -725,9 +728,15 @@ namespace Potato::Task
 		if(node_identity < process_nodes.size())
 		{
 			auto& ref = process_nodes[node_identity];
-			if(ref.status == Status::RUNNING)
+			switch(ref.status)
 			{
+			case Status::RUNNING:
+				ref.pause_count += 1;
 				ref.status = Status::RUNNING_NEED_PAUSE;
+				return true;
+			case Status::RUNNING_NEED_PAUSE:
+			case Status::PAUSE:
+				ref.pause_count += 1;
 				return true;
 			}
 		}
@@ -741,16 +750,27 @@ namespace Potato::Task
 		if(node_identity < process_nodes.size())
 		{
 			auto& ref = process_nodes[node_identity];
-			if(ref.status == Status::RUNNING_NEED_PAUSE)
+			switch(ref.status)
 			{
-				ref.status = Status::RUNNING;
+			case Status::RUNNING_NEED_PAUSE:
+				assert(ref.pause_count > 0);
+				ref.pause_count -= 1;
+				if(ref.pause_count == 0)
+					ref.status = Status::RUNNING;
 				return true;
-			}else if(ref.status == Status::PAUSE)
-			{
-				ref.status = Status::RUNNING;
-				auto re = FinishNode_AssumedLock(context, ref, node_identity);
-				assert(re);
+			case Status::PAUSE:
+				assert(ref.pause_count > 0);
+				ref.pause_count -= 1;
+				if(ref.pause_count == 0)
+				{
+					ref.status = Status::RUNNING;
+					auto re = FinishNode_AssumedLock(context, ref, node_identity);
+					assert(re);
+					return true;
+				}
 				return true;
+			default:
+				break;
 			}
 		}
 		assert(false);
