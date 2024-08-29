@@ -101,7 +101,7 @@ export namespace Potato::Task
 
 		template<typename FunT>
 		static Ptr CreateLambdaTask(FunT&& func, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
-			requires(std::is_invocable_v<FunT, ExecuteStatus& , Task::Ptr>)
+			requires(std::is_invocable_v<FunT, ExecuteStatus& , Task&>)
 		;
 
 	protected:
@@ -250,8 +250,7 @@ namespace Potato::Task
 
 		virtual void TaskExecute(ExecuteStatus& Status) override
 		{
-			Task::Ptr ThisPtr{this};
-			TaskInstance.operator()(Status, std::move(ThisPtr));
+			TaskInstance.operator()(Status, *this);
 		}
 
 	protected:
@@ -267,7 +266,7 @@ namespace Potato::Task
 
 	template<typename FunT>
 	Task::Ptr Task::CreateLambdaTask(FunT&& Func, std::pmr::memory_resource* Resource)
-		requires(std::is_invocable_v<FunT, ExecuteStatus&, Task::Ptr>)
+		requires(std::is_invocable_v<FunT, ExecuteStatus&, Task&>)
 	{
 		using Type = TaskImp<std::remove_cvref_t<FunT>>;
 		assert(Resource != nullptr);
