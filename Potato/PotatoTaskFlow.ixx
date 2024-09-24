@@ -177,7 +177,7 @@ export namespace Potato::Task
 		bool RemoveDirectEdge_AssumedLocked(TaskFlowNode& from, TaskFlowNode& direct_to);
 
 		virtual void TaskFlowNodeExecute(TaskFlowContext& status) override;
-		virtual void TaskExecute(ExecuteStatus& status) override;
+		virtual void TaskExecute(TaskContextWrapper& status) override;
 
 		virtual void AddTaskFlowRef() const = 0;
 		virtual void SubTaskFlowRef() const = 0;

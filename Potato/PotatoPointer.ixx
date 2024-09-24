@@ -404,8 +404,8 @@ export namespace Potato::Pointer
 	{
 	protected:
 
-		void AddViewerRef() const { VRefCount.AddRef(); }
-		void SubViewerRef() const { if (VRefCount.SubRef()) const_cast<DefaultControllerViewerInterface*>(this)->ViewerRelease(); }
+		void AddViewerRef() const { VRefCount.AddRef(); AddControllerRef(); }
+		void SubViewerRef() const { if (VRefCount.SubRef()) const_cast<DefaultControllerViewerInterface*>(this)->ViewerRelease(); SubControllerRef(); }
 		void AddControllerRef() const { CRefCount.AddRef(); }
 		void SubControllerRef() const { if (CRefCount.SubRef()) const_cast<DefaultControllerViewerInterface*>(this)->ControllerRelease(); }
 

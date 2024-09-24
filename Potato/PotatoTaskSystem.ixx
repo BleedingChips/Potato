@@ -75,7 +75,7 @@ export namespace Potato::Task
 		std::u8string_view name;
 	};
 
-	struct ExecuteStatus
+	struct TaskContextWrapper
 	{
 		Status status = Status::Normal;
 		TaskContext& context;
@@ -101,7 +101,7 @@ export namespace Potato::Task
 
 		template<typename FunT>
 		static Ptr CreateLambdaTask(FunT&& func, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
-			requires(std::is_invocable_v<FunT, ExecuteStatus& , Task&>)
+			requires(std::is_invocable_v<FunT, TaskContextWrapper& , Task&>)
 		;
 
 	protected:
@@ -109,7 +109,7 @@ export namespace Potato::Task
 		virtual void AddTaskRef() const = 0;
 		virtual void SubTaskRef() const = 0;
 
-		virtual void TaskExecute(ExecuteStatus& status) = 0;
+		virtual void TaskExecute(TaskContextWrapper& status) = 0;
 		virtual void TaskTerminal(TaskProperty property) noexcept {};
 		virtual ~Task() = default;
 
@@ -248,7 +248,7 @@ namespace Potato::Task
 			
 		}
 
-		virtual void TaskExecute(ExecuteStatus& Status) override
+		virtual void TaskExecute(TaskContextWrapper& Status) override
 		{
 			TaskInstance.operator()(Status, *this);
 		}
@@ -266,7 +266,7 @@ namespace Potato::Task
 
 	template<typename FunT>
 	Task::Ptr Task::CreateLambdaTask(FunT&& Func, std::pmr::memory_resource* Resource)
-		requires(std::is_invocable_v<FunT, ExecuteStatus&, Task&>)
+		requires(std::is_invocable_v<FunT, TaskContextWrapper&, Task&>)
 	{
 		using Type = TaskImp<std::remove_cvref_t<FunT>>;
 		assert(Resource != nullptr);

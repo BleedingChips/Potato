@@ -558,7 +558,7 @@ namespace Potato::Task
 		return false;
 	}
 
-	void TaskFlow::TaskExecute(ExecuteStatus& status)
+	void TaskFlow::TaskExecute(TaskContextWrapper& status)
 	{
 		auto node = reinterpret_cast<TaskFlowNode*>(status.task_property.user_data[0]);
 		auto index = status.task_property.user_data[1];

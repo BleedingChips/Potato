@@ -289,7 +289,7 @@ namespace Potato::Task
 			assert(current_task.task);
 			if(current_task.task)
 			{
-				ExecuteStatus status{
+				TaskContextWrapper status{
 					loc_status,
 						*this,
 						current_task.property,
@@ -368,7 +368,7 @@ namespace Potato::Task
 		if(tuple.task)
 		{
 			re_status.executed = true;
-			ExecuteStatus status{
+			TaskContextWrapper status{
 					loc_status,
 						*this,
 						tuple.property,
