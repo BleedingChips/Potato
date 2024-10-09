@@ -13,3 +13,4 @@ export import PotatoReg;
 export import PotatoDocument;
 export import PotatoTaskSystem;
 export import PotatoTaskFlow;
+export import PotatoPath;
