@@ -2,15 +2,19 @@ module;
 
 #include <cassert>
 
+#ifdef _WIN32
+#include <Windows.h>
+#endif
+
 module PotatoDocument;
 
 namespace Potato::Document
 {
-	const unsigned char utf8_bom[] = { 0xEF, 0xBB, 0xBF };
-	const unsigned char utf16_le_bom[] = { 0xFF, 0xFE };
-	const unsigned char utf16_be_bom[] = { 0xFE, 0xFF };
-	const unsigned char utf32_le_bom[] = { 0x00, 0x00, 0xFE, 0xFF };
-	const unsigned char utf32_be_bom[] = { 0xFF, 0xFe, 0x00, 0x00 };
+	constexpr unsigned char utf8_bom[] = { 0xEF, 0xBB, 0xBF };
+	constexpr unsigned char utf16_le_bom[] = { 0xFF, 0xFE };
+	constexpr unsigned char utf16_be_bom[] = { 0xFE, 0xFF };
+	constexpr unsigned char utf32_le_bom[] = { 0x00, 0x00, 0xFE, 0xFF };
+	constexpr unsigned char utf32_be_bom[] = { 0xFF, 0xFe, 0x00, 0x00 };
 
 	BomT DetectBom(std::span<std::byte const> bom) noexcept {
 		if (bom.size() >= std::size(utf8_bom) && std::memcmp(bom.data(), utf8_bom, std::size(utf8_bom)) == 0)
@@ -391,5 +395,245 @@ namespace Potato::Document
 			IteStr = {};
 			return Re;
 		}
+	}
+
+	std::span<std::byte> BinaryStreamReader::Read(std::span<std::byte> output)
+	{
+#ifdef _WIN32
+		DWORD readed = 0;
+		if(ReadFile(
+			file, output.data(), output.size() * sizeof(std::byte), &readed, nullptr
+		))
+		{
+			std::size_t total_count = readed;
+			return output.subspan(0, readed / sizeof(std::byte));
+		}
+#endif
+		return {};
+	}
+
+	BinaryStreamReader::operator bool() const
+	{
+#ifdef _WIN32
+		return file != INVALID_HANDLE_VALUE;
+#endif
+	}
+
+	bool BinaryStreamReader::Open(std::filesystem::path const& path)
+	{
+#ifdef _WIN32
+		Close();
+		file = ::CreateFileW(
+			path.c_str(),
+			GENERIC_READ,
+			FILE_SHARE_READ,
+			NULL,
+			OPEN_EXISTING,
+			FILE_ATTRIBUTE_NORMAL,
+			NULL
+		);
+		return file != INVALID_HANDLE_VALUE;
+#endif
+	}
+
+	BinaryStreamReader::~BinaryStreamReader()
+	{
+		Close();
+	}
+
+	void BinaryStreamReader::Close()
+	{
+#ifdef _WIN32
+		::CloseHandle(file);
+		file = INVALID_HANDLE_VALUE;
+#endif
+	}
+
+	std::int64_t BinaryStreamReader::GetStreamSize() const
+	{
+#ifdef _WIN32
+		std::int64_t result = 0;
+		::GetFileSizeEx(file, reinterpret_cast<PLARGE_INTEGER>(&result));
+		return result;
+#endif
+	}
+
+	std::optional<std::int64_t> BinaryStreamReader::SetPointerOffsetFromBegin(std::int64_t offset)
+	{
+#ifdef _WIN32
+		std::int64_t new_position = 0;
+		if(offset >= 0)
+		{
+			if(::SetFilePointerEx(
+				file,
+				*reinterpret_cast<LARGE_INTEGER*>(&offset),
+				reinterpret_cast<LARGE_INTEGER*>(&new_position),
+				FILE_BEGIN
+			))
+			{
+				return new_position;
+			}
+		}
+		return std::nullopt;
+#endif
+	}
+	std::optional<std::int64_t> BinaryStreamReader::SetPointerOffsetFromEnd(std::int64_t offset)
+	{
+#ifdef _WIN32
+		std::int64_t new_position = 0;
+		if(::SetFilePointerEx(
+			file,
+			*reinterpret_cast<LARGE_INTEGER*>(&offset),
+			reinterpret_cast<LARGE_INTEGER*>(&new_position),
+			FILE_END
+		))
+		{
+			return new_position;
+		}
+		return std::nullopt;
+#endif
+	}
+	std::optional<std::int64_t> BinaryStreamReader::SetPointerOffsetFromCurrent(std::int64_t offset)
+	{
+#ifdef _WIN32
+		std::int64_t new_position = 0;
+		if(::SetFilePointerEx(
+			file,
+			*reinterpret_cast<LARGE_INTEGER*>(&offset),
+			reinterpret_cast<LARGE_INTEGER*>(&new_position),
+			FILE_CURRENT
+		))
+		{
+			return new_position;
+		}
+		return std::nullopt;
+#endif
+	}
+
+	std::tuple<BomT, std::size_t> StringSerializer::TryGetBom(std::span<std::byte const> input)
+	{
+		if (input.size() >= std::size(utf8_bom) && std::memcmp(input.data(), utf8_bom, std::size(utf8_bom)) == 0)
+			return {BomT::UTF8, std::size(utf8_bom)};
+		if (input.size() >= std::size(utf16_le_bom) && std::memcmp(input.data(), utf16_le_bom, std::size(utf16_le_bom)) == 0)
+			return {BomT::UTF16LE, std::size(utf16_le_bom)};
+		if (input.size() >= std::size(utf32_le_bom) && std::memcmp(input.data(), utf32_le_bom, std::size(utf32_le_bom)) == 0)
+			return {BomT::UTF32LE, std::size(utf32_le_bom)};
+		if (input.size() >= std::size(utf16_be_bom) && std::memcmp(input.data(), utf16_be_bom, std::size(utf16_be_bom)) == 0)
+			return {BomT::UTF16BE, std::size(utf16_be_bom)};
+		if (input.size() >= std::size(utf32_be_bom) && std::memcmp(input.data(), utf32_be_bom, std::size(utf32_be_bom)) == 0)
+			return {BomT::UTF32BE, std::size(utf32_be_bom)};
+		return {BomT::NoBom, 0};
+	}
+
+	EncodeInfo StringSerializer::DetectUTF8Count(std::size_t max_character) const
+	{
+		switch(bom)
+		{
+		case BomT::NoBom:
+		case BomT::UTF8:
+			{
+				auto re = Encode::StrEncoder<char8_t, char8_t>::RequireSpace(
+					{
+						reinterpret_cast<char8_t const*>(reference.data()),
+						reference.size() / sizeof(char8_t)
+					},
+					max_character);
+				return re;
+			}
+		case BomT::UTF16LE:
+		case BomT::UTF16BE:
+			{
+				if(IsNativeEndian(bom))
+				{
+					auto re = Encode::StrEncoder<char16_t, char8_t>::RequireSpace(
+					{
+							reinterpret_cast<char16_t const*>(reference.data()),
+							reference.size() / sizeof(char16_t)
+						},
+						max_character);
+					return re;
+				}
+				return {false};
+			}
+		case BomT::UTF32LE:
+		case BomT::UTF32BE:
+			{
+				if(IsNativeEndian(bom))
+				{
+					auto re = Encode::StrEncoder<char32_t, char8_t>::RequireSpace(
+					{
+							reinterpret_cast<char32_t const*>(reference.data()),
+							reference.size() / sizeof(char32_t)
+						},
+						max_character);
+					return re;
+				}
+				return {false};
+			}
+		}
+		return {false};
+	}
+
+	BomT StringSerializer::SerializeAndSetBom()
+	{
+		auto [b, s] = TryGetBom(reference);
+		SetBom(b);
+		reference = reference.subspan(s);
+		return b;
+	}
+
+	EncodeInfo StringSerializer::SerializeToStringUnsafe(std::span<char8_t> output, std::size_t max_character)
+	{
+		switch(bom)
+		{
+		case BomT::NoBom:
+		case BomT::UTF8:
+			{
+				auto re = Encode::StrEncoder<char8_t, char8_t>::EncodeUnSafe(
+					{
+						reinterpret_cast<char8_t const*>(reference.data()),
+						reference.size() / sizeof(char8_t)
+					},
+					output,
+					max_character);
+				reference = reference.subspan(re.SourceSpace * sizeof(char8_t));
+				return re;
+			}
+		case BomT::UTF16LE:
+		case BomT::UTF16BE:
+			{
+				if(IsNativeEndian(bom))
+				{
+					auto re = Encode::StrEncoder<char16_t, char8_t>::EncodeUnSafe(
+					{
+							reinterpret_cast<char16_t const*>(reference.data()),
+							reference.size() / sizeof(char16_t)
+						},
+						output,
+						max_character);
+					reference = reference.subspan(re.SourceSpace * sizeof(char16_t));
+					return re;
+				}
+				return {false};
+			}
+		case BomT::UTF32LE:
+		case BomT::UTF32BE:
+			{
+				if(IsNativeEndian(bom))
+				{
+					auto re = Encode::StrEncoder<char32_t, char8_t>::EncodeUnSafe(
+					{
+							reinterpret_cast<char32_t const*>(reference.data()),
+							reference.size() / sizeof(char32_t)
+						},
+						output,
+						max_character);
+					reference = reference.subspan(re.SourceSpace * sizeof(char32_t));
+					return re;
+				}
+				return {false};
+			}
+		}
+		return {false};
 	}
 }

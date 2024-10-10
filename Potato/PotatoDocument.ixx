@@ -1,8 +1,14 @@
 module;
 
+#ifdef _WIN32
+#include <Windows.h>
+#undef max
+#endif
+
 export module PotatoDocument;
 
 import std;
+import PotatoTMP;
 import PotatoMisc;
 import PotatoEncode;
 
@@ -65,6 +71,8 @@ export namespace Potato::Document
 
 	BomT DetectBom(std::span<std::byte const> bom) noexcept;
 	std::span<std::byte const> ToBinary(BomT type) noexcept;
+
+	export struct Reader;
 
 	struct ReaderBuffer
 	{
@@ -182,7 +190,7 @@ export namespace Potato::Document
 		}
 	}
 
-	struct Reader
+	export struct Reader
 	{
 		Reader(std::filesystem::path path);
 		Reader(Reader const&) = default;
@@ -295,4 +303,86 @@ export namespace Potato::Document
 		std::u8string_view IteStr;
 	};
 
+
+	struct BinaryStreamReader
+	{
+		BinaryStreamReader(std::filesystem::path const& path) { Open(path); }
+		BinaryStreamReader() = default;
+		BinaryStreamReader(BinaryStreamReader&&) = default;
+		operator bool() const;
+		std::span<std::byte> Read(std::span<std::byte> output);
+		std::int64_t GetStreamSize() const;
+		bool Open(std::filesystem::path const& path);
+		void Close();
+		std::optional<std::int64_t> SetPointerOffsetFromBegin(std::int64_t offset = 0);
+		std::optional<std::int64_t> SetPointerOffsetFromEnd(std::int64_t offset = 0);
+		std::optional<std::int64_t> SetPointerOffsetFromCurrent(std::int64_t offset = 0);
+		~BinaryStreamReader();
+	protected:
+#ifdef _WIN32
+		HANDLE file = INVALID_HANDLE_VALUE;
+#endif
+	};
+
+	struct StringSerializer
+	{
+		StringSerializer(std::span<std::byte const> input, BomT bom = BomT::NoBom) : reference(input), bom(bom) {}
+		StringSerializer(BomT bom = BomT::NoBom) : bom(bom) {}
+		StringSerializer(StringSerializer const&) = default;
+		void SetBom(BomT bom = BomT::NoBom) { this->bom = bom; }
+		BomT SerializeAndSetBom();
+
+		template<typename Tar> EncodeInfo DetectCharacterCount(std::size_t max_character = std::numeric_limits<std::size_t>::max())
+			requires(TMP::IsOneOfV<Tar, char8_t, char32_t, char16_t, wchar_t>) 
+		{
+			if constexpr (std::is_same_v<Tar, char8_t>)
+			{
+				return DetectUTF8Count();
+			}else if constexpr (std::is_same_v<Tar, char16_t>)
+			{
+				return DetectUTF16Count();
+			}else if constexpr (std::is_same_v<Tar, char32_t>)
+			{
+				return DetectUTF32Count();
+			}else
+			{
+				static_assert(std::is_same_v<Tar, wchar_t>);
+				return DetectWideCount();
+			}
+		}
+
+		EncodeInfo DetectUTF8Count(std::size_t max_character = std::numeric_limits<std::size_t>::max()) const;
+		EncodeInfo DetectUTF16Count(std::size_t max_character = std::numeric_limits<std::size_t>::max()) const { return {false}; }
+		EncodeInfo DetectUTF32Count(std::size_t max_character = std::numeric_limits<std::size_t>::max()) const { return { false }; }
+		EncodeInfo DetectWideCount(std::size_t max_character = std::numeric_limits<std::size_t>::max()) const { return {false }; }
+		
+		EncodeInfo SerializeToStringUnsafe(std::span<char8_t> output, std::size_t max_character = std::numeric_limits<std::size_t>::max());
+		EncodeInfo SerializeToStringUnsafe(std::span<char16_t> output, std::size_t max_character = std::numeric_limits<std::size_t>::max()) { return {false }; }
+		EncodeInfo SerializeToStringUnsafe(std::span<char32_t> output, std::size_t max_character = std::numeric_limits<std::size_t>::max()) { return {false }; }
+		EncodeInfo SerializeToStringUnsafe(std::span<wchar_t> output, std::size_t max_character = std::numeric_limits<std::size_t>::max()) { return {false }; }
+		static std::tuple<BomT, std::size_t> TryGetBom(std::span<std::byte const> input);
+
+		template<typename Char, typename Trai, typename Allo>
+		static EncodeInfo SerializeToBomAndString(std::span<std::byte const> input, std::basic_string<Char, Trai, Allo>& output, std::size_t max_character = std::numeric_limits<std::size_t>::max())
+		{
+			StringSerializer ser{input};
+			ser.SerializeAndSetBom();
+			auto re = ser.DetectCharacterCount<Char>(max_character);
+			if(re)
+			{
+				auto old_size = output.size();
+				output.resize(old_size + re.TargetSpace);
+				auto out = std::span(output).subspan(old_size);
+				return ser.SerializeToStringUnsafe(out, re.CharacterCount);
+			}
+			return re;
+		}
+
+	protected:
+
+		BomT bom = BomT::NoBom;
+		std::span<std::byte const> reference;
+	};
+
+	std::tuple<BomT, std::size_t> TryGetBomFromBinary(std::span<std::byte const> input);
 }
