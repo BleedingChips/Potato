@@ -69,249 +69,15 @@ export namespace Potato::Document
 		static constexpr  BomT Value = BomT::NoBom;
 	};
 
-	BomT DetectBom(std::span<std::byte const> bom) noexcept;
-	std::span<std::byte const> ToBinary(BomT type) noexcept;
-
-	export struct Reader;
-
-	struct ReaderBuffer
-	{
-		ReaderBuffer(ReaderBuffer const&) = default;
-
-		enum class StateT
-		{
-			Normal,
-			EmptyBuffer,
-			NotEnoughtSpace,
-			UnSupport,
-		};
-
-		struct ReadResult
-		{
-			StateT State = StateT::Normal;
-			std::size_t ReadCharacterCount = 0;
-			std::size_t BufferSpace = 0;
-		};
-
-		template<typename UnicodeT, typename Function>
-		auto Read(Function&& Func, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())->ReadResult requires(std::is_invocable_r_v<std::optional<std::span<UnicodeT>>, Function, EncodeInfo>);
-
-		template<typename UnicodeT, typename CharTrai, typename Allocator>
-		ReadResult Read(std::basic_string<UnicodeT, CharTrai, Allocator>& Output, std::size_t MaxCharactor = std::numeric_limits<std::size_t>::max())
-		{
-			std::size_t OldSize = Output.size();
-			return this->Read<UnicodeT>([&](EncodeInfo Input) -> std::optional<std::span<UnicodeT>> {
-				Output.resize(OldSize + Input.TargetSpace);
-				return std::span(Output).subspan(OldSize);
-				});
-		}
-
-		template<typename UnicodeT, typename Function>
-		auto ReadLine(Function&& Func, bool KeepLine = true)->ReadResult requires(std::is_invocable_r_v<std::optional<std::span<UnicodeT>>, Function, EncodeInfo>);
-
-
-		template<typename UnicodeT, typename CharTrai, typename Allocator>
-		ReadResult ReadLine(std::basic_string<UnicodeT, CharTrai, Allocator>& Output, bool KeepLine = true)
-		{
-			std::size_t OldSize = Output.size();
-			return this->ReadLine<UnicodeT>([&](EncodeInfo Input) -> std::optional<std::span<UnicodeT>> {
-				Output.resize(OldSize + Input.TargetSpace);
-				return std::span(Output).subspan(OldSize);
-				}, KeepLine);
-		}
-
-		BomT GetBom() const { return Bom; }
-
-		explicit operator bool() const { return Available.Size() != 0; }
-
-	private:
-
-		ReaderBuffer(BomT Bom, std::span<std::byte> TemporaryBuffer) : Bom(Bom), DocumentSpan(TemporaryBuffer), Available{ 0, 0 } {}
-
-		BomT Bom = BomT::NoBom;
-		std::span<std::byte> DocumentSpan;
-		Misc::IndexSpan<> Available;
-		std::size_t TotalCharacter = 0;
-
-		friend struct Reader;
-	};
-
-	template<typename UnicodeT, typename Function>
-	auto ReaderBuffer::Read(Function&& Func, std::size_t MaxCharacter)->ReadResult requires(std::is_invocable_r_v<std::optional<std::span<UnicodeT>>, Function, EncodeInfo>)
-	{
-		if (Available.Size() == 0)
-			return { StateT::EmptyBuffer, 0, 0 };
-		std::span<std::byte> CurSpan = DocumentSpan.subspan(Available.Begin(), Available.Size());
-		switch (GetBom())
-		{
-		case BomT::NoBom:
-		case BomT::UTF8:
-		{
-			std::span<char8_t> Cur{ reinterpret_cast<char8_t*>(CurSpan.data()), CurSpan.size() / sizeof(char8_t) };
-			EncodeInfo Info = Encode::StrEncoder<char8_t, UnicodeT>::RequireSpaceUnSafe(Cur, MaxCharacter);
-			std::optional<std::span<UnicodeT>> OutputBuffer = Func(Info);
-			if (OutputBuffer.has_value())
-				Encode::StrEncoder<char8_t, UnicodeT>::EncodeUnSafe(Cur, *OutputBuffer, MaxCharacter);
-			Available = Available.SubIndex(Info.SourceSpace);
-			TotalCharacter -= Info.CharacterCount;
-			return { StateT::Normal, Info.CharacterCount, Info.TargetSpace };
-			break;
-		}
-		default:
-			return { StateT::UnSupport, 0, 0 };
-			break;
-		}
-	}
-
-	template<typename UnicodeT, typename Function>
-	auto ReaderBuffer::ReadLine(Function&& Func, bool KeepLine)->ReadResult requires(std::is_invocable_r_v<std::optional<std::span<UnicodeT>>, Function, EncodeInfo>)
-	{
-		if (Available.Size() == 0)
-			return { StateT::EmptyBuffer, 0, 0 };
-		std::span<std::byte> CurSpan = Available.Slice(DocumentSpan);
-		switch (GetBom())
-		{
-		case BomT::NoBom:
-		case BomT::UTF8:
-		{
-			std::span<char8_t> Cur{ reinterpret_cast<char8_t*>(CurSpan.data()), CurSpan.size() / sizeof(char8_t) };
-			EncodeInfo Info = Encode::StrEncoder<char8_t, UnicodeT>::RequireSpaceLineUnsafe(Cur, KeepLine);
-			std::optional<std::span<UnicodeT>> OutputBuffer = Func(Info);
-			if (OutputBuffer.has_value())
-				Encode::StrEncoder<char8_t, UnicodeT>::EncodeUnSafe(Cur, *OutputBuffer, Info.CharacterCount);
-			Available = Available.SubIndex(Info.SourceSpace);
-			TotalCharacter -= Info.CharacterCount;
-			return { StateT::Normal, Info.CharacterCount, Info.TargetSpace };
-			break;
-		}
-		default:
-			return { StateT::UnSupport, 0, 0 };
-			break;
-		}
-	}
-
-	export struct Reader
-	{
-		Reader(std::filesystem::path path);
-		Reader(Reader const&) = default;
-		Reader& operator=(Reader const&) = default;
-		explicit operator bool() const { return File.is_open(); }
-
-		void ResetIterator();
-
-		BomT GetBom() const { return Bom; }
-
-		enum class FlushResult
-		{
-			UnSupport,
-			Finish,
-			EndOfFile,
-			BadString
-		};
-
-		FlushResult Flush(ReaderBuffer& Reader);
-
-		std::size_t RecalculateLastSize();
-
-		ReaderBuffer CreateWrapper(std::span<std::byte> TemporaryBuffer) const { return ReaderBuffer{ Bom, TemporaryBuffer }; }
-
-	private:
-
-		BomT Bom = BomT::NoBom;
-		std::ifstream File;
-		std::size_t TextOffset = 0;
-	};
-
-	struct ImmediateReader
-	{
-		ImmediateReader(std::filesystem::path Path);
-		bool IsGood() const { return Buffer.has_value(); }
-		std::optional<std::u8string_view> TryCastU8() const;
-		BomT GetBom() const { return Bom; }
-		std::span<std::byte const> GetBuffer() const { return std::span(*Buffer); }
-	private:
-		std::optional<std::vector<std::byte>> Buffer;
-		BomT Bom = BomT::NoBom;
-	};
-
-	struct Encoder
-	{
-		static EncodeInfo RequireSpaceUnsafe(std::u32string_view Str, BomT Bom, bool WriteBom = false);
-		static EncodeInfo RequireSpaceUnsafe(std::u16string_view Str, BomT Bom, bool WriteBom = false);
-		static EncodeInfo RequireSpaceUnsafe(std::u8string_view Str, BomT Bom, bool WriteBom = false);
-		static EncodeInfo RequireSpaceUnsafe(std::wstring_view Str, BomT Bom, bool WriteBom = false);
-
-		static EncodeInfo EncodeUnsafe(std::span<std::byte> Span, std::u32string_view Str, BomT Bom, bool WriteBom = false);
-		static EncodeInfo EncodeUnsafe(std::span<std::byte> Span, std::u16string_view Str, BomT Bom, bool WriteBom = false);
-		static EncodeInfo EncodeUnsafe(std::span<std::byte> Span, std::u8string_view Str, BomT Bom, bool WriteBom = false);
-		static EncodeInfo EncodeUnsafe(std::span<std::byte> Span, std::wstring_view Str, BomT Bom, bool WriteBom = false);
-	};
-
-	struct Writer
-	{
-		Writer(std::filesystem::path Path, BomT BomType = BomT::NoBom);
-		explicit operator bool() const { return File.is_open(); }
-		EncodeInfo Write(std::u32string_view Str);
-		EncodeInfo Write(std::u16string_view Str);
-		EncodeInfo Write(std::u8string_view Str);
-		EncodeInfo Write(std::wstring_view Str);
-		~Writer(){ Flush(); }
-		void Flush() { if (File.good()) File.flush(); }
-	private:
-		std::ofstream File;
-		BomT BomType;
-		std::vector<std::byte> TemporaryBuffer;
-	};
-
-	struct SperateResult
-	{
-		std::u8string_view LineStr;
-		std::u8string_view Last;
-
-		enum class LineMode
-		{
-			N,
-			RN
-		}Mode;
-	};
-
-	struct LineSperater
-	{
-		enum class LineMode
-		{
-			N,
-			RN
-		};
-
-		struct Result
-		{
-			std::optional<LineMode> Mode;
-			std::u8string_view Str;
-		};
-
-		LineSperater(std::u8string_view InStr) : TotalStr(InStr), IteStr(InStr) {}
-
-		Result Consume(bool KeepLineSymbol = true);
-		std::size_t GetItePosition() const { return TotalStr.size() - IteStr.size(); }
-		std::u8string_view GetTotalStr() const { return TotalStr; };
-		operator bool() const { return !IteStr.empty(); }
-		void Clear() { IteStr = TotalStr; }
-
-	private:
-
-		std::u8string_view TotalStr;
-		std::u8string_view IteStr;
-	};
-
 
 	struct BinaryStreamReader
 	{
 		BinaryStreamReader(std::filesystem::path const& path) { Open(path); }
 		BinaryStreamReader() = default;
-		BinaryStreamReader(BinaryStreamReader&&) = default;
+		BinaryStreamReader(BinaryStreamReader&& reader);
 		operator bool() const;
 		std::span<std::byte> Read(std::span<std::byte> output);
-		std::int64_t GetStreamSize() const;
+		std::uint64_t GetStreamSize() const;
 		bool Open(std::filesystem::path const& path);
 		void Close();
 		std::optional<std::int64_t> SetPointerOffsetFromBegin(std::int64_t offset = 0);
@@ -324,65 +90,91 @@ export namespace Potato::Document
 #endif
 	};
 
+	struct BinaryStreamWriter
+	{
+		enum class OpenMode
+		{
+			APPEND,
+			CREATE,
+			APPEND_OR_CREATE,
+			CREATE_OR_EMPTY,
+			EMPTY
+		};
+		BinaryStreamWriter(std::filesystem::path const& target_path, OpenMode mode) { Open(target_path, mode); }
+		BinaryStreamWriter() = default;
+		BinaryStreamWriter(BinaryStreamWriter&& reader);
+		operator bool() const;
+		bool Open(std::filesystem::path const& path, OpenMode mode);
+		bool Write(std::span<std::byte const> output);
+		void Close();
+		~BinaryStreamWriter();
+	protected:
+#ifdef _WIN32
+		HANDLE file = INVALID_HANDLE_VALUE;
+#endif
+	};
+
+	template<typename Type>
+	concept AcceptableCharType = TMP::IsOneOfV<Type, char8_t, wchar_t, char16_t, char32_t>;
+
 	struct StringSerializer
 	{
-		StringSerializer(std::span<std::byte const> input, BomT bom = BomT::NoBom) : reference(input), bom(bom) {}
+		template<typename CharT> struct Holder{};
 		StringSerializer(BomT bom = BomT::NoBom) : bom(bom) {}
 		StringSerializer(StringSerializer const&) = default;
-		void SetBom(BomT bom = BomT::NoBom) { this->bom = bom; }
-		BomT SerializeAndSetBom();
+		BomT GetBom() const { return bom; }
+		void OverrideBom(BomT bom) { this->bom = bom; }
 
-		template<typename Tar> EncodeInfo DetectCharacterCount(std::size_t max_character = std::numeric_limits<std::size_t>::max())
-			requires(TMP::IsOneOfV<Tar, char8_t, char32_t, char16_t, wchar_t>) 
-		{
-			if constexpr (std::is_same_v<Tar, char8_t>)
-			{
-				return DetectUTF8Count();
-			}else if constexpr (std::is_same_v<Tar, char16_t>)
-			{
-				return DetectUTF16Count();
-			}else if constexpr (std::is_same_v<Tar, char32_t>)
-			{
-				return DetectUTF32Count();
-			}else
-			{
-				static_assert(std::is_same_v<Tar, wchar_t>);
-				return DetectWideCount();
-			}
-		}
+		std::span<std::byte const> ConsumeBom(std::span<std::byte const> input);
+		std::span<std::byte const> GetBinaryBom() const;
 
-		EncodeInfo DetectUTF8Count(std::size_t max_character = std::numeric_limits<std::size_t>::max()) const;
-		EncodeInfo DetectUTF16Count(std::size_t max_character = std::numeric_limits<std::size_t>::max()) const { return {false}; }
-		EncodeInfo DetectUTF32Count(std::size_t max_character = std::numeric_limits<std::size_t>::max()) const { return { false }; }
-		EncodeInfo DetectWideCount(std::size_t max_character = std::numeric_limits<std::size_t>::max()) const { return {false }; }
-		
-		EncodeInfo SerializeToStringUnsafe(std::span<char8_t> output, std::size_t max_character = std::numeric_limits<std::size_t>::max());
-		EncodeInfo SerializeToStringUnsafe(std::span<char16_t> output, std::size_t max_character = std::numeric_limits<std::size_t>::max()) { return {false }; }
-		EncodeInfo SerializeToStringUnsafe(std::span<char32_t> output, std::size_t max_character = std::numeric_limits<std::size_t>::max()) { return {false }; }
-		EncodeInfo SerializeToStringUnsafe(std::span<wchar_t> output, std::size_t max_character = std::numeric_limits<std::size_t>::max()) { return {false }; }
-		static std::tuple<BomT, std::size_t> TryGetBom(std::span<std::byte const> input);
+		template<AcceptableCharType CharT>
+		EncodeInfo RequireSpace(std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) { return RequireSpace(Holder<CharT>{}, input, max_character); }
 
-		template<typename Char, typename Trai, typename Allo>
-		static EncodeInfo SerializeToBomAndString(std::span<std::byte const> input, std::basic_string<Char, Trai, Allo>& output, std::size_t max_character = std::numeric_limits<std::size_t>::max())
-		{
-			StringSerializer ser{input};
-			ser.SerializeAndSetBom();
-			auto re = ser.DetectCharacterCount<Char>(max_character);
-			if(re)
-			{
-				auto old_size = output.size();
-				output.resize(old_size + re.TargetSpace);
-				auto out = std::span(output).subspan(old_size);
-				return ser.SerializeToStringUnsafe(out, re.CharacterCount);
-			}
-			return re;
-		}
+		template<AcceptableCharType CharT>
+		EncodeInfo SerializerToUnsafe(std::span<CharT> output, std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) { return SerializerToUnsafe(Holder<CharT>{}, output, input, max_character); }
+
+		template<AcceptableCharType CharT>
+		std::optional<std::basic_string_view<CharT>> TryDirectCastToStringView(std::span<std::byte const> input) const { return TryDirectCastToStringView(Holder<CharT>{}, input); }
+
+		bool SerializerBomTo(BinaryStreamWriter& writer) const { return writer.Write(GetBinaryBom()); }
+		bool SerializerTo(BinaryStreamWriter& writer, std::span<char8_t const> input) const;
+		bool IsNativeEnding() const { return IsNativeEndian(bom); }
 
 	protected:
 
+		EncodeInfo RequireSpace(Holder<char8_t> holder, std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) const;
+		EncodeInfo RequireSpace(Holder<char16_t> holder, std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) const { return {false}; }
+		EncodeInfo RequireSpace(Holder<char32_t> holder, std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) const { return { false }; }
+		EncodeInfo RequireSpace(Holder<wchar_t> holder, std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) const { return {false }; }
+
+		EncodeInfo SerializerToUnsafe(Holder<char8_t> holder, std::span<char8_t> output, std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) const;
+		EncodeInfo SerializerToUnsafe(Holder<char16_t> holder, std::span<char16_t> output, std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) const { return {false}; }
+		EncodeInfo SerializerToUnsafe(Holder<char32_t> holder, std::span<char32_t> output, std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) const { return { false }; }
+		EncodeInfo SerializerToUnsafe(Holder<wchar_t> holder, std::span<wchar_t> output, std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) const { return {false }; }
+
+		std::optional<std::basic_string_view<char8_t>> TryDirectCastToStringView(Holder<char8_t> holder, std::span<std::byte const> input) const;
+		std::optional<std::basic_string_view<char16_t>> TryDirectCastToStringView(Holder<char16_t> holder, std::span<std::byte const> input) const { return std::nullopt; }
+		std::optional<std::basic_string_view<char32_t>> TryDirectCastToStringView(Holder<char32_t> holder, std::span<std::byte const> input) const { return std::nullopt; }
+		std::optional<std::basic_string_view<wchar_t>> TryDirectCastToStringView(Holder<wchar_t> holder, std::span<std::byte const> input) const { return std::nullopt; }
+
 		BomT bom = BomT::NoBom;
-		std::span<std::byte const> reference;
 	};
 
-	std::tuple<BomT, std::size_t> TryGetBomFromBinary(std::span<std::byte const> input);
+	struct LineSplitter
+	{
+		enum class LineMode
+		{
+			N,
+			RN
+		};
+
+		struct Result
+		{
+			std::optional<LineMode> mode;
+			std::size_t line_count;
+		};
+
+		static Result Split(std::u8string_view str, bool keep_line = true, std::size_t offset = 0);
+	};
 }
