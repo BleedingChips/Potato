@@ -379,27 +379,38 @@ namespace Potato::Document
 		}
 	}
 
-	LineSplitter::Result LineSplitter::Split(std::u8string_view str, bool keep_line, std::size_t offset)
+	template<typename CharT, CharT R, CharT N>
+	StringSplitter::Line SplitLineImp(std::basic_string_view<CharT> str, std::size_t offset)
 	{
-		auto index = str.find_first_of(u8'\r', offset);
+		auto index = str.find_first_of(N, offset);
 		if(index >= str.size())
 		{
-			return {std::nullopt, str.size()};
-		}else if(index == 0)
+			return {
+				StringSplitter::Line::Mode::None,
+				{offset, str.size()},
+				{offset, str.size()}
+			};
+		}else if(index == offset || str[index - 1] != R)
 		{
-			if(keep_line)
-				return {LineMode::N, 1};
-			else
-				return {LineMode::N, 0};
+			return {
+				StringSplitter::Line::Mode::N,
+				{offset, index},
+				{offset, index + 1}
+			};
 		}else
 		{
-			LineMode mode = LineMode::N;
-			if(str[index] == u8'\r')
-				mode = LineMode::RN;
-			if(keep_line)
-				return {mode, index + 1};
-			else
-				return {mode,  index};
+			return {
+				StringSplitter::Line::Mode::RN,
+				{offset, index - 1},
+				{offset, index + 1}
+			};
 		}
+	}
+
+
+	auto StringSplitter::SplitLine(std::u8string_view str, std::size_t offset)
+		-> Line
+	{
+		return SplitLineImp<char8_t, u'\r', u'\n'>(str, offset);
 	}
 }

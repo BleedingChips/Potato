@@ -161,20 +161,29 @@ export namespace Potato::Document
 		BomT bom = BomT::NoBom;
 	};
 
-	struct LineSplitter
+
+	struct StringSplitter
 	{
-		enum class LineMode
+		struct Line
 		{
-			N,
-			RN
+			enum class Mode
+			{
+				None,
+				N,
+				RN
+			};
+			Mode mode = Mode::None;
+			Misc::IndexSpan<> index_without_line;
+			Misc::IndexSpan<> index_with_line;
+			std::size_t GetLineEnd() const { return index_with_line.End(); }
+			template<typename CharT>
+			std::basic_string_view<CharT> SliceWithoutLine(std::basic_string_view<CharT> str) const { return index_without_line.Slice(str);  }
+			template<typename CharT>
+			std::basic_string_view<CharT> SliceWithLine(std::basic_string_view<CharT> str) const { return index_with_line.Slice(str);  }
+			std::size_t SizeWithoutLine() const { return index_without_line.Size(); }
+			std::size_t SizeWithLine() const { return index_with_line.Size(); }
 		};
 
-		struct Result
-		{
-			std::optional<LineMode> mode;
-			std::size_t line_count;
-		};
-
-		static Result Split(std::u8string_view str, bool keep_line = true, std::size_t offset = 0);
+		static Line SplitLine(std::u8string_view str, std::size_t offset = 0);
 	};
 }
