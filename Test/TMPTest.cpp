@@ -7,6 +7,9 @@ struct Type2 {};
 
 struct Type3 {};
 
+template<typename ...T>
+struct TTTuple{};
+
 template<typename T1, typename T2, typename T3, typename T4> struct TTuple {};
 
 template<typename T1, typename T2, typename T3, typename T4> struct TTuple2 {};
@@ -85,8 +88,8 @@ int main()
 
 		static_assert(std::is_same_v<Info::OwnerType, Sample1>, "FunctionInfo Not Pass");
 		static_assert(std::is_same_v<Info::ReturnType, std::int32_t>, "FunctionInfo Not Pass");
-		static_assert(std::is_same_v<Info::PackParameters<TypeTuple>, TypeTuple<char32_t>>, "FunctionInfo Not Pass");
-		static_assert(std::is_same_v<Info::PackReturnParameters<TypeTuple>, TypeTuple<std::int32_t, char32_t>>, "FunctionInfo Not Pass");
+		static_assert(std::is_same_v<Info::PackParameters<TTTuple>, TTTuple<char32_t>>, "FunctionInfo Not Pass");
+		static_assert(std::is_same_v<Info::PackReturnParameters<TTTuple>, TTTuple<std::int32_t, char32_t>>, "FunctionInfo Not Pass");
 
 		using Info2 = FunctionInfo<decltype(Function1)>;
 		static_assert(!Info2::IsNoException, "FunctionInfo Not Pass");

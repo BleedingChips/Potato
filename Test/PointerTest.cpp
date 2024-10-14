@@ -41,8 +41,8 @@ struct Type2 : public Pointer::DefaultStrongWeakInterface
 struct Type3 : public Pointer::DefaultControllerViewerInterface
 {
 
-	virtual void ControllerRelease() override { GobalIndex = 10000; }
-	virtual void ViewerRelease() override { this->~Type3(); }
+	virtual void ControllerRelease() override { GobalIndex = 10000; this->~Type3(); }
+	virtual void ViewerRelease() override {  }
 	~Type3() {
 		GobalIndex = 100;
 	}

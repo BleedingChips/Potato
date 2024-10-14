@@ -1,4 +1,5 @@
-﻿import PotatoReg;
+﻿import std;
+import PotatoReg;
 using namespace Potato::Reg;
 
 

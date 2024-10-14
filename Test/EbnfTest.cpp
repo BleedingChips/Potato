@@ -1,3 +1,4 @@
+import std;
 import PotatoEBNF;
 
 using namespace Potato::EBNF;

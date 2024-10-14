@@ -18,6 +18,10 @@ export namespace Potato::Reg
 	inline constexpr char32_t MaxChar() { return 0x110000; };
 	inline constexpr char32_t EndOfFile() { return 0; }
 
+	export struct DfaBinaryTableWrapper;
+	export struct Dfa;
+	export struct DfaProcessor;
+
 	struct Nfa
 	{
 		
@@ -258,7 +262,7 @@ export namespace Potato::Reg
 
 	struct DfaProcessor;
 
-	struct Dfa
+	export struct Dfa
 	{
 
 		enum class FormatE
@@ -401,7 +405,7 @@ export namespace Potato::Reg
 	};
 
 
-	struct DfaBinaryTableWrapper
+	export struct DfaBinaryTableWrapper
 	{
 		using StandardT = uint32_t;
 		using HalfStandardT = uint16_t;
@@ -502,7 +506,7 @@ export namespace Potato::Reg
 		return CreateDfaBinaryTable(Dfa{ Format, std::basic_string_view<CharT>{Str}, IsRaw, Mask }, std::allocator<DfaBinaryTableWrapper::StandardT>{});
 	}
 	
-	struct DfaProcessor
+	export struct DfaProcessor
 	{
 
 		DfaProcessor(DfaProcessor const&) = default;

@@ -4,7 +4,7 @@ set_languages("cxxlatest")
 target("Potato")
     set_kind("static")
     add_files("Potato/*.cpp")
-    add_files("Potato/*.ixx")
+    add_files("Potato/*.ixx", {public = true})
 target_end()
 
 if os.scriptdir() == os.projectdir() then
