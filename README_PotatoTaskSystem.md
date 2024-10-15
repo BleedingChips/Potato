@@ -2,10 +2,10 @@
 
 基于线程池的多线程任务系统
 
-	```cpp
-	import PotatoTaskSystem;
-	using namespace Potato::Task;
-	```
+```cpp
+import PotatoTaskSystem;
+using namespace Potato::Task;
+```
 
 `TaskSyetem`内部维护了一个基于`std::thread`的内存池，并维护了一个单一任务队列，每一个线程都被赋予了特定的属性和权限，以控制其从任务队列获取任务的能力。
 
