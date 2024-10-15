@@ -1,9 +1,9 @@
 # PotatoTaskFlow
 
-	```cpp
-	import PotatoTaskFlow;
-	using namespace Potato::Task;
-	```
+```cpp
+import PotatoTaskFlow;
+using namespace Potato::Task;
+```
 
 基于`PotatoTaskSystem`与有向无环图的多线程安全任务图系统，通过改良的拓扑算法，在添加新的有向边时能够快速判断是否存在有向边。
 
