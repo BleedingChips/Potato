@@ -114,16 +114,27 @@ export namespace Potato::IR
 	struct StructLayout
 	{
 
-		struct StructLayoutConstruction
+		struct OperateProperty
 		{
-			bool enable_default = true;
-			bool enable_copy = true;
-			bool enable_move = true;
-			StructLayoutConstruction operator&&(StructLayoutConstruction const& i)
+			bool default_construct : 1 = true;
+			bool copy_construct : 1 = true;
+			bool move_construct : 1 = true;
+			bool copy_assigned : 1 = true;
+			bool move_assigned : 1 = true;
+
+			OperateProperty operator&&(OperateProperty const& i) const
 			{
-				return {enable_default && i.enable_default, enable_copy && i.enable_copy, enable_move && i.enable_move};
+				return {
+					default_construct && i.default_construct,
+					copy_construct&& i.copy_construct,
+					move_construct&& i.move_construct,
+					copy_assigned&& i.copy_assigned,
+					move_assigned&& i.move_assigned
+				};
 			}
-			operator bool() const { return enable_default || enable_copy || enable_move; }
+
+			bool EnableConstruct() const { return default_construct || copy_construct || move_construct; }
+			bool EnableEqual() const { return copy_assigned || move_assigned; }
 		};
 
 		struct Wrapper
@@ -142,11 +153,13 @@ export namespace Potato::IR
 			void* init_object = nullptr;
 		};
 
-		virtual StructLayoutConstruction GetConstructProperty() const = 0;
+		virtual OperateProperty GetOperateProperty() const = 0;
 		virtual bool DefaultConstruction(void* target, std::size_t array_count = 1) const;
 		virtual bool CopyConstruction(void* target, void* source, std::size_t array_count = 1) const;
 		virtual bool MoveConstruction(void* target, void* source, std::size_t array_count = 1) const;
 		virtual bool Destruction(void* target, std::size_t array_count = 1) const;
+		virtual bool CopyAssigned(void* target, void* source, std::size_t array_count = 1) const;
+		virtual bool MoveAssigned(void* target, void* source, std::size_t array_count = 1) const;
 
 		struct MemberView
 		{
@@ -197,8 +210,8 @@ export namespace Potato::IR
 
 
 		static Ptr DefaultConstruct(StructLayout::Ptr layout, std::size_t array_count = 1,  std::pmr::memory_resource* resource = std::pmr::get_default_resource());
-		static Ptr CopyConstruct(StructLayout::Ptr layout, StructLayoutObject::Ptr source, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
-		static Ptr MoveConstruct(StructLayout::Ptr layout, StructLayoutObject::Ptr source, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+		static Ptr CopyConstruct(StructLayout::Ptr layout, StructLayoutObject& source, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+		static Ptr MoveConstruct(StructLayout::Ptr layout, StructLayoutObject& source, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
 		static Ptr CopyConstruct(StructLayout::Ptr layout, void* source, std::size_t array_count = 1, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 		static Ptr MoveConstruct(StructLayout::Ptr layout, void* source, std::size_t array_count = 1, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
@@ -236,12 +249,12 @@ export namespace Potato::IR
 		virtual void Release() override;
 		Layout GetLayout() const override;
 		std::span<MemberView const> GetMemberView() const override;
-		StructLayoutConstruction GetConstructProperty() const override { return construct_property; }
+		OperateProperty GetOperateProperty() const override { return construct_property; }
 		virtual std::size_t GetHashCode() const override { return hash_code; }
 
 	protected:
 
-		DynamicStructLayout(StructLayoutConstruction construct_property, std::u8string_view name, Layout total_layout, std::span<MemberView> member_view, std::size_t hash_code, MemoryResourceRecord record)
+		DynamicStructLayout(OperateProperty construct_property, std::u8string_view name, Layout total_layout, std::span<MemberView> member_view, std::size_t hash_code, MemoryResourceRecord record)
 			: total_layout(total_layout), hash_code(hash_code), member_view(member_view), record(record), construct_property(construct_property)
 		{
 			
@@ -251,7 +264,7 @@ export namespace Potato::IR
 		Layout total_layout;
 		std::span<MemberView> member_view;
 		MemoryResourceRecord record;
-		StructLayoutConstruction construct_property;
+		OperateProperty construct_property;
 		std::size_t hash_code;
 
 		friend struct StructLayout;
@@ -260,6 +273,7 @@ export namespace Potato::IR
 	template<typename AtomicType>
 	struct StaticAtomicStructLayout : public StructLayout
 	{
+
 		static StructLayout::Ptr Create()
 		{
 			static StaticAtomicStructLayout<AtomicType> layout;
@@ -274,12 +288,14 @@ export namespace Potato::IR
 			return std::u8string_view{reinterpret_cast<char8_t const*>(str.data()), str.size()};
 		}
 		std::span<MemberView const> GetMemberView() const override { return {}; }
-		StructLayoutConstruction GetConstructProperty() const override
+		OperateProperty GetOperateProperty() const override
 		{
 			return {
 				std::is_constructible_v<AtomicType>,
 				 std::is_constructible_v<AtomicType, AtomicType const&>,
-				 std::is_constructible_v<AtomicType, AtomicType &&>
+				 std::is_constructible_v<AtomicType, AtomicType &&>,
+				std::is_copy_assignable_v<AtomicType>,
+				std::is_move_assignable_v<AtomicType>
 			};
 		}
 
@@ -326,6 +342,38 @@ export namespace Potato::IR
 				for(std::size_t i = 0; i < array_count; ++i)
 				{
 					new (tar + i) AtomicType{ *(sou + i) };
+				}
+				return true;
+			}
+			return false;
+		}
+
+		virtual bool CopyAssigned(void* target, void* source, std::size_t array_count = 1) const override
+		{
+			assert(target != source && target != nullptr && source != nullptr);
+			if constexpr (std::is_copy_assignable_v<AtomicType>)
+			{
+				AtomicType* tar = static_cast<AtomicType*>(target);
+				AtomicType const* sou = static_cast<AtomicType const*>(source);
+				for (std::size_t i = 0; i < array_count; ++i)
+				{
+					tar[i].operator=(sou[i]);
+				}
+				return true;
+			}
+			return false;
+		}
+
+		virtual bool MoveAssigned(void* target, void* source, std::size_t array_count = 1) const override
+		{
+			assert(target != source && target != nullptr && source != nullptr);
+			if constexpr (std::is_move_assignable_v<AtomicType>)
+			{
+				AtomicType* tar = static_cast<AtomicType*>(target);
+				AtomicType* sou = static_cast<AtomicType*>(source);
+				for (std::size_t i = 0; i < array_count; ++i)
+				{
+					tar[i].operator=(std::move(sou[i]));
 				}
 				return true;
 			}

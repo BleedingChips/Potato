@@ -187,26 +187,25 @@ namespace Potato::IR
 	auto StructLayoutObject::DefaultConstruct(StructLayout::Ptr layout, std::size_t array_count, std::pmr::memory_resource* resource)
 		->Ptr
 	{
-		if(layout && layout->GetConstructProperty().enable_default)
+		assert(layout && layout->GetOperateProperty().default_construct);
+		auto o_layout = Layout::Get<StructLayoutObject>();
+		auto m_layout = layout->GetLayout(array_count);
+		auto offset = InsertLayoutCPP(o_layout, m_layout);
+		FixLayoutCPP(o_layout);
+		auto re = MemoryResourceRecord::Allocate(resource, o_layout);
+		if (re)
 		{
-			auto o_layout = Layout::Get<StructLayoutObject>();
-			auto m_layout = layout->GetLayout(array_count);
-			auto offset = InsertLayoutCPP(o_layout, m_layout);
-			FixLayoutCPP(o_layout);
-			auto re = MemoryResourceRecord::Allocate(resource, o_layout);
-			if(re)
+			try
 			{
-				try
-				{
-					auto start = static_cast<std::byte*>(re.Get()) + offset;
-					auto re2 = layout->DefaultConstruction(start, array_count);
-					assert(re2);
-					return new (re.Get()) StructLayoutObject{start, array_count, std::move(layout), re};
-				}catch (...)
-				{
-					re.Deallocate();
-					throw;
-				}
+				auto start = static_cast<std::byte*>(re.Get()) + offset;
+				auto re2 = layout->DefaultConstruction(start, array_count);
+				assert(re2);
+				return new (re.Get()) StructLayoutObject{ start, array_count, std::move(layout), re };
+			}
+			catch (...)
+			{
+				re.Deallocate();
+				throw;
 			}
 		}
 		return {};
@@ -215,79 +214,69 @@ namespace Potato::IR
 	auto StructLayoutObject::CopyConstruct(StructLayout::Ptr layout, void* source, std::size_t array_count, std::pmr::memory_resource* resource)
 		-> Ptr
 	{
-		if(layout && layout->GetConstructProperty().enable_copy && source != nullptr)
-		{
-			auto o_layout = Layout::Get<StructLayoutObject>();
-			auto m_layout = layout->GetLayout(array_count);
+		assert(layout && layout->GetOperateProperty().copy_construct && source != nullptr);
+		auto o_layout = Layout::Get<StructLayoutObject>();
+		auto m_layout = layout->GetLayout(array_count);
 
-			auto offset = InsertLayoutCPP(o_layout, m_layout);
-			FixLayoutCPP(o_layout);
-			auto re = MemoryResourceRecord::Allocate(resource, o_layout);
-			if(re)
+		auto offset = InsertLayoutCPP(o_layout, m_layout);
+		FixLayoutCPP(o_layout);
+		auto re = MemoryResourceRecord::Allocate(resource, o_layout);
+		if (re)
+		{
+			try
 			{
-				try
-				{
-					auto start = static_cast<std::byte*>(re.Get()) + offset;
-					auto re2= layout->CopyConstruction(start, source, array_count);
-					assert(re2);
-					return new (re.Get()) StructLayoutObject{start, array_count, std::move(layout), re};
-				}catch (...)
-				{
-					re.Deallocate();
-					throw;
-				}
+				auto start = static_cast<std::byte*>(re.Get()) + offset;
+				auto re2 = layout->CopyConstruction(start, source, array_count);
+				assert(re2);
+				return new (re.Get()) StructLayoutObject{ start, array_count, std::move(layout), re };
+			}
+			catch (...)
+			{
+				re.Deallocate();
+				throw;
 			}
 		}
 		return {};
 	}
 
-	auto StructLayoutObject::CopyConstruct(StructLayout::Ptr layout, StructLayoutObject::Ptr source, std::pmr::memory_resource* resource)
+	auto StructLayoutObject::CopyConstruct(StructLayout::Ptr layout, StructLayoutObject& source, std::pmr::memory_resource* resource)
 		-> Ptr
 	{
-		if(source && source->layout == layout)
-		{
-			return CopyConstruct(std::move(layout), source->GetData(), source->GetArrayCount());
-		}
-		return {};
+		return CopyConstruct(std::move(layout), source.GetData(), source.GetArrayCount(), resource);
 	}
 
 	auto StructLayoutObject::MoveConstruct(StructLayout::Ptr layout, void* source, std::size_t array_count, std::pmr::memory_resource* resource)
 		-> Ptr
 	{
-		if(layout && layout->GetConstructProperty().enable_move && source != nullptr)
-		{
-			auto o_layout = Layout::Get<StructLayoutObject>();
-			auto m_layout = layout->GetLayout(array_count);
+		assert(layout && layout->GetOperateProperty().move_construct && source != nullptr);
+		auto o_layout = Layout::Get<StructLayoutObject>();
+		auto m_layout = layout->GetLayout(array_count);
 
-			auto offset = InsertLayoutCPP(o_layout, m_layout);
-			FixLayoutCPP(o_layout);
-			auto re = MemoryResourceRecord::Allocate(resource, o_layout);
-			if(re)
+		auto offset = InsertLayoutCPP(o_layout, m_layout);
+		FixLayoutCPP(o_layout);
+		auto re = MemoryResourceRecord::Allocate(resource, o_layout);
+		if (re)
+		{
+			try
 			{
-				try
-				{
-					auto start = static_cast<std::byte*>(re.Get()) + offset;
-					auto re2= layout->MoveConstruction(start, source);
-					assert(re2);
-					return new (re.Get()) StructLayoutObject{start, array_count, std::move(layout), re};
-				}catch (...)
-				{
-					re.Deallocate();
-					throw;
-				}
+				auto start = static_cast<std::byte*>(re.Get()) + offset;
+				auto re2 = layout->MoveConstruction(start, source);
+				assert(re2);
+				return new (re.Get()) StructLayoutObject{ start, array_count, std::move(layout), re };
+			}
+			catch (...)
+			{
+				re.Deallocate();
+				throw;
 			}
 		}
 		return {};
 	}
 
-	auto StructLayoutObject::MoveConstruct(StructLayout::Ptr layout, StructLayoutObject::Ptr source, std::pmr::memory_resource* resource)
+	auto StructLayoutObject::MoveConstruct(StructLayout::Ptr layout, StructLayoutObject& source, std::pmr::memory_resource* resource)
 		-> Ptr
 	{
-		if(source && source->layout == layout)
-		{
-			return MoveConstruct(std::move(layout), source->GetData(), source->GetArrayCount());
-		}
-		return {};
+		return MoveConstruct(std::move(layout), source.GetData(), source.GetArrayCount());
 	}
 
 
@@ -317,9 +306,9 @@ namespace Potato::IR
 	bool StructLayout::DefaultConstruction(void* target, std::size_t array_count) const
 	{
 		assert(target != nullptr);
-		auto construct_property = GetConstructProperty();
+		auto operate_property = GetOperateProperty();
 		auto member_view = GetMemberView();
-		if(construct_property.enable_default)
+		if(operate_property.default_construct)
 		{
 			auto layout = GetLayout();
 			std::byte* tar = static_cast<std::byte*>(target);
@@ -348,8 +337,8 @@ namespace Potato::IR
 	bool StructLayout::CopyConstruction(void* target, void* source, std::size_t array_count) const
 	{
 		assert(target != nullptr);
-		auto construct_property = GetConstructProperty();
-		if(construct_property.enable_copy)
+		auto operate_property = GetOperateProperty();
+		if(operate_property.copy_construct)
 		{
 			auto member_view = GetMemberView();
 			auto layout = GetLayout();
@@ -374,8 +363,8 @@ namespace Potato::IR
 	bool StructLayout::MoveConstruction(void* target, void* source, std::size_t array_count) const
 	{
 		assert(target != source && target != nullptr && source != nullptr);
-		auto construct_property = GetConstructProperty();
-		if(construct_property.enable_move)
+		auto operate_property = GetOperateProperty();
+		if(operate_property.move_construct)
 		{
 			auto member_view = GetMemberView();
 			auto layout = GetLayout();
@@ -417,31 +406,81 @@ namespace Potato::IR
 		return true;
 	}
 
+	bool StructLayout::CopyAssigned(void* target, void* source, std::size_t array_count) const
+	{
+		assert(target != nullptr && source != nullptr);
+		auto member_view = GetMemberView();
+		auto operate_property = GetOperateProperty();
+		auto layout = GetLayout();
+		std::byte* tar = static_cast<std::byte*>(target);
+		std::byte* sou = static_cast<std::byte*>(source);
+		if(operate_property.copy_assigned)
+		{
+			for (std::size_t i = 0; i < array_count; ++i)
+			{
+				std::byte* tar_ite = tar + layout.Size * i;
+				std::byte* sou_ite = sou + layout.Size * i;
+				for (auto& ite : member_view)
+				{
+					auto data = GetData(ite, tar_ite);
+					auto re = ite.struct_layout->CopyAssigned(data, sou_ite, ite.array_count);
+					assert(re);
+				}
+			}
+			return true;
+		}
+		return false;
+	}
+
+	bool StructLayout::MoveAssigned(void* target, void* source, std::size_t array_count) const
+	{
+		assert(target != nullptr && source != nullptr);
+		auto member_view = GetMemberView();
+		auto operate_property = GetOperateProperty();
+		auto layout = GetLayout();
+		std::byte* tar = static_cast<std::byte*>(target);
+		std::byte* sou = static_cast<std::byte*>(source);
+		if (operate_property.move_assigned)
+		{
+			for (std::size_t i = 0; i < array_count; ++i)
+			{
+				std::byte* tar_ite = tar + layout.Size * i;
+				std::byte* sou_ite = sou + layout.Size * i;
+				for (auto& ite : member_view)
+				{
+					auto data = GetData(ite, tar_ite);
+					auto re = ite.struct_layout->MoveAssigned(data, sou_ite, ite.array_count);
+					assert(re);
+				}
+			}
+			return true;
+		}
+		return false;
+	}
+
 
 	auto DynamicStructLayout::Create(std::u8string_view name, std::span<Member const> members, std::pmr::memory_resource* resource)
 		-> Ptr
 	{
 		std::size_t hash_code = 0;
-		StructLayoutConstruction construct_pro;
+		OperateProperty ope_property;
 
 		std::size_t name_size = name.size();
 		std::size_t index = 1;
+
 		for(auto& ite : members)
 		{
 			auto cur_hash_code = ite.type_id->GetHashCode();
 			hash_code += (cur_hash_code - (cur_hash_code % index)) * ite.array_count + (cur_hash_code % index);
 			name_size += ite.name.size();
-			auto tem_layout = ite.type_id->GetConstructProperty();
-			if(!tem_layout.enable_default && ite.init_object != nullptr && tem_layout.enable_copy)
+			auto tem_layout = ite.type_id->GetOperateProperty();
+			if(!tem_layout.default_construct && ite.init_object != nullptr && tem_layout.copy_construct)
 			{
-				tem_layout.enable_default = true;
+				tem_layout.default_construct = true;
 			}
-			construct_pro =  construct_pro && tem_layout;
+			ope_property = ope_property && tem_layout;
 			++index;
 		}
-
-		if(!construct_pro)
-			return {};
 
 		auto cur_layout = Layout::Get<DynamicStructLayout>();
 		std::size_t member_offset = InsertLayoutCPP(cur_layout, Layout::GetArray<MemberView>(members.size()));
@@ -503,7 +542,7 @@ namespace Potato::IR
 			}
 			FixLayoutCPP(total_layout);
 			return new (re.Get()) DynamicStructLayout{
-				construct_pro,
+				ope_property,
 				name,
 				total_layout,
 				member_span,
