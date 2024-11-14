@@ -111,7 +111,7 @@ namespace Potato::IR
 	{
 		if(resource != nullptr)
 		{
-			auto adress = resource->allocate(layout.Size, layout.Align);
+			auto adress = resource->allocate(layout.size, layout.align);
 			return { resource, layout, adress};
 		}
 		return {resource, layout, nullptr};
@@ -126,7 +126,7 @@ namespace Potato::IR
 	{
 		if(*this)
 		{
-			resource->deallocate(adress, layout.Size, layout.Align);
+			resource->deallocate(adress, layout.size, layout.align);
 			resource = nullptr;
 			adress = nullptr;
 			return true;
@@ -144,7 +144,7 @@ namespace Potato::IR
 	{
 		return {
 			static_cast<std::byte*>(target) + view.offset,
-			view.struct_layout->GetLayout(view.array_count).Size
+			view.struct_layout->GetLayout(view.array_count).size
 		};
 	}
 
@@ -166,8 +166,8 @@ namespace Potato::IR
 	{
 		auto layout = GetLayout();
 		return {
-			layout.Align,
-			layout.Size * array_count
+			layout.align,
+			layout.size * array_count
 		};
 	}
 
@@ -188,10 +188,10 @@ namespace Potato::IR
 		->Ptr
 	{
 		assert(layout && layout->GetOperateProperty().default_construct);
-		auto o_layout = Layout::Get<StructLayoutObject>();
+		MemLayout::MemLayoutCPP layout_cpp = Layout::Get<StructLayoutObject>();
 		auto m_layout = layout->GetLayout(array_count);
-		auto offset = InsertLayoutCPP(o_layout, m_layout);
-		FixLayoutCPP(o_layout);
+		auto offset = layout_cpp.Insert(m_layout);
+		auto o_layout = layout_cpp.Get();
 		auto re = MemoryResourceRecord::Allocate(resource, o_layout);
 		if (re)
 		{
@@ -215,11 +215,12 @@ namespace Potato::IR
 		-> Ptr
 	{
 		assert(layout && layout->GetOperateProperty().copy_construct && source != nullptr);
-		auto o_layout = Layout::Get<StructLayoutObject>();
+		auto cpp_layout = MemLayout::MemLayoutCPP::Get<StructLayoutObject>();
+		
 		auto m_layout = layout->GetLayout(array_count);
-
-		auto offset = InsertLayoutCPP(o_layout, m_layout);
-		FixLayoutCPP(o_layout);
+		
+		auto offset = cpp_layout.Insert(m_layout);
+		auto o_layout = cpp_layout.Get();
 		auto re = MemoryResourceRecord::Allocate(resource, o_layout);
 		if (re)
 		{
@@ -249,11 +250,12 @@ namespace Potato::IR
 		-> Ptr
 	{
 		assert(layout && layout->GetOperateProperty().move_construct && source != nullptr);
-		auto o_layout = Layout::Get<StructLayoutObject>();
+		auto cpp_layout = MemLayout::MemLayoutCPP::Get<StructLayoutObject>();
+		
 		auto m_layout = layout->GetLayout(array_count);
 
-		auto offset = InsertLayoutCPP(o_layout, m_layout);
-		FixLayoutCPP(o_layout);
+		auto offset = cpp_layout.Insert(m_layout);
+		auto o_layout = cpp_layout.Get();
 		auto re = MemoryResourceRecord::Allocate(resource, o_layout);
 		if (re)
 		{
@@ -314,7 +316,7 @@ namespace Potato::IR
 			std::byte* tar = static_cast<std::byte*>(target);
 			for(std::size_t i = 0; i < array_count; ++i)
 			{
-				std::byte* tar_ite = tar + layout.Size * i;
+				std::byte* tar_ite = tar + layout.size * i;
 				for(auto& ite : member_view)
 				{
 					auto data = GetData(ite, tar_ite);
@@ -346,8 +348,8 @@ namespace Potato::IR
 			std::byte* sou = static_cast<std::byte*>(source);
 			for(std::size_t i = 0; i < array_count; ++i)
 			{
-				std::byte* tar_ite = tar + layout.Size * i;
-				std::byte* sou_ite = sou + layout.Size * i;
+				std::byte* tar_ite = tar + layout.size * i;
+				std::byte* sou_ite = sou + layout.size * i;
 				for(auto& ite : member_view)
 				{
 					auto data = GetData(ite, tar_ite);
@@ -372,8 +374,8 @@ namespace Potato::IR
 			std::byte* sou = static_cast<std::byte*>(source);
 			for(std::size_t i = 0; i < array_count; ++i)
 			{
-				std::byte* tar_ite = tar + layout.Size * i;
-				std::byte* sou_ite = sou + layout.Size * i;
+				std::byte* tar_ite = tar + layout.size * i;
+				std::byte* sou_ite = sou + layout.size * i;
 				for(auto& ite : member_view)
 				{
 					auto data = GetData(ite, tar_ite);
@@ -395,7 +397,7 @@ namespace Potato::IR
 		std::byte* tar = static_cast<std::byte*>(target);
 		for(std::size_t i = 0; i < array_count; ++i)
 		{
-			std::byte* tar_ite = tar + layout.Size * i;
+			std::byte* tar_ite = tar + layout.size * i;
 			for(auto& ite : member_view)
 			{
 				auto data = GetData(ite, tar_ite);
@@ -418,8 +420,8 @@ namespace Potato::IR
 		{
 			for (std::size_t i = 0; i < array_count; ++i)
 			{
-				std::byte* tar_ite = tar + layout.Size * i;
-				std::byte* sou_ite = sou + layout.Size * i;
+				std::byte* tar_ite = tar + layout.size * i;
+				std::byte* sou_ite = sou + layout.size * i;
 				for (auto& ite : member_view)
 				{
 					auto data = GetData(ite, tar_ite);
@@ -444,8 +446,8 @@ namespace Potato::IR
 		{
 			for (std::size_t i = 0; i < array_count; ++i)
 			{
-				std::byte* tar_ite = tar + layout.Size * i;
-				std::byte* sou_ite = sou + layout.Size * i;
+				std::byte* tar_ite = tar + layout.size * i;
+				std::byte* sou_ite = sou + layout.size * i;
 				for (auto& ite : member_view)
 				{
 					auto data = GetData(ite, tar_ite);
@@ -482,23 +484,23 @@ namespace Potato::IR
 			++index;
 		}
 
-		auto cur_layout = Layout::Get<DynamicStructLayout>();
-		std::size_t member_offset = InsertLayoutCPP(cur_layout, Layout::GetArray<MemberView>(members.size()));
-		std::size_t name_offset = InsertLayoutCPP(cur_layout, Layout::GetArray<char8_t>(name_size));
+		auto cur_layout_cpp = MemLayout::MemLayoutCPP::Get<DynamicStructLayout>();
+		std::size_t member_offset = cur_layout_cpp.Insert(Layout::GetArray<MemberView>(members.size()));
+		std::size_t name_offset = cur_layout_cpp.Insert(Layout::GetArray<char8_t>(name_size));
 
-		auto record_layout = cur_layout;
+		auto record_layout = cur_layout_cpp;
 
 		for(auto& ite : members)
 		{
 			if(ite.init_object != nullptr)
-				InsertLayoutCPP(cur_layout, ite.type_id->GetLayout(ite.array_count));
+				cur_layout_cpp.Insert(ite.type_id->GetLayout(ite.array_count));
 		}
 
-		FixLayoutCPP(cur_layout);
+		auto cur_layout = cur_layout_cpp.Get();
 		auto re = MemoryResourceRecord::Allocate(resource, cur_layout);
 		if(re)
 		{
-			Layout total_layout;
+			MemLayout::MemLayoutCPP total_layout_cpp;
 			auto member_span = std::span(reinterpret_cast<MemberView*>(re.GetByte() + member_offset), members.size());
 			auto str_span = std::span(reinterpret_cast<char8_t*>(re.GetByte() + name_offset), name_size);
 			std::memcpy(str_span.data(), name.data(), name.size() * sizeof(char8_t));
@@ -512,11 +514,11 @@ namespace Potato::IR
 				std::size_t offset = 0;
 				if(i == 0)
 				{
-					total_layout = cur.type_id->GetLayout(cur.array_count);
+					total_layout_cpp = cur.type_id->GetLayout(cur.array_count);
 				}else
 				{
 					auto new_layout = cur.type_id->GetLayout(cur.array_count);
-					offset = InsertLayoutCPP(total_layout, new_layout);
+					offset = total_layout_cpp.Insert(new_layout);
 				}
 
 				std::memcpy(str_span.data(), cur.name.data(), cur.name.size() * sizeof(char8_t));
@@ -525,7 +527,7 @@ namespace Potato::IR
 
 				if(cur.init_object != nullptr)
 				{
-					auto init_offset = InsertLayoutCPP(record_layout, cur.type_id->GetLayout(cur.array_count));
+					auto init_offset = record_layout.Insert(cur.type_id->GetLayout(cur.array_count));
 					init_object = static_cast<std::byte*>(re.Get()) + init_offset;
 					auto re2 = cur.type_id->CopyConstruction(init_object, cur.init_object, cur.array_count);
 					assert(re2);
@@ -540,11 +542,10 @@ namespace Potato::IR
 				};
 				str_span = str_span.subspan(cur.name.size());
 			}
-			FixLayoutCPP(total_layout);
 			return new (re.Get()) DynamicStructLayout{
 				ope_property,
 				name,
-				total_layout,
+				total_layout_cpp.Get(),
 				member_span,
 				hash_code,
 				re

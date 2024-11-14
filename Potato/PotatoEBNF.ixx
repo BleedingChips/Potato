@@ -13,7 +13,8 @@ import PotatoMisc;
 
 export namespace Potato::EBNF
 {
-	
+	export struct Ebnf;
+
 	struct EbnfBuilder : protected SLRX::ProcessorOperator
 	{
 
@@ -162,7 +163,10 @@ export namespace Potato::EBNF
 		virtual std::any HandleReduce(SymbolInfo Symbol, ReduceProduction Production) { return {}; };
 	};
 
-	struct Ebnf
+	export struct EbnfProcessor;
+	export struct EbnfBinaryTableWrapper;
+
+	export struct Ebnf
 	{
 		template<typename CharT, typename CharTraisT>
 		Ebnf(std::basic_string_view<CharT, CharTraisT> EbnfStr);
@@ -204,7 +208,7 @@ export namespace Potato::EBNF
 	};
 
 
-	struct EbnfBinaryTableWrapper
+	export struct EbnfBinaryTableWrapper
 	{
 		using StandardT = std::uint32_t;
 
@@ -252,7 +256,7 @@ export namespace Potato::EBNF
 
 	std::vector<EbnfBinaryTableWrapper::StandardT> CreateEbnfBinaryTable(Ebnf const& Table);
 
-	struct EbnfProcessor : protected SLRX::ProcessorOperator
+	export struct EbnfProcessor : protected SLRX::ProcessorOperator
 	{
 
 		void Clear(std::size_t Startup = 0);
@@ -266,6 +270,9 @@ export namespace Potato::EBNF
 
 		void SetObserverTable(Ebnf const& Table, Pointer::ObserverPtr<EbnfOperator> Ope, std::size_t StartupTokenIndex = 0);
 		void SetObserverTable(EbnfBinaryTableWrapper Table, Pointer::ObserverPtr<EbnfOperator> Ope, std::size_t StartupTokenIndex = 0);
+
+		EbnfProcessor(std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+			: LexicalProcessor(resource), SyntaxProcessor(resource), TempElement(resource) {}
 
 	protected:
 
@@ -287,7 +294,7 @@ export namespace Potato::EBNF
 		Reg::DfaProcessor LexicalProcessor;
 		SLRX::LRXProcessor SyntaxProcessor;
 
-		std::vector<ReduceProduction::Element> TempElement;
+		std::pmr::vector<ReduceProduction::Element> TempElement;
 		std::size_t RequireTokenIndex = 0;
 		std::size_t LastSymbolTokenIndex = 0;
 	};

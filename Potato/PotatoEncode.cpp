@@ -383,12 +383,10 @@ namespace Potato::Encode
 		
 	}
 
-	/*
 	EncodeInfo StrEncoder<char, wchar_t>::RequireSpace(std::span<char const> Source, std::size_t MaxCharacter)
 	{
 		return RequireSpaceUnSafe(Source, MaxCharacter);
 	}
-	*/
 
 	EncodeInfo StrEncoder<char, wchar_t>::EncodeUnSafe(std::span<char const> Source, std::span<wchar_t> Target, std::size_t MaxCharacter)
 	{
@@ -467,12 +465,10 @@ namespace Potato::Encode
 		
 	}
 
-	/*
 	EncodeInfo StrEncoder<wchar_t, char>::RequireSpace(std::span<wchar_t const> Source, std::size_t MaxCharacter)
 	{
 		return RequireSpaceUnSafe(Source, MaxCharacter);
 	}
-	*/
 
 	EncodeInfo StrEncoder<wchar_t, char>::EncodeUnSafe(std::span<wchar_t const> Source, std::span<char> Target, std::size_t MaxCharacter)
 	{
@@ -512,45 +508,38 @@ namespace Potato::Encode
 		
 	}
 
-#else
-	EncodeInfo StrEncoder<char, wchar_t>::RequireSpaceUnSafe(std::span<char const> Source, std::size_t MaxCharacter)
+
+
+	auto StrEncoder<char, wchar_t>::EncodeToString(
+		std::basic_string_view<char> Source,
+		std::pmr::memory_resource* resource
+	) -> std::optional<std::pmr::basic_string<wchar_t>>
 	{
-		return StrEncoder<char8_t, wchar_t>::RequireSpaceUnSafe(
-			std::span<char8_t const>{ reinterpret_cast<char8_t const*>(Source.data()), Source.size() }, MaxCharacter
-		);
+		auto Info = RequireSpaceUnSafe(Source);
+		if (Info)
+		{
+			std::pmr::basic_string<wchar_t> Result{ resource };
+			Result.resize(Info.TargetSpace);
+			EncodeUnSafe(Source, Result);
+			return Result;
+		}
+		return {};
 	}
 
-	EncodeInfo StrEncoder<char, wchar_t>::RequireSpace(std::span<char const> Source, std::size_t MaxCharacter)
+	auto StrEncoder<wchar_t, char>::EncodeToString(
+		std::basic_string_view<wchar_t> Source,
+		std::pmr::memory_resource* resource
+	) -> std::optional<std::pmr::basic_string<char>>
 	{
-		return StrEncoder<char8_t, wchar_t>::RequireSpace(
-			std::span<char8_t const>{ reinterpret_cast<char8_t const*>(Source.data()), Source.size() }, MaxCharacter
-		);
-	}
-
-	EncodeInfo StrEncoder<char, wchar_t>::EncodeUnSafe(std::span<char const> Source, std::span<wchar_t> Target, std::size_t MaxCharacter)) {
-		return StrEncoder<char8_t, wchar_t>::EncodeUnSafe(
-			std::span<char8_t const>{ reinterpret_cast<char8_t const*>(Source.data()), Source.size() }, Target, MaxCharacter
-		);
-	}
-
-	EncodeInfo StrEncoder<wchar_t, char>::RequireSpaceUnSafe(std::span<wchar_t const> Source, std::size_t MaxCharacter)
-	{
-		return StrEncoder<wchar_t, char8_t>::RequireSpaceUnSafe(
-			std::span<wchar_t const>{ reinterpret_cast<wchar_t const*>(Source.data()), Source.size() }, MaxCharacter
-		);
-	}
-
-	EncodeInfo StrEncoder<char, wchar_t>::RequireSpace(std::span<wchar_t const> Source, std::size_t MaxCharacter)
-	{
-		return StrEncoder<char8_t, wchar_t>::RequireSpace(
-			std::span<wchar_t const>{ reinterpret_cast<wchar_t const*>(Source.data()), Source.size() }, MaxCharacter
-		);
-	}
-
-	EncodeInfo StrEncoder<wchar_t, char>::EncodeUnSafe(std::span<wchar_t const> Source, std::span<char> Target, std::size_t MaxCharacter)) {
-		return StrEncoder<char8_t, wchar_t>::EncodeUnSafe(
-			std::span<wchar_t const>{ reinterpret_cast<wchar_t const*>(Source.data()), Source.size() }, Target, MaxCharacter
-		);
+		auto Info = RequireSpaceUnSafe(Source);
+		if (Info)
+		{
+			std::pmr::basic_string<char> Result{ resource };
+			Result.resize(Info.TargetSpace);
+			EncodeUnSafe(Source, Result);
+			return Result;
+		}
+		return {};
 	}
 #endif
 }

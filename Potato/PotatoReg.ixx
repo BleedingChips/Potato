@@ -511,7 +511,8 @@ export namespace Potato::Reg
 
 		DfaProcessor(DfaProcessor const&) = default;
 		DfaProcessor(DfaProcessor&&) = default;
-		DfaProcessor() = default;
+		DfaProcessor(std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+			: TempResult(resource), CacheIndex(resource) {}
 
 		bool Consume(char32_t Token, std::size_t TokenIndex);
 		bool EndOfFile(std::size_t TokenIndex) { return Consume(Reg::EndOfFile(), TokenIndex); }
@@ -529,9 +530,9 @@ export namespace Potato::Reg
 			DfaBinaryTableWrapper
 		> TableWrapper;
 
-		std::size_t CurNodeIndex;
-		std::vector<std::size_t> TempResult;
-		std::vector<std::size_t> CacheIndex;
+		std::size_t CurNodeIndex = 0;
+		std::pmr::vector<std::size_t> TempResult;
+		std::pmr::vector<std::size_t> CacheIndex;
 		TokenIndexRecorder Record;
 
 		friend struct Dfa;

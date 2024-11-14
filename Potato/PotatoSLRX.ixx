@@ -277,7 +277,7 @@ export namespace Potato::SLRX
 		std::size_t StartupTokenIndex;
 	};
 
-	struct LRXProcessor;
+	export struct LRXProcessor;
 
 	struct LRX
 	{
@@ -463,7 +463,7 @@ export namespace Potato::SLRX
 	};
 
 
-	struct LRXProcessor
+	export struct LRXProcessor
 	{
 
 		bool Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, std::any AppendInfo);
@@ -482,6 +482,9 @@ export namespace Potato::SLRX
 
 		void Clear();
 
+		LRXProcessor(std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+			: CacheSymbols(resource), States(resource) {}
+
 	protected:
 
 		std::variant<
@@ -494,8 +497,8 @@ export namespace Potato::SLRX
 
 		void TryReduce();
 
-		std::deque<ProcessElement> CacheSymbols;
-		std::vector<ProcessElement> States;
+		std::pmr::deque<ProcessElement> CacheSymbols;
+		std::pmr::vector<ProcessElement> States;
 		std::size_t CurrentTopState = 0;
 		std::size_t RequireNode = 0;
 		friend struct LRX;

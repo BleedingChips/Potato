@@ -7,63 +7,11 @@ export module PotatoIR;
 import std;
 import PotatoPointer;
 import PotatoMisc;
+export import PotatoMemLayout;
 
 export namespace Potato::IR
 {
-	struct Layout
-	{
-		std::size_t Align = 1;
-		std::size_t Size = 0;
-
-		template<typename Type>
-		static constexpr Layout Get() { return { alignof(std::remove_cvref_t<Type>), sizeof(std::remove_cvref_t<Type>) }; }
-		template<typename Type>
-		static constexpr Layout GetArray(std::size_t array_count) { return { alignof(std::remove_cvref_t<Type>), sizeof(std::remove_cvref_t<Type>) * array_count }; }
-		bool operator==(Layout const& l) const noexcept = default;
-		std::strong_ordering operator<=>(Layout const& l2) const noexcept = default;
-	};
-
-	inline constexpr std::size_t InsertLayoutCPP(Layout& Target, Layout const Inserted)
-	{
-		if (Target.Align < Inserted.Align)
-			Target.Align = Inserted.Align;
-		if (Target.Size % Inserted.Align != 0)
-			Target.Size += Inserted.Align - (Target.Size % Inserted.Align);
-		std::size_t Offset = Target.Size;
-		Target.Size += Inserted.Size;
-		return Offset;
-	}
-
-	inline constexpr std::size_t InsertLayoutCPP(Layout& Target, Layout const Inserted, std::size_t ArrayCount)
-	{
-		if (Target.Align < Inserted.Align)
-			Target.Align = Inserted.Align;
-		if (Target.Size % Inserted.Align != 0)
-			Target.Size += Inserted.Align - (Target.Size % Inserted.Align);
-		std::size_t Offset = Target.Size;
-		Target.Size += Inserted.Size * ArrayCount;
-		return Offset;
-	}
-
-	inline constexpr bool FixLayoutCPP(Layout& Target)
-	{
-		auto ModedSize = (Target.Size % Target.Align);
-		if (ModedSize != 0)
-		{
-			Target.Size += Target.Align - ModedSize;
-			return true;
-		}
-		return false;
-	}
-
-	inline constexpr Layout SumLayoutCPP(std::span<Layout> Layouts)
-	{
-		Layout Start;
-		for (auto Ite : Layouts)
-			InsertLayoutCPP(Start, Ite);
-		FixLayoutCPP(Start);
-		return Start;
-	}
+	using Layout = MemLayout::Layout;
 
 	struct MemoryResourceRecord
 	{
@@ -76,7 +24,7 @@ export namespace Potato::IR
 		std::pmr::memory_resource* GetMemoryResource() const{ return resource; }
 
 		template<typename Type>
-		Type* Cast() const {  assert(sizeof(Type) <= layout.Size && alignof(Type) <= layout.Align); return static_cast<Type*>(adress); }
+		Type* Cast() const {  assert(sizeof(Type) <= layout.size && alignof(Type) <= layout.align); return static_cast<Type*>(adress); }
 
 		template<typename Type>
 		std::span<Type> GetArray(std::size_t element_size, std::size_t offset) const
@@ -220,7 +168,7 @@ export namespace Potato::IR
 		StructLayout::Ptr GetStructLayout() const { return layout; };
 		std::size_t GetArrayCount() const { return array_count; }
 		void* GetData() const { return start; }
-		void* GetData(std::size_t index) const { return static_cast<std::byte*>(start) + layout->GetLayout().Size * index; }
+		void* GetData(std::size_t index) const { return static_cast<std::byte*>(start) + layout->GetLayout().size * index; }
 
 	protected:
 

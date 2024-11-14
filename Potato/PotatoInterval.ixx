@@ -61,7 +61,7 @@ export namespace Potato::Misc
 		using WrapperT = Wrapper;
 	};
 
-	template<typename Type, typename Wrapper, typename Allocator>
+	template<typename Type, typename Wrapper>
 	struct IntervalT;
 
 	template<typename Type, typename Wrapper = DefaultIntervalWrapperT<Type>>
@@ -72,24 +72,20 @@ export namespace Potato::Misc
 
 		static std::strong_ordering Order(Type T1, Type T2) { return Wrapper::Order(T1, T2); }
 
-		template<typename AllocatorT>
-		static auto Ordering(std::initializer_list<ElementT> const& List, AllocatorT Allocator)
-			-> IntervalT<Type, Wrapper, AllocatorT>;
+		static auto Ordering(std::initializer_list<ElementT> const& List, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+			-> IntervalT<Type, Wrapper>;
 
 		// Need Ordered in Span
-		template<typename AllocatorT>
-		static auto Add(std::span<ElementT const> T1, std::span<ElementT const> T2, AllocatorT Allocator)
-			-> IntervalT<Type, Wrapper, AllocatorT>;
+		static auto Add(std::span<ElementT const> T1, std::span<ElementT const> T2, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+			-> IntervalT<Type, Wrapper>;
 
 		// Need Ordered in Span
-		template<typename AllocatorT>
-		static auto Sub(std::span<ElementT const> T1, std::span<ElementT const> T2, AllocatorT Allocator)
-			-> IntervalT<Type, Wrapper, AllocatorT>;
+		static auto Sub(std::span<ElementT const> T1, std::span<ElementT const> T2, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+			-> IntervalT<Type, Wrapper>;
 		
 		// Need Ordered in Span
-		template<typename AllocatorT>
-		static auto And(std::span<ElementT const> T1, std::span<ElementT const> T2, AllocatorT Allocator)
-			-> IntervalT<Type, Wrapper, AllocatorT>;
+		static auto And(std::span<ElementT const> T1, std::span<ElementT const> T2, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+			-> IntervalT<Type, Wrapper>;
 
 		// Need Ordered in Span
 		static bool IsInclude(std::span<ElementT const> T1, Type Input)
@@ -115,13 +111,12 @@ export namespace Potato::Misc
 
 		static std::tuple<LocateResult, LocateResult> Locate(std::span<ElementT const> Source, ElementT Value);
 
-		template<typename AllocatorT>
-		static bool AddOne(std::vector<ElementT, AllocatorT>&, ElementT Input);
+		static bool AddOne(std::pmr::vector<ElementT>&, ElementT Input);
 	};
 
 
 
-	template<typename Type, typename Wrapper = DefaultIntervalWrapperT<Type>, typename AllocatorT = std::allocator<IntervalElementT<Type, Wrapper>>>
+	template<typename Type, typename Wrapper = DefaultIntervalWrapperT<Type>>
 	struct IntervalT
 	{
 		using ElementT = IntervalElementT<Type, Wrapper>;
@@ -129,12 +124,12 @@ export namespace Potato::Misc
 		
 		struct NoDetectT {};
 
-		IntervalT(AllocatorT Allocator = {}) : Elements(Allocator) {}
-		IntervalT(Type Single, AllocatorT Allocator = {}) : Elements({ElementT{Single}}, std::move(Allocator)) {};
-		IntervalT(ElementT SingleElementT, AllocatorT Allocator = {}) : Elements({ SingleElementT }, std::move(Allocator)) {}
+		IntervalT(std::pmr::memory_resource* resource = std::pmr::get_default_resource()) : Elements(resource) {}
+		IntervalT(Type Single, std::pmr::memory_resource* resource = std::pmr::get_default_resource()) : Elements({ElementT{Single}}, resource) {};
+		IntervalT(ElementT SingleElementT, std::pmr::memory_resource* resource = std::pmr::get_default_resource()) : Elements({ SingleElementT }, resource) {}
 		IntervalT(IntervalT const&) = default;
 		IntervalT(IntervalT &&) = default;
-		IntervalT(std::initializer_list<ElementT> const& List, AllocatorT Allocator = {}) : IntervalT(WrapperT::Ordering(List, std::move(Allocator))) {}
+		IntervalT(std::initializer_list<ElementT> const& List, std::pmr::memory_resource* resource = std::pmr::get_default_resource()) : IntervalT(WrapperT::Ordering(List, resource)) {}
 		ElementT& operator[](std::size_t Index) { return Elements[Index]; }
 		ElementT const& operator[](std::size_t Index) const { return Elements[Index]; }
 		std::size_t Size() const { return Elements.size(); }
@@ -144,13 +139,16 @@ export namespace Potato::Misc
 
 		bool IsInclude(Type Input) const { return WrapperT::IsInclude(std::span(Elements), Input); }
 
-		template<typename OAllocatorT>
-		IntervalT operator+(IntervalT<Type, Wrapper, OAllocatorT> const& T1) const { return WrapperT::Add(std::span(Elements), std::span(T1.Elements), AllocatorT{}); }
-		template<typename OAllocatorT>
-		IntervalT operator-(IntervalT<Type, Wrapper, OAllocatorT> const& T1) const { return WrapperT::Sub(std::span(Elements), std::span(T1.Elements), AllocatorT{}); }
-		template<typename OAllocatorT>
-		IntervalT operator&(IntervalT<Type, Wrapper, OAllocatorT> const& T1) const { return WrapperT::And(std::span(Elements), std::span(T1.Elements), AllocatorT{}); }
-	
+		IntervalT Add(std::span<ElementT const> T1, std::pmr::memory_resource* resource = std::pmr::get_default_resource()) const { return WrapperT::Add(std::span(Elements), T1, resource); };
+		IntervalT Sub(std::span<ElementT const> T1, std::pmr::memory_resource* resource = std::pmr::get_default_resource()) const { return WrapperT::Sub(std::span(Elements), T1, resource); };
+		IntervalT And(std::span<ElementT const> T1, std::pmr::memory_resource* resource = std::pmr::get_default_resource()) const { return WrapperT::And(std::span(Elements), T1, resource); };
+
+
+		IntervalT operator+(std::span<ElementT const> T1) const { return this->Add(T1); };
+		IntervalT operator-(std::span<ElementT const> T1) const { return this->Sub(T1); };
+		IntervalT operator&(std::span<ElementT const> T1) const { return this->And(T1); };
+
+
 		IntervalT& operator=(IntervalT const&) = default;
 		IntervalT& operator=(IntervalT&&) = default;
 
@@ -158,22 +156,20 @@ export namespace Potato::Misc
 
 	protected:
 
-		std::vector<ElementT, AllocatorT> Elements;
+		std::pmr::vector<ElementT> Elements;
 
 		template<typename Type, typename Wrapper>
 		friend struct IntervalWrapperT;
 
-		template<typename Type, typename Wrapper, typename AllocatorT>
-
+		template<typename Type, typename Wrapper>
 		friend struct IntervalT;
 	};
 
 	template<typename Type, typename Wrapper>
-	template<typename AllocatorT>
-	auto IntervalWrapperT<Type, Wrapper>::Ordering(std::initializer_list<ElementT> const& List, AllocatorT Allocator)
-		-> IntervalT<Type, Wrapper, AllocatorT>
+	auto IntervalWrapperT<Type, Wrapper>::Ordering(std::initializer_list<ElementT> const& List, std::pmr::memory_resource* resource)
+		-> IntervalT<Type, Wrapper>
 	{
-		IntervalT<Type, Wrapper, AllocatorT> Result(Allocator);
+		IntervalT<Type, Wrapper> Result(resource);
 		for (auto Ite : List)
 		{
 			AddOne(Result.Elements, Ite);
@@ -219,8 +215,7 @@ export namespace Potato::Misc
 	}
 
 	template<typename Type, typename Wrapper>
-	template<typename AllocatorT>
-	static bool IntervalWrapperT<Type, Wrapper>::AddOne(std::vector<ElementT, AllocatorT>& Output, ElementT Input)
+	bool IntervalWrapperT<Type, Wrapper>::AddOne(std::pmr::vector<ElementT>& Output, ElementT Input)
 	{
 		if (Input)
 		{
@@ -276,11 +271,10 @@ export namespace Potato::Misc
 	}
 
 	template<typename Type, typename Wrapper>
-	template<typename AllocatorT>
-	static auto IntervalWrapperT<Type, Wrapper>::Add(std::span<ElementT const> T1, std::span<ElementT const> T2, AllocatorT Allocator)
-		-> IntervalT<Type, Wrapper, AllocatorT>
+	auto IntervalWrapperT<Type, Wrapper>::Add(std::span<ElementT const> T1, std::span<ElementT const> T2, std::pmr::memory_resource* resource)
+		-> IntervalT<Type, Wrapper>
 	{
-		IntervalT<Type, Wrapper, AllocatorT> Result(Allocator);
+		IntervalT<Type, Wrapper> Result(resource);
 		for (auto Ite : T1)
 		{
 			AddOne(Result.Elements, Ite);
@@ -293,11 +287,10 @@ export namespace Potato::Misc
 	}
 
 	template<typename Type, typename Wrapper>
-	template<typename AllocatorT>
-	static auto IntervalWrapperT<Type, Wrapper>::Sub(std::span<ElementT const> T1, std::span<ElementT const> T2, AllocatorT Allocator)
-		-> IntervalT<Type, Wrapper, AllocatorT>
+	auto IntervalWrapperT<Type, Wrapper>::Sub(std::span<ElementT const> T1, std::span<ElementT const> T2, std::pmr::memory_resource* resource)
+		-> IntervalT<Type, Wrapper>
 	{
-		IntervalT<Type, Wrapper, AllocatorT> Result(Allocator);
+		IntervalT<Type, Wrapper> Result(resource);
 
 		while (!T1.empty())
 		{
@@ -352,11 +345,10 @@ export namespace Potato::Misc
 	}
 
 	template<typename Type, typename Wrapper>
-	template<typename AllocatorT>
-	static auto IntervalWrapperT<Type, Wrapper>::And(std::span<ElementT const> T1, std::span<ElementT const> T2, AllocatorT Allocator)
-		-> IntervalT<Type, Wrapper, AllocatorT>
+	auto IntervalWrapperT<Type, Wrapper>::And(std::span<ElementT const> T1, std::span<ElementT const> T2, std::pmr::memory_resource* resource)
+		-> IntervalT<Type, Wrapper>
 	{
-		IntervalT<Type, Wrapper, AllocatorT> Result(Allocator);
+		IntervalT<Type, Wrapper> Result(resource);
 
 		while (!T1.empty())
 		{

@@ -363,13 +363,15 @@ export namespace Potato::Encode
 			return Result;
 		}
 
-		template<typename CharTraits, typename AllocatorT = std::allocator<TargetT>>
-		static auto EncodeToString(std::basic_string_view<SourceT, CharTraits> Source, AllocatorT Allocator = {}) -> std::optional<std::basic_string<TargetT, std::char_traits<TargetT>, AllocatorT>>
+		static auto EncodeToString(
+			std::basic_string_view<SourceT> Source,
+			std::pmr::memory_resource* resource = std::pmr::get_default_resource()
+			) -> std::optional<std::pmr::basic_string<TargetT>>
 		{
 			auto Info = RequireSpaceUnSafe(Source);
 			if (Info)
 			{
-				std::basic_string<TargetT, std::char_traits<TargetT>, AllocatorT> Result{ std::move(Allocator) };
+				std::pmr::basic_string<TargetT> Result{  resource };
 				Result.resize(Info.TargetSpace);
 				EncodeUnSafe(Source, Result);
 				return Result;
@@ -381,52 +383,93 @@ export namespace Potato::Encode
 	template<>
 	struct StrEncoder<char, wchar_t>
 	{
-		static EncodeInfo RequireSpaceUnSafe(std::span<char const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
+		static EncodeInfo RequireSpaceUnSafe(std::span<char const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())
+#ifndef _WIN32
+		{
+			return StrEncoder<char8_t, wchar_t>::RequireSpaceUnSafe(
+				std::span{ reinterpret_cast<char8_t const*>(Source.data()), Source.size()},
+				MaxCharacter
+			);
+		}
+#else
+		;
+#endif
+
 		static EncodeInfo RequireSpace(std::span<char const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())
+#ifndef _WIN32
 		{
-			return RequireSpaceUnSafe(Source, MaxCharacter);
+			return StrEncoder<char8_t, wchar_t>::RequireSpace(
+				std::span{ reinterpret_cast<char8_t const*>(Source.data()), Source.size() },
+				MaxCharacter
+			);
 		}
+#else
+			;
+#endif
 
-		static EncodeInfo EncodeUnSafe(std::span<char const> Source, std::span<wchar_t> Target, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
-
-		template<typename CharTraits, typename AllocatorT = std::allocator<wchar_t>>
-		static auto EncodeToString(std::basic_string_view<char, CharTraits> Source, AllocatorT Allocator = {}) -> std::optional<std::basic_string<wchar_t, std::char_traits<wchar_t>, AllocatorT>>
+		static EncodeInfo EncodeUnSafe(std::span<char const> Source, std::span<wchar_t> Target, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())
+#ifndef _WIN32
 		{
-			auto Info = RequireSpaceUnSafe(Source);
-			if (Info)
-			{
-				std::basic_string<wchar_t, std::char_traits<wchar_t>, AllocatorT> Result{ std::move(Allocator) };
-				Result.resize(Info.TargetSpace);
-				EncodeUnSafe(Source, Result);
-				return Result;
-			}
-			return {};
+			return StrEncoder<char8_t, wchar_t>::EncodeUnSafe(
+				std::span{ reinterpret_cast<char8_t const*>(Source.data()), Source.size() },
+				Target,
+				MaxCharacter
+			);
 		}
+#else
+			;
+#endif
+
+		static auto EncodeToString(
+			std::basic_string_view<char> Source, 
+			std::pmr::memory_resource* resource = std::pmr::get_default_resource()
+			) -> std::optional<std::pmr::basic_string<wchar_t>>;
 	};
+
 
 	template<>
 	struct StrEncoder<wchar_t, char>
 	{
-		static EncodeInfo RequireSpaceUnSafe(std::span<wchar_t const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
-		static EncodeInfo RequireSpace(std::span<wchar_t const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())
-		{
-			return RequireSpaceUnSafe(Source, MaxCharacter);
-		}
-
-		static EncodeInfo EncodeUnSafe(std::span<wchar_t const> Source, std::span<char> Target, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
-
-		template<typename CharTraits, typename AllocatorT = std::allocator<char>>
-		static auto EncodeToString(std::basic_string_view<wchar_t, CharTraits> Source, AllocatorT Allocator = {}) -> std::optional<std::basic_string<char, std::char_traits<char>, AllocatorT>>
-		{
-			auto Info = RequireSpaceUnSafe(Source);
-			if (Info)
+		static EncodeInfo RequireSpaceUnSafe(std::span<wchar_t const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())
+#ifndef _WIN32
 			{
-				std::basic_string<char, std::char_traits<char>, AllocatorT> Result{ std::move(Allocator) };
-				Result.resize(Info.TargetSpace);
-				EncodeUnSafe(Source, Result);
-				return Result;
+				return StrEncoder<wchar_t, char8_t>::RequireSpaceUnSafe(
+					Source,
+					MaxCharacter
+				);
 			}
-			return {};
+#else
+			;
+#endif
+
+		static EncodeInfo RequireSpace(std::span<wchar_t const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())
+#ifndef _WIN32
+		{
+			return StrEncoder<wchar_t, char8_t>::RequireSpace(
+				Source,
+				MaxCharacter
+			);
 		}
+#else
+			;
+#endif
+
+		static EncodeInfo EncodeUnSafe(std::span<wchar_t const> Source, std::span<char> Target, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())
+#ifndef _WIN32
+		{
+			return StrEncoder<wchar_t, char8_t>::EncodeUnSafe(
+				Source,
+				std::span{ reinterpret_cast<char8_t const*>(Target.data()), Target.size() },
+				MaxCharacter
+			);
+		}
+#else
+			;
+#endif
+
+		static auto EncodeToString(
+			std::basic_string_view<wchar_t> Source, 
+			std::pmr::memory_resource* resource = std::pmr::get_default_resource()
+			) -> std::optional<std::pmr::basic_string<char>>;
 	};
 }
