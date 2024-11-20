@@ -11,7 +11,7 @@ export import PotatoMemLayout;
 
 export namespace Potato::IR
 {
-	using Layout = MemLayout::Layout;
+	using MemLayout::Layout;
 
 	struct MemoryResourceRecord
 	{
@@ -20,6 +20,7 @@ export namespace Potato::IR
 		void* adress = nullptr;
 		void* Get() const { return adress; }
 		std::byte* GetByte() const { return static_cast<std::byte*>(adress); }
+		std::byte* GetByte(std::size_t byte_offset) const { return static_cast<std::byte*>(adress) + byte_offset; }
 
 		std::pmr::memory_resource* GetMemoryResource() const{ return resource; }
 

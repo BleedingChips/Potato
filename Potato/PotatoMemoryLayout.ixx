@@ -69,6 +69,11 @@ export namespace Potato::MemLayout
 			return target;
 		}
 
+		inline constexpr Layout GetRawLayout() const
+		{
+			return target;
+		}
+
 		static inline constexpr Layout Sum(std::span<Layout> Layouts)
 		{
 			MemLayoutC target;

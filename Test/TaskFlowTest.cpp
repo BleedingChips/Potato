@@ -3,6 +3,7 @@ import PotatoTaskSystem;
 import PotatoTaskFlow;
 import PotatoFormat;
 import PotatoEncode;
+import PotatoGraph;
 
 using namespace Potato::Task;
 
@@ -53,6 +54,21 @@ struct DefaultTaskFlow : TaskFlow
 int main()
 {
 
+	Potato::Graph::DirectedAcyclicGraph grap;
+
+	auto a1 = grap.Add();
+	auto a2 = grap.Add();
+	auto a3 = grap.Add();
+	auto a4 = grap.Add();
+	auto a5 = grap.Add();
+
+	bool l12 = grap.AddEdge(a1, a2);
+	bool l23 = grap.AddEdge(a2, a3);
+	bool l34 = grap.AddEdge(a3, a4);
+	bool l41 = grap.AddEdge(a4, a1);
+
+	volatile int i = 0;
+
 	{
 		DefaultTaskFlow tf2;
 		DefaultTaskFlow tf;
@@ -72,7 +88,7 @@ int main()
 		auto lambda2 = [&](Potato::Task::TaskFlowContext& context)
 		{
 			auto nodex = TaskFlow::CreateLambdaTask(lambda);
-			context.flow->AddTemporaryNode(*nodex, {});
+			context.flow->AddTemporaryNode(nodex, {});
 		};
 
 		
@@ -82,24 +98,24 @@ int main()
 		auto a3 = tf.AddLambda(lambda, {u8"A3"});
 		auto a4 = tf.AddLambda(lambda, {u8"A4"});
 		auto a5 = tf.AddLambda(lambda, {u8"A5"});
-		auto a6 = tf.AddNode(tf2, {u8"SubTask"});
+		auto a6 = tf.AddNode(&tf2, {u8"SubTask"});
 		auto a7 = tf.AddLambda(lambda2, {u8"temporary"});
 		
 		auto a21 = tf2.AddLambda(lambda, {u8"SubTask A1"});
 		auto a22 = tf2.AddLambda(lambda, {u8"SubTask A2"});
 
-		bool l12 = tf.AddDirectEdge(*a1, *a2);
-		bool l23 = tf.AddDirectEdge(*a2, *a3);
-		bool l34 = tf.AddDirectEdge(*a3, *a4);
-		bool l41 = tf.AddDirectEdge(*a4, *a1);
-		bool m35 = tf.AddMutexEdge(*a3, *a5);
+		bool l12 = tf.AddDirectEdge(a1, a2);
+		bool l23 = tf.AddDirectEdge(a2, a3);
+		bool l34 = tf.AddDirectEdge(a3, a4);
+		bool l41 = tf.AddDirectEdge(a4, a1);
+		bool m35 = tf.AddMutexEdge(a3, a5);
 		
-		bool r41 = tf.RemoveDirectEdge(*a2, *a3);
-		bool l41_2 = tf.AddDirectEdge(*a4, *a1);
-		bool l61 = tf.AddDirectEdge(tf2, *a1);
-		bool l46 = tf.AddDirectEdge(*a4, tf2);
+		bool r41 = tf.RemoveDirectEdge(a2, a3);
+		bool l41_2 = tf.AddDirectEdge(a4, a1);
+		bool l61 = tf.AddDirectEdge(a6, a1);
+		bool l46 = tf.AddDirectEdge(a4, a6);
 
-		auto l_12 = tf2.AddDirectEdge(*a21, *a22);
+		auto l_12 = tf2.AddDirectEdge(a21, a22);
 
 		tf.Update();
 
@@ -118,5 +134,5 @@ int main()
 		context.ProcessTaskUntillNoExitsTask({});
 	}
 
-	volatile int i = 0;
+	volatile int i2 = 0;
 }
