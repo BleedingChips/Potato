@@ -19,6 +19,7 @@ export namespace Potato::MemLayout
 		static constexpr Layout GetArray(std::size_t array_count) { return { alignof(std::remove_cvref_t<Type>), sizeof(std::remove_cvref_t<Type>) * array_count }; }
 		bool operator==(Layout const& l) const noexcept = default;
 		std::strong_ordering operator<=>(Layout const& l2) const noexcept = default;
+		Layout WithArray(std::size_t array_count = 1) const { return {align, size * array_count}; }
 	};
 
 	struct MemLayoutC

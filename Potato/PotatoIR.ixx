@@ -110,6 +110,9 @@ export namespace Potato::IR
 		virtual bool CopyAssigned(void* target, void* source, std::size_t array_count = 1) const;
 		virtual bool MoveAssigned(void* target, void* source, std::size_t array_count = 1) const;
 
+		template<typename Type>
+		static StructLayout::Ptr GetStatic();
+
 		struct MemberView
 		{
 			StructLayout::Ptr struct_layout;
@@ -352,6 +355,12 @@ export namespace Potato::IR
 			return re;
 		}
 	};
+
+	template<typename Type>
+	StructLayout::Ptr StructLayout::GetStatic()
+	{
+		return StaticAtomicStructLayout<Type>::Create();
+	}
 
 	struct SymbolTable
 	{

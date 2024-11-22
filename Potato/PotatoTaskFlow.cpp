@@ -181,9 +181,9 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskFlow::AddDirectEdge_AssumedLocked(GraphNode from, GraphNode direct_to, bool check_repeat, std::pmr::memory_resource* temp_resource)
+	bool TaskFlow::AddDirectEdge_AssumedLocked(GraphNode from, GraphNode direct_to, bool check_repeat, bool skip_circle_check, std::pmr::memory_resource* temp_resource)
 	{
-		if(graph.AddEdge(from, direct_to, check_repeat, temp_resource))
+		if(graph.AddEdge(from, direct_to, check_repeat, skip_circle_check, temp_resource))
 		{
 			need_update = true;
 			return true;
