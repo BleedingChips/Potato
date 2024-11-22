@@ -80,13 +80,13 @@ namespace Potato::Graph
 		return false;
 	}
 
-	bool DirectedAcyclicGraph::AddEdge(GraphNode from, GraphNode to, bool check_repeat, bool skip_circle_check, std::pmr::memory_resource* temp_resource)
+	bool DirectedAcyclicGraph::AddEdge(GraphNode from, GraphNode to, EdgeOptimize optimize, std::pmr::memory_resource* temp_resource)
 	{
 		if (
 			CheckExist(from) && CheckExist(to)
 			)
 		{
-			if(check_repeat)
+			if(optimize.need_repeat_check)
 			{
 				auto find = std::find(edges.begin(), edges.end(), Edge{from.node_index, to.node_index});
 				if(find != edges.end())
@@ -95,7 +95,7 @@ namespace Potato::Graph
 				}
 			}
 
-			if(skip_circle_check)
+			if(!optimize.need_acyclic_check)
 			{
 				edges.emplace_back(from.GetIndex(), to.GetIndex());
 				return true;

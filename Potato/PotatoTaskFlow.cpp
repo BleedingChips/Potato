@@ -158,12 +158,12 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskFlow::AddMutexEdge_AssumedLocked(GraphNode from, GraphNode to, bool check_repeat)
+	bool TaskFlow::AddMutexEdge_AssumedLocked(GraphNode from, GraphNode to, EdgeOptimize optimize)
 	{
 		if(graph.CheckExist(from) && graph.CheckExist(to))
 		{
 			PreprocessEdge edge{ from.GetIndex(), to.GetIndex() };
-			if(check_repeat)
+			if(optimize.need_repeat_check)
 			{
 				for(auto& ite : preprocess_mutex_edges)
 				{
@@ -181,9 +181,9 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskFlow::AddDirectEdge_AssumedLocked(GraphNode from, GraphNode direct_to, bool check_repeat, bool skip_circle_check, std::pmr::memory_resource* temp_resource)
+	bool TaskFlow::AddDirectEdge_AssumedLocked(GraphNode from, GraphNode direct_to, EdgeOptimize optimize, std::pmr::memory_resource* temp_resource)
 	{
-		if(graph.AddEdge(from, direct_to, check_repeat, skip_circle_check, temp_resource))
+		if(graph.AddEdge(from, direct_to, optimize, temp_resource))
 		{
 			need_update = true;
 			return true;

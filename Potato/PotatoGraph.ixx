@@ -45,7 +45,15 @@ export namespace Potato::Graph
 			: nodes(resource), edges(resource) {}
 
 		GraphNode Add();
-		bool AddEdge(GraphNode from, GraphNode to, bool check_repeat = true, bool skip_circle_check = false, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource());
+
+
+		struct EdgeOptimize
+		{
+			bool need_repeat_check = true;
+			bool need_acyclic_check = true;
+		};
+
+		bool AddEdge(GraphNode from, GraphNode to, EdgeOptimize optimize = {}, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource());
 		bool RemoveEdge(GraphNode from, GraphNode to);
 		bool RemoveNode(GraphNode node);
 		std::size_t GetNodeCount() const { return count; }
