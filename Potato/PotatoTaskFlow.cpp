@@ -34,11 +34,11 @@ namespace Potato::Task
 		}
 	}
 
-	GraphNode TaskFlow::AddNode_AssumedLocked(TaskFlowNode::Ptr node, TaskFlowNodeProperty property)
+	GraphNode TaskFlow::AddNode_AssumedLocked(TaskFlowNode::Ptr node, TaskFlowNodeProperty property, std::size_t append_info)
 	{
 		if(node)
 		{
-			auto t_node = graph.Add();
+			auto t_node = graph.Add(append_info);
 
 			if (t_node.GetIndex() < preprocess_nodes.size())
 			{

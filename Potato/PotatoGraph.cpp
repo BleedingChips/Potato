@@ -7,7 +7,7 @@ module PotatoGraph;
 
 namespace Potato::Graph
 {
-	GraphNode DirectedAcyclicGraph::Add()
+	GraphNode DirectedAcyclicGraphImmediately::Add(std::size_t append_info)
 	{
 		if(count < nodes.size())
 		{
@@ -20,25 +20,24 @@ namespace Potato::Graph
 					ref.state = State::Active;
 					ref.topology_degree = version;
 					ref.version = version;
+					ref.append_info = append_info;
 					++version;
 					++count;
-					return { i, ref.topology_degree };
+					return { i, version };
 				}
 			}
 		}
 		auto index = nodes.size();
 		GraphNode node{ index, version };
-		nodes.emplace_back(State::Active, version, 0, version);
+		nodes.emplace_back(State::Active, version, 0, version, append_info);
 		++version;
 		++count;
 		return node;
 	}
 
-	bool DirectedAcyclicGraph::RemoveEdge(GraphNode from, GraphNode to)
+	bool DirectedAcyclicGraphImmediately::RemoveEdge(GraphNode from, GraphNode to)
 	{
-		if(
-			CheckExist(from) && CheckExist(to)
-			)
+		if(CheckExist(from) && CheckExist(to))
 		{
 			auto size_count = std::erase_if(
 				edges,
@@ -53,11 +52,9 @@ namespace Potato::Graph
 		return false;
 	}
 
-	bool DirectedAcyclicGraph::RemoveNode(GraphNode node)
+	bool DirectedAcyclicGraphImmediately::RemoveNode(GraphNode node)
 	{
-		if (
-			CheckExist(node)
-			)
+		if (CheckExist(node))
 		{
 
 			auto size_count = std::erase_if(
@@ -80,11 +77,9 @@ namespace Potato::Graph
 		return false;
 	}
 
-	bool DirectedAcyclicGraph::AddEdge(GraphNode from, GraphNode to, EdgeOptimize optimize, std::pmr::memory_resource* temp_resource)
+	bool DirectedAcyclicGraphImmediately::AddEdge(GraphNode from, GraphNode to, EdgeOptimize optimize, std::pmr::memory_resource* temp_resource)
 	{
-		if (
-			CheckExist(from) && CheckExist(to)
-			)
+		if (CheckExist(from) && CheckExist(to))
 		{
 			if(optimize.need_repeat_check)
 			{
@@ -93,12 +88,6 @@ namespace Potato::Graph
 				{
 					return false;
 				}
-			}
-
-			if(!optimize.need_acyclic_check)
-			{
-				edges.emplace_back(from.GetIndex(), to.GetIndex());
-				return true;
 			}
 
 			auto f = from.node_index;
@@ -199,7 +188,10 @@ namespace Potato::Graph
 					std::size_t index = 0;
 					for (auto& ite : nodes)
 					{
-						cur_in_degree.emplace_back(ite.in_degree, index++);
+						if(ite.state == State::Active)
+							cur_in_degree.emplace_back(ite.in_degree, index++, false);
+						else
+							cur_in_degree.emplace_back(0, index++, true);
 					}
 
 					cur_in_degree[t].in_degree += 1;
@@ -255,10 +247,198 @@ namespace Potato::Graph
 		return false;
 	}
 
-	bool DirectedAcyclicGraph::CheckExist(GraphNode node) const
+	bool DirectedAcyclicGraphImmediately::CheckExist(GraphNode node) const
 	{
 		return node.node_index < nodes.size() &&
 			nodes[node.node_index].version == node.version;
+	}
+
+
+
+	GraphNode DirectedAcyclicGraphDefer::Add(std::size_t append_info)
+	{
+		if (count < nodes.size())
+		{
+			for (std::size_t i = 0; i < nodes.size(); ++i)
+			{
+				auto& ref = nodes[i];
+				if (ref.state == State::None)
+				{
+					ref.in_degree = 0;
+					ref.state = State::Active;
+					ref.version = version;
+					ref.append_info = append_info;
+					++version;
+					++count;
+					return { i,  version };
+				}
+			}
+		}
+		auto index = nodes.size();
+		GraphNode node{ index, version };
+		nodes.emplace_back(State::Active, version, 0, append_info);
+		++version;
+		++count;
+		return node;
+	}
+
+	bool DirectedAcyclicGraphDefer::RemoveEdge(GraphNode from, GraphNode to)
+	{
+		if (CheckExist(from) && CheckExist(to))
+		{
+			auto size_count = std::erase_if(
+				edges,
+				[=](Edge ite) { return ite.from == from.node_index && ite.to == to.node_index; }
+			);
+			if (size_count != 0)
+			{
+				nodes[to.node_index].in_degree -= size_count;
+				need_update = true;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool DirectedAcyclicGraphDefer::RemoveNode(GraphNode node)
+	{
+		if (CheckExist(node))
+		{
+			auto size_count = std::erase_if(
+				edges,
+				[&](Edge ite)
+				{
+					if (ite.from == node.node_index)
+					{
+						nodes[ite.to].in_degree -= 1;
+						return true;
+					}
+					return ite.to == node.node_index;
+				}
+			);
+			nodes[node.node_index].state = State::None;
+			count -= 1;
+			need_update = true;
+			return true;
+		}
+		return false;
+	}
+
+	bool DirectedAcyclicGraphDefer::AddEdge(GraphNode from, GraphNode to, EdgeOptimize optimize)
+	{
+		if (
+			CheckExist(from) && CheckExist(to)
+			)
+		{
+			if (optimize.need_repeat_check)
+			{
+				auto find = std::find(edges.begin(), edges.end(), Edge{ from.node_index, to.node_index });
+				if (find != edges.end())
+				{
+					return false;
+				}
+			}
+
+			edges.emplace_back(
+				from.GetIndex(),
+				to.GetIndex()
+			);
+
+			nodes[to.GetIndex()].in_degree += 1;
+			need_update = true;
+			return true;
+		}
+		return false;
+	}
+
+	bool DirectedAcyclicGraphDefer::CheckExist(GraphNode node) const
+	{
+		return node.node_index < nodes.size() &&
+			nodes[node.node_index].version == node.version;
+	}
+
+	std::optional<std::span<GraphNode const>> DirectedAcyclicGraphDefer::AcyclicCheck(std::span<GraphNode> output_buffer, CheckOptimize optimize, std::pmr::memory_resource* temporary_resource)
+	{
+		if(need_update)
+		{
+			need_update = false;
+			if(optimize.need_acyclic_check)
+			{
+				struct SearchProperty
+				{
+					std::size_t in_degree = 0;
+					bool exported = false;
+				};
+
+				std::pmr::vector<SearchProperty> search_node(temporary_resource);
+				search_node.reserve(nodes.size());
+
+				for(auto& ite : nodes)
+				{
+					if(ite.state == State::Active)
+					{
+						search_node.emplace_back(
+							ite.in_degree,
+							false
+						);
+					}else
+					{
+						search_node.emplace_back(
+							ite.in_degree,
+							true
+						);
+					}
+				}
+
+				bool Finded = true;
+				std::size_t node_count = 0;
+				while (Finded)
+				{
+					Finded = false;
+					std::size_t index = 0;
+					for (auto& ite : search_node)
+					{
+						if (!ite.exported)
+						{
+							if (ite.in_degree == 0)
+							{
+								Finded = true;
+								ite.exported = true;
+								node_count += 1;
+								for (auto& ite2 : edges)
+								{
+									if (ite2.from == index)
+									{
+										search_node[ite2.to].in_degree -= 1;
+									}
+								}
+							}
+						}
+						index += 1;
+					}
+				}
+				if (node_count != count)
+				{
+					auto ite_span = output_buffer;
+					if(!ite_span.empty())
+					{
+						std::size_t index = 0;
+						for (auto& ite : search_node)
+						{
+							if(!ite.exported && ite.in_degree != 0)
+							{
+								ite_span[0] = GraphNode{index, nodes[index].version};
+								ite_span = ite_span.subspan(1);
+								if(ite_span.empty())
+									return output_buffer.subspan(0, output_buffer.size() - ite_span.size());
+							}
+							index += 1;
+						}
+					}
+				}
+			}
+		}
+		return std::nullopt;
 	}
 
 }

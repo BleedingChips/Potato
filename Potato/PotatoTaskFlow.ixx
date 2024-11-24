@@ -84,19 +84,19 @@ export namespace Potato::Task
 		static TaskFlowNode::Ptr CreateLambdaTask(Func&& func, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
 			requires(std::is_invocable_v<Func, TaskFlowContext&>);
 
-		GraphNode AddNode(TaskFlowNode::Ptr node, TaskFlowNodeProperty property)
+		GraphNode AddNode(TaskFlowNode::Ptr node, TaskFlowNodeProperty property, std::size_t append_info = 0)
 		{
 			std::lock_guard lg(preprocess_mutex);
-			return AddNode_AssumedLocked(std::move(node), property);
+			return AddNode_AssumedLocked(std::move(node), property, append_info);
 		}
 
 		template<typename Func>
-		GraphNode AddLambda(Func&& func, TaskFlowNodeProperty property, std::pmr::memory_resource *resource = std::pmr::get_default_resource()) requires(std::is_invocable_v<Func, TaskFlowContext&>)
+		GraphNode AddLambda(Func&& func, TaskFlowNodeProperty property, std::size_t append_info = 0, std::pmr::memory_resource *resource = std::pmr::get_default_resource()) requires(std::is_invocable_v<Func, TaskFlowContext&>)
 		{
 			auto ptr = CreateLambdaTask(std::forward<Func>(func), resource);
 			if(ptr)
 			{
-				return this->AddNode(std::move(ptr), property);
+				return this->AddNode(std::move(ptr), property, append_info);
 			}
 			return {};
 		}
@@ -152,7 +152,7 @@ export namespace Potato::Task
 			
 		TaskFlow(std::pmr::memory_resource* task_flow_resource = std::pmr::get_default_resource());
 
-		GraphNode AddNode_AssumedLocked(TaskFlowNode::Ptr node, TaskFlowNodeProperty property);
+		GraphNode AddNode_AssumedLocked(TaskFlowNode::Ptr node, TaskFlowNodeProperty property, std::size_t append_info);
 
 		virtual bool Update_AssumedLocked(std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 		bool Commited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property, std::chrono::steady_clock::time_point time_point);
