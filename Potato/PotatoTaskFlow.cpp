@@ -181,9 +181,9 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool TaskFlow::AddDirectEdge_AssumedLocked(GraphNode from, GraphNode direct_to, EdgeOptimize optimize, std::pmr::memory_resource* temp_resource)
+	bool TaskFlow::AddDirectEdge_AssumedLocked(GraphNode from, GraphNode direct_to, EdgeOptimize optimize)
 	{
-		if(graph.AddEdge(from, direct_to, optimize, temp_resource))
+		if(graph.AddEdge(from, direct_to, optimize))
 		{
 			need_update = true;
 			return true;
@@ -195,8 +195,13 @@ namespace Potato::Task
 	{
 		if(current_status == Status::DONE || current_status == Status::READY)
 		{
+			auto output = graph.AcyclicCheck({});
+			if (output)
+				return false;
 			current_status = Status::READY;
 			finished_task = 0;
+			
+			assert(!output);
 			{
 				std::lock_guard lg2(preprocess_mutex);
 				if(need_update)

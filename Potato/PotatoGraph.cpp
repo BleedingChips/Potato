@@ -191,7 +191,11 @@ namespace Potato::Graph
 						if(ite.state == State::Active)
 							cur_in_degree.emplace_back(ite.in_degree, index++, false);
 						else
+						{
 							cur_in_degree.emplace_back(0, index++, true);
+							++total_node;
+						}
+							
 					}
 
 					cur_in_degree[t].in_degree += 1;
@@ -225,6 +229,7 @@ namespace Potato::Graph
 							}
 						}
 					}
+
 					if (total_node != cur_in_degree.size())
 					{
 						return false;
@@ -326,9 +331,7 @@ namespace Potato::Graph
 
 	bool DirectedAcyclicGraphDefer::AddEdge(GraphNode from, GraphNode to, EdgeOptimize optimize)
 	{
-		if (
-			CheckExist(from) && CheckExist(to)
-			)
+		if (CheckExist(from) && CheckExist(to))
 		{
 			if (optimize.need_repeat_check)
 			{
@@ -357,7 +360,7 @@ namespace Potato::Graph
 			nodes[node.node_index].version == node.version;
 	}
 
-	std::optional<std::span<GraphNode const>> DirectedAcyclicGraphDefer::AcyclicCheck(std::span<GraphNode> output_buffer, CheckOptimize optimize, std::pmr::memory_resource* temporary_resource)
+	std::optional<std::span<GraphEdge const>> DirectedAcyclicGraphDefer::AcyclicCheck(std::span<GraphEdge> output_buffer, CheckOptimize optimize, std::pmr::memory_resource* temporary_resource)
 	{
 		if(need_update)
 		{
@@ -417,6 +420,7 @@ namespace Potato::Graph
 						index += 1;
 					}
 				}
+
 				if (node_count != count)
 				{
 					auto ite_span = output_buffer;
@@ -427,14 +431,24 @@ namespace Potato::Graph
 						{
 							if(!ite.exported && ite.in_degree != 0)
 							{
-								ite_span[0] = GraphNode{index, nodes[index].version};
-								ite_span = ite_span.subspan(1);
-								if(ite_span.empty())
-									return output_buffer.subspan(0, output_buffer.size() - ite_span.size());
+								for (auto& ite2 : edges)
+								{
+									if (ite2.from == index && !search_node[ite2.to].exported)
+									{
+										ite_span[0] = GraphEdge{
+											GraphNode{index, nodes[index].version},
+											GraphNode{ite2.to, nodes[ite2.to].version},
+										};
+										ite_span = ite_span.subspan(1);
+										if (ite_span.empty())
+											return output_buffer.subspan(0, output_buffer.size() - ite_span.size());
+									}
+								}
 							}
 							index += 1;
 						}
 					}
+					return output_buffer.subspan(0, output_buffer.size() - ite_span.size());
 				}
 			}
 		}

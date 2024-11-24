@@ -54,7 +54,7 @@ struct DefaultTaskFlow : TaskFlow
 int main()
 {
 
-	Potato::Graph::DirectedAcyclicGraph grap;
+	Potato::Graph::DirectedAcyclicGraphImmediately grap;
 
 	auto a1 = grap.Add();
 	auto a2 = grap.Add();
@@ -109,8 +109,14 @@ int main()
 		bool l34 = tf.AddDirectEdge(a3, a4);
 		bool l41 = tf.AddDirectEdge(a4, a1);
 		bool m35 = tf.AddMutexEdge(a3, a5);
+
+		std::array<GraphEdge, 100> temp_edge;
+		auto p = tf.AcyclicEdgeCheck(temp_edge);
+
 		
 		bool r41 = tf.RemoveDirectEdge(a2, a3);
+
+		auto p2 = tf.AcyclicEdgeCheck(temp_edge);
 		bool l41_2 = tf.AddDirectEdge(a4, a1);
 		bool l61 = tf.AddDirectEdge(a6, a1);
 		bool l46 = tf.AddDirectEdge(a4, a6);

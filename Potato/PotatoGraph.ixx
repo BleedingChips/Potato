@@ -19,6 +19,22 @@ export namespace Potato::Graph
 		operator bool() const { return node_index != std::numeric_limits<std::size_t>::max(); }
 	};
 
+	struct GraphEdge
+	{
+		GraphNode from;
+		GraphNode to;
+	};
+
+	struct EdgeOptimize
+	{
+		bool need_repeat_check = true;
+	};
+
+	struct CheckOptimize
+	{
+		bool need_acyclic_check = true;
+	};
+
 	struct DirectedAcyclicGraphImmediately
 	{
 		enum class State
@@ -48,12 +64,6 @@ export namespace Potato::Graph
 			: nodes(resource), edges(resource) {}
 
 		GraphNode Add(std::size_t append_info = 0);
-
-
-		struct EdgeOptimize
-		{
-			bool need_repeat_check = true;
-		};
 
 		bool AddEdge(GraphNode from, GraphNode to, EdgeOptimize optimize = {}, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource());
 		bool RemoveEdge(GraphNode from, GraphNode to);
@@ -102,23 +112,23 @@ export namespace Potato::Graph
 		}
 
 		GraphNode Add(std::size_t append_info = 0);
-
-		struct EdgeOptimize
-		{
-			bool need_repeat_check = true;
-		};
-
-		struct CheckOptimize
-		{
-			bool need_acyclic_check = true;
-		};
 		
 		bool AddEdge(GraphNode from, GraphNode to, EdgeOptimize optimize = {});
 		bool RemoveEdge(GraphNode from, GraphNode to);
 		bool RemoveNode(GraphNode node);
 		std::size_t GetNodeCount() const { return count; }
 		bool CheckExist(GraphNode node) const;
-		std::optional<std::span<GraphNode const>> AcyclicCheck(std::span<GraphNode> output_buffer, CheckOptimize optimize = {}, std::pmr::memory_resource* temporary_resource = std::pmr::get_default_resource());
+
+		std::optional<std::size_t> GetAppendInfo_AssumedLocked(GraphNode node_index) const
+		{
+			if (CheckExist(node_index))
+			{
+				return nodes[node_index.GetIndex()].append_info;
+			}
+			return std::nullopt;
+		}
+
+		std::optional<std::span<GraphEdge const>> AcyclicCheck(std::span<GraphEdge> output_buffer, CheckOptimize optimize = {}, std::pmr::memory_resource* temporary_resource = std::pmr::get_default_resource());
 
 		std::span<Node const> GetNodes() const { return std::span(nodes); }
 		std::span<Edge const> GetEdges() const { return std::span(edges); }

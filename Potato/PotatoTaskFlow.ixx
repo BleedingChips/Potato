@@ -16,6 +16,9 @@ export namespace Potato::Task
 {
 
 	using Graph::GraphNode;
+	using Graph::GraphEdge;
+	using Graph::EdgeOptimize;
+	using Graph::CheckOptimize;
 
 	export struct TaskFlow;
 
@@ -76,8 +79,6 @@ export namespace Potato::Task
 			Mutex,
 		};
 
-		using EdgeOptimize = Graph::DirectedAcyclicGraph::EdgeOptimize;
-
 		static TaskFlow::Ptr CreateTaskFlow(std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
 		template<typename Func>
@@ -102,8 +103,8 @@ export namespace Potato::Task
 		}
 
 		bool Remove(GraphNode node) { std::lock_guard lg(preprocess_mutex); return Remove_AssumedLocked(node); }
-		bool AddDirectEdge(GraphNode from, GraphNode direct_to, EdgeOptimize optimize = {}, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource()) { std::lock_guard lg(preprocess_mutex); return AddDirectEdge_AssumedLocked(from, direct_to , optimize, temp_resource); }
-		bool AddMutexEdge(GraphNode from, GraphNode direct_to, EdgeOptimize optimize = {}) { std::lock_guard lg(preprocess_mutex); return AddMutexEdge_AssumedLocked(from, direct_to, optimize); }
+		bool AddDirectEdge(GraphNode from, GraphNode direct_to, EdgeOptimize optimize = {}) { std::lock_guard lg(preprocess_mutex); return AddDirectEdge_AssumedLocked(from, direct_to , optimize); }
+		bool AddMutexEdge(GraphNode from, GraphNode direct_to, Graph::EdgeOptimize optimize = {}) { std::lock_guard lg(preprocess_mutex); return AddMutexEdge_AssumedLocked(from, direct_to, optimize); }
 		bool RemoveDirectEdge(GraphNode from, GraphNode direct_to) { std::lock_guard lg(preprocess_mutex); return RemoveDirectEdge_AssumedLocked(from, direct_to); }
 
 		virtual void TaskFlowExecuteBegin(TaskFlowContext& context) {}
@@ -148,11 +149,22 @@ export namespace Potato::Task
 			return this->AddTemporaryNode_AssumedLocked(std::move(node), property, nullptr, nullptr);
 		}
 
+		std::optional<std::span<GraphEdge const>> AcyclicEdgeCheck(std::span<GraphEdge> output, CheckOptimize optimize = {}, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource())
+		{
+			std::lock_guard lg(preprocess_mutex);
+			return this->AcyclicEdgeCheck_AssumedLocked(output, optimize, temp_resource);
+		}
+
 	protected:
 			
 		TaskFlow(std::pmr::memory_resource* task_flow_resource = std::pmr::get_default_resource());
 
 		GraphNode AddNode_AssumedLocked(TaskFlowNode::Ptr node, TaskFlowNodeProperty property, std::size_t append_info);
+
+		std::optional<std::span<Graph::GraphEdge const>> AcyclicEdgeCheck_AssumedLocked(std::span<Graph::GraphEdge> output_span, Graph::CheckOptimize optimize = {}, std::pmr::memory_resource * temp_resource = std::pmr::get_default_resource())
+		{
+			return graph.AcyclicCheck(output_span, optimize, temp_resource);
+		}
 
 		virtual bool Update_AssumedLocked(std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 		bool Commited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property, std::chrono::steady_clock::time_point time_point);
@@ -171,7 +183,7 @@ export namespace Potato::Task
 		bool AddTemporaryNode_AssumedLocked(TaskFlowNode::Ptr node, TaskFlowNodeProperty property, bool(*detect_func)(void* append_data, TaskFlowNode const&, TaskFlowNodeProperty, TemporaryNodeIndex), void* append_data);
 		bool SubTaskCommited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property);
 		bool Remove_AssumedLocked(GraphNode node);
-		bool AddDirectEdge_AssumedLocked(GraphNode from, GraphNode direct_to, EdgeOptimize optimize = {}, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource());
+		bool AddDirectEdge_AssumedLocked(GraphNode from, GraphNode direct_to, EdgeOptimize optimize = {});
 		bool AddMutexEdge_AssumedLocked(GraphNode from, GraphNode direct_to, EdgeOptimize optimize = {});
 		bool RemoveDirectEdge_AssumedLocked(GraphNode from, GraphNode direct_to);
 
@@ -200,7 +212,7 @@ export namespace Potato::Task
 		};
 
 		std::mutex preprocess_mutex;
-		Graph::DirectedAcyclicGraph graph;
+		Graph::DirectedAcyclicGraphDefer graph;
 		std::pmr::vector<PreprocessNode> preprocess_nodes;
 		std::pmr::vector<PreprocessEdge> preprocess_mutex_edges;
 		bool need_update = false;
