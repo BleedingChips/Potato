@@ -45,10 +45,11 @@ namespace Potato::Task
 				auto& ref = preprocess_nodes[t_node.GetIndex()];
 				ref.node = std::move(node);
 				ref.property = property;
+				ref.self = t_node;
 				return t_node;
 			}
 
-			preprocess_nodes.emplace_back(std::move(node), property);
+			preprocess_nodes.emplace_back(std::move(node), property, t_node);
 			return t_node;
 		}
 		return {};

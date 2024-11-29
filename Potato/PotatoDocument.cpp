@@ -201,14 +201,14 @@ namespace Potato::Document
 #endif
 	}
 
-	bool BinaryStreamWriter::Write(std::span<std::byte const> output)
+	bool BinaryStreamWriter::Write(std::byte const* buffer, std::size_t size)
 	{
 #ifdef _WIN32
 		DWORD writed;
 		return WriteFile(
 			file,
-			reinterpret_cast<LPCVOID>(output.data()),
-			output.size() * sizeof(std::byte),
+			reinterpret_cast<LPCVOID>(buffer),
+			size * sizeof(std::byte),
 			&writed,
 			nullptr
 		);

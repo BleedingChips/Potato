@@ -159,7 +159,7 @@ export namespace Potato::Task
 			
 		TaskFlow(std::pmr::memory_resource* task_flow_resource = std::pmr::get_default_resource());
 
-		GraphNode AddNode_AssumedLocked(TaskFlowNode::Ptr node, TaskFlowNodeProperty property, std::size_t append_info);
+		GraphNode AddNode_AssumedLocked(TaskFlowNode::Ptr node, TaskFlowNodeProperty property, std::size_t append_info = 0);
 
 		std::optional<std::span<Graph::GraphEdge const>> AcyclicEdgeCheck_AssumedLocked(std::span<Graph::GraphEdge> output_span, Graph::CheckOptimize optimize = {}, std::pmr::memory_resource * temp_resource = std::pmr::get_default_resource())
 		{
@@ -209,6 +209,7 @@ export namespace Potato::Task
 		{
 			TaskFlowNode::Ptr node;
 			TaskFlowNodeProperty property;
+			GraphNode self;
 		};
 
 		std::mutex preprocess_mutex;

@@ -283,7 +283,8 @@ export namespace Potato::Reg
 		
 		template<typename CharT>
 		Dfa(FormatE Format, CharT const* Str, bool IsRaw = false, std::size_t Mask = 0)
-			: Dfa(Format, Str, IsRaw, Mask) {}
+			: Dfa(Format, std::basic_string_view{ Str }, IsRaw, Mask) {
+		}
 
 
 		std::size_t GetStartupNodeIndex() const { return 0; }
