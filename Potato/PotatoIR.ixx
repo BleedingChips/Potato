@@ -290,10 +290,10 @@ export namespace Potato::IR
 			if constexpr (std::is_constructible_v<AtomicType, AtomicType const&>)
 			{
 				AtomicType* tar = static_cast<AtomicType*>(target);
-				AtomicType const* sou = static_cast<AtomicType const*>(source);
+				AtomicType* sou = static_cast<AtomicType*>(source);
 				for(std::size_t i = 0; i < array_count; ++i)
 				{
-					new (tar + i) AtomicType{ *(sou + i) };
+					new (tar + i) AtomicType{ std::move(*(sou + i)) };
 				}
 				return true;
 			}

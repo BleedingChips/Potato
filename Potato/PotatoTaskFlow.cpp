@@ -50,6 +50,7 @@ namespace Potato::Task
 			}
 
 			preprocess_nodes.emplace_back(std::move(node), property, t_node);
+			need_update = true;
 			return t_node;
 		}
 		return {};
