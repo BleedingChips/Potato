@@ -359,7 +359,7 @@ export namespace Potato::IR
 	template<typename Type>
 	StructLayout::Ptr StructLayout::GetStatic()
 	{
-		return StaticAtomicStructLayout<Type>::Create();
+		return StaticAtomicStructLayout<std::remove_cvref_t<Type>>::Create();
 	}
 
 	struct SymbolTable
