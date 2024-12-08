@@ -1,3 +1,5 @@
+module;
+
 export module Potato;
 
 export import PotatoTMP;
