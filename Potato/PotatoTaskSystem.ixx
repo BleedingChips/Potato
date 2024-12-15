@@ -183,6 +183,12 @@ export namespace Potato::Task
 		TaskContext(std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 		virtual ~TaskContext();
 
+		bool ProcessTaskOnce(ThreadProperty property)
+		{
+			auto state = ProcessTaskOnce(property, std::this_thread::get_id(), std::chrono::steady_clock::now());
+			return state.executed;
+		}
+
 	protected:
 
 	private:
