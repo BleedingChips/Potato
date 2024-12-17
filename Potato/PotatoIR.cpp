@@ -7,34 +7,30 @@ module PotatoIR;
 
 namespace Potato::IR
 {
-	std::strong_ordering StructLayout::operator<=>(StructLayout const& layout) const
+	bool StructLayout::operator== (StructLayout const& other) const
 	{
-		auto re = (this <=> &layout);
-		if(re == std::strong_ordering::equal)
-			return re;
-		re = GetHashCode() <=> layout.GetHashCode();
-		if(re != std::strong_ordering::equal)
-			return re;
+		if (this == &other)
+			return true;
+		if (GetHashCode() != other.GetHashCode())
+			return false;
+		if (GetLayout() != other.GetLayout())
+			return false;
 		auto mem = GetMemberView();
-		auto mem2 = layout.GetMemberView();
-		re = (mem.size() <=> mem2.size());
-		if(re != std::strong_ordering::equal)
-			return re;
-		for(std::size_t i = 0; i < mem.size();++i)
+		auto mem2 = other.GetMemberView();
+		if (mem.size() != mem2.size())
+			return false;
+		for (std::size_t i = 0; i < mem.size(); ++i)
 		{
-			auto& ref = mem[i];
-			auto& ref2 = mem2[i];
-			re = (ref.offset <=> ref2.offset);
-			if(re != std::strong_ordering::equal)
-				return re;
-			re = (ref.array_count <=> ref2.array_count);
-			if(re != std::strong_ordering::equal)
-				return re;
-			re = (*ref.struct_layout) <=> (*ref2.struct_layout);
-			if(re != std::strong_ordering::equal)
-				return re;
+			if (mem[i].name != mem2[i].name)
+				return false;
+			if (mem[i].array_count != mem2[i].array_count)
+				return false;
+			/*
+			if (*mem[i].struct_layout != *mem2[i].struct_layout)
+				return false;
+				*/
 		}
-		return std::strong_ordering::equal;
+		return true;
 	}
 
 	auto SymbolTable::InsertSymbol(std::u32string Name, std::size_t FeedbackIndex, std::any Data) -> std::size_t

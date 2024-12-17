@@ -145,12 +145,12 @@ export namespace Potato::IR
 		}
 		virtual std::size_t GetHashCode() const = 0;
 		virtual ~StructLayout() = default;
-		virtual std::strong_ordering operator<=>(StructLayout const& layout) const;
-		bool operator==(StructLayout const& layout) const { return operator<=>(layout) == std::strong_ordering::equal; }
-		bool operator<(StructLayout const& layout) const { return operator<=>(layout) == std::strong_ordering::less; }
+		
+		bool operator== (StructLayout const& other) const;
 
 	protected:
-		
+
+		virtual bool IsEqual(StructLayout const* other) const { return false; }
 		virtual void AddStructLayoutRef() const = 0;
 		virtual void SubStructLayoutRef() const = 0;
 	};
@@ -287,7 +287,7 @@ export namespace Potato::IR
 		virtual bool MoveConstruction(void* target, void* source, std::size_t array_count = 1) const override
 		{
 			assert(target != source && target != nullptr && source != nullptr);
-			if constexpr (std::is_constructible_v<AtomicType, AtomicType const&>)
+			if constexpr (std::is_constructible_v<AtomicType, AtomicType&&>)
 			{
 				AtomicType* tar = static_cast<AtomicType*>(target);
 				AtomicType* sou = static_cast<AtomicType*>(source);
@@ -343,16 +343,6 @@ export namespace Potato::IR
 				(tar + i)->~AtomicType();
 			}
 			return true;
-		}
-
-		virtual std::strong_ordering operator<=>(StructLayout const& layout) const
-		{
-			auto re = StructLayout::operator<=>(layout);
-			if(re == std::strong_ordering::equal && this != &layout)
-			{
-				return GetName() <=> layout.GetName();
-			}
-			return re;
 		}
 	};
 
