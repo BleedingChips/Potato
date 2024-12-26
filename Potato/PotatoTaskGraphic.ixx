@@ -2,19 +2,19 @@ module;
 
 #include <cassert>
 
-export module PotatoTaskFlow;
+export module PotatoTaskGraphic;
 
 import std;
 import PotatoMisc;
 import PotatoPointer;
 import PotatoIR;
-import PotatoTaskSystem;
+import PotatoTask;
 import PotatoGraph;
 
 
-export namespace Potato::Task
+export namespace Potato::Task::Graphic
 {
-
+	/*
 	using Graph::GraphNode;
 	using Graph::GraphEdge;
 	using Graph::EdgeOptimize;
@@ -280,12 +280,14 @@ export namespace Potato::Task
 		TaskFlow::Ptr flow;
 		std::size_t node_identity = 0;
 	};
+	*/
 
 	
 
 	
 }
 
+/*
 namespace
 {
 	struct BuildInTaskFlow : public Potato::Task::TaskFlow, public Potato::IR::MemoryResourceRecordIntrusiveInterface
@@ -326,3 +328,4 @@ namespace Potato::Task
 		return IR::MemoryResourceRecord::AllocateAndConstruct<BuildInTaskFlow>(resource);
 	}
 }
+*/
