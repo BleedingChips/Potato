@@ -12,8 +12,293 @@ import PotatoTask;
 import PotatoGraph;
 
 
-export namespace Potato::Task::Graphic
+export namespace Potato::TaskGraphic
 {
+
+	using Graph::GraphNode;
+	using Graph::CheckOptimize;
+	using Graph::EdgeOptimize;
+	using Graph::GraphEdge;
+
+	export struct Flow;
+
+	struct FlowNodeDetectionIndex
+	{
+		std::size_t current_index;
+		std::size_t process_node_count;
+	};
+
+	template<typename Type>
+	concept AcceptableTemporaryDetectFunction = std::is_invocable_r_v<bool, Type, Task::Node const&, Task::Property const&, FlowNodeDetectionIndex const&>;
+
+	struct FlowProcessContext : public Task::NodeData
+	{
+		struct Wrapper
+		{
+			void AddRef(FlowProcessContext const* ptr) { ptr->AddTaskGraphicFlowProcessContextRef(); }
+			void SubRef(FlowProcessContext const* ptr) { ptr->SubTaskGraphicFlowProcessContextRef(); }
+		};
+		using Ptr = Pointer::IntrusivePtr<FlowProcessContext, Wrapper>;
+
+		template<AcceptableTemporaryDetectFunction Func>
+		bool AddTemporaryNode(Task::Node::Ptr node, Func&& func, Task::Property property = {})
+		{
+			std::lock_guard lg(process_mutex);
+			return this->AddTemporaryNode_AssumedLocked(std::move(node), std::forward<Func>(func), std::move(property));
+		}
+
+		bool AddTemporaryNode(Task::Node::Ptr node, Task::Property property = {})
+		{
+			std::lock_guard lg(process_mutex);
+			return this->AddTemporaryNode_AssumedLocked(std::move(node), std::move(property), nullptr, nullptr);
+		}
+
+		struct Config
+		{
+			std::pmr::memory_resource* self_resource = std::pmr::get_default_resource();
+			std::pmr::memory_resource* temporary_update_resource = std::pmr::get_default_resource();
+		};
+
+		~FlowProcessContext();
+
+		
+		
+
+	protected:
+
+		FlowProcessContext(Config config);
+		bool UpdateFromFlow_AssumedLocked(Flow& flow);
+		template<AcceptableTemporaryDetectFunction Func>
+		bool AddTemporaryNode_AssumedLocked(Task::Node::Ptr node, Func&& func, Task::Property property = {})
+		{
+			return this->AddTemporaryNode_AssumedLocked(node, std::move(property), [](void* append_data, Task::Node const& node, Task::Property const& property, FlowNodeDetectionIndex const& index) -> bool
+				{
+					return (*static_cast<Func*>(append_data))(node, property, index);
+				}, &func);
+		}
+
+		bool Start(Flow& flow, Task::ContextWrapper& wrapper);
+		void OnTaskFlowTerminal(Flow& flow, Task::ContextWrapper& wrapper) noexcept {}
+		bool OnTaskFlowFlowTriggerExecute(Flow& flow, Task::ContextWrapper& wrapper);
+		bool OnTaskFlowFlowTriggerTerminal(Flow& flow, Task::ContextWrapper& wrapper) noexcept { return true; }
+
+		bool AddTemporaryNode_AssumedLocked(Task::Node::Ptr node, Task::Property property, bool(*detect_func)(void* append_data, Task::Node const&, Task::Property const&, FlowNodeDetectionIndex const& index), void* append_data);
+		//bool SubTaskCommited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property);
+		std::pmr::memory_resource* temporary_resource;
+
+		enum class State
+		{
+			READY,
+			RUNNING,
+			RUNNING_NEED_PAUSE,
+			PAUSE,
+			DONE
+		};
+
+		struct ProcessNode
+		{
+			State status = State::READY;
+			std::size_t in_degree = 0;
+			std::size_t mutex_degree = 0;
+			Misc::IndexSpan<> direct_edges;
+			Misc::IndexSpan<> mutex_edges;
+			std::size_t init_in_degree = 0;
+			Task::Node::Ptr node;
+			Task::Property property;
+			std::size_t pause_count = 0;
+			bool need_append_mutex = false;
+		};
+
+		bool TryStartupNode_AssumedLock(Flow& flow, Task::ContextWrapper& context, ProcessNode& node, std::size_t index);
+		bool FinishNode_AssumedLock(Flow& flow, Task::ContextWrapper& context, ProcessNode& node, std::size_t index);
+
+		Config config;
+
+		std::mutex process_mutex;
+		std::size_t version = 0;
+		State current_status = State::READY;
+		std::pmr::vector<ProcessNode> process_nodes;
+		std::pmr::vector<std::size_t> process_edges;
+
+		struct AppendEdge
+		{
+			std::size_t from;
+			std::size_t to;
+		};
+
+		std::pmr::vector<AppendEdge> append_direct_edge;
+
+		std::size_t finished_task = 0;
+		std::size_t request_task = 0;
+		std::size_t temporary_node_offset = 0;
+		std::size_t temporary_edge_offset = 0;
+
+		Task::TriggerProperty trigger;
+
+		virtual void AddTaskGraphicFlowProcessContextRef() const = 0;
+		virtual void SubTaskGraphicFlowProcessContextRef() const = 0;
+		void AddNodeDataRef() const override { AddTaskGraphicFlowProcessContextRef(); }
+		void SubNodeDataRef() const override { SubTaskGraphicFlowProcessContextRef(); }
+
+		friend struct Flow;
+	};
+
+	export struct Flow : protected Task::Node, protected Task::Trigger, protected Task::NodeData
+	{
+		struct Wrapper
+		{
+			void AddRef(Flow const* ptr) { ptr->AddTaskGraphicFlowRef(); }
+			void SubRef(Flow const* ptr) { ptr->SubTaskGraphicFlowRef(); }
+			operator Task::Node::Wrapper() const { return {}; }
+			operator Task::Trigger::Wrapper() const { return {}; }
+		};
+
+		using Ptr = Pointer::IntrusivePtr<Flow, Wrapper>;
+
+		enum class EdgeType
+		{
+			Direct,
+			//ReverseDirect,
+			Mutex,
+		};
+
+		struct Config
+		{
+			std::pmr::memory_resource* self_resource = std::pmr::get_default_resource();
+			std::pmr::memory_resource* temporary_resource = std::pmr::get_default_resource();
+		};
+
+		static Flow::Ptr CreateTaskFlow(Config config);
+
+		GraphNode AddNode(Task::Node::Ptr node, Task::Property property = {})
+		{
+			std::lock_guard lg(preprocess_mutex);
+			return AddNode_AssumedLocked(std::move(node), property);
+		}
+
+		template<Task::AcceptableTaskNode Func>
+		GraphNode AddLambdaNode(Func&& func, Task::Property property = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+		{
+			auto ptr = Task::Node::CreateLambdaNode(std::forward<Func>(func), resource);
+			if (ptr)
+			{
+				return this->AddNode(std::move(ptr), property);
+			}
+			return {};
+		}
+
+		bool Remove(GraphNode node) { std::lock_guard lg(preprocess_mutex); return Remove_AssumedLocked(node); }
+		bool AddDirectEdge(GraphNode from, GraphNode direct_to, EdgeOptimize optimize = {}) { std::lock_guard lg(preprocess_mutex); return AddDirectEdge_AssumedLocked(from, direct_to, optimize); }
+		bool AddMutexEdge(GraphNode from, GraphNode direct_to, Graph::EdgeOptimize optimize = {}) { std::lock_guard lg(preprocess_mutex); return AddMutexEdge_AssumedLocked(from, direct_to, optimize); }
+		bool RemoveDirectEdge(GraphNode from, GraphNode direct_to) { std::lock_guard lg(preprocess_mutex); return RemoveDirectEdge_AssumedLocked(from, direct_to); }
+
+		virtual void TaskFlowExecuteBegin(Task::ContextWrapper& context) {}
+		virtual void TaskFlowExecuteEnd(Task::ContextWrapper& context) {}
+
+		~Flow();
+
+		std::optional<std::span<GraphEdge const>> AcyclicEdgeCheck(std::span<GraphEdge> output, CheckOptimize optimize = {})
+		{
+			std::lock_guard lg(preprocess_mutex);
+			return this->AcyclicEdgeCheck_AssumedLocked(output, optimize);
+		}
+
+		bool Commited(Task::Context& context, std::u8string_view display_name = u8"", Task::Catgegory catrgory = {});
+		bool CommitedDelay(Task::Context& context, std::chrono::steady_clock::time_point now, std::u8string_view display_name = u8"", Task::Catgegory catrgory = {});
+		GraphNode AddFlow(Flow& flow, std::u8string_view display_name = u8"", Task::Catgegory catrgory = {});
+
+		template<Task::AcceptableTaskNode Func>
+		GraphNode AddLambda(Func&& func, Task::Property property, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+		{
+			auto task = Task::Node::CreateLambdaNode(std::forward<Func>(func), resource);
+			if (task)
+			{
+				return AddNode(std::move(task), std::move(property));
+			}
+			return {};
+		}
+
+	protected:
+
+		//virtual bool MarkNodePause(std::size_t node_identity);
+		//virtual bool ContinuePauseNode(TaskContext& context, std::size_t node_identity);
+
+		virtual FlowProcessContext::Ptr CreateProcessContext();
+
+		Flow(Config config = {});
+
+		GraphNode AddNode_AssumedLocked(Task::Node::Ptr node, Task::Property property);
+
+		std::optional<std::span<Graph::GraphEdge const>> AcyclicEdgeCheck_AssumedLocked(std::span<Graph::GraphEdge> output_span, Graph::CheckOptimize optimize = {})
+		{
+			auto re = graph.AcyclicCheck(output_span, optimize);
+			if (re.has_value())
+			{
+				update_state = UpdateState::Bad;
+				return re;
+			}else
+			{
+				update_state = UpdateState::None;
+				++version;
+				return std::nullopt;
+			}
+		}
+
+		bool Remove_AssumedLocked(GraphNode node);
+		bool AddDirectEdge_AssumedLocked(GraphNode from, GraphNode direct_to, EdgeOptimize optimize = {});
+		bool AddMutexEdge_AssumedLocked(GraphNode from, GraphNode direct_to, EdgeOptimize optimize = {});
+		bool RemoveDirectEdge_AssumedLocked(GraphNode from, GraphNode direct_to);
+
+		virtual void TaskExecute(Task::ContextWrapper& wrapper) override;
+		virtual void TaskTerminal(Task::ContextWrapper& wrapper) noexcept override;
+		virtual void TriggerExecute(Task::ContextWrapper& wrapper) override;
+		virtual void TriggerTerminal(Task::ContextWrapper& wrapper) noexcept override;
+
+		virtual void AddTaskGraphicFlowRef() const = 0;
+		virtual void SubTaskGraphicFlowRef() const = 0;
+		virtual void AddTaskNodeRef() const override { AddTaskGraphicFlowRef(); }
+		virtual void SubTaskNodeRef() const override { SubTaskGraphicFlowRef(); }
+		virtual void AddTriggerRef() const override { AddTaskGraphicFlowRef(); }
+		virtual void SubTriggerRef() const override { SubTaskGraphicFlowRef(); }
+		virtual void AddNodeDataRef() const override { AddTaskGraphicFlowRef(); }
+		virtual void SubNodeDataRef() const override { SubTaskGraphicFlowRef(); }
+
+		struct PreprocessEdge
+		{
+			std::size_t from;
+			std::size_t to;
+
+			bool operator==(PreprocessEdge const&) const = default;
+		};
+
+		struct PreprocessNode
+		{
+			Task::Node::Ptr node;
+			Task::Property property;
+			GraphNode self;
+		};
+
+		Config config;
+
+		std::shared_mutex preprocess_mutex;
+		Graph::DirectedAcyclicGraphDefer graph;
+		std::pmr::vector<PreprocessNode> preprocess_nodes;
+		std::pmr::vector<PreprocessEdge> preprocess_mutex_edges;
+		std::size_t version = 0;
+
+		enum class UpdateState
+		{
+			None,
+			Updated,
+			Bad,
+		};
+
+		UpdateState update_state = UpdateState::None;
+
+		friend struct FlowProcessContext;
+	};
+
+
 	/*
 	using Graph::GraphNode;
 	using Graph::GraphEdge;

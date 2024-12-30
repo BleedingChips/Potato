@@ -108,8 +108,7 @@ export namespace Potato::Graph
 		};
 
 		DirectedAcyclicGraphDefer(std::pmr::memory_resource* resource = std::pmr::get_default_resource())
-			: nodes(resource), edges(resource) {
-		}
+			: nodes(resource), edges(resource) {}
 
 		GraphNode Add(std::size_t append_info = 0);
 		

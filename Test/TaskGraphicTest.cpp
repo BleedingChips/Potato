@@ -1,6 +1,6 @@
 import std;
-import PotatoTaskSystem;
-import PotatoTaskFlow;
+import PotatoTaskGraphic;
+import PotatoTask;
 import PotatoFormat;
 import PotatoEncode;
 import PotatoGraph;
@@ -26,13 +26,14 @@ void Print(std::u8string_view str, std::thread::id thread_id)
 	}
 }
 
-struct DefaultTaskFlow : TaskFlow
+struct DefaultTaskFlow : Potato::TaskGraphic::Flow
 {
-	void AddTaskFlowRef() const override {}
-	void SubTaskFlowRef() const override {}
-	void TaskFlowExecuteBegin(TaskFlowContext& context) override
+	void AddTaskGraphicFlowRef() const override {}
+	void SubTaskGraphicFlowRef() const override {}
+
+	void TaskFlowExecuteBegin(Potato::Task::ContextWrapper& wrapper) override
 	{
-		auto wstr = *Potato::Encode::StrEncoder<char8_t, wchar_t>::EncodeToString(std::u8string_view{context.node_property.display_name});
+		auto wstr = *Potato::Encode::StrEncoder<char8_t, wchar_t>::EncodeToString(std::u8string_view{ wrapper .GetTaskNodeProperty().node_name});
 		auto sstr = *Potato::Encode::StrEncoder<wchar_t, char>::EncodeToString(std::wstring_view{wstr});
 		{
 			std::lock_guard lg(print_mutex);
@@ -40,9 +41,9 @@ struct DefaultTaskFlow : TaskFlow
 		}
 	}
 
-	void TaskFlowExecuteEnd(TaskFlowContext& context) override
+	void TaskFlowExecuteEnd(Potato::Task::ContextWrapper& wrapper) override
 	{
-		auto wstr = *Potato::Encode::StrEncoder<char8_t, wchar_t>::EncodeToString(std::u8string_view{context.node_property.display_name});
+		auto wstr = *Potato::Encode::StrEncoder<char8_t, wchar_t>::EncodeToString(std::u8string_view{ wrapper.GetTaskNodeProperty().node_name });
 		auto sstr = *Potato::Encode::StrEncoder<wchar_t, char>::EncodeToString(std::wstring_view{wstr});
 		{
 			std::lock_guard lg(print_mutex);
@@ -74,21 +75,21 @@ int main()
 		DefaultTaskFlow tf;
 		
 
-		TaskContext context;
+		Potato::Task::Context context;
 
 		std::size_t Count = 0;
-		auto A1 = TaskFlow::CreateLambdaTask([](Potato::Task::TaskFlowContext& status){
-			Print(status.node_property.display_name, std::this_thread::get_id());
+		auto A1 = Potato::Task::Node::CreateLambdaNode([](Potato::Task::ContextWrapper& wrapper){
+			Print(wrapper.GetTaskNodeProperty().node_name, std::this_thread::get_id());
 		});
 
-		auto lambda = [](Potato::Task::TaskFlowContext& status){
-			Print(status.node_property.display_name, std::this_thread::get_id());
+		auto lambda = [](Potato::Task::ContextWrapper& wrapper){
+			Print(wrapper.GetTaskNodeProperty().node_name, std::this_thread::get_id());
 		};
 
-		auto lambda2 = [&](Potato::Task::TaskFlowContext& context)
+		auto lambda2 = [&](Potato::Task::ContextWrapper& wrapper)
 		{
-			auto nodex = TaskFlow::CreateLambdaTask(lambda);
-			context.flow->AddTemporaryNode(nodex, {});
+			//auto nodex = TaskFlow::CreateLambdaTask(lambda);
+			//context.flow->AddTemporaryNode(nodex, {});
 		};
 
 		
@@ -98,7 +99,7 @@ int main()
 		auto a3 = tf.AddLambda(lambda, {u8"A3"});
 		auto a4 = tf.AddLambda(lambda, {u8"A4"});
 		auto a5 = tf.AddLambda(lambda, {u8"A5"});
-		auto a6 = tf.AddNode(&tf2, {u8"SubTask"});
+		auto a6 = tf.AddFlow(tf2, {u8"SubTask"});
 		auto a7 = tf.AddLambda(lambda2, {u8"temporary"});
 		
 		auto a21 = tf2.AddLambda(lambda, {u8"SubTask A1"});
@@ -110,7 +111,7 @@ int main()
 		bool l41 = tf.AddDirectEdge(a4, a1);
 		bool m35 = tf.AddMutexEdge(a3, a5);
 
-		std::array<GraphEdge, 100> temp_edge;
+		std::array<Potato::Graph::GraphEdge, 100> temp_edge;
 		auto p = tf.AcyclicEdgeCheck(temp_edge);
 
 		
@@ -123,21 +124,26 @@ int main()
 
 		auto l_12 = tf2.AddDirectEdge(a21, a22);
 
-		tf.Update();
+		std::array<Potato::Graph::GraphEdge, 10> error;
 
-		context.AddGroupThread({}, 5);
+		tf.AcyclicEdgeCheck(std::span(error));
+
+		//tf.Update();
+
+		//context.AddGroupThread({}, 5);
 
 		tf.Commited(context, {u8"first Task Flow"});
 
-		context.ProcessTaskUntillNoExitsTask({});
+		context.ExecuteContextThreadUntilNoExsitTask();
 
 		//auto pro = tf.CreateProcessor();
 
-		tf.Update();
+		//tf.Update();
+		tf.AcyclicEdgeCheck(std::span(error));
 
 		tf.Commited(context, {u8"second Task Flow"});
 
-		context.ProcessTaskUntillNoExitsTask({});
+		context.ExecuteContextThreadUntilNoExsitTask({});
 	}
 
 	volatile int i2 = 0;

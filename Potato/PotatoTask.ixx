@@ -8,24 +8,25 @@ import std;
 import PotatoMisc;
 import PotatoPointer;
 import PotatoIR;
+import PotatoTMP;
 
 
 export namespace Potato::Task
 {
-	struct AppendInfo
+	struct NodeData
 	{
 		struct Wrapper
 		{
-			void AddRef(AppendInfo const* ptr) { ptr->AddAppendInfoRef(); }
-			void SubRef(AppendInfo const* ptr) { ptr->SubAppendInfoRef(); }
+			void AddRef(NodeData const* ptr) { ptr->AddNodeDataRef(); }
+			void SubRef(NodeData const* ptr) { ptr->SubNodeDataRef(); }
 		};
 
-		using Ptr = Pointer::IntrusivePtr<AppendInfo, Wrapper>;
+		using Ptr = Pointer::IntrusivePtr<NodeData, Wrapper>;
 
 	protected:
 
-		virtual void AddAppendInfoRef() const = 0;
-		virtual void SubAppendInfoRef() const = 0;
+		virtual void AddNodeDataRef() const = 0;
+		virtual void SubNodeDataRef() const = 0;
 	};
 
 	export struct ContextWrapper;
@@ -41,15 +42,14 @@ export namespace Potato::Task
 
 		using Ptr = Pointer::IntrusivePtr<Trigger, Wrapper>;
 
-		virtual void TriggerExecute(ContextWrapper& wrapper, AppendInfo* trigger_append_info) = 0;
-		virtual void TriggerTerminal(ContextWrapper& wrapper, AppendInfo* trigger_append_info) noexcept = 0;
+		virtual void TriggerExecute(ContextWrapper& wrapper) = 0;
+		virtual void TriggerTerminal(ContextWrapper& wrapper) noexcept = 0;
 
 	protected:
 
 		virtual void AddTriggerRef() const = 0;
 		virtual void SubTriggerRef() const = 0;
 	};
-
 
 	enum class Priority : std::size_t
 	{
@@ -60,11 +60,72 @@ export namespace Potato::Task
 		Max
 	};
 
+	struct Catgegory
+	{
+
+		template<typename Type>
+		std::optional<Type> GetOptional() const requires(TMP::IsOneOfV<std::remove_cvref_t<Type>, std::monostate, std::size_t, std::thread::id>)
+		{
+			using T = std::remove_cvref_t<Type>;
+			if (std::holds_alternative<Type>(category))
+			{
+				return std::get<Type>(category);
+			}
+			return std::nullopt;
+		}
+
+
+		bool IsGlobal() const { return std::holds_alternative<std::monostate>(category); }
+		std::optional<std::size_t> GetGroupID() const { return GetOptional<std::size_t>(); }
+		std::optional<std::thread::id> GetThreadID() const { return GetOptional<std::thread::id>(); }
+	protected:
+		std::variant<std::monostate, std::size_t, std::thread::id> category;
+	};
+
 	struct Property
 	{
-		Priority priority = Priority::Normal;
-		std::variant<std::monostate, std::size_t, std::thread::id> category;
 		std::u8string_view node_name;
+		Catgegory category;
+		//Priority priority = Priority::Normal;
+		
+		
+
+		struct Data
+		{
+			operator bool() const { return !std::holds_alternative<std::monostate>(data); }
+			bool HasSizeT() const { return std::holds_alternative<std::size_t>(data); }
+			std::size_t GetSizeT() const { return std::get<std::size_t>(data); }
+			bool HasNodeDataPointer() const { return std::holds_alternative<NodeData::Ptr>(data); }
+			NodeData::Ptr GetNodeDataPointer() const { return std::get<NodeData::Ptr>(data); }
+			template<typename PointerType>
+			PointerType* TryGetNodeDataPointerWithType() const
+			{
+				if (HasNodeDataPointer())
+				{
+					return dynamic_cast<PointerType*>(std::get<NodeData::Ptr>(data).GetPointer());
+				}
+				return nullptr;
+			}
+			Data(Data const&) = default;
+			Data(Data&&) = default;
+			Data() = default;
+			Data& operator=(Data const&) = default;
+			Data& operator=(Data&&) = default;
+			Data& SetIndex(std::size_t index) { data = index; return *this; }
+			Data& SetNodeData(NodeData::Ptr node_data) { data = std::move(node_data); return *this; }
+		protected:
+			std::variant<std::monostate, std::size_t, void*, NodeData::Ptr> data;
+		};
+
+		Data data;
+		Data data2;
+	};
+
+	struct TriggerProperty
+	{
+		Trigger::Ptr trigger;
+		Property::Data data;
+		Property::Data data2;
 	};
 
 	enum class Status : std::size_t
@@ -79,13 +140,15 @@ export namespace Potato::Task
 	{
 		virtual Status GetStatue() const = 0;
 		virtual std::size_t GetGroupId() const = 0;
-		virtual Property GetTaskNodeProperty() const = 0;
-		virtual AppendInfo* GetAppendInfo() const = 0;
-		virtual bool Commit(Node& target, Property property, AppendInfo::Ptr append_info = {}, Trigger::Ptr trigger = {}, AppendInfo::Ptr trigger_info = {}) = 0;
-		virtual bool CommitDelay(Node& target, std::chrono::steady_clock::time_point target_time_point, Property property, AppendInfo::Ptr append_info = {}, Trigger::Ptr trigger = {}, AppendInfo::Ptr trigger_info = {}) = 0;
+		virtual Property& GetTaskNodeProperty() const = 0;
+		virtual TriggerProperty& GetTriggerProperty() const = 0;
+		virtual bool Commit(Node& target, Property property, TriggerProperty trigger = {}) = 0;
+		virtual bool CommitDelay(Node& target, std::chrono::steady_clock::time_point target_time_point, Property property = {}, TriggerProperty trigger = {}) = 0;
 		virtual Node& GetCurrentTaskNode() const = 0;
 	};
-	
+
+	template<typename Type>
+	concept AcceptableTaskNode = std::is_invocable_v<Type, ContextWrapper&>;
 
 	export struct Node
 	{
@@ -98,9 +161,8 @@ export namespace Potato::Task
 
 		using Ptr = Pointer::IntrusivePtr<Node, Wrapper>;
 
-		template<typename FunT>
-		static Ptr CreateLambdaNode(FunT&& func, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
-			requires(std::is_invocable_v<FunT, ContextWrapper&>);
+		template<AcceptableTaskNode FunT>
+		static Ptr CreateLambdaNode(FunT&& func, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
 		virtual void TaskExecute(ContextWrapper& status) = 0;
 		virtual void TaskTerminal(ContextWrapper& property) noexcept {};
@@ -123,9 +185,7 @@ export namespace Potato::Task
 		{
 			Node::Ptr node;
 			Property property;
-			AppendInfo::Ptr append_info;
-			Trigger::Ptr trigger;
-			AppendInfo::Ptr trigger_info;
+			TriggerProperty trigger;
 		};
 
 		struct TimedNodeTuple
@@ -185,8 +245,8 @@ export namespace Potato::Task
 		bool CheckNodeSequencerEmpty();
 
 		void ExecuteContextThreadUntilNoExsitTask(std::size_t group_id = std::numeric_limits<std::size_t>::max());
-		bool Commit(Node& target, Property property, AppendInfo::Ptr append_info = {}, Trigger::Ptr trigger = {}, AppendInfo::Ptr trigger_info = {});
-		bool CommitDelay(Node& target, std::chrono::steady_clock::time_point target_time_point, Property property, AppendInfo::Ptr append_info = {}, Trigger::Ptr trigger = {}, AppendInfo::Ptr trigger_info = {});
+		bool Commit(Node& target, Property property = {}, TriggerProperty trigger = {});
+		bool CommitDelay(Node& target, std::chrono::steady_clock::time_point target_time_point, Property property = {}, TriggerProperty trigger = {});
 
 	protected:
 
@@ -215,7 +275,7 @@ export namespace Potato::Task
 	private:
 
 		void ThreadExecute(NodeSequencer& group, NodeSequencer& thread, std::size_t group_id, std::stop_token& sk);
-		void FlushNodeSequencer(Status state, NodeSequencer& target_sequence, std::size_t group_id);
+		void TerminalNodeSequencer(Status state, NodeSequencer& target_sequence, std::size_t group_id) noexcept;
 		bool ExecuteNodeSequencer(NodeSequencer& target_sequence, std::size_t group_id, std::chrono::steady_clock::time_point now_time);
 	};
 }
@@ -250,9 +310,8 @@ namespace Potato::Task
 		LanbdaT TaskInstance;
 	};
 
-	template<typename FunT>
-	auto Node::CreateLambdaNode(FunT&& func, std::pmr::memory_resource* resource)
-		->Ptr requires(std::is_invocable_v<FunT, ContextWrapper&>)
+	template<AcceptableTaskNode FunT>
+	auto Node::CreateLambdaNode(FunT&& func, std::pmr::memory_resource* resource)->Ptr
 	{
 		using Type = LambdaNode<std::remove_cvref_t<FunT>>;
 		auto Record = Potato::IR::MemoryResourceRecord::Allocate<Type>(resource);

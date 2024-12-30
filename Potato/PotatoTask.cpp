@@ -64,7 +64,7 @@ namespace Potato::Task
 		}
 		if (!node_deque.empty())
 		{
-			auto result = std::move(*node_deque.rbegin());
+			auto result = std::move(*node_deque.begin());
 			node_deque.pop_front();
 			return std::move(result);
 		}
@@ -206,22 +206,22 @@ namespace Potato::Task
 			thread_group_infos.clear();
 		}
 
-		FlushNodeSequencer(Status::ContextTerminal, *node_sequencer_global, std::numeric_limits<std::size_t>::max());
+		TerminalNodeSequencer(Status::ContextTerminal, *node_sequencer_global, std::numeric_limits<std::size_t>::max());
 	}
 
 	struct ContextWrapperImp : public ContextWrapper
 	{
 		virtual Status GetStatue() const override { return status; }
 		virtual std::size_t GetGroupId() const override { return group_id; }
-		virtual Property GetTaskNodeProperty() const { return node_tuple.property; }
-		virtual AppendInfo* GetAppendInfo() const { return node_tuple.append_info.GetPointer(); }
-		virtual bool Commit(Node& target, Property property, AppendInfo::Ptr append_info = {}, Trigger::Ptr trigger = {}, AppendInfo::Ptr trigger_info = {}) override
+		virtual Property& GetTaskNodeProperty() const override { return node_tuple.property; }
+		TriggerProperty& GetTriggerProperty() const override { return node_tuple.trigger; }
+		virtual bool Commit(Node& target, Property property = {}, TriggerProperty trigger = {}) override
 		{
-			return context.Commit(target, std::move(property), std::move(append_info), std::move(trigger), std::move(trigger_info));
+			return context.Commit(target, std::move(property), std::move(trigger));
 		}
-		virtual bool CommitDelay(Node& target, std::chrono::steady_clock::time_point target_time_point, Property property, AppendInfo::Ptr append_info = {}, Trigger::Ptr trigger = {}, AppendInfo::Ptr trigger_info = {}) override
+		virtual bool CommitDelay(Node& target, std::chrono::steady_clock::time_point target_time_point, Property property = {}, TriggerProperty trigger = {}) override
 		{
-			return context.CommitDelay(target, target_time_point, std::move(property), std::move(append_info), std::move(trigger), std::move(trigger_info));
+			return context.CommitDelay(target, target_time_point, std::move(property), std::move(trigger));
 		}
 
 		virtual Node& GetCurrentTaskNode() const
@@ -278,7 +278,7 @@ namespace Potato::Task
 			std::this_thread::yield();
 		}
 
-		FlushNodeSequencer(Status::ThreadTerminal, thread, group_id);
+		TerminalNodeSequencer(Status::ThreadTerminal, thread, group_id);
 
 		NodeSequencer::Ptr group_node;
 		{
@@ -295,47 +295,45 @@ namespace Potato::Task
 
 		if (group_node)
 		{
-			FlushNodeSequencer(Status::GroupTerminal, *group_node, group_id);
+			TerminalNodeSequencer(Status::GroupTerminal, *group_node, group_id);
 		}
 	}
 
-	bool Context::Commit(Node& target, Property property, AppendInfo::Ptr append_info, Trigger::Ptr trigger, AppendInfo::Ptr trigger_info)
+	bool Context::Commit(Node& target, Property property, TriggerProperty trigger)
 	{
-		if (std::holds_alternative<std::monostate>(property.category))
+		if (property.category.IsGlobal())
 		{
 			node_sequencer_global->InsertNode(
 				NodeSequencer::NodeTuple{
-					&target, std::move(property), std::move(append_info), std::move(trigger), std::move(trigger_info)
+					&target, std::move(property), std::move(trigger)
 				}
 			);
 			return true;
 		}
-		if (std::holds_alternative<std::size_t>(property.category))
+		if (auto group = property.category.GetGroupID(); group)
 		{
-			auto group_id = std::get<std::size_t>(property.category);
 			std::shared_lock sl(infos_mutex);
-			auto find = std::find_if(thread_group_infos.begin(), thread_group_infos.end(), [=](ThreadGroupInfo& info) { return info.group_id == group_id; });
+			auto find = std::find_if(thread_group_infos.begin(), thread_group_infos.end(), [=](ThreadGroupInfo& info) { return info.group_id == *group; });
 			if (find != thread_group_infos.end())
 			{
 				find->node_sequencer->InsertNode(
 					NodeSequencer::NodeTuple{
-						&target, std::move(property), std::move(append_info), std::move(trigger), std::move(trigger_info)
+						&target, std::move(property), std::move(trigger)
 					}
 				);
 				return true;
 			}
 			return false;
 		}
-		if (std::holds_alternative<std::thread::id>(property.category))
+		if (auto threadid = property.category.GetThreadID(); threadid)
 		{
-			auto thread_id = std::get<std::thread::id>(property.category);
 			std::shared_lock sl(infos_mutex);
-			auto find = std::find_if(thread_infos.begin(), thread_infos.end(), [=](ThreadInfo& info) { return info.thread_id == thread_id; });
+			auto find = std::find_if(thread_infos.begin(), thread_infos.end(), [=](ThreadInfo& info) { return info.thread_id == *threadid; });
 			if (find != thread_infos.end())
 			{
 				find->node_sequencer->InsertNode(
 					NodeSequencer::NodeTuple{
-						&target, std::move(property), std::move(append_info), std::move(trigger), std::move(trigger_info)
+						&target, std::move(property), std::move(trigger)
 					}
 				);
 				return true;
@@ -344,43 +342,41 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool Context::CommitDelay(Node& target, std::chrono::steady_clock::time_point target_time_point, Property property, AppendInfo::Ptr append_info, Trigger::Ptr trigger, AppendInfo::Ptr trigger_info)
+	bool Context::CommitDelay(Node& target, std::chrono::steady_clock::time_point target_time_point, Property property, TriggerProperty trigger)
 	{
-		if (std::holds_alternative<std::monostate>(property.category))
+		if (property.category.IsGlobal())
 		{
 			node_sequencer_global->InsertDelayNode(
 				NodeSequencer::NodeTuple{
-					&target, std::move(property), std::move(append_info), std::move(trigger), std::move(trigger_info)
+					&target, std::move(property), std::move(trigger)
 				}, target_time_point
 			);
 			return true;
 		}
-		if (std::holds_alternative<std::size_t>(property.category))
+		if (auto group = property.category.GetGroupID(); group)
 		{
-			auto group_id = std::get<std::size_t>(property.category);
 			std::shared_lock sl(infos_mutex);
-			auto find = std::find_if(thread_group_infos.begin(), thread_group_infos.end(), [=](ThreadGroupInfo& info) { return info.group_id == group_id; });
+			auto find = std::find_if(thread_group_infos.begin(), thread_group_infos.end(), [=](ThreadGroupInfo& info) { return info.group_id == *group; });
 			if (find != thread_group_infos.end())
 			{
 				find->node_sequencer->InsertDelayNode(
 					NodeSequencer::NodeTuple{
-						&target, std::move(property), std::move(append_info), std::move(trigger), std::move(trigger_info)
+						&target, std::move(property), std::move(trigger)
 					}, target_time_point
 				);
 				return true;
 			}
 			return false;
 		}
-		if (std::holds_alternative<std::thread::id>(property.category))
+		if (auto threadid = property.category.GetThreadID(); threadid)
 		{
-			auto thread_id = std::get<std::thread::id>(property.category);
 			std::shared_lock sl(infos_mutex);
-			auto find = std::find_if(thread_infos.begin(), thread_infos.end(), [=](ThreadInfo& info) { return info.thread_id == thread_id; });
+			auto find = std::find_if(thread_infos.begin(), thread_infos.end(), [=](ThreadInfo& info) { return info.thread_id == *threadid; });
 			if (find != thread_infos.end())
 			{
 				find->node_sequencer->InsertDelayNode(
 					NodeSequencer::NodeTuple{
-						&target, std::move(property), std::move(append_info), std::move(trigger), std::move(trigger_info)
+						&target, std::move(property), std::move(trigger)
 					}, target_time_point
 				);
 				return true;
@@ -478,7 +474,7 @@ namespace Potato::Task
 		return true;
 	}
 
-	void Context::FlushNodeSequencer(Status state, NodeSequencer& target_sequence, std::size_t group_id)
+	void Context::TerminalNodeSequencer(Status state, NodeSequencer& target_sequence, std::size_t group_id) noexcept
 	{
 		while (true)
 		{
@@ -489,9 +485,9 @@ namespace Potato::Task
 			}
 			ContextWrapperImp wrapper_imp{ state, group_id, *this, *result };
 			result->node->TaskTerminal(wrapper_imp);
-			if (result->trigger)
+			if (result->trigger.trigger)
 			{
-				result->trigger->TriggerTerminal(wrapper_imp, result->trigger_info.GetPointer());
+				result->trigger.trigger->TriggerTerminal(wrapper_imp);
 			}
 		}
 	}
@@ -505,9 +501,9 @@ namespace Potato::Task
 		}
 		ContextWrapperImp wrapper_imp{ Status::Normal, group_id, *this, *result };
 		result->node->TaskExecute(wrapper_imp);
-		if (result->trigger)
+		if (result->trigger.trigger)
 		{
-			result->trigger->TriggerExecute(wrapper_imp, result->trigger_info.GetPointer());
+			result->trigger.trigger->TriggerExecute(wrapper_imp);
 		}
 		target_sequence.MarkNodeFinish();
 		return true;
