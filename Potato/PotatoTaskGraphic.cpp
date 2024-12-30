@@ -42,11 +42,11 @@ namespace Potato::TaskGraphic
 
 					auto& ref = process_nodes[top];
 
-					if (ref.status != State::DONE)
+					if (ref.state != State::DONE)
 					{
 						if ((*detect_func)(append_data, *ref.node, ref.property, { top, temporary_node_offset }))
 						{
-							if (top < temporary_node_offset && ref.status == State::READY)
+							if (top < temporary_node_offset && ref.state == State::READY)
 							{
 								process_edges.push_back(top);
 								ref.in_degree += 1;
@@ -61,7 +61,7 @@ namespace Potato::TaskGraphic
 						}
 					}
 
-					if (ref.status != State::READY)
+					if (ref.state != State::READY)
 					{
 						auto Misc = ref.direct_edges.Slice(std::span(process_edges));
 						search_index.insert(search_index.end(), Misc.begin(), Misc.end());
@@ -96,9 +96,9 @@ namespace Potato::TaskGraphic
 
 	bool FlowProcessContext::UpdateFromFlow_AssumedLocked(Flow& flow)
 	{
-		if (current_status == State::DONE || current_status == State::READY)
+		if (current_state == State::DONE || current_state == State::READY)
 		{
-			current_status = FlowProcessContext::State::READY;
+			current_state = FlowProcessContext::State::READY;
 			finished_task = 0;
 
 			std::shared_lock sl(flow.preprocess_mutex);
@@ -116,7 +116,7 @@ namespace Potato::TaskGraphic
 				{
 					if (ite.node)
 					{
-						ite.status = State::READY;
+						ite.state = State::READY;
 						ite.in_degree = ite.init_in_degree;
 						ite.mutex_degree = 0;
 						ite.need_append_mutex = false;
@@ -195,7 +195,7 @@ namespace Potato::TaskGraphic
 
 	bool FlowProcessContext::TryStartupNode_AssumedLock(Flow& flow, Task::ContextWrapper& wrapper, ProcessNode& node, std::size_t index)
 	{
-		if (node.status == State::READY && node.mutex_degree == 0 && node.in_degree == 0)
+		if (node.state == State::READY && node.mutex_degree == 0 && node.in_degree == 0)
 		{
 			Task::Property property = node.property;
 			Task::TriggerProperty t_property;
@@ -211,7 +211,7 @@ namespace Potato::TaskGraphic
 				{
 					process_nodes[ite].mutex_degree += 1;
 				}
-				node.status = State::RUNNING;
+				node.state = State::RUNNING;
 			}
 		}
 		return false;
@@ -219,10 +219,10 @@ namespace Potato::TaskGraphic
 
 	bool FlowProcessContext::FinishNode_AssumedLock(Flow& flow, Task::ContextWrapper& wrapper, ProcessNode& node, std::size_t index)
 	{
-		if (node.status == State::RUNNING)
+		if (node.state == State::RUNNING || node.state == State::PAUSE)
 		{
 			assert(node.pause_count == 0);
-			node.status = State::DONE;
+			node.state = State::DONE;
 
 			{
 				auto temp_span = std::span(process_nodes).subspan(temporary_node_offset);
@@ -269,13 +269,13 @@ namespace Potato::TaskGraphic
 				property.data.SetNodeData(this);
 				property.data2.SetIndex(1);
 				wrapper.Commit(flow, std::move(property), std::move(trigger));
-				current_status = State::DONE;
+				current_state = State::DONE;
 			}
 			return true;
 		}
-		else if (node.status == State::RUNNING_NEED_PAUSE)
+		else if (node.state == State::RUNNING_NEED_PAUSE)
 		{
-			node.status = State::PAUSE;
+			node.state = State::PAUSE;
 			return true;
 		}
 		return false;
@@ -292,7 +292,7 @@ namespace Potato::TaskGraphic
 				std::size_t i = 0;
 				for (auto& ite : process_nodes)
 				{
-					if (ite.status == State::READY)
+					if (ite.state == State::READY)
 					{
 						TryStartupNode_AssumedLock(flow, wrapper, ite, i);
 					}
@@ -305,12 +305,14 @@ namespace Potato::TaskGraphic
 				property.data.SetNodeData(this);
 				property.data2.SetIndex(1);
 				wrapper.Commit(flow, std::move(property), std::move(trigger_property));
-				current_status = State::DONE;
+				current_state = State::DONE;
 			}
 			return true;
 		}
 		return false;
 	}
+
+	constexpr std::size_t pause_offset = std::numeric_limits<std::size_t>::max() / 2;
 
 	bool FlowProcessContext::OnTaskFlowFlowTriggerExecute(Flow& flow, Task::ContextWrapper& wrapper)
 	{
@@ -318,8 +320,73 @@ namespace Potato::TaskGraphic
 		auto trigger = wrapper.GetTriggerProperty();
 		assert(trigger.data.HasNodeDataPointer() && trigger.data2.HasSizeT());
 		auto index = trigger.data2.GetSizeT();
-		assert(index < process_nodes.size());
-		return FinishNode_AssumedLock(flow, wrapper, process_nodes[index], index);
+		if (index >= pause_offset)
+		{
+			index = index - pause_offset;
+			assert(index < process_nodes.size());
+			if (Continue_AssumedLock(process_nodes[index]))
+			{
+				return FinishNode_AssumedLock(flow, wrapper, process_nodes[index], index);
+			}
+		}else
+		{
+			assert(index < process_nodes.size());
+			return FinishNode_AssumedLock(flow, wrapper, process_nodes[index], index);
+		}
+		return true;
+	}
+
+	bool FlowProcessContext::PauseAndLaunch(Task::ContextWrapper& wrapper, Flow& flow, std::size_t index, Task::Node& ptr, Task::Property property, std::optional<std::chrono::steady_clock::time_point> delay_time)
+	{
+		{
+			std::lock_guard lg(process_mutex);
+			if (index >= pause_offset)
+			{
+				index = index - pause_offset;
+			}
+			if (!Pause_AssumedLock(process_nodes[index]))
+				return false;
+		}
+
+		assert(
+			dynamic_cast<Flow*>(wrapper.GetTriggerProperty().trigger.GetPointer()) == &flow
+			&&
+			wrapper.GetTriggerProperty().data.GetNodeDataPointer().GetPointer() == this
+		);
+
+		Task::TriggerProperty t_property = wrapper.GetTriggerProperty();
+		t_property.data2.SetIndex(index + pause_offset);
+		if (wrapper.Commit(ptr, std::move(property), std::move(t_property), std::move(delay_time)))
+		{
+			return true;
+		}else
+		{
+			std::lock_guard lg(process_mutex);
+			auto re = Continue_AssumedLock(process_nodes[index]);
+			assert(!re);
+			return false;
+		}
+	}
+
+	bool FlowProcessContext::Pause_AssumedLock(ProcessNode& node)
+	{
+		assert(node.state == State::RUNNING || node.state == State::RUNNING_NEED_PAUSE);
+		if (node.state == State::RUNNING)
+			node.state = State::RUNNING_NEED_PAUSE;
+		node.pause_count += 1;
+		return true;
+	}
+
+	bool FlowProcessContext::Continue_AssumedLock(ProcessNode& node)
+	{
+		assert(node.state == State::RUNNING || node.state == State::RUNNING_NEED_PAUSE || node.state == State::PAUSE);
+		node.pause_count -= 1;
+		if (node.pause_count == 0)
+		{
+			node.state = State::RUNNING;
+			return true;
+		}
+		return false;
 	}
 
 	Flow::Flow(Config config)
@@ -415,81 +482,6 @@ namespace Potato::TaskGraphic
 		return false;
 	}
 
-	/*
-	bool TaskFlow::Commited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property)
-	{
-		if(current_status == Status::READY)
-		{
-			TaskProperty tem_property
-			{
-				property.display_name,
-				{0, 0},
-				property.filter
-			};
-			if(context.CommitTask(this, tem_property))
-			{
-				current_status = Status::RUNNING;
-				return true;
-			}
-			
-		}else if(current_status != Status::DONE)
-		{
-			assert(false);
-		}
-		return false;
-	}
-	
-
-	bool TaskFlow::SubTaskCommited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property)
-	{
-		if (current_status == Status::READY)
-		{
-			TaskProperty tem_property
-			{
-				property.display_name,
-				{0, 0},
-				property.filter
-			};
-			if (context.CommitTask(this, tem_property))
-			{
-				current_status = Status::RUNNING;
-				return true;
-			}
-
-		}
-		else if (current_status != Status::DONE)
-		{
-			assert(false);
-		}
-		return false;
-	}
-
-	bool TaskFlow::Commited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property, std::chrono::steady_clock::time_point time_point)
-	{
-		if(current_status == Status::READY)
-		{
-			TaskProperty tem_property
-			{
-				property.display_name,
-				{0, 0},
-				property.filter
-			};
-			if(context.CommitDelayTask(this, time_point, tem_property))
-			{
-				current_status = Status::RUNNING;
-				running_property = property;
-				return true;
-			}
-			
-		}else if(current_status != Status::DONE)
-		{
-			assert(false);
-		}
-		return false;
-	}
-	*/
-
-
 	struct DefaultFlowProcessContext : public FlowProcessContext, public IR::MemoryResourceRecordIntrusiveInterface
 	{
 		DefaultFlowProcessContext(Potato::IR::MemoryResourceRecord record, FlowProcessContext::Config config)
@@ -507,6 +499,21 @@ namespace Potato::TaskGraphic
 			return new(re.Get()) DefaultFlowProcessContext{std::move(re), {}};
 		}
 		return nullptr;
+	}
+
+	bool Flow::PauseAndLaunch(Task::ContextWrapper& wrapper, Node& node, Task::Property property, std::optional<std::chrono::steady_clock::time_point> delay)
+	{
+		auto& trigger = wrapper.GetTriggerProperty();
+		auto flow = dynamic_cast<Flow*>(trigger.trigger.GetPointer());
+		if (flow != nullptr)
+		{
+			auto context = trigger.data.TryGetNodeDataPointerWithType<FlowProcessContext>();
+			if (context != nullptr)
+			{
+				return context->PauseAndLaunch(wrapper, *flow, trigger.data2.GetSizeT(), node, std::move(property), std::move(delay));
+			}
+		}
+		return false;
 	}
 
 	void Flow::TaskExecute(Task::ContextWrapper& wrapper)
@@ -593,21 +600,6 @@ namespace Potato::TaskGraphic
 		return false;
 	}
 
-	bool Flow::CommitedDelay(Task::Context& context, std::chrono::steady_clock::time_point now, std::u8string_view display_name, Task::Catgegory catrgory)
-	{
-		auto execute = CreateProcessContext();
-		if (execute)
-		{
-			Task::Property property;
-			property.node_name = display_name;
-			property.category = catrgory;
-			property.data.SetNodeData(execute.GetPointer());
-			property.data2.SetIndex(0);
-			return context.CommitDelay(*this, now, std::move(property));
-		}
-		return false;
-	}
-
 	GraphNode Flow::AddFlow(Flow& flow, std::u8string_view display_name, Task::Catgegory catrgory)
 	{
 		auto execute = CreateProcessContext();
@@ -622,97 +614,4 @@ namespace Potato::TaskGraphic
 		}
 		return {};
 	}
-
-	
-
-
-	
-	/*
-	bool TaskFlow::MarkNodePause(std::size_t node_identity)
-	{
-		std::lock_guard lg(process_mutex);
-		if(node_identity < process_nodes.size())
-		{
-			auto& ref = process_nodes[node_identity];
-			switch(ref.status)
-			{
-			case Status::RUNNING:
-				ref.pause_count += 1;
-				ref.status = Status::RUNNING_NEED_PAUSE;
-				return true;
-			case Status::RUNNING_NEED_PAUSE:
-			case Status::PAUSE:
-				ref.pause_count += 1;
-				return true;
-			}
-		}
-		assert(false);
-		return false;
-	}
-
-	bool TaskFlow::ContinuePauseNode(TaskContext& context, std::size_t node_identity)
-	{
-		std::lock_guard lg(process_mutex);
-		if(node_identity < process_nodes.size())
-		{
-			auto& ref = process_nodes[node_identity];
-			switch(ref.status)
-			{
-			case Status::RUNNING_NEED_PAUSE:
-				assert(ref.pause_count > 0);
-				ref.pause_count -= 1;
-				if(ref.pause_count == 0)
-					ref.status = Status::RUNNING;
-				return true;
-			case Status::PAUSE:
-				assert(ref.pause_count > 0);
-				ref.pause_count -= 1;
-				if(ref.pause_count == 0)
-				{
-					ref.status = Status::RUNNING;
-					auto re = FinishNode_AssumedLock(context, ref, node_identity);
-					assert(re);
-					return true;
-				}
-				return true;
-			default:
-				break;
-			}
-		}
-		assert(false);
-		return false;
-	}
-
-	void TaskFlow::TaskFlowNodeExecute(TaskFlowContext& status)
-	{
-		std::lock_guard lg(process_mutex);
-		switch(current_status)
-		{
-		case Status::READY:
-			{
-				std::lock_guard lg(parent_mutex);
-				assert(!parent_node);
-				TaskProperty pro{
-					status.node_property.display_name,
-					{0, 0},
-					status.node_property.filter
-				};
-
-				if(SubTaskCommited_AssumedLocked(status.context, status.node_property))
-				{
-					running_property = status.node_property;
-					current_status = Status::RUNNING;
-					parent_node = std::move(status.flow);
-					current_identity = status.node_identity;
-					parent_node->MarkNodePause(status.node_identity);
-				}
-				break;
-			}
-		default:
-			{
-				break;
-			}
-		}
-	}
-	*/
 }

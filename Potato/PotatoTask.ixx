@@ -22,7 +22,7 @@ export namespace Potato::Task
 		};
 
 		using Ptr = Pointer::IntrusivePtr<NodeData, Wrapper>;
-
+		virtual ~NodeData() = default;
 	protected:
 
 		virtual void AddNodeDataRef() const = 0;
@@ -45,6 +45,7 @@ export namespace Potato::Task
 		virtual void TriggerExecute(ContextWrapper& wrapper) = 0;
 		virtual void TriggerTerminal(ContextWrapper& wrapper) noexcept = 0;
 
+		virtual ~Trigger() = default;
 	protected:
 
 		virtual void AddTriggerRef() const = 0;
@@ -142,8 +143,7 @@ export namespace Potato::Task
 		virtual std::size_t GetGroupId() const = 0;
 		virtual Property& GetTaskNodeProperty() const = 0;
 		virtual TriggerProperty& GetTriggerProperty() const = 0;
-		virtual bool Commit(Node& target, Property property, TriggerProperty trigger = {}) = 0;
-		virtual bool CommitDelay(Node& target, std::chrono::steady_clock::time_point target_time_point, Property property = {}, TriggerProperty trigger = {}) = 0;
+		virtual bool Commit(Node& target, Property property, TriggerProperty trigger = {}, std::optional<std::chrono::steady_clock::time_point> delay_time = std::nullopt) = 0;
 		virtual Node& GetCurrentTaskNode() const = 0;
 	};
 
@@ -197,8 +197,7 @@ export namespace Potato::Task
 		std::optional<NodeTuple> PopNode(std::chrono::steady_clock::time_point current_time);
 		std::optional<NodeTuple> ForcePopNode();
 
-		bool InsertNode(NodeTuple node);
-		bool InsertDelayNode(NodeTuple node, std::chrono::steady_clock::time_point target_time_point);
+		bool InsertNode(NodeTuple node, std::optional<std::chrono::steady_clock::time_point> delay_time);
 		std::size_t GetTaskCount() const { return task_count; }
 		void MarkNodeFinish() { task_count -= 1; }
 
@@ -245,8 +244,7 @@ export namespace Potato::Task
 		bool CheckNodeSequencerEmpty();
 
 		void ExecuteContextThreadUntilNoExsitTask(std::size_t group_id = std::numeric_limits<std::size_t>::max());
-		bool Commit(Node& target, Property property = {}, TriggerProperty trigger = {});
-		bool CommitDelay(Node& target, std::chrono::steady_clock::time_point target_time_point, Property property = {}, TriggerProperty trigger = {});
+		bool Commit(Node& target, Property property = {}, TriggerProperty trigger = {}, std::optional<std::chrono::steady_clock::time_point> delay_time_point = std::nullopt);
 
 	protected:
 

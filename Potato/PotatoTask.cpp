@@ -12,26 +12,20 @@ namespace Potato::Task
 		
 	}
 
-	bool NodeSequencer::InsertNode(NodeTuple node)
+	bool NodeSequencer::InsertNode(NodeTuple node, std::optional<std::chrono::steady_clock::time_point> delay_time)
 	{
 		if (node.node)
 		{
 			std::lock_guard lg(node_deque_mutex);
-			node_deque.emplace_back(std::move(node));
-			task_count += 1;
-			return true;
-		}
-		return false;
-	}
-
-	bool NodeSequencer::InsertDelayNode(NodeTuple node, std::chrono::steady_clock::time_point target_time_point)
-	{
-		if (node.node)
-		{
-			std::lock_guard lg(node_deque_mutex);
-			if (!min_time_point.has_value() || target_time_point < min_time_point)
-				min_time_point = target_time_point;
-			delay_node.emplace_back(std::move(node), target_time_point);
+			if (delay_time.has_value())
+			{
+				if (!min_time_point.has_value() || *delay_time < min_time_point)
+					min_time_point = *delay_time;
+				delay_node.emplace_back(std::move(node), *delay_time);
+			}else
+			{
+				node_deque.emplace_back(std::move(node));
+			}
 			task_count += 1;
 			return true;
 		}
@@ -215,13 +209,9 @@ namespace Potato::Task
 		virtual std::size_t GetGroupId() const override { return group_id; }
 		virtual Property& GetTaskNodeProperty() const override { return node_tuple.property; }
 		TriggerProperty& GetTriggerProperty() const override { return node_tuple.trigger; }
-		virtual bool Commit(Node& target, Property property = {}, TriggerProperty trigger = {}) override
+		virtual bool Commit(Node& target, Property property, TriggerProperty trigger = {}, std::optional<std::chrono::steady_clock::time_point> delay_time = std::nullopt) override
 		{
-			return context.Commit(target, std::move(property), std::move(trigger));
-		}
-		virtual bool CommitDelay(Node& target, std::chrono::steady_clock::time_point target_time_point, Property property = {}, TriggerProperty trigger = {}) override
-		{
-			return context.CommitDelay(target, target_time_point, std::move(property), std::move(trigger));
+			return context.Commit(target, std::move(property), std::move(trigger), std::move(delay_time));
 		}
 
 		virtual Node& GetCurrentTaskNode() const
@@ -299,14 +289,14 @@ namespace Potato::Task
 		}
 	}
 
-	bool Context::Commit(Node& target, Property property, TriggerProperty trigger)
+	bool Context::Commit(Node& target, Property property, TriggerProperty trigger, std::optional<std::chrono::steady_clock::time_point> delay_time_point)
 	{
 		if (property.category.IsGlobal())
 		{
 			node_sequencer_global->InsertNode(
 				NodeSequencer::NodeTuple{
 					&target, std::move(property), std::move(trigger)
-				}
+				}, std::move(delay_time_point)
 			);
 			return true;
 		}
@@ -319,7 +309,7 @@ namespace Potato::Task
 				find->node_sequencer->InsertNode(
 					NodeSequencer::NodeTuple{
 						&target, std::move(property), std::move(trigger)
-					}
+					}, std::move(delay_time_point)
 				);
 				return true;
 			}
@@ -334,50 +324,7 @@ namespace Potato::Task
 				find->node_sequencer->InsertNode(
 					NodeSequencer::NodeTuple{
 						&target, std::move(property), std::move(trigger)
-					}
-				);
-				return true;
-			}
-		}
-		return false;
-	}
-
-	bool Context::CommitDelay(Node& target, std::chrono::steady_clock::time_point target_time_point, Property property, TriggerProperty trigger)
-	{
-		if (property.category.IsGlobal())
-		{
-			node_sequencer_global->InsertDelayNode(
-				NodeSequencer::NodeTuple{
-					&target, std::move(property), std::move(trigger)
-				}, target_time_point
-			);
-			return true;
-		}
-		if (auto group = property.category.GetGroupID(); group)
-		{
-			std::shared_lock sl(infos_mutex);
-			auto find = std::find_if(thread_group_infos.begin(), thread_group_infos.end(), [=](ThreadGroupInfo& info) { return info.group_id == *group; });
-			if (find != thread_group_infos.end())
-			{
-				find->node_sequencer->InsertDelayNode(
-					NodeSequencer::NodeTuple{
-						&target, std::move(property), std::move(trigger)
-					}, target_time_point
-				);
-				return true;
-			}
-			return false;
-		}
-		if (auto threadid = property.category.GetThreadID(); threadid)
-		{
-			std::shared_lock sl(infos_mutex);
-			auto find = std::find_if(thread_infos.begin(), thread_infos.end(), [=](ThreadInfo& info) { return info.thread_id == *threadid; });
-			if (find != thread_infos.end())
-			{
-				find->node_sequencer->InsertDelayNode(
-					NodeSequencer::NodeTuple{
-						&target, std::move(property), std::move(trigger)
-					}, target_time_point
+					}, std::move(delay_time_point)
 				);
 				return true;
 			}

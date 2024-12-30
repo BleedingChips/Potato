@@ -61,9 +61,6 @@ export namespace Potato::TaskGraphic
 
 		~FlowProcessContext();
 
-		
-		
-
 	protected:
 
 		FlowProcessContext(Config config);
@@ -81,10 +78,9 @@ export namespace Potato::TaskGraphic
 		void OnTaskFlowTerminal(Flow& flow, Task::ContextWrapper& wrapper) noexcept {}
 		bool OnTaskFlowFlowTriggerExecute(Flow& flow, Task::ContextWrapper& wrapper);
 		bool OnTaskFlowFlowTriggerTerminal(Flow& flow, Task::ContextWrapper& wrapper) noexcept { return true; }
-
+		bool PauseAndLaunch(Task::ContextWrapper& wrapper, Flow& flow, std::size_t index, Task::Node& ptr, Task::Property property, std::optional<std::chrono::steady_clock::time_point> delay_time);
 		bool AddTemporaryNode_AssumedLocked(Task::Node::Ptr node, Task::Property property, bool(*detect_func)(void* append_data, Task::Node const&, Task::Property const&, FlowNodeDetectionIndex const& index), void* append_data);
 		//bool SubTaskCommited_AssumedLocked(TaskContext& context, TaskFlowNodeProperty property);
-		std::pmr::memory_resource* temporary_resource;
 
 		enum class State
 		{
@@ -97,7 +93,7 @@ export namespace Potato::TaskGraphic
 
 		struct ProcessNode
 		{
-			State status = State::READY;
+			State state = State::READY;
 			std::size_t in_degree = 0;
 			std::size_t mutex_degree = 0;
 			Misc::IndexSpan<> direct_edges;
@@ -111,12 +107,14 @@ export namespace Potato::TaskGraphic
 
 		bool TryStartupNode_AssumedLock(Flow& flow, Task::ContextWrapper& context, ProcessNode& node, std::size_t index);
 		bool FinishNode_AssumedLock(Flow& flow, Task::ContextWrapper& context, ProcessNode& node, std::size_t index);
+		bool Pause_AssumedLock(ProcessNode& node);
+		bool Continue_AssumedLock(ProcessNode& node);
 
 		Config config;
 
 		std::mutex process_mutex;
 		std::size_t version = 0;
-		State current_status = State::READY;
+		State current_state = State::READY;
 		std::pmr::vector<ProcessNode> process_nodes;
 		std::pmr::vector<std::size_t> process_edges;
 
@@ -143,7 +141,7 @@ export namespace Potato::TaskGraphic
 		friend struct Flow;
 	};
 
-	export struct Flow : protected Task::Node, protected Task::Trigger, protected Task::NodeData
+	export struct Flow : protected Task::Node, public Task::Trigger
 	{
 		struct Wrapper
 		{
@@ -204,7 +202,6 @@ export namespace Potato::TaskGraphic
 		}
 
 		bool Commited(Task::Context& context, std::u8string_view display_name = u8"", Task::Catgegory catrgory = {});
-		bool CommitedDelay(Task::Context& context, std::chrono::steady_clock::time_point now, std::u8string_view display_name = u8"", Task::Catgegory catrgory = {});
 		GraphNode AddFlow(Flow& flow, std::u8string_view display_name = u8"", Task::Catgegory catrgory = {});
 
 		template<Task::AcceptableTaskNode Func>
@@ -217,6 +214,8 @@ export namespace Potato::TaskGraphic
 			}
 			return {};
 		}
+
+		static bool PauseAndLaunch(Task::ContextWrapper& wrapper, Node& node, Task::Property propery = {}, std::optional<std::chrono::steady_clock::time_point> delay = std::nullopt);
 
 	protected:
 
@@ -260,8 +259,8 @@ export namespace Potato::TaskGraphic
 		virtual void SubTaskNodeRef() const override { SubTaskGraphicFlowRef(); }
 		virtual void AddTriggerRef() const override { AddTaskGraphicFlowRef(); }
 		virtual void SubTriggerRef() const override { SubTaskGraphicFlowRef(); }
-		virtual void AddNodeDataRef() const override { AddTaskGraphicFlowRef(); }
-		virtual void SubNodeDataRef() const override { SubTaskGraphicFlowRef(); }
+		//virtual void AddNodeDataRef() const override { AddTaskGraphicFlowRef(); }
+		//virtual void SubNodeDataRef() const override { SubTaskGraphicFlowRef(); }
 
 		struct PreprocessEdge
 		{

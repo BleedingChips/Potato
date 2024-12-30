@@ -26,7 +26,7 @@ void Print(std::u8string_view str, std::thread::id thread_id)
 	}
 }
 
-struct DefaultTaskFlow : Potato::TaskGraphic::Flow
+struct DefaultTaskFlow : public Potato::TaskGraphic::Flow
 {
 	void AddTaskGraphicFlowRef() const override {}
 	void SubTaskGraphicFlowRef() const override {}
@@ -88,6 +88,9 @@ int main()
 
 		auto lambda2 = [&](Potato::Task::ContextWrapper& wrapper)
 		{
+			Print(wrapper.GetTaskNodeProperty().node_name, std::this_thread::get_id());
+			auto new_node = Potato::Task::Node::CreateLambdaNode([](Potato::Task::ContextWrapper& wrapper) {Print(wrapper.GetTaskNodeProperty().node_name, std::this_thread::get_id()); });
+			Potato::TaskGraphic::Flow::PauseAndLaunch(wrapper, *new_node, { u8"pause" });
 			//auto nodex = TaskFlow::CreateLambdaTask(lambda);
 			//context.flow->AddTemporaryNode(nodex, {});
 		};
@@ -130,7 +133,7 @@ int main()
 
 		//tf.Update();
 
-		//context.AddGroupThread({}, 5);
+		context.AddGroupThread({}, 5);
 
 		tf.Commited(context, {u8"first Task Flow"});
 
