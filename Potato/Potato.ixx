@@ -13,6 +13,7 @@ export import PotatoFormat;
 export import PotatoEBNF;
 export import PotatoReg;
 export import PotatoDocument;
+export import PotatoGraph;
 export import PotatoTask;
 export import PotatoTaskGraphic;
 export import PotatoPath;

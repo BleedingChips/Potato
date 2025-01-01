@@ -26,7 +26,7 @@ int main()
 
 	context.Commit(*Task, {});
 
-	context.ExecuteContextThreadUntilNoExsitTask();
+	context.ExecuteContextThreadUntilNoExistTask();
 
 	return 0;
 }

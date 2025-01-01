@@ -137,7 +137,7 @@ int main()
 
 		tf.Commited(context, {u8"first Task Flow"});
 
-		context.ExecuteContextThreadUntilNoExsitTask();
+		context.ExecuteContextThreadUntilNoExistTask();
 
 		//auto pro = tf.CreateProcessor();
 
@@ -146,7 +146,7 @@ int main()
 
 		tf.Commited(context, {u8"second Task Flow"});
 
-		context.ExecuteContextThreadUntilNoExsitTask({});
+		context.ExecuteContextThreadUntilNoExistTask({});
 	}
 
 	volatile int i2 = 0;

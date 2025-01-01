@@ -7,7 +7,7 @@ module PotatoGraph;
 
 namespace Potato::Graph
 {
-	GraphNode DirectedAcyclicGraphImmediately::Add(std::size_t append_info)
+	GraphNode DirectedAcyclicGraphImmediately::Add()
 	{
 		if(count < nodes.size())
 		{
@@ -20,7 +20,6 @@ namespace Potato::Graph
 					ref.state = State::Active;
 					ref.topology_degree = version;
 					ref.version = version;
-					ref.append_info = append_info;
 					++version;
 					++count;
 					return { i, version };
@@ -29,7 +28,7 @@ namespace Potato::Graph
 		}
 		auto index = nodes.size();
 		GraphNode node{ index, version };
-		nodes.emplace_back(State::Active, version, 0, version, append_info);
+		nodes.emplace_back(State::Active, version, 0, version);
 		++version;
 		++count;
 		return node;
@@ -272,7 +271,6 @@ namespace Potato::Graph
 					ref.in_degree = 0;
 					ref.state = State::Active;
 					ref.version = version;
-					ref.append_info = append_info;
 					++version;
 					++count;
 					return { i,  version };
@@ -281,7 +279,7 @@ namespace Potato::Graph
 		}
 		auto index = nodes.size();
 		GraphNode node{ index, version };
-		nodes.emplace_back(State::Active, version, 0, append_info);
+		nodes.emplace_back(State::Active, version, 0);
 		++version;
 		++count;
 		return node;

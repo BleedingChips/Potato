@@ -61,7 +61,7 @@ export namespace Potato::Task
 		Max
 	};
 
-	struct Catgegory
+	struct Category
 	{
 
 		template<typename Type>
@@ -86,7 +86,7 @@ export namespace Potato::Task
 	struct Property
 	{
 		std::u8string_view node_name;
-		Catgegory category;
+		Category category;
 		//Priority priority = Priority::Normal;
 		
 		
@@ -243,7 +243,7 @@ export namespace Potato::Task
 
 		bool CheckNodeSequencerEmpty();
 
-		void ExecuteContextThreadUntilNoExsitTask(std::size_t group_id = std::numeric_limits<std::size_t>::max());
+		void ExecuteContextThreadUntilNoExistTask(std::size_t group_id = std::numeric_limits<std::size_t>::max());
 		bool Commit(Node& target, Property property = {}, TriggerProperty trigger = {}, std::optional<std::chrono::steady_clock::time_point> delay_time_point = std::nullopt);
 
 	protected:

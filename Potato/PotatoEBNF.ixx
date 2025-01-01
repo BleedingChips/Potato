@@ -404,8 +404,8 @@ export namespace Potato::EBNF::Exception
 			UnfindedStartSymbol,
 		};
 		TypeE Type;
-		std::wstring Str;
-		UnacceptableEbnf(TypeE Type, std::wstring Str)
+		std::pmr::wstring Str;
+		UnacceptableEbnf(TypeE Type, std::pmr::wstring Str)
 			: Type(Type), Str(Str) {}
 		UnacceptableEbnf(UnacceptableEbnf const&) = default;
 		virtual char const* what() const override;

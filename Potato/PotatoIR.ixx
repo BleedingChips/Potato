@@ -309,7 +309,7 @@ export namespace Potato::IR
 				AtomicType const* sou = static_cast<AtomicType const*>(source);
 				for (std::size_t i = 0; i < array_count; ++i)
 				{
-					tar[i].operator=(sou[i]);
+					tar[i] = (sou[i]);
 				}
 				return true;
 			}
@@ -325,7 +325,7 @@ export namespace Potato::IR
 				AtomicType* sou = static_cast<AtomicType*>(source);
 				for (std::size_t i = 0; i < array_count; ++i)
 				{
-					tar[i].operator=(std::move(sou[i]));
+					tar[i] = (std::move(sou[i]));
 				}
 				return true;
 			}

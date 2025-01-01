@@ -14,84 +14,104 @@ namespace Potato::TaskGraphic
 		
 	}
 
-	bool FlowProcessContext::AddTemporaryNode_AssumedLocked(Task::Node::Ptr node, Task::Property property, bool(*detect_func)(void* append_data, Task::Node const&, Task::Property const&, FlowNodeDetectionIndex const& index), void* append_data)
+	void FlowProcessContext::AddTemporaryNode_AssumedLocked(Task::Node& node, Task::Property property, bool(*detect_func)(void* append_data, Task::Node const&, Task::Property const&, FlowNodeDetectionIndex const& index), void* append_data)
 	{
-		if (node)
-		{
-			auto old_edge = process_edges.size();
-			std::size_t cur_index = process_nodes.size();
-			std::size_t init_in_degree = 0;
+		auto old_edge = process_edges.size();
+		std::size_t cur_index = process_nodes.size();
+		std::size_t init_in_degree = 0;
 
-			if (detect_func != nullptr)
+		if (detect_func != nullptr)
+		{
+			struct State
 			{
-				std::vector<std::size_t> search_index;
-				std::size_t index = 0;
-				for (auto& ite : process_nodes)
+				std::size_t in_degree = 0;
+			};
+
+			std::pmr::vector<State> state{config.temporary_update_resource};
+			state.resize(process_nodes.size());
+			std::pmr::vector<std::size_t> search_index;
+			search_index.reserve(process_nodes.size());
+
+			std::size_t index = 0;
+			for (auto& ite : process_nodes)
+			{
+				if (ite.node && ite.state != FlowProcessContext::State::DONE)
 				{
-					if (ite.init_in_degree == 0)
+					state[index].in_degree = ite.in_degree;
+					if (ite.in_degree == 0)
 					{
 						search_index.emplace_back(index);
 					}
-					++index;
+				}
+				++index;
+			}
+
+			while (!search_index.empty())
+			{
+				auto top = *search_index.rbegin();
+				search_index.pop_back();
+
+				auto& ref = process_nodes[top];
+				assert(ref.state != FlowProcessContext::State::DONE);
+
+				if ((*detect_func)(append_data, *ref.node, ref.property, {top, temporary_node_offset }))
+				{
+					if (ref.state == FlowProcessContext::State::READY && top < temporary_node_offset)
+					{
+						process_edges.push_back(top);
+						ref.in_degree += 1;
+					}else
+					{
+						ref.need_append_mutex = true;
+						append_direct_edge.push_back({ top, cur_index });
+						init_in_degree += 1;
+					}
 				}
 
-				while (!search_index.empty())
+				if (ref.state != FlowProcessContext::State::READY)
 				{
-					auto top = *search_index.rbegin();
-					search_index.pop_back();
-
-					auto& ref = process_nodes[top];
-
-					if (ref.state != State::DONE)
+					auto edge = ref.direct_edges.Slice(std::span(process_edges));
+					for (auto ite : edge)
 					{
-						if ((*detect_func)(append_data, *ref.node, ref.property, { top, temporary_node_offset }))
+						assert(state[ite].in_degree >= 1);
+						state[ite].in_degree -= 1;
+						if (state[ite].in_degree == 0)
 						{
-							if (top < temporary_node_offset && ref.state == State::READY)
-							{
-								process_edges.push_back(top);
-								ref.in_degree += 1;
-								continue;
-							}
-							else
-							{
-								ref.need_append_mutex = true;
-								append_direct_edge.push_back({ top, cur_index });
-								init_in_degree += 1;
-							}
+							search_index.emplace_back(ite);
 						}
 					}
-
-					if (ref.state != State::READY)
+					if (ref.need_append_mutex)
 					{
-						auto Misc = ref.direct_edges.Slice(std::span(process_edges));
-						search_index.insert(search_index.end(), Misc.begin(), Misc.end());
-						if (ref.need_append_mutex)
+						for (auto& ite : append_direct_edge)
 						{
-							for (auto& ite : append_direct_edge)
+							if (ite.from == top && ite.to < cur_index)
 							{
-								if (ite.from == top)
+								assert(state[ite.to].in_degree >= 1);
+								state[ite.to].in_degree -= 1;
+								if (state[ite.to].in_degree == 0)
+								{
 									search_index.push_back(ite.to);
+								}
 							}
 						}
 					}
 				}
 			}
-
-			process_nodes.emplace_back(
-				State::READY,
-				init_in_degree,
-				0,
-				Misc::IndexSpan<>{old_edge, process_edges.size()},
-				Misc::IndexSpan<>{process_edges.size(), process_edges.size()},
-				init_in_degree,
-				std::move(node),
-				property,
-				0,
-				false
-			);
-			return true;
 		}
-		return false;
+
+		process_nodes.emplace_back(
+			State::READY,
+			init_in_degree,
+			0,
+			Misc::IndexSpan<>{old_edge, process_edges.size()},
+			Misc::IndexSpan<>{process_edges.size(), process_edges.size()},
+			init_in_degree,
+			&node,
+			property,
+			0,
+			false
+		);
+		++request_task;
 	}
 
 	bool FlowProcessContext::UpdateFromFlow_AssumedLocked(Flow& flow)
@@ -129,7 +149,7 @@ namespace Potato::TaskGraphic
 				version = flow.version;
 				process_nodes.clear();
 				process_edges.clear();
-				request_task = 0;
+				real_request_task = 0;
 				for (auto& ite : flow.preprocess_nodes)
 				{
 					process_nodes.emplace_back(
@@ -146,7 +166,7 @@ namespace Potato::TaskGraphic
 					);
 					if (ite.node)
 					{
-						request_task += 1;
+						real_request_task += 1;
 					}
 				}
 				for (std::size_t i = 0; i < process_nodes.size(); ++i)
@@ -182,6 +202,7 @@ namespace Potato::TaskGraphic
 				temporary_edge_offset = process_edges.size();
 				append_direct_edge.clear();
 			}
+			request_task = real_request_task;
 			return true;
 		}
 		return false;
@@ -286,6 +307,7 @@ namespace Potato::TaskGraphic
 		std::lock_guard lg(process_mutex);
 		if (UpdateFromFlow_AssumedLocked(flow))
 		{
+			flow.PostUpdateFromFlow(*this, wrapper);
 			if (!process_nodes.empty())
 			{
 				trigger = std::move(wrapper.GetTriggerProperty());
@@ -408,26 +430,22 @@ namespace Potato::TaskGraphic
 		}
 	}
 
-	GraphNode Flow::AddNode_AssumedLocked(Task::Node::Ptr node, Task::Property property)
+	GraphNode Flow::AddNode_AssumedLocked(Task::Node& node, Task::Property property)
 	{
-		if(node)
+		auto t_node = graph.Add();
+
+		if (t_node.GetIndex() < preprocess_nodes.size())
 		{
-			auto t_node = graph.Add();
-
-			if (t_node.GetIndex() < preprocess_nodes.size())
-			{
-				auto& ref = preprocess_nodes[t_node.GetIndex()];
-				ref.node = std::move(node);
-				ref.property = property;
-				ref.self = t_node;
-				return t_node;
-			}
-
-			preprocess_nodes.emplace_back(std::move(node), property, t_node);
-			update_state = UpdateState::Updated;
+			auto& ref = preprocess_nodes[t_node.GetIndex()];
+			ref.node = &node;
+			ref.property = property;
+			ref.self = t_node;
 			return t_node;
 		}
-		return {};
+
+		preprocess_nodes.emplace_back(&node, property, t_node);
+		update_state = UpdateState::Updated;
+		return t_node;
 	}
 
 
@@ -450,16 +468,42 @@ namespace Potato::TaskGraphic
 		}
 		return false;
 	}
+	bool Flow::RemoveMutexEdge_AssumedLocked(GraphNode from, GraphNode direct_to)
+	{
+		if (graph.CheckExist(from) && graph.CheckExist(direct_to))
+		{
+			std::size_t o = 0;
+			preprocess_mutex_edges.erase(
+				std::remove_if(preprocess_mutex_edges.begin(), preprocess_mutex_edges.end(), [&](PreprocessEdge const& edge)
+				{
+					if (edge.from == from && edge.to == direct_to || edge.from == direct_to && edge.to == from)
+					{
+						o += 1;
+						return true;
+					}
+					return false;
+				}),
+				preprocess_mutex_edges.end()
+			);
+			update_state = UpdateState::Updated;
+			return o > 0;
+		}
+		return false;
+	}
 	bool Flow::AddMutexEdge_AssumedLocked(GraphNode from, GraphNode to, EdgeOptimize optimize)
 	{
 		if(graph.CheckExist(from) && graph.CheckExist(to))
 		{
 			PreprocessEdge edge{ from.GetIndex(), to.GetIndex() };
+			PreprocessEdge edge2{ to.GetIndex(), from.GetIndex()};
 			if(optimize.need_repeat_check)
 			{
 				for(auto& ite : preprocess_mutex_edges)
 				{
-					auto find = std::find(preprocess_mutex_edges.begin(), preprocess_mutex_edges.end(), edge);
+					auto find = std::find_if(preprocess_mutex_edges.begin(), preprocess_mutex_edges.end(), [=](PreprocessEdge ite_edge)
+					{
+							return ite_edge == edge || ite_edge == edge2;
+					});
 					if(find != preprocess_mutex_edges.end())
 					{
 						return false;
@@ -467,6 +511,7 @@ namespace Potato::TaskGraphic
 				}
 			}
 			preprocess_mutex_edges.emplace_back(edge);
+			preprocess_mutex_edges.emplace_back(edge2);
 			update_state = UpdateState::Updated;
 			return true;
 		}
@@ -491,7 +536,7 @@ namespace Potato::TaskGraphic
 		void SubTaskGraphicFlowProcessContextRef() const override { MemoryResourceRecordIntrusiveInterface::SubRef(); }
 	};
 
-	FlowProcessContext::Ptr Flow::CreateProcessContext()
+	FlowProcessContext::Ptr Flow::CreateProcessContext_AssumedLocked()
 	{
 		auto re = Potato::IR::MemoryResourceRecord::Allocate<DefaultFlowProcessContext>(config.self_resource);
 		if (re)
@@ -501,7 +546,7 @@ namespace Potato::TaskGraphic
 		return nullptr;
 	}
 
-	bool Flow::PauseAndLaunch(Task::ContextWrapper& wrapper, Node& node, Task::Property property, std::optional<std::chrono::steady_clock::time_point> delay)
+	std::tuple<Flow*, FlowProcessContext*> Flow::GetProcessContextFromWrapper(Task::ContextWrapper& wrapper)
 	{
 		auto& trigger = wrapper.GetTriggerProperty();
 		auto flow = dynamic_cast<Flow*>(trigger.trigger.GetPointer());
@@ -510,8 +555,29 @@ namespace Potato::TaskGraphic
 			auto context = trigger.data.TryGetNodeDataPointerWithType<FlowProcessContext>();
 			if (context != nullptr)
 			{
-				return context->PauseAndLaunch(wrapper, *flow, trigger.data2.GetSizeT(), node, std::move(property), std::move(delay));
+				return { flow, context };
 			}
+		}
+		return {};
+	}
+
+	bool Flow::PauseAndLaunch(Task::ContextWrapper& wrapper, Node& node, Task::Property property, std::optional<std::chrono::steady_clock::time_point> delay)
+	{
+		auto [flow, context] = GetProcessContextFromWrapper(wrapper);
+		if (context != nullptr)
+		{
+			return context->PauseAndLaunch(wrapper, *flow, wrapper.GetTriggerProperty().data2.GetSizeT(), node, std::move(property), std::move(delay));
+		}
+		return false;
+	}
+
+	bool Flow::AddTemporaryNode(Task::ContextWrapper& wrapper, Node& node, Task::Property property)
+	{
+		auto [flow, context] = GetProcessContextFromWrapper(wrapper);
+		if (context != nullptr)
+		{
+			context->AddTemporaryNode(node, std::move(property));
+			return true;
 		}
 		return false;
 	}
@@ -585,14 +651,14 @@ namespace Potato::TaskGraphic
 		}
 	}
 
-	bool Flow::Commited(Task::Context& context, std::u8string_view display_name, Task::Catgegory catrgory)
+	bool Flow::Commited(Task::Context& context, std::u8string_view display_name, Task::Category category)
 	{
 		auto execute = CreateProcessContext();
 		if (execute)
 		{
 			Task::Property property;
 			property.node_name = display_name;
-			property.category = catrgory;
+			property.category = category;
 			property.data.SetNodeData(execute.GetPointer());
 			property.data2.SetIndex(0);
 			return context.Commit(*this, std::move(property));
@@ -600,17 +666,23 @@ namespace Potato::TaskGraphic
 		return false;
 	}
 
-	GraphNode Flow::AddFlow(Flow& flow, std::u8string_view display_name, Task::Catgegory catrgory)
+	GraphNode Flow::AddFlow(Flow& flow, std::u8string_view display_name, Task::Category category)
 	{
-		auto execute = CreateProcessContext();
+		std::lock_guard lg(preprocess_mutex);
+		return AddFlow_AssumedLocked(flow, display_name, category);
+	}
+
+	GraphNode Flow::AddFlow_AssumedLocked(Flow& flow, std::u8string_view display_name, Task::Category category)
+	{
+		auto execute = CreateProcessContext_AssumedLocked();
 		if (execute)
 		{
 			Task::Property property;
 			property.node_name = display_name;
-			property.category = catrgory;
+			property.category = category;
 			property.data.SetNodeData(execute.GetPointer());
 			property.data2.SetIndex(0);
-			return AddNode(&flow, std::move(property));
+			return AddNode_AssumedLocked(flow, std::move(property));
 		}
 		return {};
 	}

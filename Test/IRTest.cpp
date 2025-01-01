@@ -92,7 +92,7 @@ int main()
 
 	K* io = static_cast<K*>(so->GetData());
 
-	auto so2 = StructLayoutObject::CopyConstruct(P, so);
+	auto so2 = StructLayoutObject::CopyConstruct(P, *so);
 
 
 	K* io2 = static_cast<K*>(so2->GetData());

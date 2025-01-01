@@ -49,7 +49,6 @@ export namespace Potato::Graph
 			std::size_t version = 0;
 			std::size_t in_degree = 0;
 			std::size_t topology_degree = 0;
-			std::size_t append_info = 0;
 		};
 
 		struct Edge
@@ -63,7 +62,7 @@ export namespace Potato::Graph
 		DirectedAcyclicGraphImmediately(std::pmr::memory_resource* resource = std::pmr::get_default_resource())
 			: nodes(resource), edges(resource) {}
 
-		GraphNode Add(std::size_t append_info = 0);
+		GraphNode Add();
 
 		bool AddEdge(GraphNode from, GraphNode to, EdgeOptimize optimize = {}, std::pmr::memory_resource* temp_resource = std::pmr::get_default_resource());
 		bool RemoveEdge(GraphNode from, GraphNode to);
@@ -96,7 +95,6 @@ export namespace Potato::Graph
 			State state = State::None;
 			std::size_t version = 0;
 			std::size_t in_degree = 0;
-			std::size_t append_info = 0;
 		};
 
 		struct Edge
@@ -117,15 +115,6 @@ export namespace Potato::Graph
 		bool RemoveNode(GraphNode node);
 		std::size_t GetNodeCount() const { return count; }
 		bool CheckExist(GraphNode node) const;
-
-		std::optional<std::size_t> GetAppendInfo_AssumedLocked(GraphNode node_index) const
-		{
-			if (CheckExist(node_index))
-			{
-				return nodes[node_index.GetIndex()].append_info;
-			}
-			return std::nullopt;
-		}
 
 		std::optional<std::span<GraphEdge const>> AcyclicCheck(std::span<GraphEdge> output_buffer, CheckOptimize optimize = {}, std::pmr::memory_resource* temporary_resource = std::pmr::get_default_resource());
 

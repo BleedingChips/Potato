@@ -378,7 +378,7 @@ namespace Potato::Task
 		}
 	}
 
-	void Context::ExecuteContextThreadUntilNoExsitTask(std::size_t group_id)
+	void Context::ExecuteContextThreadUntilNoExistTask(std::size_t group_id)
 	{
 		std::size_t loop_count = 0;
 		ThreadExecuteContext context;
