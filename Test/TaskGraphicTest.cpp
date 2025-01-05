@@ -78,21 +78,22 @@ int main()
 		Potato::Task::Context context;
 
 		std::size_t Count = 0;
-		auto A1 = Potato::Task::Node::CreateLambdaNode([](Potato::Task::ContextWrapper& wrapper){
-			Print(wrapper.GetTaskNodeProperty().node_name, std::this_thread::get_id());
+		auto A1 = Potato::TaskGraphic::Node::CreateLambdaNode([](Potato::TaskGraphic::ContextWrapper& wrapper){
+			Print(wrapper.GetNodeProperty().node_name, std::this_thread::get_id());
 		});
 
-		auto lambda = [](Potato::Task::ContextWrapper& wrapper){
-			Print(wrapper.GetTaskNodeProperty().node_name, std::this_thread::get_id());
+		auto lambda = [](Potato::TaskGraphic::ContextWrapper& wrapper){
+			Print(wrapper.GetNodeProperty().node_name, std::this_thread::get_id());
 		};
 
-		auto lambda2 = [&](Potato::Task::ContextWrapper& wrapper)
+		auto lambda2 = [&](Potato::TaskGraphic::ContextWrapper& wrapper)
 		{
-			Print(wrapper.GetTaskNodeProperty().node_name, std::this_thread::get_id());
-			auto new_node = Potato::Task::Node::CreateLambdaNode([](Potato::Task::ContextWrapper& wrapper) {Print(wrapper.GetTaskNodeProperty().node_name, std::this_thread::get_id()); });
-			Potato::TaskGraphic::Flow::PauseAndLaunch(wrapper, *new_node, { u8"pause" });
-			//auto nodex = TaskFlow::CreateLambdaTask(lambda);
-			//context.flow->AddTemporaryNode(nodex, {});
+			Print(wrapper.GetNodeProperty().node_name, std::this_thread::get_id());
+			auto new_node = Potato::TaskGraphic::Node::CreateLambdaNode([](Potato::TaskGraphic::ContextWrapper& wrapper)
+			{
+				Print(wrapper.GetNodeProperty().node_name, std::this_thread::get_id());
+			});
+			wrapper.PauseAndPause(*new_node, { u8"pause" });
 		};
 
 		
@@ -102,7 +103,7 @@ int main()
 		auto a3 = tf.AddLambda(lambda, {u8"A3"});
 		auto a4 = tf.AddLambda(lambda, {u8"A4"});
 		auto a5 = tf.AddLambda(lambda, {u8"A5"});
-		auto a6 = tf.AddFlow(tf2, {u8"SubTask"});
+		auto a6 = tf.AddNode(tf2, {u8"SubTask"});
 		auto a7 = tf.AddLambda(lambda2, {u8"temporary"});
 		
 		auto a21 = tf2.AddLambda(lambda, {u8"SubTask A1"});

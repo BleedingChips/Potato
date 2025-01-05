@@ -12,7 +12,7 @@ namespace Potato::Task
 		
 	}
 
-	bool NodeSequencer::InsertNode(NodeTuple node, std::optional<std::chrono::steady_clock::time_point> delay_time)
+	bool NodeSequencer::InsertNode(NodeTuple node, std::optional<TimeT::time_point> delay_time)
 	{
 		if (node.node)
 		{
@@ -32,7 +32,7 @@ namespace Potato::Task
 		return false;
 	}
 
-	auto NodeSequencer::PopNode(std::chrono::steady_clock::time_point current_time) ->std::optional<NodeTuple>
+	auto NodeSequencer::PopNode(TimeT::time_point current_time) ->std::optional<NodeTuple>
 	{
 		std::lock_guard lg(node_deque_mutex);
 		if (min_time_point.has_value() && min_time_point <= current_time)
@@ -239,13 +239,13 @@ namespace Potato::Task
 		ThreadExecuteContext ite_context;
 		while (!sk.stop_requested())
 		{
-			std::chrono::steady_clock::time_point now_time;
+			TimeT::time_point now_time;
 			std::size_t skip_empty_sequence_count = 0;
 			std::size_t total_task_index_count = 0;
 			while (total_task_index_count < 3 && skip_empty_sequence_count < 3)
 			{
 				if (skip_empty_sequence_count == 0)
-					now_time = std::chrono::steady_clock::now();
+					now_time = TimeT::now();
 				auto tar = node_sequencer[ite_context.node_sequencer_selector];
 
 				if (ExecuteNodeSequencer(*tar, group_id, now_time))
@@ -289,7 +289,7 @@ namespace Potato::Task
 		}
 	}
 
-	bool Context::Commit(Node& target, Property property, TriggerProperty trigger, std::optional<std::chrono::steady_clock::time_point> delay_time_point)
+	bool Context::Commit(Node& target, Property property, TriggerProperty trigger, std::optional<TimeT::time_point> delay_time_point)
 	{
 		if (property.category.IsGlobal())
 		{
@@ -332,7 +332,7 @@ namespace Potato::Task
 		return false;
 	}
 
-	bool Context::ExecuteContextThreadOnce(ThreadExecuteContext& execute_context, std::chrono::steady_clock::time_point now, bool accept_global, std::size_t group_id)
+	bool Context::ExecuteContextThreadOnce(ThreadExecuteContext& execute_context, TimeT::time_point now, bool accept_global, std::size_t group_id)
 	{
 		NodeSequencer* TargetSequence = nullptr;
 		switch (execute_context.node_sequencer_selector)
@@ -383,7 +383,7 @@ namespace Potato::Task
 		std::size_t loop_count = 0;
 		ThreadExecuteContext context;
 
-		std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+		TimeT::time_point now = TimeT::now();
 
 		while (true)
 		{
@@ -391,7 +391,7 @@ namespace Potato::Task
 			if (!ExecuteContextThreadOnce(context, now, true, group_id))
 				std::this_thread::yield();
 			if (context.current_node_sequencer_iterator != 0)
-				now = std::chrono::steady_clock::now();
+				now = TimeT::now();
 			if (context.current_node_sequencer_iterator == 0 && context.node_sequencer_selector == 0 && CheckNodeSequencerEmpty())
 				return;
 		}
@@ -439,7 +439,7 @@ namespace Potato::Task
 		}
 	}
 
-	bool Context::ExecuteNodeSequencer(NodeSequencer& target_sequence, std::size_t group_id, std::chrono::steady_clock::time_point now_time)
+	bool Context::ExecuteNodeSequencer(NodeSequencer& target_sequence, std::size_t group_id, TimeT::time_point now_time)
 	{
 		auto result = target_sequence.PopNode(now_time);
 		if (!result.has_value())

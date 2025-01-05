@@ -254,7 +254,8 @@ namespace Potato::Graph
 	bool DirectedAcyclicGraphImmediately::CheckExist(GraphNode node) const
 	{
 		return node.node_index < nodes.size() &&
-			nodes[node.node_index].version == node.version;
+			nodes[node.node_index].version == node.version && 
+			nodes[node.node_index].state == State::Active;
 	}
 
 

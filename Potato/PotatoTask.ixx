@@ -13,6 +13,9 @@ import PotatoTMP;
 
 export namespace Potato::Task
 {
+
+	using TimeT = std::chrono::steady_clock;
+
 	struct NodeData
 	{
 		struct Wrapper
@@ -164,8 +167,8 @@ export namespace Potato::Task
 		template<AcceptableTaskNode FunT>
 		static Ptr CreateLambdaNode(FunT&& func, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
-		virtual void TaskExecute(ContextWrapper& status) = 0;
-		virtual void TaskTerminal(ContextWrapper& property) noexcept {};
+		virtual void TaskExecute(ContextWrapper& wrapper) = 0;
+		virtual void TaskTerminal(ContextWrapper& wrapper) noexcept {};
 		virtual ~Node() = default;
 
 	protected:
@@ -191,13 +194,13 @@ export namespace Potato::Task
 		struct TimedNodeTuple
 		{
 			NodeTuple node_tuple;
-			std::chrono::steady_clock::time_point request_time;
+			TimeT::time_point request_time;
 		};
 
-		std::optional<NodeTuple> PopNode(std::chrono::steady_clock::time_point current_time);
+		std::optional<NodeTuple> PopNode(TimeT::time_point current_time);
 		std::optional<NodeTuple> ForcePopNode();
 
-		bool InsertNode(NodeTuple node, std::optional<std::chrono::steady_clock::time_point> delay_time);
+		bool InsertNode(NodeTuple node, std::optional<TimeT::time_point> delay_time);
 		std::size_t GetTaskCount() const { return task_count; }
 		void MarkNodeFinish() { task_count -= 1; }
 
@@ -208,7 +211,7 @@ export namespace Potato::Task
 		std::atomic_size_t task_count = 0;
 
 		std::mutex node_deque_mutex;
-		std::optional<std::chrono::steady_clock::time_point> min_time_point;
+		std::optional<TimeT::time_point> min_time_point;
 		std::pmr::vector<TimedNodeTuple> delay_node;
 		std::pmr::deque<NodeTuple> node_deque;
 	};
@@ -239,12 +242,12 @@ export namespace Potato::Task
 			std::size_t current_node_sequencer_iterator = 0;
 		};
 
-		bool ExecuteContextThreadOnce(ThreadExecuteContext& execute_context, std::chrono::steady_clock::time_point now, bool accept_global = true, std::size_t group_id = std::numeric_limits<std::size_t>::max());
+		bool ExecuteContextThreadOnce(ThreadExecuteContext& execute_context, TimeT::time_point now = TimeT::now(), bool accept_global = true, std::size_t group_id = std::numeric_limits<std::size_t>::max());
 
 		bool CheckNodeSequencerEmpty();
 
 		void ExecuteContextThreadUntilNoExistTask(std::size_t group_id = std::numeric_limits<std::size_t>::max());
-		bool Commit(Node& target, Property property = {}, TriggerProperty trigger = {}, std::optional<std::chrono::steady_clock::time_point> delay_time_point = std::nullopt);
+		bool Commit(Node& target, Property property = {}, TriggerProperty trigger = {}, std::optional<TimeT::time_point> delay_time_point = std::nullopt);
 
 	protected:
 
@@ -274,7 +277,7 @@ export namespace Potato::Task
 
 		void ThreadExecute(NodeSequencer& group, NodeSequencer& thread, std::size_t group_id, std::stop_token& sk);
 		void TerminalNodeSequencer(Status state, NodeSequencer& target_sequence, std::size_t group_id) noexcept;
-		bool ExecuteNodeSequencer(NodeSequencer& target_sequence, std::size_t group_id, std::chrono::steady_clock::time_point now_time);
+		bool ExecuteNodeSequencer(NodeSequencer& target_sequence, std::size_t group_id, TimeT::time_point now_time);
 	};
 }
 
