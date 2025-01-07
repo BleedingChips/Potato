@@ -120,9 +120,9 @@ export namespace Potato::TaskGraphic
 		bool AddMutexEdge(GraphNode from, GraphNode direct_to, Graph::EdgeOptimize optimize = {});
 		bool RemoveDirectEdge(GraphNode from, GraphNode direct_to);
 
-		virtual void TaskFlowExecuteBegin(Task::ContextWrapper& context) {}
-		virtual void TaskFlowExecuteEnd(Task::ContextWrapper& context) {}
-		virtual void TaskFlowPostUpdateProcessNode(Task::ContextWrapper& context) {}
+		virtual void TaskFlowExecuteBegin_AssumedLocked(Task::ContextWrapper& context) {}
+		virtual void TaskFlowExecuteEnd_AssumedLocked(Task::ContextWrapper& context) {}
+		virtual void TaskFlowPostUpdateProcessNode_AssumedLocked(Task::ContextWrapper& context) {}
 
 		~Flow();
 
@@ -138,6 +138,10 @@ export namespace Potato::TaskGraphic
 	protected:
 
 		Flow(Config config = {});
+
+		bool Commited_AssumedLocked(Task::Context& context, Task::Property property = {}, Task::TriggerProperty trigger_property = {}, std::optional<TimeT::time_point> delay = std::nullopt);
+		bool Commited_AssumedLocked(Task::ContextWrapper& context, Task::Property property = {}, Task::TriggerProperty trigger_property = {}, std::optional<TimeT::time_point> delay = std::nullopt);
+
 
 		void OnLeaveFlow(Flow const& flow) override;
 		bool AcceptFlow(Flow const& flow) override;
@@ -238,6 +242,7 @@ export namespace Potato::TaskGraphic
 		bool Pause_AssumedLock(ProcessNode& node);
 		bool Continue_AssumedLock(ProcessNode& node);
 		void UpdateProcessNode();
+		virtual bool UpdateProcessNode_AssumedLocked();
 		bool Start(Task::ContextWrapper& wrapper);
 		std::mutex process_mutex;
 		std::pmr::vector<ProcessNode> process_nodes;

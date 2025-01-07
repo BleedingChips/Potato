@@ -364,11 +364,9 @@ namespace Potato::TaskGraphic
 		return true;
 	}
 
-	void Flow::UpdateProcessNode()
+	bool Flow::UpdateProcessNode_AssumedLocked()
 	{
-		std::lock_guard lg(preprocess_mutex);
 		std::lock_guard lg2(process_mutex);
-
 		finished_task = 0;
 
 		auto span = std::span(process_nodes).subspan(temporary_node_offset);
@@ -405,8 +403,8 @@ namespace Potato::TaskGraphic
 				if (ite.node)
 				{
 					real_request_task += 1;
+					ite.under_process = true;
 				}
-				ite.under_process = true;
 			}
 			for (std::size_t i = 0; i < process_nodes.size(); ++i)
 			{
@@ -440,6 +438,8 @@ namespace Potato::TaskGraphic
 			temporary_node_offset = process_nodes.size();
 			temporary_edge_offset = process_edges.size();
 			append_direct_edge.clear();
+			request_task = real_request_task;
+			return true;
 		}
 		else
 		{
@@ -453,9 +453,9 @@ namespace Potato::TaskGraphic
 					ite.need_append_mutex = false;
 				}
 			}
+			request_task = real_request_task;
+			return false;
 		}
-
-		request_task = real_request_task;
 	}
 
 
@@ -641,14 +641,14 @@ namespace Potato::TaskGraphic
 
 		if(need_begin)
 		{
-			TaskFlowExecuteBegin(wrapper);
-			AcyclicEdgeCheck({}, {});
-			UpdateProcessNode();
-			TaskFlowPostUpdateProcessNode(wrapper);
+			std::lock_guard lg(preprocess_mutex);
+			TaskFlowExecuteBegin_AssumedLocked(wrapper);
+			AcyclicEdgeCheck_AssumedLocked({}, {});
+			UpdateProcessNode_AssumedLocked();
+			TaskFlowPostUpdateProcessNode_AssumedLocked(wrapper);
 			Start(wrapper);
 		}else
 		{
-			TaskFlowExecuteEnd(wrapper);
 			std::lock_guard lg(preprocess_mutex);
 			switch (running_state)
 			{
@@ -662,6 +662,7 @@ namespace Potato::TaskGraphic
 				assert(false);
 				return;
 			}
+			TaskFlowExecuteEnd_AssumedLocked(wrapper);
 		}
 	}
 
@@ -717,20 +718,11 @@ namespace Potato::TaskGraphic
 	bool Flow::Commited(Task::Context& context, Task::Property property, Task::TriggerProperty trigger_property, std::optional<TimeT::time_point> delay)
 	{
 		std::lock_guard lg(preprocess_mutex);
-		if(running_state == RunningState::Free)
-		{
-			if(context.Commit(*this, std::move(property), std::move(trigger_property), delay))
-			{
-				running_state = RunningState::Ready;
-				return true;
-			}
-		}
-		return false;
+		return Commited_AssumedLocked(context, std::move(property), std::move(trigger_property), delay);
 	}
 
-	bool Flow::Commited(Task::ContextWrapper& context, Task::Property property, Task::TriggerProperty trigger_property, std::optional<TimeT::time_point> delay)
+	bool Flow::Commited_AssumedLocked(Task::Context& context, Task::Property property, Task::TriggerProperty trigger_property, std::optional<TimeT::time_point> delay)
 	{
-		std::lock_guard lg(preprocess_mutex);
 		if (running_state == RunningState::Free)
 		{
 			if (context.Commit(*this, std::move(property), std::move(trigger_property), delay))
@@ -742,5 +734,23 @@ namespace Potato::TaskGraphic
 		return false;
 	}
 
+	bool Flow::Commited(Task::ContextWrapper& context, Task::Property property, Task::TriggerProperty trigger_property, std::optional<TimeT::time_point> delay)
+	{
+		std::lock_guard lg(preprocess_mutex);
+		return Commited_AssumedLocked(context, std::move(property), std::move(trigger_property), delay);
+	}
+
+	bool Flow::Commited_AssumedLocked(Task::ContextWrapper& context, Task::Property property, Task::TriggerProperty trigger_property, std::optional<TimeT::time_point> delay)
+	{
+		if (running_state == RunningState::Free)
+		{
+			if (context.Commit(*this, std::move(property), std::move(trigger_property), delay))
+			{
+				running_state = RunningState::Ready;
+				return true;
+			}
+		}
+		return false;
+	}
 
 }
