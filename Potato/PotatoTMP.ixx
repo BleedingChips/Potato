@@ -77,13 +77,6 @@ export namespace Potato::TMP
 	};
 	template<template<typename ...> class Output, typename ...Input> using InstantT = Output<Input...>;
 
-	/*
-	template<typename ...Type> struct TypeTuple {
-		static constexpr size_t Size = sizeof...(Type);
-		template<size_t Index> using Get = typename FindByIndex<Index, Type...>::Type;
-	};
-	*/
-
 	// FindByIndex
 
 	template<size_t index, typename ...AT>
@@ -105,6 +98,11 @@ export namespace Potato::TMP
 	struct FindByIndex<0, CT, AT...>
 	{
 		using Type = CT;
+	};
+
+	template<typename ...Type> struct TypeTuple {
+		static constexpr size_t Size = sizeof...(Type);
+		template<size_t Index> using Get = typename FindByIndex<Index, Type...>::Type;
 	};
 
 	// LocateByType

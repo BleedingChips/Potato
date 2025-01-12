@@ -390,7 +390,7 @@ namespace Potato::Task
 			
 			if (!ExecuteContextThreadOnce(context, now, true, group_id))
 				std::this_thread::yield();
-			if (context.current_node_sequencer_iterator != 0)
+			if (context.current_node_sequencer_iterator != 0 || context.continuous_empty_node_sequencer_count >= 10)
 				now = TimeT::now();
 			if (context.current_node_sequencer_iterator == 0 && context.node_sequencer_selector == 0 && CheckNodeSequencerEmpty())
 				return;
