@@ -14,6 +14,7 @@ import PotatoGraph;
 
 export namespace Potato::TaskGraphic
 {
+
 	using Task::TimeT;
 	using Graph::GraphNode;
 	using Graph::CheckOptimize;
@@ -24,24 +25,70 @@ export namespace Potato::TaskGraphic
 
 	export struct Node;
 
-	struct ContextWrapper
+	export struct Node
 	{
-		bool PauseAndPause(Task::Node& node, Task::Property property = {}, std::optional<TimeT::time_point> delay = std::nullopt);
-		bool PauseAndPause(Node& node, Task::Property property = {}, std::optional<TimeT::time_point> delay = std::nullopt);
-		Task::Property& GetNodeProperty();
-		ContextWrapper(Task::ContextWrapper& wrapper, Flow& flow) : wrapper(wrapper), flow(flow) {}
-		Flow& GetFlow() { return flow; }
-	protected:
-		Task::ContextWrapper& wrapper;
-		Flow& flow;
+		struct Wrapper
+		{
+			void AddRef(Node const* ptr) { ptr->AddTaskGraphicNodeRef(); }
+			void SubRef(Node const* ptr) { ptr->SubTaskGraphicNodeRef(); }
+			operator Task::Node::Wrapper() const { return {}; }
+		};
 
-		friend struct Flow;
+		using Ptr = Pointer::IntrusivePtr<Node, Wrapper>;
+
+		using Parameter = Task::Node::Parameter;
+
+		virtual void TaskGraphicNodeExecute(Task::Context& context, Node& self, Parameter& parameter) = 0;
+		virtual void TaskGraphicNodeTerminal(Node& self, Parameter& parameter) noexcept {}
+
+	protected:
+
+		virtual void AddTaskGraphicNodeRef() const = 0;
+		virtual void SubTaskGraphicNodeRef() const = 0;
 	};
 
-	template<typename Type>
-	concept AcceptableTaskGraphicNode = std::is_invocable_v<Type, ContextWrapper&>;
+	export struct Flow
+	{
+		GraphNode AddNode(Node& node, Node::Parameter parameter = {});
+		GraphNode AddFlowAsNode(Flow const& flow);
+		bool Remove(GraphNode node);
+		bool AddDirectEdge(GraphNode from, GraphNode direct_to, EdgeOptimize optimize = {});
+		bool AddMutexEdge(GraphNode from, GraphNode direct_to, Graph::EdgeOptimize optimize = {});
+		bool RemoveDirectEdge(GraphNode from, GraphNode direct_to);
+		Flow(std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+
+	protected:
+
+		Graph::DirectedAcyclicGraphDefer graph;
+
+		struct NodeInfos
+		{
+			Node::Ptr node;
+			Node::Parameter parameter;
+		};
+
+		struct NodeMutexEdge
+		{
+			std::size_t from;
+			std::size_t to;
+		};
+
+		struct SubNodeInfos
+		{
+			Node::Ptr node;
+			Node::Parameter parameter;
+			std::size_t sub_flow_index;
+		};
+
+		std::pmr::vector<NodeInfos> node_infos;
+		std::pmr::vector<NodeMutexEdge> node_mutex_edges;
+		std::pmr::vector<SubNodeInfos> node_infos;
+	};
 
 
+
+
+	/*
 	export struct Node : protected Task::Node
 	{
 		struct Wrapper
@@ -53,17 +100,15 @@ export namespace Potato::TaskGraphic
 
 		using Ptr = Pointer::IntrusivePtr<Node, Wrapper>;
 
-		virtual void TaskGraphicNodeExecute(ContextWrapper& wrapper) = 0;
-		virtual void TaskGraphicNodeTerminal(ContextWrapper& wrapper) noexcept {}
+		virtual void TaskGraphicNodeExecute(Flow& wrapper, Task::Context& context, Task::Property property) = 0;
+		virtual void TaskGraphicNodeTerminal(Task::Property property) noexcept {}
+
 		virtual bool AcceptFlow(Flow const& flow) { return true; };
 		virtual void OnLeaveFlow(Flow const& flow) {}
 
-		template<AcceptableTaskGraphicNode FunT>
-		static Ptr CreateLambdaNode(FunT&& func, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
-
 	protected:
 
-		void TaskExecute(Task::ContextWrapper& status) override;
+		void TaskExecute(Task::Context& context, Task::Node& self, Task::Property property, Task::TriggerProperty& trigger_property) override;
 		void TaskTerminal(Task::ContextWrapper& property) noexcept override;
 
 		virtual void AddTaskGraphicNodeRef() const = 0;
@@ -71,6 +116,9 @@ export namespace Potato::TaskGraphic
 		void AddTaskNodeRef() const override final { AddTaskGraphicNodeRef(); }
 		void SubTaskNodeRef() const override final { SubTaskGraphicNodeRef(); }
 	};
+
+	template<typename Type>
+	concept AcceptableTaskGraphicNode = std::is_invocable_v<Type, ContextWrapper&>;
 
 	struct FlowNodeDetectionIndex
 	{
@@ -103,6 +151,10 @@ export namespace Potato::TaskGraphic
 			std::pmr::memory_resource* self_resource = std::pmr::get_default_resource();
 			std::pmr::memory_resource* temporary_resource = std::pmr::get_default_resource();
 		};
+
+		template<AcceptableTaskGraphicNode FunT>
+		static Ptr CreateLambdaNode(FunT&& func, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+
 
 		static Flow::Ptr CreateTaskFlow(Config config);
 
@@ -334,4 +386,5 @@ export namespace Potato::TaskGraphic
 		}
 		return {};
 	}
+	*/
 }

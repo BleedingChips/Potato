@@ -8,6 +8,7 @@ module PotatoTaskGraphic;
 namespace Potato::TaskGraphic
 {
 
+	/*
 	bool ContextWrapper::PauseAndPause(Task::Node& node, Task::Property property, std::optional<TimeT::time_point> delay)
 	{
 		return flow.PauseAndLaunch(*this, node, std::move(property), delay);
@@ -752,5 +753,6 @@ namespace Potato::TaskGraphic
 		}
 		return false;
 	}
+	*/
 
 }

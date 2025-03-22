@@ -6,453 +6,242 @@ module PotatoTask;
 
 namespace Potato::Task
 {
-	NodeSequencer::NodeSequencer(Potato::IR::MemoryResourceRecord record, std::pmr::memory_resource* resource)
-		: MemoryResourceRecordIntrusiveInterface(record), delay_node(resource), node_deque(resource)
-	{
-		
-	}
-
-	bool NodeSequencer::InsertNode(NodeTuple node, std::optional<TimeT::time_point> delay_time)
-	{
-		if (node.node)
-		{
-			std::lock_guard lg(node_deque_mutex);
-			if (delay_time.has_value())
-			{
-				if (!min_time_point.has_value() || *delay_time < min_time_point)
-					min_time_point = *delay_time;
-				delay_node.emplace_back(std::move(node), *delay_time);
-			}else
-			{
-				node_deque.emplace_back(std::move(node));
-			}
-			task_count += 1;
-			return true;
-		}
-		return false;
-	}
-
-	auto NodeSequencer::PopNode(TimeT::time_point current_time) ->std::optional<NodeTuple>
-	{
-		std::lock_guard lg(node_deque_mutex);
-		if (min_time_point.has_value() && min_time_point <= current_time)
-		{
-			min_time_point.reset();
-
-			delay_node.erase(
-				std::remove_if(delay_node.begin(), delay_node.end(), [&](TimedNodeTuple& ite)
-				{
-					if (ite.request_time < current_time)
-					{
-						node_deque.emplace_back(std::move(ite.node_tuple));
-						return true;
-					}else if (!min_time_point.has_value() || *min_time_point > ite.request_time)
-					{
-						min_time_point = ite.request_time;
-					}
-					return false;
-				}),
-				delay_node.end()
-			);
-			
-		}
-		if (!node_deque.empty())
-		{
-			auto result = std::move(*node_deque.begin());
-			node_deque.pop_front();
-			return std::move(result);
-		}
-		return std::nullopt;
-	}
-
-	auto NodeSequencer::ForcePopNode() ->std::optional<NodeTuple>
-	{
-		std::lock_guard lg(node_deque_mutex);
-		if (min_time_point.has_value())
-		{
-			min_time_point.reset();
-			for (auto& ite : delay_node)
-			{
-				node_deque.emplace_back(std::move(ite.node_tuple));
-			}
-			delay_node.clear();
-		}
-		if (!node_deque.empty())
-		{
-			auto result = std::move(*node_deque.rbegin());
-			node_deque.pop_front();
-			return std::move(result);
-		}
-		return std::nullopt;
-	}
-
-	auto NodeSequencer::Create(std::pmr::memory_resource* resource) -> Ptr
-	{
-		auto re = Potato::IR::MemoryResourceRecord::Allocate<NodeSequencer>(resource);
-		if (re)
-		{
-			return new (re.Get()) NodeSequencer{re, re.GetMemoryResource()};
-		}
-		return {};
-	}
-
 
 	Context::Context(Config config)
-		:thread_group_infos(config.self_resource), thread_infos(config.self_resource)
+		:delay_node_sequencer(config.resource), node_sequencer(config.resource), thread_infos(config.resource), startup_acceptable_mask(config.startup_acceptable_mask)
 	{
-		node_sequencer_global = NodeSequencer::Create(config.node_sequence_resource);
-		node_sequencer_context = NodeSequencer::Create(config.node_sequence_resource);
+		acceptable_mask = startup_acceptable_mask;
 	}
 
-	std::size_t Context::AddGroupThread(std::size_t group_id, std::size_t thread_count, std::pmr::memory_resource* node_sequence_resource)
+	std::optional<std::size_t> Context::CreateThreads(std::size_t thread_count, ThreadProperty thread_property)
 	{
-		std::size_t count = 0;
-
 		std::lock_guard lg(infos_mutex);
-		auto finded = std::find_if(
-			thread_group_infos.begin(),
-			thread_group_infos.end(),
-			[=](auto& Ite) { return Ite.group_id == group_id; }
-		);
-
-		if (finded == thread_group_infos.end())
+		if (current_state != Status::Normal)
 		{
-			NodeSequencer::Ptr group = NodeSequencer::Create(node_sequence_resource);
-			if (!group)
-				return 0;
-			ThreadGroupInfo infos{
-				std::move(group),
-				0,
-				group_id
-			};
-			finded = thread_group_infos.insert(thread_group_infos.end(), std::move(infos));
+			return {};
 		}
-
-		if (finded == thread_group_infos.end())
-			return 0;
-
-		for (std::size_t i = 0; i < thread_count; ++i)
+		for (std::size_t count = 0; count < thread_count; ++count)
 		{
-			NodeSequencer::Ptr thread_node = NodeSequencer::Create(node_sequence_resource);
-			if (thread_node)
-			{
-				auto jthread = std::jthread{ [
-					this,
-					global_node = node_sequencer_global,
-					group_node = finded->node_sequencer,
-					thread_node = thread_node,
-					group_id = group_id
-				](std::stop_token token)
+			auto current_thread = std::jthread{ [
+					this, thread_property
+				] (std::stop_token token)
 				{
-					ThreadExecute(*group_node, *thread_node, group_id, token);
+					ThreadExecute(thread_property, token);
 				} };
+			auto thread_id = current_thread.get_id();
+			acceptable_mask |= thread_property.acceptable_mask;
+			thread_infos.emplace_back(std::move(current_thread), std::move(thread_id), std::move(thread_property));
+		}
+		return thread_infos.size();
+	}
 
-				auto id = jthread.get_id();
-
-				thread_infos.emplace_back(
-					std::move(thread_node),
-					std::move(jthread),
-					id,
-					finded->group_id
-				);
-
-				finded->thread_count += 1;
-				count += 1;
-			}
+	bool Context::Commit(Node& node, Node::Parameter parameter)
+	{
+		std::shared_lock sl(infos_mutex);
+		if (current_state != Status::Normal || (acceptable_mask & parameter.acceptable_mask) == 0)
+		{
+			return false;
 		}
 
-		return count;
+		if (parameter.delay_time.has_value())
+		{
+			auto now = TimeT::now();
+			auto delay_time = now + *parameter.delay_time;
+			std::lock_guard lg(delay_node_sequencer_mutex);
+			if (!min_time_point.has_value() || delay_time < *min_time_point)
+				min_time_point = delay_time;
+			delay_node_sequencer.emplace_back(
+				NodeTuple{ &node, std::move(parameter) },
+				delay_time
+			);
+		}else
+		{
+			std::lock_guard lg(node_sequencer_mutex);
+			if (current_state != Status::Normal)
+				return false;
+			node_sequencer.emplace_back(&node, std::move(parameter));
+			++exist_node_count;
+		}
+		return true;
 	}
 
 	Context::~Context()
 	{
 		{
-			std::lock_guard lg(infos_mutex);
-			for (auto& ite : thread_infos)
+			std::pmr::vector<ThreadInfo> temp_infos;
+			{
+				std::lock_guard lg(infos_mutex);
+				current_state = Status::Terminal;
+				temp_infos = std::move(thread_infos);
+			}
+
+			for (auto& ite : temp_infos)
 			{
 				ite.thread.request_stop();
 			}
+
+			for (auto& ite : temp_infos)
+			{
+				ite.thread.join();
+			}
+
+			temp_infos.clear();
 		}
 
-		while (true)
 		{
-			std::optional<std::jthread> target_jthread;
+			decltype(delay_node_sequencer) temp_delay_node;
 			{
-				std::lock_guard lg(infos_mutex);
-				if (!thread_infos.empty())
-				{
-					target_jthread = std::move(thread_infos.rbegin()->thread);
-					thread_infos.pop_back();
-				}
+				std::lock_guard lg(delay_node_sequencer_mutex);
+				temp_delay_node = std::move(delay_node_sequencer);
 			}
-			if (target_jthread.has_value())
+			for (auto& ite : temp_delay_node)
 			{
-				if (target_jthread->joinable())
-					target_jthread->join();
-			}else
-			{
-				break;
+				ite.node_tuple.node->TaskTerminal(*ite.node_tuple.node, ite.node_tuple.parameter);
 			}
 		}
 
 		{
-			std::lock_guard lg(infos_mutex);
-			thread_group_infos.clear();
+			decltype(node_sequencer) temp_node;
+			{
+				std::lock_guard lg(node_sequencer_mutex);
+				temp_node = std::move(node_sequencer);
+			}
+			for (auto& ite : temp_node)
+			{
+				ite.node->TaskTerminal(*ite.node, ite.parameter);
+			}
 		}
-
-		TerminalNodeSequencer(Status::ContextTerminal, *node_sequencer_global, std::numeric_limits<std::size_t>::max());
 	}
 
-	struct ContextWrapperImp : public ContextWrapper
+	void Context::ThreadExecute(ThreadProperty thread_property, std::stop_token& sk)
 	{
-		virtual Status GetStatue() const override { return status; }
-		virtual std::size_t GetGroupId() const override { return group_id; }
-		virtual Property& GetTaskNodeProperty() const override { return node_tuple.property; }
-		TriggerProperty& GetTriggerProperty() const override { return node_tuple.trigger; }
-		virtual bool Commit(Node& target, Property property, TriggerProperty trigger = {}, std::optional<std::chrono::steady_clock::time_point> delay_time = std::nullopt) override
-		{
-			return context.Commit(target, std::move(property), std::move(trigger), std::move(delay_time));
-		}
-
-		virtual Node& GetCurrentTaskNode() const
-		{
-			return *node_tuple.node;
-		}
-
-		ContextWrapperImp(Status status, std::size_t group_id, Context& context, NodeSequencer::NodeTuple& node_tuple)
-			: status(status), group_id(group_id), context(context), node_tuple(node_tuple) {}
-	protected:
-		Status status;
-		std::size_t group_id;
-		Context& context;
-		NodeSequencer::NodeTuple& node_tuple;
-	};
-
-	static constexpr std::array<std::size_t, 3> task_execute_target = {4, 2, 1};
-
-	void Context::ThreadExecute(NodeSequencer& group, NodeSequencer& thread, std::size_t group_id, std::stop_token& sk)
-	{
-		std::size_t count = 0;
-		std::size_t test_count = 0;
-
-		std::array<NodeSequencer*, 3> node_sequencer = { &thread, &group, node_sequencer_global.GetPointer() };
-		ThreadExecuteContext ite_context;
+		ExecuteResult result;
 		while (!sk.stop_requested())
 		{
-			TimeT::time_point now_time;
-			std::size_t skip_empty_sequence_count = 0;
-			std::size_t total_task_index_count = 0;
-			while (total_task_index_count < 3 && skip_empty_sequence_count < 3)
+			ExecuteContextThreadOnce(result, thread_property);
+			if (!result.has_been_execute)
 			{
-				if (skip_empty_sequence_count == 0)
-					now_time = TimeT::now();
-				auto tar = node_sequencer[ite_context.node_sequencer_selector];
+				std::this_thread::sleep_for(std::chrono::microseconds{10});
+			}else
+			{
+				std::this_thread::yield();
+			}
+		}
+		FinishExecuteContext(result);
+	}
 
-				if (ExecuteNodeSequencer(*tar, group_id, now_time))
+	void Context::FinishExecuteContext(ExecuteResult& result)
+	{
+		if (result.has_been_execute)
+		{
+			result.has_been_execute = false;
+			std::lock_guard lg(node_sequencer_mutex);
+			--exist_node_count;
+			result.exist_node = exist_node_count;
+		}
+	}
+
+	void Context::ExecuteContextThreadOnce(ExecuteResult& result, ThreadProperty property, TimeT::time_point now)
+	{
+		result.exist_delay_node.reset();
+		if (delay_node_sequencer_mutex.try_lock())
+		{
+			std::lock_guard lg(delay_node_sequencer_mutex, std::adopt_lock);
+			if (min_time_point.has_value() && min_time_point <= now)
+			{
+				min_time_point.reset();
+				std::lock_guard lg2(node_sequencer_mutex);
+				delay_node_sequencer.erase(
+					std::remove_if(delay_node_sequencer.begin(), delay_node_sequencer.end(), 
+						[&](TimedNodeTuple& tuple)
+						{
+							if (tuple.request_time < now)
+							{
+								node_sequencer.push_back(std::move(tuple.node_tuple));
+								exist_node_count += 1;
+								return true;
+							}else
+							{
+								if (!min_time_point.has_value() || min_time_point > tuple.request_time)
+								{
+									min_time_point = tuple.request_time;
+								}
+								return false;
+							}
+						}
+					),
+					delay_node_sequencer.end()
+				);
+			}
+			result.exist_delay_node = delay_node_sequencer.size();
+		}
+
+		NodeTuple current_node_tuple;
+
+		{
+			std::lock_guard lg(node_sequencer_mutex);
+			if (result.has_been_execute)
+			{
+				exist_node_count -= 1;
+				result.has_been_execute = false;
+			}
+			if (!node_sequencer.empty())
+			{
+				std::size_t empty_count = 0;
+				for (auto& ite : node_sequencer)
 				{
-					skip_empty_sequence_count = 0;
-					++ite_context.current_node_sequencer_iterator;
-					if (ite_context.current_node_sequencer_iterator >= task_execute_target[ite_context.node_sequencer_selector])
+					if ((ite.parameter.acceptable_mask & property.acceptable_mask) != 0)
 					{
-						ite_context.current_node_sequencer_iterator = 0;
-						total_task_index_count += 1;
-						ite_context.node_sequencer_selector = ((ite_context.node_sequencer_selector + 1) % task_execute_target.size());
+						assert(ite.node);
+						current_node_tuple = std::move(ite);
+						ite.parameter.acceptable_mask = 0;
+						break;
 					}
-				}else
+					else if (ite.parameter.acceptable_mask == 0)
+					{
+						empty_count += 1;
+					}
+				}
+				if (empty_count * 2 > node_sequencer.size())
 				{
-					skip_empty_sequence_count += 1;
-					total_task_index_count += 1;
-					ite_context.node_sequencer_selector = ((ite_context.node_sequencer_selector + 1) % task_execute_target.size());
+					node_sequencer.erase(
+						std::remove_if(node_sequencer.begin(), node_sequencer.end(), [](NodeTuple& tuple) {
+							if (tuple.parameter.acceptable_mask == 0)
+							{
+								assert(!tuple.node);
+								return true;
+							}
+							return false;
+						}),
+						node_sequencer.end()
+					);
 				}
 			}
-			std::this_thread::yield();
+			result.exist_node = exist_node_count;
 		}
 
-		TerminalNodeSequencer(Status::ThreadTerminal, thread, group_id);
-
-		NodeSequencer::Ptr group_node;
+		if (current_node_tuple.node)
 		{
-			std::lock_guard lg(infos_mutex);
-			auto finded = std::find_if(thread_group_infos.begin(), thread_group_infos.end(), [=](ThreadGroupInfo const& info) { return info.group_id == group_id; });
-			assert(finded != thread_group_infos.end());
-			finded->thread_count -= 1;
-			if (finded->thread_count == 0)
-			{
-				group_node = std::move(finded->node_sequencer);
-				thread_group_infos.erase(finded);
-			}
-		}
-
-		if (group_node)
-		{
-			TerminalNodeSequencer(Status::GroupTerminal, *group_node, group_id);
+			current_node_tuple.node->TaskExecute(*this, *current_node_tuple.node, current_node_tuple.parameter);
+			result.has_been_execute = true;
 		}
 	}
 
-	bool Context::Commit(Node& target, Property property, TriggerProperty trigger, std::optional<TimeT::time_point> delay_time_point)
+	void Context::ExecuteContextThreadUntilNoExistTask()
 	{
-		if (property.category.IsGlobal())
-		{
-			node_sequencer_global->InsertNode(
-				NodeSequencer::NodeTuple{
-					&target, std::move(property), std::move(trigger)
-				}, std::move(delay_time_point)
-			);
-			return true;
-		}
-		if (auto group = property.category.GetGroupID(); group)
-		{
-			std::shared_lock sl(infos_mutex);
-			auto find = std::find_if(thread_group_infos.begin(), thread_group_infos.end(), [=](ThreadGroupInfo& info) { return info.group_id == *group; });
-			if (find != thread_group_infos.end())
-			{
-				find->node_sequencer->InsertNode(
-					NodeSequencer::NodeTuple{
-						&target, std::move(property), std::move(trigger)
-					}, std::move(delay_time_point)
-				);
-				return true;
-			}
-			return false;
-		}
-		if (auto threadid = property.category.GetThreadID(); threadid)
-		{
-			std::shared_lock sl(infos_mutex);
-			auto find = std::find_if(thread_infos.begin(), thread_infos.end(), [=](ThreadInfo& info) { return info.thread_id == *threadid; });
-			if (find != thread_infos.end())
-			{
-				find->node_sequencer->InsertNode(
-					NodeSequencer::NodeTuple{
-						&target, std::move(property), std::move(trigger)
-					}, std::move(delay_time_point)
-				);
-				return true;
-			}
-		}
-		return false;
-	}
-
-	bool Context::ExecuteContextThreadOnce(ThreadExecuteContext& execute_context, TimeT::time_point now, bool accept_global, std::size_t group_id)
-	{
-		NodeSequencer* TargetSequence = nullptr;
-		switch (execute_context.node_sequencer_selector)
-		{
-		case 0:
-			TargetSequence = node_sequencer_context.GetPointer();
-			break;
-		case 1:
-			{
-				std::shared_lock sl(infos_mutex);
-				auto find = std::find_if(thread_group_infos.begin(), thread_group_infos.end(), [=](ThreadGroupInfo& info) { return info.group_id == group_id; });
-				if (find != thread_group_infos.end())
-					TargetSequence = find->node_sequencer.GetPointer();
-				break;
-			}
-		case 2:
-			if (accept_global)
-			{
-				TargetSequence = node_sequencer_global.GetPointer();
-				break;
-			}
-		}
-
-		if (TargetSequence != nullptr && ExecuteNodeSequencer(*TargetSequence, group_id, now))
-		{
-			execute_context.current_node_sequencer_iterator += 1;
-			if (execute_context.current_node_sequencer_iterator >= task_execute_target[execute_context.node_sequencer_selector])
-			{
-				execute_context.node_sequencer_selector = (execute_context.node_sequencer_selector + 1) % task_execute_target.size();
-				execute_context.current_node_sequencer_iterator = 0;
-				execute_context.reached_node_sequencer_count += 1;
-			}
-			return true;
-		}
-		else
-		{
-			if (execute_context.current_node_sequencer_iterator == 0)
-				execute_context.continuous_empty_node_sequencer_count += 1;
-			execute_context.node_sequencer_selector = (execute_context.node_sequencer_selector + 1) % task_execute_target.size();
-			execute_context.current_node_sequencer_iterator = 0;
-			execute_context.reached_node_sequencer_count += 1;
-			return false;
-		}
-	}
-
-	void Context::ExecuteContextThreadUntilNoExistTask(std::size_t group_id)
-	{
-		std::size_t loop_count = 0;
-		ThreadExecuteContext context;
-
-		TimeT::time_point now = TimeT::now();
-
+		ExecuteResult result;
 		while (true)
 		{
-			
-			if (!ExecuteContextThreadOnce(context, now, true, group_id))
-				std::this_thread::yield();
-			if (context.current_node_sequencer_iterator != 0 || context.continuous_empty_node_sequencer_count >= 10)
-				now = TimeT::now();
-			if (context.current_node_sequencer_iterator == 0 && context.node_sequencer_selector == 0 && CheckNodeSequencerEmpty())
-				return;
-		}
-	}
-
-	bool Context::CheckNodeSequencerEmpty()
-	{
-		if (node_sequencer_global->GetTaskCount() != 0)
-			return false;
-		if (node_sequencer_context->GetTaskCount() != 0)
-			return false;
-
-		{
-			std::shared_lock sl(infos_mutex);
-			for (auto& ite : thread_group_infos)
-			{
-				if (ite.node_sequencer->GetTaskCount() != 0)
-					return false;
-			}
-			for (auto& ite : thread_infos)
-			{
-				if (ite.node_sequencer->GetTaskCount() != 0)
-					return false;
-			}
-		}
-
-		return true;
-	}
-
-	void Context::TerminalNodeSequencer(Status state, NodeSequencer& target_sequence, std::size_t group_id) noexcept
-	{
-		while (true)
-		{
-			auto result = target_sequence.ForcePopNode();
-			if (!result.has_value())
+			ExecuteContextThreadOnce(result, { startup_acceptable_mask });
+			if (result.exist_delay_node.has_value() && *result.exist_delay_node == 0 && result.exist_node ==0)
 			{
 				break;
 			}
-			ContextWrapperImp wrapper_imp{ state, group_id, *this, *result };
-			result->node->TaskTerminal(wrapper_imp);
-			if (result->trigger.trigger)
+			if (!result.has_been_execute)
 			{
-				result->trigger.trigger->TriggerTerminal(wrapper_imp);
+				std::this_thread::sleep_for(std::chrono::microseconds{ 10 });
 			}
 		}
-	}
-
-	bool Context::ExecuteNodeSequencer(NodeSequencer& target_sequence, std::size_t group_id, TimeT::time_point now_time)
-	{
-		auto result = target_sequence.PopNode(now_time);
-		if (!result.has_value())
-		{
-			return false;
-		}
-		ContextWrapperImp wrapper_imp{ Status::Normal, group_id, *this, *result };
-		result->node->TaskExecute(wrapper_imp);
-		if (result->trigger.trigger)
-		{
-			result->trigger.trigger->TriggerExecute(wrapper_imp);
-		}
-		target_sequence.MarkNodeFinish();
-		return true;
+		FinishExecuteContext(result);
 	}
 }
