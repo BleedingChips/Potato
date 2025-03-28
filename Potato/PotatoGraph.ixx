@@ -21,8 +21,8 @@ export namespace Potato::Graph
 
 	struct GraphEdge
 	{
-		GraphNode from;
-		GraphNode to;
+		std::size_t from;
+		std::size_t to;
 	};
 
 	struct EdgeOptimize

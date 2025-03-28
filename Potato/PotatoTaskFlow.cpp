@@ -2,11 +2,327 @@ module;
 
 #include <cassert>
 
-module PotatoTaskGraphic;
+module PotatoTaskFlow;
 
 
-namespace Potato::TaskGraphic
+namespace Potato::TaskFlow
 {
+	Flow::Flow(std::pmr::memory_resource* resource)
+		: node_infos(resource), node_direct_edges(resource),
+	node_mutex_edges(resource), encoded_flow(resource)
+	{
+		
+	}
+
+	Flow::NodeIndex Flow::AddFlowAsNode(Flow const& flow, std::pmr::memory_resource* temporary_resource)
+	{
+		auto old_node_size = encoded_flow.encode_infos.size();
+		auto old_edge_size = encoded_flow.edges.size();
+
+		if (EncodeNodeTo(flow, encoded_flow, temporary_resource))
+		{
+			std::size_t index = 0;
+
+			NodeInfos info;
+			info.category = NodeCategory::SubFlowNode;
+			info.version = 1;
+			info.encode_nodes = { old_node_size, encoded_flow.encode_infos.size() };
+			info.encode_edges = { old_edge_size, encoded_flow.edges.size() };
+
+			for (index = 0; index < node_infos.size(); ++index)
+			{
+				auto& ref = node_infos[index];
+				if (ref.category == NodeCategory::Empty)
+				{
+					info.version = ref.version + 1;
+					ref = std::move(info);
+					return { index, ref.version };
+				}
+			}
+
+			node_infos.emplace_back(std::move(info));
+
+			return { index, info.version };
+		}
+
+		return {};
+	}
+
+	Flow::NodeIndex Flow::AddNode(Node& node, Node::Parameter parameter)
+	{
+		std::size_t index = 0;
+
+		NodeInfos info;
+		info.category = NodeCategory::NormalNode;
+		info.version = 1;
+		info.node = &node;
+		info.parameter = std::move(parameter);
+
+		for (index = 0; index < node_infos.size(); ++index)
+		{
+			auto& ref = node_infos[index];
+			if (ref.category == NodeCategory::Empty)
+			{
+				info.version = ref.version + 1;
+				ref = std::move(info);
+				return {index, ref.version};
+			}
+		}
+
+		node_infos.emplace_back(std::move(info));
+
+		return {index, info.version};
+	}
+
+	bool Flow::Remove(NodeIndex const& index)
+	{
+		if (index.index < node_infos.size())
+		{
+			auto& target = node_infos[index.index];
+			if (target.version == index.version)
+			{
+				auto info = std::move(target);
+				target.category = NodeCategory::Empty;
+
+				std::erase_if(node_direct_edges, [=](Graph::GraphEdge const& edge)
+					{
+						return edge.from == index.index || edge.to == index.index;
+					});
+
+				std::erase_if(node_mutex_edges, [=](Graph::GraphEdge const& edge)
+					{
+						return edge.from == index.index || edge.to == index.index;
+					});
+
+				if (info.category == NodeCategory::SubFlowNode)
+				{
+					encoded_flow.edges.erase(
+						encoded_flow.edges.begin() + info.encode_edges.Begin(),
+						encoded_flow.edges.begin() + info.encode_edges.End()
+					);
+
+					encoded_flow.encode_infos.erase(
+						encoded_flow.encode_infos.begin() + info.encode_nodes.Begin(),
+						encoded_flow.encode_infos.begin() + info.encode_nodes.End()
+					);
+
+					for (auto& ite : node_infos)
+					{
+						if (ite.category == NodeCategory::SubFlowNode)
+						{
+							if (ite.encode_nodes.Begin() >= info.encode_nodes.Begin())
+							{
+								ite.encode_nodes.WholeForward(ite.encode_nodes.Size());
+							}
+							if (ite.encode_edges.Begin() >= info.encode_edges.Begin())
+							{
+								ite.encode_edges.WholeForward(ite.encode_edges.Size());
+							}
+						}
+					}
+				}
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool Flow::AddDirectEdge(NodeIndex from, NodeIndex direct_to)
+	{
+		if (IsAvailableIndex(from) && IsAvailableIndex(direct_to) && from != direct_to)
+		{
+			node_direct_edges.emplace_back( from.index, direct_to.index );
+			return true;
+		}
+		return false;
+	}
+
+	bool Flow::AddMutexEdge(NodeIndex from, NodeIndex direct_to)
+	{
+		if (IsAvailableIndex(from) && IsAvailableIndex(direct_to) && from != direct_to)
+		{
+			node_mutex_edges.emplace_back(from.index, direct_to.index);
+			node_mutex_edges.emplace_back(direct_to.index, from.index);
+			return true;
+		}
+		return false;
+	}
+
+	bool Flow::RemoveDirectEdge(NodeIndex from, NodeIndex direct_to)
+	{
+		if (IsAvailableIndex(from) && IsAvailableIndex(direct_to))
+		{
+			std::erase_if(node_direct_edges, [=](Graph::GraphEdge const& edge)
+				{
+					return edge.from == from.index && edge.to == direct_to.index;
+				});
+			return true;
+		}
+		return false;
+	}
+
+	bool Flow::RemoveMutexEdge(NodeIndex from, NodeIndex direct_to)
+	{
+		if (IsAvailableIndex(from) && IsAvailableIndex(direct_to))
+		{
+			std::erase_if(node_mutex_edges, [=](Graph::GraphEdge const& edge)
+				{
+					return (edge.from == from.index && edge.to == direct_to.index)
+						|| (edge.from == direct_to.index && edge.to == from.index);
+				});
+			return true;
+		}
+		return false;
+	}
+
+	bool Flow::IsAvailableIndex(NodeIndex const& index) const
+	{
+		if(index.index < node_infos.size() && index.version == node_infos[index.index].version)
+		{
+			return true;
+		}
+		return false;
+	}
+
+	bool Flow::EncodeNodeTo(
+		Flow const& target_flow,
+		EncodedFlowNodes& output_encoded_flow,
+		std::pmr::memory_resource* temporary_resource
+	)
+	{
+
+		struct DetectedInfo
+		{
+			std::size_t original_index = 0;
+			std::size_t mapping_index = std::numeric_limits<std::size_t>::max();
+			std::size_t in_degree = 0;
+			std::size_t out_degree = 0;
+		};
+
+		std::pmr::vector<DetectedInfo> temporary_node{temporary_resource};
+		temporary_node.reserve(target_flow.node_infos.size());
+		std::size_t index = 0;
+		std::size_t total_available_node_count = 0;
+		for (auto& ite : target_flow.node_infos)
+		{
+			DetectedInfo info;
+			if (ite.category != NodeCategory::Empty)
+			{
+				info.original_index = index;
+				total_available_node_count += 1;
+			}
+			temporary_node.emplace_back(info);
+			++index;
+		}
+
+		for (auto& ite : target_flow.node_direct_edges)
+		{
+			temporary_node[ite.from].out_degree += 1;
+			temporary_node[ite.to].in_degree += 1;
+		}
+
+		std::pmr::vector<std::size_t> search_stack{ temporary_resource };
+		search_stack.reserve(target_flow.node_infos.size());
+
+		for (std::size_t i = 0; i < temporary_node.size(); ++i)
+		{
+			auto& info = temporary_node[i];
+			if (info.in_degree == 0)
+			{
+				info.mapping_index = search_stack.size();
+				search_stack.push_back(i);
+			}
+		}
+
+		for (std::size_t search_index = 0; search_index < search_stack.size(); ++search_index)
+		{
+			auto old_index = search_stack[search_index];
+
+			for (auto& ite : target_flow.node_direct_edges)
+			{
+				if (ite.from == old_index)
+				{
+					auto& to_node = temporary_node[ite.to];
+					assert(to_node.in_degree > 0);
+					to_node.in_degree -= 1;
+					if (to_node.in_degree == 0)
+					{
+						assert(to_node.mapping_index == std::numeric_limits<std::size_t>::max());
+						to_node.mapping_index = search_stack.size();
+						search_stack.push_back(ite.to);
+					}
+				}
+			}
+		}
+
+		if (search_stack.size() != total_available_node_count)
+			return false;
+
+		struct EdgesInfo
+		{
+			bool been_direct_to = false;
+			bool need_remove = false;
+		};
+
+		std::pmr::vector<EdgesInfo> temporary_edges{ temporary_resource };
+		temporary_edges.resize(target_flow.node_infos.size());
+
+		for (auto current_index : search_stack)
+		{
+
+			std::size_t edges_count = 0;
+
+			for (auto& ite : target_flow.node_direct_edges)
+			{
+				if (ite.from == current_index)
+				{
+					temporary_edges[ite.to].been_direct_to = true;
+					edges_count += 1;
+				}
+			}
+
+			std::size_t new_edges_count = output_encoded_flow.edges.size();
+
+			if (edges_count != 0)
+			{
+				for (auto& ite : target_flow.node_direct_edges)
+				{
+					if (
+						ite.from != current_index && ite.to != current_index
+						&& temporary_edges[ite.from].been_direct_to
+						&& temporary_edges[ite.to].been_direct_to
+						)
+					{
+						temporary_edges[ite.to].need_remove = true;
+					}
+				}
+			}
+			
+
+			
+
+		}
+
+
+
+
+
+		auto old_node_count = output_encoded_flow.encode_infos.size();
+		auto old_edge_count = output_encoded_flow.edges.size();
+		std::size_t index = 0;
+		std::pmr::map<std::size_t, std::size_t> index_mapping;
+		std::pmr::set<std::size_t> temporary_edge{ temporary_resource };
+		std::pmr::vector<std::size_t> temporary{ temporary_resource };
+		for (std::size_t index = 0; index < node_infos.size(); ++index)
+		{
+			auto& target_node = node_infos[index];
+			if (target_node.category != NodeCategory::Empty)
+			{
+				index_mapping.insert(index, output_encoded_flow.size());
+			}
+		}
+	}
+
 
 	/*
 	bool ContextWrapper::PauseAndPause(Task::Node& node, Task::Property property, std::optional<TimeT::time_point> delay)

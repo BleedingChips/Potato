@@ -2,7 +2,7 @@ module;
 
 #include <cassert>
 
-export module PotatoTaskGraphic;
+export module PotatoTaskFlow;
 
 import std;
 import PotatoMisc;
@@ -12,7 +12,7 @@ import PotatoTask;
 import PotatoGraph;
 
 
-export namespace Potato::TaskGraphic
+export namespace Potato::TaskFlow
 {
 
 	using Task::TimeT;
@@ -22,6 +22,7 @@ export namespace Potato::TaskGraphic
 	using Graph::GraphEdge;
 
 	export struct Flow;
+	export struct FlowExecutorNode;
 
 	export struct Node;
 
@@ -36,7 +37,12 @@ export namespace Potato::TaskGraphic
 
 		using Ptr = Pointer::IntrusivePtr<Node, Wrapper>;
 
-		using Parameter = Task::Node::Parameter;
+		struct Parameter
+		{
+			std::u8string_view node_name;
+			std::size_t acceptable_mask = std::numeric_limits<std::size_t>::max();
+			Task::CustomData custom_data;
+		};
 
 		virtual void TaskGraphicNodeExecute(Task::Context& context, Node& self, Parameter& parameter) = 0;
 		virtual void TaskGraphicNodeTerminal(Node& self, Parameter& parameter) noexcept {}
@@ -47,42 +53,111 @@ export namespace Potato::TaskGraphic
 		virtual void SubTaskGraphicNodeRef() const = 0;
 	};
 
+	struct EncodedFlowNodes
+	{
+		struct Infos
+		{
+			Node::Ptr node;
+			Node::Parameter parameter;
+			Misc::IndexSpan<> direct_edges;
+			Misc::IndexSpan<> mutex_edges;
+			std::size_t in_degree = 0;
+		};
+
+		EncodedFlowNodes(std::pmr::memory_resource* resource) : encode_infos(resource), edges(resource) {}
+
+		std::pmr::vector<Infos> encode_infos;
+		std::pmr::vector<std::size_t> edges;
+	};
+
 	export struct Flow
 	{
-		GraphNode AddNode(Node& node, Node::Parameter parameter = {});
-		GraphNode AddFlowAsNode(Flow const& flow);
-		bool Remove(GraphNode node);
-		bool AddDirectEdge(GraphNode from, GraphNode direct_to, EdgeOptimize optimize = {});
-		bool AddMutexEdge(GraphNode from, GraphNode direct_to, Graph::EdgeOptimize optimize = {});
-		bool RemoveDirectEdge(GraphNode from, GraphNode direct_to);
+
+		struct NodeIndex
+		{
+			std::size_t index = std::numeric_limits<std::size_t>::max();
+			std::size_t version = 0;
+			std::strong_ordering operator<=>(const NodeIndex&) const = default;
+		};
+
+		NodeIndex AddNode(Node& node, Node::Parameter parameter = {});
+
+		NodeIndex AddFlowAsNode(Flow const& flow, std::pmr::memory_resource* temporary_resource = std::pmr::get_default_resource());
+		bool Remove(NodeIndex const& index);
+		bool AddDirectEdge(NodeIndex from, NodeIndex direct_to);
+		bool AddMutexEdge(NodeIndex from, NodeIndex direct_to);
+		bool RemoveDirectEdge(NodeIndex from, NodeIndex direct_to);
+		bool RemoveMutexEdge(NodeIndex from, NodeIndex direct_to);
 		Flow(std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+		bool IsAvailableIndex(NodeIndex const& index) const;
 
 	protected:
 
-		Graph::DirectedAcyclicGraphDefer graph;
+		enum class NodeCategory
+		{
+			Empty,
+			NormalNode,
+			SubFlowNode
+		};
 
 		struct NodeInfos
 		{
 			Node::Ptr node;
 			Node::Parameter parameter;
+			std::size_t version = 1;
+			NodeCategory category = NodeCategory::Empty;
+			Misc::IndexSpan<> encode_nodes;
+			Misc::IndexSpan<> encode_edges;
 		};
 
-		struct NodeMutexEdge
-		{
-			std::size_t from;
-			std::size_t to;
-		};
-
-		struct SubNodeInfos
-		{
-			Node::Ptr node;
-			Node::Parameter parameter;
-			std::size_t sub_flow_index;
-		};
+		static bool EncodeNodeTo(
+			Flow const& target_flow,
+			EncodedFlowNodes& output_encoded_flow,
+			std::pmr::memory_resource* temporary_resource = std::pmr::get_default_resource()
+			);
 
 		std::pmr::vector<NodeInfos> node_infos;
-		std::pmr::vector<NodeMutexEdge> node_mutex_edges;
-		std::pmr::vector<SubNodeInfos> node_infos;
+		std::pmr::vector<Graph::GraphEdge> node_direct_edges;
+		std::pmr::vector<Graph::GraphEdge> node_mutex_edges;
+
+		EncodedFlowNodes encoded_flow;
+
+		friend struct FlowExecutorNode;
+	};
+
+	export struct FlowExecutorNode : protected Task::Node, protected IR::MemoryResourceRecordIntrusiveInterface
+	{
+		using Ptr = Pointer::IntrusivePtr<FlowExecutorNode>;
+
+		static Ptr Create(std::pmr::memory_resource* resource);
+
+		bool UpdateFromFlow(Flow const& target_flow);
+		bool ForceUpdateState();
+
+	protected:
+
+		FlowExecutorNode(Potato::IR::MemoryResourceRecord record);
+
+		std::shared_mutex encode_nodes_mutex;
+		EncodedFlowNodes encode_flow_nodes;
+
+		struct ExecuteState
+		{
+			enum class State
+			{
+				Ready,
+				Running,
+				Pause,
+				Done
+			};
+			State state = State::Ready;
+			std::size_t in_degree = 0;
+			std::size_t mutex_degree = 0;
+		};
+
+		std::mutex running_state_mutex;
+		ExecuteState::State running_state = ExecuteState::State::Ready;
+		std::pmr::vector<ExecuteState> execute_state;
 	};
 
 
