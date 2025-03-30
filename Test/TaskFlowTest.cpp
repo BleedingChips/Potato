@@ -1,5 +1,5 @@
 import std;
-import PotatoTaskGraphic;
+import PotatoTaskFlow;
 import PotatoTask;
 import PotatoFormat;
 import PotatoEncode;
@@ -26,6 +26,7 @@ void Print(std::u8string_view str, std::thread::id thread_id)
 	}
 }
 
+/*
 struct DefaultTaskFlow : public Potato::TaskGraphic::Flow
 {
 	void AddTaskGraphicFlowRef() const override {}
@@ -51,10 +52,61 @@ struct DefaultTaskFlow : public Potato::TaskGraphic::Flow
 		}
 	}
 };
+*/
+
+using namespace Potato;
+
+struct TestNode : public TaskFlow::Node
+{
+
+	virtual void TaskGraphicNodeExecute(Context& context, TaskFlow::Node& self, TaskFlow::Node::Parameter& parameter)
+	{
+		Print(parameter.node_name, std::this_thread::get_id());
+	}
+
+protected:
+
+	virtual void AddTaskGraphicNodeRef() const {}
+	virtual void SubTaskGraphicNodeRef() const {}
+};
+
+TestNode tnode;
 
 int main()
 {
+	TaskFlow::Flow flow1;
+	TaskFlow::Flow flow2;
 
+	auto n1_1 = flow1.AddNode(tnode, {u8"n1_1"});
+	auto n1_2 = flow1.AddNode(tnode, { u8"n1_2" });
+	auto n1_3 = flow1.AddNode(tnode, { u8"n1_3" });
+	auto n1_4 = flow1.AddNode(tnode, { u8"n1_4" });
+
+	auto n2_1 = flow2.AddNode(tnode, { u8"n2_1" });
+	auto n2_2 = flow2.AddNode(tnode, { u8"n2_2" });
+	auto n2_3 = flow2.AddNode(tnode, { u8"n2_3" });
+	auto n2_4 = flow2.AddNode(tnode, { u8"n2_4" });
+
+	flow2.AddDirectEdge(n2_1, n2_2);
+	flow2.AddDirectEdge(n2_2, n2_3);
+	flow2.AddDirectEdge(n2_3, n2_4);
+	flow2.AddDirectEdge(n2_2, n2_4);
+
+	auto n1_5 = flow1.AddFlowAsNode(flow2, u8"flow2");
+
+	flow1.AddDirectEdge(n1_4, n1_5);
+	flow1.AddDirectEdge(n1_1, n1_2);
+	flow1.AddDirectEdge(n1_2, n1_3);
+	flow1.AddDirectEdge(n1_3, n1_4);
+
+	TaskFlow::Flow flow3;
+
+	auto n3_1 = flow3.AddFlowAsNode(flow1, u8"flow1");
+
+	volatile int o = 0;
+
+
+	/*
 	Potato::Graph::DirectedAcyclicGraphImmediately grap;
 
 	auto a1 = grap.Add();
@@ -151,4 +203,5 @@ int main()
 	}
 
 	volatile int i2 = 0;
+	*/
 }

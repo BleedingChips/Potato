@@ -55,8 +55,17 @@ export namespace Potato::TaskFlow
 
 	struct EncodedFlowNodes
 	{
-		struct Infos
+
+		enum class Category
 		{
+			NormalNode,
+			SubFlowBegin,
+			SubFlowEnd
+		};
+
+		struct Info
+		{
+			Category category;
 			Node::Ptr node;
 			Node::Parameter parameter;
 			Misc::IndexSpan<> direct_edges;
@@ -66,7 +75,7 @@ export namespace Potato::TaskFlow
 
 		EncodedFlowNodes(std::pmr::memory_resource* resource) : encode_infos(resource), edges(resource) {}
 
-		std::pmr::vector<Infos> encode_infos;
+		std::pmr::vector<Info> encode_infos;
 		std::pmr::vector<std::size_t> edges;
 	};
 
@@ -82,7 +91,7 @@ export namespace Potato::TaskFlow
 
 		NodeIndex AddNode(Node& node, Node::Parameter parameter = {});
 
-		NodeIndex AddFlowAsNode(Flow const& flow, std::pmr::memory_resource* temporary_resource = std::pmr::get_default_resource());
+		NodeIndex AddFlowAsNode(Flow const& flow, std::u8string_view sub_flow_name = {}, std::pmr::memory_resource* temporary_resource = std::pmr::get_default_resource());
 		bool Remove(NodeIndex const& index);
 		bool AddDirectEdge(NodeIndex from, NodeIndex direct_to);
 		bool AddMutexEdge(NodeIndex from, NodeIndex direct_to);
@@ -110,7 +119,7 @@ export namespace Potato::TaskFlow
 			Misc::IndexSpan<> encode_edges;
 		};
 
-		static bool EncodeNodeTo(
+		static std::optional<std::size_t> EncodeNodeTo(
 			Flow const& target_flow,
 			EncodedFlowNodes& output_encoded_flow,
 			std::pmr::memory_resource* temporary_resource = std::pmr::get_default_resource()

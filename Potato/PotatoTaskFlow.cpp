@@ -14,7 +14,7 @@ namespace Potato::TaskFlow
 		
 	}
 
-	Flow::NodeIndex Flow::AddFlowAsNode(Flow const& flow, std::pmr::memory_resource* temporary_resource)
+	Flow::NodeIndex Flow::AddFlowAsNode(Flow const& flow, std::u8string_view sub_flow_name, std::pmr::memory_resource* temporary_resource)
 	{
 		auto old_node_size = encoded_flow.encode_infos.size();
 		auto old_edge_size = encoded_flow.edges.size();
@@ -28,6 +28,7 @@ namespace Potato::TaskFlow
 			info.version = 1;
 			info.encode_nodes = { old_node_size, encoded_flow.encode_infos.size() };
 			info.encode_edges = { old_edge_size, encoded_flow.edges.size() };
+			info.parameter.node_name = sub_flow_name;
 
 			for (index = 0; index < node_infos.size(); ++index)
 			{
@@ -184,40 +185,44 @@ namespace Potato::TaskFlow
 		return false;
 	}
 
-	bool Flow::EncodeNodeTo(
+	std::optional<std::size_t> Flow::EncodeNodeTo(
 		Flow const& target_flow,
 		EncodedFlowNodes& output_encoded_flow,
 		std::pmr::memory_resource* temporary_resource
 	)
 	{
 
+		std::size_t total_zero_out_degree_count = 0;
+
 		struct DetectedInfo
 		{
-			std::size_t original_index = 0;
+			std::size_t original_index = std::numeric_limits<std::size_t>::max();
 			std::size_t mapping_index = std::numeric_limits<std::size_t>::max();
 			std::size_t in_degree = 0;
-			std::size_t out_degree = 0;
+			std::size_t encode_in_degree = 0;
+			bool is_sub_flow = false;
 		};
 
 		std::pmr::vector<DetectedInfo> temporary_node{temporary_resource};
 		temporary_node.reserve(target_flow.node_infos.size());
 		std::size_t index = 0;
 		std::size_t total_available_node_count = 0;
+
 		for (auto& ite : target_flow.node_infos)
 		{
 			DetectedInfo info;
 			if (ite.category != NodeCategory::Empty)
 			{
 				info.original_index = index;
+				info.is_sub_flow = ite.category == NodeCategory::SubFlowNode;
 				total_available_node_count += 1;
 			}
 			temporary_node.emplace_back(info);
 			++index;
 		}
 
-		for (auto& ite : target_flow.node_direct_edges)
+		for(auto ite : target_flow.node_direct_edges)
 		{
-			temporary_node[ite.from].out_degree += 1;
 			temporary_node[ite.to].in_degree += 1;
 		}
 
@@ -227,7 +232,7 @@ namespace Potato::TaskFlow
 		for (std::size_t i = 0; i < temporary_node.size(); ++i)
 		{
 			auto& info = temporary_node[i];
-			if (info.in_degree == 0)
+			if (info.original_index != std::numeric_limits<std::size_t>::max() && info.in_degree == 0)
 			{
 				info.mapping_index = search_stack.size();
 				search_stack.push_back(i);
@@ -256,27 +261,43 @@ namespace Potato::TaskFlow
 		}
 
 		if (search_stack.size() != total_available_node_count)
-			return false;
+			return {};
+
+		std::size_t index_offset = 0;
+
+		for(auto search_index : search_stack)
+		{
+			auto& ref = temporary_node[search_index];
+			ref.mapping_index += index_offset;
+			if(ref.is_sub_flow)
+			{
+				index_offset += target_flow.node_infos[search_index].encode_nodes.Size() + 1;
+			}
+		}
 
 		struct EdgesInfo
 		{
-			bool been_direct_to = false;
-			bool need_remove = false;
+			std::uint8_t been_direct_to : 1 = false;
+			std::uint8_t reach : 1 = false;
+			std::uint8_t need_remove : 1 = false;
 		};
 
 		std::pmr::vector<EdgesInfo> temporary_edges{ temporary_resource };
 		temporary_edges.resize(target_flow.node_infos.size());
+		std::size_t old_node_count = output_encoded_flow.encode_infos.size();
 
 		for (auto current_index : search_stack)
 		{
 
 			std::size_t edges_count = 0;
 
-			for (auto& ite : target_flow.node_direct_edges)
+			for (auto ite : target_flow.node_direct_edges)
 			{
 				if (ite.from == current_index)
 				{
-					temporary_edges[ite.to].been_direct_to = true;
+					auto& ref = temporary_edges[ite.to];
+					ref.been_direct_to = true;
+					ref.reach = true;
 					edges_count += 1;
 				}
 			}
@@ -285,42 +306,216 @@ namespace Potato::TaskFlow
 
 			if (edges_count != 0)
 			{
-				for (auto& ite : target_flow.node_direct_edges)
+
+				bool modify = true;
+
+				while (modify)
 				{
-					if (
-						ite.from != current_index && ite.to != current_index
-						&& temporary_edges[ite.from].been_direct_to
-						&& temporary_edges[ite.to].been_direct_to
-						)
+					modify = false;
+
+					for (auto ite : target_flow.node_direct_edges)
 					{
-						temporary_edges[ite.to].need_remove = true;
+						if (ite.from != current_index && ite.to != current_index)
+						{
+							auto& from_ref = temporary_edges[ite.from];
+							auto& to_ref = temporary_edges[ite.to];
+
+							if (from_ref.reach)
+							{
+								if(!to_ref.reach)
+								{
+									to_ref.reach = true;
+									modify = true;
+								}
+								to_ref.need_remove = true;
+							}
+						}
 					}
 				}
 			}
-			
 
 			
 
-		}
-
-
-
-
-
-		auto old_node_count = output_encoded_flow.encode_infos.size();
-		auto old_edge_count = output_encoded_flow.edges.size();
-		std::size_t index = 0;
-		std::pmr::map<std::size_t, std::size_t> index_mapping;
-		std::pmr::set<std::size_t> temporary_edge{ temporary_resource };
-		std::pmr::vector<std::size_t> temporary{ temporary_resource };
-		for (std::size_t index = 0; index < node_infos.size(); ++index)
-		{
-			auto& target_node = node_infos[index];
-			if (target_node.category != NodeCategory::Empty)
+			if(temporary_node[current_index].is_sub_flow)
 			{
-				index_mapping.insert(index, output_encoded_flow.size());
+				EncodedFlowNodes::Info encode_node;
+				auto& target_flow_node = target_flow.node_infos[current_index];
+				encode_node.category = EncodedFlowNodes::Category::SubFlowBegin;
+				encode_node.parameter = target_flow_node.parameter;
+
+				std::size_t old_edge_count = output_encoded_flow.edges.size();
+
+				auto sub_node_span = target_flow_node.encode_nodes.Slice(std::span(target_flow.encoded_flow.encode_infos));
+
+				std::size_t sub_node_start_index = output_encoded_flow.encode_infos.size() + 1;
+
+				if (sub_node_span.size() != 0)
+				{
+					for (auto& sub_node : sub_node_span)
+					{
+						if (sub_node.in_degree == 0)
+						{
+							output_encoded_flow.edges.emplace_back(sub_node_start_index);
+						}
+						++sub_node_start_index;
+					}
+				}
+				else
+				{
+					output_encoded_flow.edges.emplace_back(sub_node_start_index);
+				}
+				
+
+				encode_node.direct_edges = { old_edge_count, output_encoded_flow.edges.size() };
+
+				old_edge_count = output_encoded_flow.edges.size();
+
+				for (auto& ite : target_flow.node_mutex_edges)
+				{
+					if (ite.from == current_index)
+					{
+						output_encoded_flow.edges.emplace_back(temporary_node[ite.to].mapping_index);
+					}
+				}
+
+				encode_node.mutex_edges = { old_edge_count, output_encoded_flow.edges.size() };
+
+				old_edge_count = output_encoded_flow.edges.size();
+
+				output_encoded_flow.encode_infos.emplace_back(encode_node);
+
+				sub_node_start_index = output_encoded_flow.encode_infos.size();
+
+				output_encoded_flow.encode_infos.insert(output_encoded_flow.encode_infos.end(), sub_node_span.begin(), sub_node_span.end());
+
+				auto new_added_node_span = std::span(output_encoded_flow.encode_infos).subspan(sub_node_start_index);
+
+				for(auto& ite : new_added_node_span)
+				{
+					if(ite.in_degree == 0)
+					{
+						ite.in_degree = 1;
+					}
+					ite.direct_edges.WholeOffset(old_edge_count);
+					ite.mutex_edges.WholeOffset(old_edge_count);
+				}
+
+				auto old_edge_span = target_flow_node.encode_edges.Slice(std::span(target_flow.encoded_flow.edges));
+
+				output_encoded_flow.edges.insert(output_encoded_flow.edges.end(), old_edge_span.begin(), old_edge_span.end());
+
+				auto new_added_edge_span = std::span(output_encoded_flow.edges).subspan(old_edge_count);
+
+				encode_node.category = EncodedFlowNodes::Category::SubFlowEnd;
+				encode_node.parameter = target_flow_node.parameter;
+
+				for(auto& ite : new_added_edge_span)
+				{
+					if(ite == std::numeric_limits<std::size_t>::max())
+					{
+						ite = output_encoded_flow.encode_infos.size();
+						encode_node.in_degree += 1;
+					}else
+					{
+						ite += sub_node_start_index;
+					}
+				}
+
+				old_edge_count = output_encoded_flow.edges.size();
+
+				if (edges_count == 0)
+				{
+					total_zero_out_degree_count += 1;
+					output_encoded_flow.edges.emplace_back(std::numeric_limits<std::size_t>::max());
+				}
+				else
+				{
+					for (std::size_t edge_index = 0; edge_index < temporary_edges.size(); ++edge_index)
+					{
+						auto& edge_ref = temporary_edges[edge_index];
+						if (edge_ref.been_direct_to && !edge_ref.need_remove)
+						{
+							temporary_node[edge_index].encode_in_degree += 1;
+							output_encoded_flow.edges.emplace_back(temporary_node[edge_index].mapping_index);
+						}
+					}
+				}
+
+				encode_node.direct_edges = { old_edge_count, output_encoded_flow.edges.size() };
+				old_edge_count = output_encoded_flow.edges.size();
+
+				for (auto& ite : target_flow.node_mutex_edges)
+				{
+					if (ite.from == current_index)
+					{
+						output_encoded_flow.edges.emplace_back(temporary_node[ite.to].mapping_index);
+					}
+				}
+
+				encode_node.mutex_edges = { old_edge_count, output_encoded_flow.edges.size() };
+				output_encoded_flow.encode_infos.emplace_back(std::move(encode_node));
+
+			}else
+			{
+				EncodedFlowNodes::Info encode_node;
+				auto& target_flow_node = target_flow.node_infos[current_index];
+				encode_node.node = target_flow_node.node;
+				encode_node.parameter = target_flow_node.parameter;
+				encode_node.category = EncodedFlowNodes::Category::NormalNode;
+				
+				std::size_t old_edge_count = output_encoded_flow.edges.size();
+				if(edges_count == 0)
+				{
+					total_zero_out_degree_count += 1;
+					output_encoded_flow.edges.emplace_back(std::numeric_limits<std::size_t>::max());
+				}else
+				{
+					for (std::size_t edge_index = 0; edge_index < temporary_edges.size(); ++edge_index)
+					{
+						auto& edge_ref = temporary_edges[edge_index];
+						if (edge_ref.been_direct_to && !edge_ref.need_remove)
+						{
+							temporary_node[edge_index].encode_in_degree += 1;
+							output_encoded_flow.edges.emplace_back(temporary_node[edge_index].mapping_index);
+						}
+					}
+				}
+
+				encode_node.direct_edges = { old_edge_count, output_encoded_flow.edges.size()};
+
+				old_edge_count = output_encoded_flow.edges.size();
+
+				for(auto& ite : target_flow.node_mutex_edges)
+				{
+					if(ite.from == current_index)
+					{
+						output_encoded_flow.edges.emplace_back(temporary_node[ite.to].mapping_index);
+					}
+				}
+
+				encode_node.mutex_edges = { old_edge_count, output_encoded_flow.edges.size() };
+
+				output_encoded_flow.encode_infos.emplace_back(std::move(encode_node));
+			}
+
+			if(edges_count != 0)
+			{
+				for(auto& ite : temporary_edges)
+				{
+					ite.reach = false;
+					ite.been_direct_to = false;
+					ite.need_remove = false;
+				}
 			}
 		}
+
+		for(auto& ite : temporary_node)
+		{
+			if(ite.mapping_index != std::numeric_limits<std::size_t>::max())
+				output_encoded_flow.encode_infos[old_node_count + ite.mapping_index].in_degree = ite.encode_in_degree;
+		}
+
+		return total_zero_out_degree_count;
 	}
 
 
