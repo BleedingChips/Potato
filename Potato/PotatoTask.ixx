@@ -59,8 +59,8 @@ export namespace Potato::Task
 			std::optional<TimeT::duration> delay_time;
 		};
 
-		virtual void TaskExecute(Context& context, Node& self, Parameter& parameter) = 0;
-		virtual void TaskTerminal(Node& self, Parameter& parameter) noexcept {};
+		virtual void TaskExecute(Context& context, Parameter& parameter) = 0;
+		virtual void TaskTerminal(Parameter& parameter) noexcept {};
 		virtual ~Node() = default;
 
 	protected:
@@ -70,7 +70,10 @@ export namespace Potato::Task
 	};
 
 	template<typename Type>
-	concept AcceptableTaskNode = std::is_invocable_v<Type, Context&, Node&, Node::Parameter&>;
+	concept AcceptableTaskNode = std::is_invocable_v<Type, Context&, Node::Parameter&>;
+
+	template<typename Type>
+	concept AcceptableTaskNodeWithSelf = std::is_invocable_v<Type, Context&, Node::Parameter&, Node&>;
 
 	struct ThreadProperty
 	{
@@ -110,8 +113,32 @@ export namespace Potato::Task
 		bool Commit(Node& node, Node::Parameter parameter = {});
 
 		template<AcceptableTaskNode FunT>
+		bool Commit(FunT&& func, Node::Parameter parameter = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+		{
+			auto node = CreateLambdaNode(std::forward<FunT>(func), resource);
+			if (node)
+			{
+				return Commit(*node, parameter);
+			}
+			return false;
+		}
+
+		template<AcceptableTaskNode FunT>
 		static Node::Ptr CreateLambdaNode(FunT&& func, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
+		template<AcceptableTaskNodeWithSelf FunT>
+		static Node::Ptr CreateLambdaNodeWithSelf(FunT&& func, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+
+		template<AcceptableTaskNodeWithSelf FunT>
+		bool Commit(FunT&& func, Node::Parameter parameter = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+		{
+			auto node = CreateLambdaNodeWithSelf(std::forward<FunT>(func), resource);
+			if (node)
+			{
+				return Commit(*node, parameter);
+			}
+			return false;
+		}
 
 	protected:
 
@@ -170,9 +197,34 @@ namespace Potato::Task
 
 		}
 
-		virtual void TaskExecute(Context& context, Node& self, Node::Parameter& parameter) override
+		virtual void TaskExecute(Context& context, Node::Parameter& parameter) override
 		{
-			TaskInstance.operator()(context, self, parameter);
+			TaskInstance.operator()(context, parameter);
+		}
+
+	protected:
+
+		virtual void AddTaskNodeRef() const override { MemoryResourceRecordIntrusiveInterface::AddRef(); }
+		virtual void SubTaskNodeRef() const override { MemoryResourceRecordIntrusiveInterface::SubRef(); }
+
+	private:
+
+		LanbdaT TaskInstance;
+	};
+
+	template<typename LanbdaT>
+	struct LambdaNodeWithSelf : public Node, public Potato::IR::MemoryResourceRecordIntrusiveInterface
+	{
+		template<typename FunT>
+		LambdaNodeWithSelf(Potato::IR::MemoryResourceRecord Record, FunT&& Fun)
+			: MemoryResourceRecordIntrusiveInterface(Record), TaskInstance(std::forward<FunT>(Fun))
+		{
+
+		}
+
+		virtual void TaskExecute(Context& context, Node::Parameter& parameter) override
+		{
+			TaskInstance.operator()(context, parameter, *this);
 		}
 
 	protected:
@@ -189,6 +241,18 @@ namespace Potato::Task
 	Node::Ptr Context::CreateLambdaNode(FunT&& func, std::pmr::memory_resource* resource)
 	{
 		using Type = LambdaNode<std::remove_cvref_t<FunT>>;
+		auto Record = Potato::IR::MemoryResourceRecord::Allocate<Type>(resource);
+		if (Record)
+		{
+			return new (Record.Get()) Type{ Record, std::forward<FunT>(func) };
+		}
+		return {};
+	}
+
+	template<AcceptableTaskNodeWithSelf FunT>
+	Node::Ptr Context::CreateLambdaNodeWithSelf(FunT&& func, std::pmr::memory_resource* resource)
+	{
+		using Type = LambdaNodeWithSelf<std::remove_cvref_t<FunT>>;
 		auto Record = Potato::IR::MemoryResourceRecord::Allocate<Type>(resource);
 		if (Record)
 		{

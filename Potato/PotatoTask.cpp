@@ -96,7 +96,7 @@ namespace Potato::Task
 			}
 			for (auto& ite : temp_delay_node)
 			{
-				ite.node_tuple.node->TaskTerminal(*ite.node_tuple.node, ite.node_tuple.parameter);
+				ite.node_tuple.node->TaskTerminal(ite.node_tuple.parameter);
 			}
 		}
 
@@ -108,7 +108,7 @@ namespace Potato::Task
 			}
 			for (auto& ite : temp_node)
 			{
-				ite.node->TaskTerminal(*ite.node, ite.parameter);
+				ite.node->TaskTerminal(ite.parameter);
 			}
 		}
 	}
@@ -222,7 +222,7 @@ namespace Potato::Task
 
 		if (current_node_tuple.node)
 		{
-			current_node_tuple.node->TaskExecute(*this, *current_node_tuple.node, current_node_tuple.parameter);
+			current_node_tuple.node->TaskExecute(*this, current_node_tuple.parameter);
 			result.has_been_execute = true;
 		}
 	}

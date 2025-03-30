@@ -23,6 +23,7 @@ export namespace Potato::TaskFlow
 
 	export struct Flow;
 	export struct FlowExecutorNode;
+	export struct FlowExecutorController;
 
 	export struct Node;
 
@@ -44,8 +45,8 @@ export namespace Potato::TaskFlow
 			Task::CustomData custom_data;
 		};
 
-		virtual void TaskGraphicNodeExecute(Task::Context& context, Node& self, Parameter& parameter) = 0;
-		virtual void TaskGraphicNodeTerminal(Node& self, Parameter& parameter) noexcept {}
+		virtual void TaskFlowNodeExecute(Task::Context& context, FlowExecutorController& controller, Parameter& parameter) = 0;
+		virtual void TaskFlowNodeTerminal(FlowExecutorController& controller, Parameter& parameter) noexcept {}
 
 	protected:
 
@@ -134,21 +135,41 @@ export namespace Potato::TaskFlow
 		friend struct FlowExecutorNode;
 	};
 
-	export struct FlowExecutorNode : protected Task::Node, protected IR::MemoryResourceRecordIntrusiveInterface
+	export struct FlowExecutorNode : protected Task::Node
 	{
-		using Ptr = Pointer::IntrusivePtr<FlowExecutorNode>;
 
-		static Ptr Create(std::pmr::memory_resource* resource);
+		struct Wrapper
+		{
+			void AddRef(FlowExecutorNode const* ptr) { ptr->AddTaskFlowExecutorRef(); }
+			void SubRef(FlowExecutorNode const* ptr) { ptr->SubTaskFlowExecutorRef(); }
+			operator Task::Node::Wrapper() const { return {}; }
+		};
 
-		bool UpdateFromFlow(Flow const& target_flow);
+		using Ptr = Pointer::IntrusivePtr<FlowExecutorNode, Wrapper>;
+
+		static Ptr Create(std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+
+		bool UpdateFromFlow(Flow const& target_flow, std::pmr::memory_resource* temporary_resource = std::pmr::get_default_resource());
 		bool ForceUpdateState();
 
 	protected:
 
-		FlowExecutorNode(Potato::IR::MemoryResourceRecord record);
+		virtual void BeginFlow(Task::Context& context, Task::Node::Parameter parameter) {};
+		virtual void EndFlow(Task::Context& context, Task::Node::Parameter parameter) {};
+		virtual void TaskExecute(Task::Context& context, Parameter& parameter) override;
+		virtual void AddTaskNodeRef() const override;
+		virtual void SubTaskNodeRef() const override;
+
+		virtual void AddTaskFlowExecutorRef() const = 0;
+		virtual void SubTaskFlowExecutorRef() const = 0;
+
+		FlowExecutorNode(std::pmr::memory_resource* resource);
+
+		void TryStartupNode(Task::Context& context, std::size_t index);
 
 		std::shared_mutex encode_nodes_mutex;
 		EncodedFlowNodes encode_flow_nodes;
+		std::size_t end_indegree = 0;
 
 		struct ExecuteState
 		{
@@ -162,14 +183,20 @@ export namespace Potato::TaskFlow
 			State state = State::Ready;
 			std::size_t in_degree = 0;
 			std::size_t mutex_degree = 0;
+			std::size_t pause_count = 0;
 		};
 
 		std::mutex running_state_mutex;
+		Task::Node::Parameter flow_parameter;
 		ExecuteState::State running_state = ExecuteState::State::Ready;
 		std::pmr::vector<ExecuteState> execute_state;
+		std::size_t running_end_indegree = 0;
 	};
 
-
+	struct FlowExecutorController
+	{
+		
+	};
 
 
 	/*
