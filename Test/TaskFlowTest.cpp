@@ -6,62 +6,40 @@ import PotatoEncode;
 import PotatoGraph;
 
 using namespace Potato::Task;
+using namespace Potato;
 
 std::mutex print_mutex;
 
-void Print(std::u8string_view str, std::thread::id thread_id)
+void Print(TaskFlow::Node::Parameter parameter,  TaskFlow::FlowController& controller, std::thread::id thread_id)
 {
-	auto wstr = *Potato::Encode::StrEncoder<char8_t, wchar_t>::EncodeToString(std::u8string_view{str});
+	auto wstr = *Potato::Encode::StrEncoder<char8_t, wchar_t>::EncodeToString(std::u8string_view{ parameter.node_name});
 	auto sstr = *Potato::Encode::StrEncoder<wchar_t, char>::EncodeToString(std::wstring_view{wstr});
+
+	if (controller.GetCategory() != TaskFlow::EncodedFlow::Category::SubFlowEnd)
 	{
 		std::lock_guard lg(print_mutex);
 		std::println("{0} Begin - {1}", sstr, thread_id);
 	}
-	
-	std::this_thread::sleep_for(std::chrono::seconds{ 2 });
 
+	if (controller.GetCategory() == TaskFlow::EncodedFlow::Category::NormalNode)
+		std::this_thread::sleep_for(std::chrono::milliseconds{ 10 });
+
+	if (controller.GetCategory() != TaskFlow::EncodedFlow::Category::SubFlowBegin)
 	{
 		std::lock_guard lg(print_mutex);
 		std::println("{0} End - {1}", sstr, thread_id);
 	}
 }
 
-/*
-struct DefaultTaskFlow : public Potato::TaskGraphic::Flow
-{
-	void AddTaskGraphicFlowRef() const override {}
-	void SubTaskGraphicFlowRef() const override {}
 
-	void TaskFlowExecuteBegin(Potato::Task::ContextWrapper& wrapper) override
-	{
-		auto wstr = *Potato::Encode::StrEncoder<char8_t, wchar_t>::EncodeToString(std::u8string_view{ wrapper .GetTaskNodeProperty().node_name});
-		auto sstr = *Potato::Encode::StrEncoder<wchar_t, char>::EncodeToString(std::wstring_view{wstr});
-		{
-			std::lock_guard lg(print_mutex);
-			std::println("Task Flow <{0}> Begin - {1} ----------", sstr, std::this_thread::get_id());
-		}
-	}
 
-	void TaskFlowExecuteEnd(Potato::Task::ContextWrapper& wrapper) override
-	{
-		auto wstr = *Potato::Encode::StrEncoder<char8_t, wchar_t>::EncodeToString(std::u8string_view{ wrapper.GetTaskNodeProperty().node_name });
-		auto sstr = *Potato::Encode::StrEncoder<wchar_t, char>::EncodeToString(std::wstring_view{wstr});
-		{
-			std::lock_guard lg(print_mutex);
-			std::println("Task Flow <{0}> End - {1} ----------", sstr, std::this_thread::get_id());
-		}
-	}
-};
-*/
-
-using namespace Potato;
 
 struct TestNode : public TaskFlow::Node
 {
 
-	virtual void TaskGraphicNodeExecute(Context& context, TaskFlow::Node& self, TaskFlow::Node::Parameter& parameter)
+	virtual void TaskFlowNodeExecute(Context& context, TaskFlow::FlowController& controller, TaskFlow::Node::Parameter& parameter)
 	{
-		Print(parameter.node_name, std::this_thread::get_id());
+		Print(parameter, controller, std::this_thread::get_id());
 	}
 
 protected:
@@ -87,12 +65,17 @@ int main()
 	auto n2_3 = flow2.AddNode(tnode, { u8"n2_3" });
 	auto n2_4 = flow2.AddNode(tnode, { u8"n2_4" });
 
+	auto n2_5 = flow2.AddNode([](Context& context, TaskFlow::FlowController& controller, TaskFlow::Node::Parameter& parameter)
+		{
+			Print(parameter, controller, std::this_thread::get_id());
+		}, {u8"lambda"});
+
 	flow2.AddDirectEdge(n2_1, n2_2);
 	flow2.AddDirectEdge(n2_2, n2_3);
 	flow2.AddDirectEdge(n2_3, n2_4);
 	flow2.AddDirectEdge(n2_2, n2_4);
 
-	auto n1_5 = flow1.AddFlowAsNode(flow2, u8"flow2");
+	auto n1_5 = flow1.AddFlowAsNode(flow2, &tnode, { u8"flow2" });
 
 	flow1.AddDirectEdge(n1_4, n1_5);
 	flow1.AddDirectEdge(n1_1, n1_2);
@@ -101,7 +84,29 @@ int main()
 
 	TaskFlow::Flow flow3;
 
-	auto n3_1 = flow3.AddFlowAsNode(flow1, u8"flow1");
+	auto n3_1 = flow3.AddFlowAsNode(flow1, &tnode, {u8"flow1"});
+
+	auto instance = TaskFlow::FlowExecutor::Create();
+
+	instance->UpdateFromFlow(flow3);
+
+	Task::Context context;
+
+	instance->Commit(context);
+
+	context.ExecuteContextThreadUntilNoExistTask();
+
+	{
+		std::lock_guard lg(print_mutex);
+		std::println("----------Fuckk----------");
+	}
+	
+
+	instance->UpdateState();
+
+	instance->Commit(context);
+
+	context.ExecuteContextThreadUntilNoExistTask();
 
 	volatile int o = 0;
 
