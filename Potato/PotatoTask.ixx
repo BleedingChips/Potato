@@ -212,7 +212,7 @@ namespace Potato::Task
 		LanbdaT TaskInstance;
 	};
 
-	template<typename LanbdaT>
+	template<typename LambdaT>
 	struct LambdaNodeWithSelf : public Node, public Potato::IR::MemoryResourceRecordIntrusiveInterface
 	{
 		template<typename FunT>
@@ -234,7 +234,7 @@ namespace Potato::Task
 
 	private:
 
-		LanbdaT TaskInstance;
+		LambdaT TaskInstance;
 	};
 
 	template<AcceptableTaskNode FunT>

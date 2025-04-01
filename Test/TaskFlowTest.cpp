@@ -22,7 +22,7 @@ void Print(TaskFlow::Node::Parameter parameter,  TaskFlow::FlowController& contr
 	}
 
 	if (controller.GetCategory() == TaskFlow::EncodedFlow::Category::NormalNode)
-		std::this_thread::sleep_for(std::chrono::milliseconds{ 10 });
+		std::this_thread::sleep_for(std::chrono::milliseconds{ 1000 });
 
 	if (controller.GetCategory() != TaskFlow::EncodedFlow::Category::SubFlowBegin)
 	{
@@ -54,6 +54,12 @@ int main()
 {
 	TaskFlow::Flow flow1;
 	TaskFlow::Flow flow2;
+	TaskFlow::Flow flow4;
+	TaskFlow::Flow flow5;
+
+	auto n1_6 = flow1.AddFlowAsNode(flow4, &tnode, { u8"flow4" });
+
+	auto n5_2 = flow5.AddFlowAsNode(flow1, &tnode);
 
 	auto n1_1 = flow1.AddNode(tnode, {u8"n1_1"});
 	auto n1_2 = flow1.AddNode(tnode, { u8"n1_2" });
@@ -68,6 +74,25 @@ int main()
 	auto n2_5 = flow2.AddNode([](Context& context, TaskFlow::FlowController& controller, TaskFlow::Node::Parameter& parameter)
 		{
 			Print(parameter, controller, std::this_thread::get_id());
+
+			auto mp = controller.MarkCurrentAsPause();
+
+			context.Commit([mp=std::move(mp)](Task::Context& context, Node::Parameter par) mutable 
+			{
+					{
+						std::lock_guard lg(print_mutex);
+						std::println("pause - {0}", std::this_thread::get_id());
+					}
+
+					std::this_thread::sleep_for(std::chrono::milliseconds{ 5000 });
+
+					{
+						std::lock_guard lg(print_mutex);
+						std::println("pause done - {0}", std::this_thread::get_id());
+					}
+
+					mp.Continue(context);
+			});
 		}, {u8"lambda"});
 
 	flow2.AddDirectEdge(n2_1, n2_2);
@@ -75,7 +100,12 @@ int main()
 	flow2.AddDirectEdge(n2_3, n2_4);
 	flow2.AddDirectEdge(n2_2, n2_4);
 
+	flow2.AddMutexEdge(n2_1, n2_5);
+
+	
+
 	auto n1_5 = flow1.AddFlowAsNode(flow2, &tnode, { u8"flow2" });
+
 
 	flow1.AddDirectEdge(n1_4, n1_5);
 	flow1.AddDirectEdge(n1_1, n1_2);
@@ -91,6 +121,7 @@ int main()
 	instance->UpdateFromFlow(flow3);
 
 	Task::Context context;
+	context.CreateThreads(4);
 
 	instance->Commit(context);
 

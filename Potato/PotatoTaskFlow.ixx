@@ -163,6 +163,24 @@ export namespace Potato::TaskFlow
 
 		using Ptr = Pointer::IntrusivePtr<FlowExecutor, Wrapper>;
 
+		struct PauseMountPoint
+		{
+			~PauseMountPoint();
+			PauseMountPoint(PauseMountPoint&& point);
+			bool Continue(Task::Context& context);
+			operator bool() const { return exectutor; }
+		protected:
+			PauseMountPoint(FlowExecutor::Ptr exectutor, std::size_t encoded_flow_index)
+				: exectutor(std::move(exectutor)), encoded_flow_index(encoded_flow_index)
+			{
+			}
+			PauseMountPoint() = default;
+			FlowExecutor::Ptr exectutor;
+			std::size_t encoded_flow_index = std::numeric_limits<std::size_t>::max();
+
+			friend struct FlowExecutor;
+		};
+
 		static Ptr Create(std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
 		bool UpdateFromFlow(Flow const& target_flow, std::pmr::memory_resource* temporary_resource = std::pmr::get_default_resource());
@@ -176,13 +194,15 @@ export namespace Potato::TaskFlow
 		virtual void TaskExecute(Task::Context& context, Parameter& parameter) override;
 		virtual void AddTaskNodeRef() const override;
 		virtual void SubTaskNodeRef() const override;
-
+		PauseMountPoint CreatePauseMountPoint(std::size_t encoded_flow_index);
+		bool ContinuePauseMountPoint(Task::Context& context, std::size_t encoded_flow_index);
 		virtual void AddTaskFlowExecutorRef() const = 0;
 		virtual void SubTaskFlowExecutorRef() const = 0;
 
 		FlowExecutor(std::pmr::memory_resource* resource);
 
-		void TryStartupNode(Task::Context& context, std::size_t index);
+		void TryStartupNode_AssumedLocked(Task::Context& context, std::size_t index);
+		void FinishNode_AssumedLocked(Task::Context& context, std::size_t index);
 
 		std::shared_mutex encoded_flow_mutex;
 		EncodedFlow encoded_flow;
@@ -216,16 +236,17 @@ export namespace Potato::TaskFlow
 	{
 
 		EncodedFlow::Category GetCategory() const { return category; }
-
+		FlowExecutor::PauseMountPoint MarkCurrentAsPause();
 
 	protected:
-		FlowController(FlowExecutor& exe, std::size_t execute_state_index)
-			: executor(exe), execute_state_index(execute_state_index)
+
+		FlowController(FlowExecutor& exe, std::size_t encoded_flow_index)
+			: executor(exe), encoded_flow_index(encoded_flow_index)
 		{
 			
 		}
 		FlowExecutor& executor;
-		std::size_t execute_state_index;
+		std::size_t encoded_flow_index;
 		EncodedFlow::Category category = EncodedFlow::Category::NormalNode;
 
 		friend struct FlowExecutor;
