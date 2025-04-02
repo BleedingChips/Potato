@@ -24,6 +24,7 @@ export namespace Potato::TaskFlow
 	export struct Flow;
 	export struct FlowExecutor;
 	export struct FlowController;
+	export struct FlowTerminator;
 
 	export struct Node
 	{
@@ -44,7 +45,7 @@ export namespace Potato::TaskFlow
 		};
 
 		virtual void TaskFlowNodeExecute(Task::Context& context, FlowController& controller, Parameter& parameter) = 0;
-		virtual void TaskFlowNodeTerminal(FlowController& controller, Parameter& parameter) noexcept {}
+		virtual void TaskFlowNodeTerminal(FlowTerminator& controller, Parameter& parameter) noexcept {}
 
 	protected:
 
@@ -191,19 +192,22 @@ export namespace Potato::TaskFlow
 
 		virtual void BeginFlow(Task::Context& context, Task::Node::Parameter parameter) {};
 		virtual void EndFlow(Task::Context& context, Task::Node::Parameter parameter) {};
+		virtual void TerminalFlow(Task::Node::Parameter parameter) {}
 		virtual void TaskExecute(Task::Context& context, Parameter& parameter) override;
+		virtual void TaskTerminal(Parameter& parameter) noexcept override;
 		virtual void AddTaskNodeRef() const override;
 		virtual void SubTaskNodeRef() const override;
 		PauseMountPoint CreatePauseMountPoint(std::size_t encoded_flow_index);
 		bool ContinuePauseMountPoint(Task::Context& context, std::size_t encoded_flow_index);
+		bool TerminalPauseMountPoint(std::size_t encoded_flow_index);
 		virtual void AddTaskFlowExecutorRef() const = 0;
 		virtual void SubTaskFlowExecutorRef() const = 0;
 
 		FlowExecutor(std::pmr::memory_resource* resource);
 
-		void TryStartupNode_AssumedLocked(Task::Context& context, std::size_t index);
-		void FinishNode_AssumedLocked(Task::Context& context, std::size_t index);
-
+		void TryStartupNode_AssumedLocked(Task::Context& context, std::size_t encoded_flow_index);
+		void FinishNode_AssumedLocked(Task::Context& context, std::size_t encoded_flow_index);
+		void TryTerminalNode_AssumedLocked(std::size_t encoded_flow_index);
 		std::shared_mutex encoded_flow_mutex;
 		EncodedFlow encoded_flow;
 		std::size_t encoded_flow_out_degree = 0;
@@ -244,6 +248,25 @@ export namespace Potato::TaskFlow
 			: executor(exe), encoded_flow_index(encoded_flow_index)
 		{
 			
+		}
+		FlowExecutor& executor;
+		std::size_t encoded_flow_index;
+		EncodedFlow::Category category = EncodedFlow::Category::NormalNode;
+
+		friend struct FlowExecutor;
+	};
+
+	export struct FlowTerminator
+	{
+
+		EncodedFlow::Category GetCategory() const { return category; }
+
+	protected:
+
+		FlowTerminator(FlowExecutor& exe, std::size_t encoded_flow_index)
+			: executor(exe), encoded_flow_index(encoded_flow_index)
+		{
+
 		}
 		FlowExecutor& executor;
 		std::size_t encoded_flow_index;

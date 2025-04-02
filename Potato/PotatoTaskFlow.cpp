@@ -814,6 +814,107 @@ namespace Potato::TaskFlow
 		return false;
 	}
 
+	bool FlowExecutor::TerminalPauseMountPoint(std::size_t encoded_flow_index)
+	{
+		std::lock_guard lg(execute_state_mutex);
+		if (encoded_flow_index < encoded_flow_execute_state.size())
+		{
+			auto& ref = encoded_flow_execute_state[encoded_flow_index];
+			assert(ref.pause_count > 0);
+			assert(ref.state == ExecuteState::State::Running || ref.state == ExecuteState::State::Pause);
+			ref.pause_count -= 1;
+			if (ref.pause_count == 0)
+			{
+				std::shared_lock sl(encoded_flow_mutex);
+				TryTerminalNode_AssumedLocked(encoded_flow_index);
+			}
+			return true;
+		}
+		return false;
+
+		
+		return true;
+	}
+
+	void FlowExecutor::TryTerminalNode_AssumedLocked(std::size_t encoded_flow_index)
+	{
+		assert(encoded_flow_execute_state.size() > encoded_flow_index);
+		auto& current_state = encoded_flow_execute_state[encoded_flow_index];
+		if (current_state.in_degree == 0 && current_state.mutex_degree == 0 && current_state.pause_count == 0)
+		{
+			auto& encoded_node = encoded_flow.encode_infos[encoded_flow_index];
+			switch (current_state.state)
+			{
+			case ExecuteState::State::Done:
+			case ExecuteState::State::Running:
+				return;
+			case ExecuteState::State::Pause:
+				break;
+			case ExecuteState::State::Ready:
+				if (encoded_node.node)
+				{
+					FlowTerminator terminator{ *this, encoded_flow_index };
+					terminator.category = encoded_node.category;
+					encoded_node.node->TaskFlowNodeTerminal(terminator, encoded_node.parameter);
+				}
+				break;
+			default:
+				assert(false);
+				break;
+			}
+
+			auto dir_edges = encoded_node.direct_edges.Slice(std::span(encoded_flow.edges));
+			auto mut_edges = encoded_node.mutex_edges.Slice(std::span(encoded_flow.edges));
+
+			for (auto ite : dir_edges)
+			{
+				if (ite != std::numeric_limits<std::size_t>::max())
+				{
+					encoded_flow_execute_state[ite].in_degree -= 1;
+					TryTerminalNode_AssumedLocked(ite);
+				}
+				else
+				{
+					execute_out_degree -= 1;
+				}
+			}
+
+			if (encoded_node.category != EncodedFlow::Category::SubFlowBegin)
+			{
+				for (auto ite : mut_edges)
+				{
+					encoded_flow_execute_state[ite].mutex_degree -= 1;
+					TryTerminalNode_AssumedLocked(ite);
+				}
+			}
+
+			if (execute_out_degree == 0)
+			{
+				execute_state = ExecuteState::State::Done;
+				TerminalFlow(executor_parameter);
+			}
+		}
+	}
+
+	void FlowExecutor::TaskTerminal(Parameter& parameter) noexcept
+	{
+		auto index = parameter.custom_data.data1;
+		std::lock_guard lg(execute_state_mutex);
+		std::shared_lock sl(encoded_flow_mutex);
+		if (index == std::numeric_limits<std::size_t>::max())
+		{
+			execute_state = ExecuteState::State::Done;
+			TerminalFlow(executor_parameter);
+		}else if (index == std::numeric_limits<std::size_t>::max() - 1)
+		{
+			return;
+		}else
+		{
+			TryTerminalNode_AssumedLocked(index);
+		}
+	}
+
+
 	FlowExecutor::PauseMountPoint FlowController::MarkCurrentAsPause()
 	{
 		return executor.CreatePauseMountPoint(encoded_flow_index);
