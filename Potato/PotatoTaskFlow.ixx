@@ -24,7 +24,6 @@ export namespace Potato::TaskFlow
 	export struct Flow;
 	export struct FlowExecutor;
 	export struct FlowController;
-	export struct FlowTerminator;
 
 	export struct Node
 	{
@@ -45,7 +44,6 @@ export namespace Potato::TaskFlow
 		};
 
 		virtual void TaskFlowNodeExecute(Task::Context& context, FlowController& controller, Parameter& parameter) = 0;
-		virtual void TaskFlowNodeTerminal(FlowTerminator& controller, Parameter& parameter) noexcept {}
 
 	protected:
 
@@ -192,7 +190,6 @@ export namespace Potato::TaskFlow
 
 		virtual void BeginFlow(Task::Context& context, Task::Node::Parameter parameter) {};
 		virtual void EndFlow(Task::Context& context, Task::Node::Parameter parameter) {};
-		virtual void TerminalFlow(Task::Node::Parameter parameter) {}
 		virtual void TaskExecute(Task::Context& context, Parameter& parameter) override;
 		virtual void TaskTerminal(Parameter& parameter) noexcept override;
 		virtual void AddTaskNodeRef() const override;
@@ -207,7 +204,6 @@ export namespace Potato::TaskFlow
 
 		void TryStartupNode_AssumedLocked(Task::Context& context, std::size_t encoded_flow_index);
 		void FinishNode_AssumedLocked(Task::Context& context, std::size_t encoded_flow_index);
-		void TryTerminalNode_AssumedLocked(std::size_t encoded_flow_index);
 		std::shared_mutex encoded_flow_mutex;
 		EncodedFlow encoded_flow;
 		std::size_t encoded_flow_out_degree = 0;
@@ -219,19 +215,42 @@ export namespace Potato::TaskFlow
 				Ready,
 				Running,
 				Pause,
-				Done
+				Done,
+				PauseTerminal,
+				FlowTerminal,
 			};
 			State state = State::Ready;
 			std::size_t in_degree = 0;
 			std::size_t mutex_degree = 0;
 			std::size_t pause_count = 0;
+			bool has_template_edges = false;
 		};
+
+		struct TemplateNode
+		{
+			TaskFlow::Node::Ptr node;
+			TaskFlow::Node::Parameter parameter;
+			bool has_template_edge = false;
+		};
+
+		struct TemplateEdge
+		{
+			std::uint8_t is_direct_to = true;
+			std::size_t from = 0;
+			std::size_t to = 0;
+		};
+
+		std::shared_mutex template_node_mutex;
+		std::pmr::vector<TemplateNode> template_node;
+		std::pmr::vector<TemplateEdge> template_edges;
+		std::size_t encoded_flow_node_count_for_template = 0;
 
 		std::mutex execute_state_mutex;
 		Task::Node::Parameter executor_parameter;
 		ExecuteState::State execute_state = ExecuteState::State::Ready;
 		std::pmr::vector<ExecuteState> encoded_flow_execute_state;
 		std::size_t execute_out_degree = 0;
+		std::size_t encoded_flow_node_count_for_execute = 0;
 
 		friend struct FlowController;
 	};
@@ -248,25 +267,6 @@ export namespace Potato::TaskFlow
 			: executor(exe), encoded_flow_index(encoded_flow_index)
 		{
 			
-		}
-		FlowExecutor& executor;
-		std::size_t encoded_flow_index;
-		EncodedFlow::Category category = EncodedFlow::Category::NormalNode;
-
-		friend struct FlowExecutor;
-	};
-
-	export struct FlowTerminator
-	{
-
-		EncodedFlow::Category GetCategory() const { return category; }
-
-	protected:
-
-		FlowTerminator(FlowExecutor& exe, std::size_t encoded_flow_index)
-			: executor(exe), encoded_flow_index(encoded_flow_index)
-		{
-
 		}
 		FlowExecutor& executor;
 		std::size_t encoded_flow_index;
