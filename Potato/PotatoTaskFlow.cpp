@@ -670,7 +670,6 @@ namespace Potato::TaskFlow
 			return;
 		}
 
-		bool is_template_node = false;
 		TaskFlow::Node::Ptr node;
 		TaskFlow::Node::Parameter current_node_parameter;
 		FlowController controller{ *this, index };
@@ -694,7 +693,6 @@ namespace Potato::TaskFlow
 				auto& ref = template_node[index];
 				node = ref.node;
 				current_node_parameter = ref.parameter;
-				is_template_node = true;
 			}
 		}
 
@@ -763,15 +761,8 @@ namespace Potato::TaskFlow
 					if (ite.from == index)
 					{
 						auto& ref = encoded_flow_execute_state[ite.to];
-						if (ite.is_direct_to)
-						{
-							assert(ref.in_degree > 0);
-							ref.in_degree -= 1;
-						}else
-						{
-							assert(ref.mutex_degree > 0);
-							ref.mutex_degree -= 1;
-						}
+						assert(ref.in_degree > 0);
+						ref.in_degree -= 1;
 						TryStartupNode_AssumedLocked(context, ite.to);
 					}
 				}
@@ -799,17 +790,6 @@ namespace Potato::TaskFlow
 				for (auto edge : span_mutex_edge)
 				{
 					encoded_flow_execute_state[edge].mutex_degree += 1;
-				}
-			}
-
-			if (state.has_template_edges)
-			{
-				for (auto& t_edges : template_edges)
-				{
-					if (!t_edges.is_direct_to && t_edges.from == index)
-					{
-						encoded_flow_execute_state[t_edges.to].mutex_degree += 1;
-					}
 				}
 			}
 
@@ -852,12 +832,16 @@ namespace Potato::TaskFlow
 	FlowExecutor::PauseMountPoint::PauseMountPoint(PauseMountPoint&& point)
 		: exectutor(std::move(point.exectutor)), encoded_flow_index(point.encoded_flow_index)
 	{
-		volatile int i = 0;
 	}
 
 	FlowExecutor::PauseMountPoint::~PauseMountPoint()
 	{
 		assert(!exectutor);
+		if(exectutor)
+		{
+			exectutor->TerminalPauseMountPoint(encoded_flow_index);
+			exectutor.Reset();
+		}
 	}
 
 	bool FlowExecutor::PauseMountPoint::Continue(Task::Context& context)
@@ -930,6 +914,16 @@ namespace Potato::TaskFlow
 			assert(encoded_flow_execute_state.size() > index);
 			encoded_flow_execute_state[index].state = ExecuteState::State::FlowTerminal;
 		}
+	}
+
+	bool FlowExecutor::AddTemplateNode(TaskFlow::Node& target_node, TaskFlow::Node::Parameter parameter, bool(*func)(void* data, TemplateSequencer& sequencer, std::size_t), void* append_data, std::size_t start_up_index, std::pmr::memory_resource* resource)
+	{
+		std::lock_guard lg(execute_state_mutex);
+		if(execute_state == ExecuteState::State::Ready || execute_state == ExecuteState::State::Running)
+		{
+
+		}
+		return false;
 	}
 
 

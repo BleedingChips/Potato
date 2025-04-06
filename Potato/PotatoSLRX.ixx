@@ -18,18 +18,18 @@ export namespace Potato::SLRX
 			ENDOFFILE,
 		};
 
-		constexpr std::strong_ordering operator<=>(Symbol const& Input) const = default;
+		constexpr std::strong_ordering operator<=>(Symbol const&) const = default;
 		constexpr static Symbol EndOfFile() { return { T::ENDOFFILE, 0 }; }
 		constexpr static Symbol StartSymbol() { return { T::STARTSYMBOL, 0 }; }
-		constexpr static Symbol AsNoTerminal(std::size_t Value) { return { T::NOTERMIAL, Value};  }
-		constexpr static Symbol AsTerminal(std::size_t Value) { return { T::TERMINAL, Value }; }
-		constexpr bool IsTerminal() const { return Type == T::TERMINAL || IsEndOfFile(); }
-		constexpr bool IsNoTerminal() const { return Type == T::NOTERMIAL || IsStartSymbol(); }
-		constexpr bool IsEndOfFile() const { return Type == T::ENDOFFILE; }
-		constexpr bool IsStartSymbol() const { return Type == T::STARTSYMBOL; }
+		constexpr static Symbol AsNoTerminal(std::size_t symbol) { return { T::NOTERMIAL, symbol };  }
+		constexpr static Symbol AsTerminal(std::size_t symbol) { return { T::TERMINAL, symbol }; }
+		constexpr bool IsTerminal() const { return type == T::TERMINAL || IsEndOfFile(); }
+		constexpr bool IsNoTerminal() const { return type == T::NOTERMIAL || IsStartSymbol(); }
+		constexpr bool IsEndOfFile() const { return type == T::ENDOFFILE; }
+		constexpr bool IsStartSymbol() const { return type == T::STARTSYMBOL; }
 
-		T Type = T::ENDOFFILE;
-		std::size_t Value = 0;
+		T type = T::ENDOFFILE;
+		std::size_t symbol = 0;
 	};
 
 	struct ParsingStep

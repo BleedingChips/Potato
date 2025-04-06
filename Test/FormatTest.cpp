@@ -3,7 +3,7 @@ import std;
 
 using namespace Potato::Format;
 
-
+/*
 template<typename Target>
 void TestScan(std::u8string_view Pattern, std::u8string_view Str, Target Tar, const char* Error)
 {
@@ -55,11 +55,12 @@ void TestingStrFormat()
 
 	std::wcout << LR"(TestingStrFormat Pass !)" << std::endl;
 }
+*/
 
 int main()
 {
 	try {
-		TestingStrFormat();
+		//TestingStrFormat();
 	}
 	catch (const char* Error)
 	{

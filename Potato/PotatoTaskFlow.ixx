@@ -186,6 +186,12 @@ export namespace Potato::TaskFlow
 		bool UpdateState();
 		bool Commit(Task::Context& context, Task::Node::Parameter flow_parameter = {});
 
+
+		struct TemplateSequencer
+		{
+
+		};
+
 	protected:
 
 		virtual void BeginFlow(Task::Context& context, Task::Node::Parameter parameter) {};
@@ -199,6 +205,7 @@ export namespace Potato::TaskFlow
 		bool TerminalPauseMountPoint(std::size_t encoded_flow_index);
 		virtual void AddTaskFlowExecutorRef() const = 0;
 		virtual void SubTaskFlowExecutorRef() const = 0;
+		bool AddTemplateNode(TaskFlow::Node& target_node, TaskFlow::Node::Parameter parameter, bool (*func)(void* data, TemplateSequencer& sequencer, std::size_t), void* append_data, std::size_t startup_index, std::pmr::memory_resource* resource);
 
 		FlowExecutor(std::pmr::memory_resource* resource);
 
@@ -210,7 +217,7 @@ export namespace Potato::TaskFlow
 
 		struct ExecuteState
 		{
-			enum class State
+			enum class State : std::uint8_t
 			{
 				Ready,
 				Running,
@@ -219,11 +226,12 @@ export namespace Potato::TaskFlow
 				PauseTerminal,
 				FlowTerminal,
 			};
-			State state = State::Ready;
+			
 			std::size_t in_degree = 0;
 			std::size_t mutex_degree = 0;
 			std::size_t pause_count = 0;
-			bool has_template_edges = false;
+			State state : 7 = State::Ready;
+			std::uint8_t has_template_edges : 1 = false;
 		};
 
 		struct TemplateNode
@@ -235,7 +243,6 @@ export namespace Potato::TaskFlow
 
 		struct TemplateEdge
 		{
-			std::uint8_t is_direct_to = true;
 			std::size_t from = 0;
 			std::size_t to = 0;
 		};

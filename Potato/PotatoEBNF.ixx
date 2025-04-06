@@ -13,6 +13,7 @@ import PotatoMisc;
 
 export namespace Potato::EBNF
 {
+	
 	export struct Ebnf;
 
 	struct EbnfBuilder : protected SLRX::ProcessorOperator

@@ -14,139 +14,133 @@ import PotatoReg;
 export namespace Potato::Format
 {
 
+	
 	template<typename SourceType, typename UnicodeType>
 	struct Scanner
 	{
-		bool Scan(std::span<UnicodeType const> Par, SourceType& Input) = delete;
+		bool Scan(std::span<UnicodeType const> parameter, SourceType& input) = delete;
 	};
 
 	template<typename CharT, typename CharTraiT, typename TargetT>
-	bool DirectScan(std::basic_string_view<CharT, CharTraiT> Pars, TargetT& TarType)
+	bool DirectScan(std::basic_string_view<CharT, CharTraiT> parameter, TargetT& target)
 	{
-		return Scanner<std::remove_cvref_t<TargetT>, CharT>{}.Scan(Pars, TarType);
+		return Scanner<std::remove_cvref_t<TargetT>, CharT>{}.Scan(parameter, target);
 	}
 
 	template<typename CharT, typename TargetT>
-	bool DirectScan(CharT const* Pars, TargetT& TarType)
+	bool DirectScan(CharT const* parameters, TargetT& target)
 	{
-		return DirectScan(std::basic_string_view<CharT>{Pars}, TarType);
+		return DirectScan(std::basic_string_view<CharT>{parameters}, target);
 	}
 
 	template<typename CharT, typename CharTraits>
-	bool CaptureScan(std::span<std::size_t const>, std::basic_string_view<CharT, CharTraits> InputStr)
+	bool CaptureScan(std::span<std::size_t const>, std::basic_string_view<CharT, CharTraits> input)
 	{
 		return true;
 	}
 
 	template<typename CharT, typename CharTraits, typename CT, typename ...OT>
-	bool CaptureScan(std::span<std::size_t const> CaptureIndex, std::basic_string_view<CharT, CharTraits> InputStr, CT& O1, OT& ...OO)
+	bool CaptureScan(std::span<std::size_t const> capture_index, std::basic_string_view<CharT, CharTraits> input, CT& target, OT& ...other_target)
 	{
-		return CaptureIndex.size() >= 2 && DirectScan(Misc::IndexSpan<>{CaptureIndex[0], CaptureIndex[1]}.Slice(InputStr), O1) && CaptureScan(CaptureIndex.subspan(2), InputStr, OO...);
+		return capture_index.size() >= 2 && DirectScan(Misc::IndexSpan<>{capture_index[0], capture_index[1]}.Slice(input), target) && CaptureScan(capture_index.subspan(2), input, other_target...);
 	}
 
 	template<typename CharT, typename CT, typename ...OT>
-	bool CaptureScan(std::span<Misc::IndexSpan<> const> CaptureIndex, CharT const* InputStr, CT& O1, OT& ...OO)
+	bool CaptureScan(std::span<Misc::IndexSpan<> const> capture_index, CharT const* input, CT& target, OT& ...other_target)
 	{
-		return CaptureScan(CaptureIndex, std::basic_string_view<CharT>(InputStr), O1, OO...);
+		return CaptureScan(capture_index, std::basic_string_view<CharT>(input), target, other_target...);
 	}
 
 	template<typename CharT, typename CharTraits, typename ...OT>
-	bool RegAcceptScan(Reg::ProcessorAcceptRef Accept, std::basic_string_view<CharT, CharTraits> InputStr,  OT& ...OO)
+	bool RegAcceptScan(Reg::ProcessorAcceptRef accept, std::basic_string_view<CharT, CharTraits> input,  OT& ...other_target)
 	{
-		return Accept && CaptureScan(Accept.Capture, InputStr, OO...);
+		return accept && CaptureScan(accept.Capture, input, other_target...);
 	}
 
 	template<typename CharT, typename CharTraits, typename ...OT>
-	bool RegAcceptScan(Reg::ProcessorAcceptRef Accept, CharT const* InputStr, OT& ...OO)
+	bool RegAcceptScan(Reg::ProcessorAcceptRef accept, CharT const* input, OT& ...other_target)
 	{
-		return RegAcceptScan(Accept, std::basic_string_view<CharT>(InputStr), OO...);
+		return RegAcceptScan(accept, std::basic_string_view<CharT>(input), other_target...);
 	}
 
 	template<typename CharT, typename CharTraits, typename ...OT>
-	bool ProcessorScan(Reg::DfaProcessor& Processor, std::basic_string_view<CharT, CharTraits> Str, OT& ...OO)
+	bool ProcessorScan(Reg::DfaProcessor& processor, std::basic_string_view<CharT, CharTraits> input, OT& ...other_target)
 	{
-		auto Accept = Reg::Process(Processor, Str);
-		return RegAcceptScan(Accept, Str, OO...);
+		auto accept = Reg::Process(processor, input);
+		return RegAcceptScan(accept, input, other_target...);
 	}
 
 	template<typename CharT1, typename CharTT1, typename CharT2, typename CharTT2, typename ...OT>
-	bool MatchScan(std::basic_string_view<CharT1, CharTT1> Regex, std::basic_string_view<CharT2, CharTT2> Source, OT&... OO)
+	bool MatchScan(std::basic_string_view<CharT1, CharTT1> regex, std::basic_string_view<CharT2, CharTT2> input, OT&... other_target)
 	{
-		Reg::Dfa Table(Reg::Dfa::FormatE::Match, Regex, false, 0);
-		Reg::DfaProcessor Processor;
-		Processor.SetObserverTable(Table);
-		Processor.Clear();
-		return ProcessorScan(Processor, Source, OO...);
+		Reg::Dfa table(Reg::Dfa::FormatE::Match, regex, false, 0);
+		Reg::DfaProcessor processor;
+		processor.SetObserverTable(table);
+		processor.Clear();
+		return ProcessorScan(processor, input, other_target...);
 	}
 
 	template<typename CharT1, typename CharTT1, typename CharT2, typename CharTT2, typename ...OT>
-	bool HeadMatchScan(std::basic_string_view<CharT1, CharTT1> Regex, std::basic_string_view<CharT2, CharTT2> Source, OT&... OO)
+	bool HeadMatchScan(std::basic_string_view<CharT1, CharTT1> regex, std::basic_string_view<CharT2, CharTT2> input, OT&... other_target)
 	{
-		Reg::Dfa Table(Reg::Dfa::FormatE::HeadMatch, Regex, false, 0);
-		Reg::DfaProcessor Processor;
-		Processor.SetObserverTable(Table);
-		Processor.Clear();
-		return ProcessorScan(Processor, Source, OO...);
+		Reg::Dfa table(Reg::Dfa::FormatE::HeadMatch, regex, false, 0);
+		Reg::DfaProcessor processor;
+		processor.SetObserverTable(table);
+		processor.Clear();
+		return ProcessorScan(processor, input, other_target...);
 	}
-
 
 	template<typename SourceType>
-	struct FormatWritter
+	struct FormatWriter
 	{
-		constexpr FormatWritter() = default;
-		constexpr FormatWritter(std::span<SourceType> Output) : Output(Output) {}
-
-		constexpr bool IsWritting() const { return Output.has_value(); }
-
-		constexpr std::optional<std::span<SourceType>> GetLastBuffer() const{
-			if (Output.has_value())
-			{
-				return Output->subspan(WritedCount);
-			}
-			return {};
+		constexpr FormatWriter(std::size_t written_byte) : written_byte(written_byte) {}
+		constexpr FormatWriter(FormatWriter const&) = default;
+		constexpr std::size_t Write(SourceType&& source_type)
+		{
+			return Write(std::span(&source_type, 1));
+		}
+		constexpr std::size_t Write(std::span<SourceType const> source_type)
+		{
+			auto written = written_byte;
+			auto span = WriteWithoutConstruction(1);
+			std::copy_n(&source_type, source_type.size(), span.data());
+			return written;
+		}
+		constexpr std::span<SourceType> WriteWithoutConstruction(std::size_t allocate_size)
+		{
+			auto span = Allocate(allocate_size);
+			written_byte += span;
+			return span;
 		}
 
-		constexpr std::size_t GetWritedSize() const { return WritedCount; }
 
-		constexpr std::size_t Write(SourceType Input)
+		template<typename FuncT>
+		struct Wrapper : public FormatWriter
 		{
-			if (Output.has_value())
-			{
-				Output->operator[](WritedCount) = Input;
-			}
-			auto Old = WritedCount;
-			WritedCount += 1;
-			return Old;
-		}
+			constexpr virtual std::span<SourceType> Allocate(std::size_t allocate_size) { return func(allocate_size); }
+			constexpr Wrapper(FuncT& func, std::size_t written_byte) : func(func), FormatWriter(written_byte) {}
+			constexpr Wrapper(Wrapper const&) = default;
+		protected:
+			FuncT& func;
+		};
 
-		constexpr std::size_t Write(std::span<SourceType const> Input)
+		template<typename FuncT>
+		auto GetWrapper(FuncT&& funcT, std::size_t written_byte = 0) requires(std::is_invocable_r_v<std::span<SourceType>, FuncT, std::size_t>)
 		{
-			if (Output.has_value())
-			{
-				std::copy_n(Input.begin(), Input.size(), Output->subspan(WritedCount).begin());
-			}
-			auto Old = WritedCount;
-			WritedCount += Input.size();
-			return Old;
-		}
-
-		constexpr std::size_t Allocate(std::size_t Size)
-		{
-			auto Old = WritedCount;
-			WritedCount += Size;
-			return Old;
+			using Type = std::remove_cvref_t<FuncT>;
+			Wrapper<Type> wrapper {funcT, written_byte };
+			return wrapper;
 		}
 
 	protected:
-
-		std::size_t WritedCount = 0;
-		std::optional<std::span<SourceType>> Output;
+		constexpr virtual std::span<SourceType> Allocate(std::size_t allocate_size) = 0;
+		std::size_t written_byte = false;
 	};
 
 	template<typename SourceType, typename UnicodeType>
 	struct Formatter
 	{
-		bool operator()(FormatWritter<SourceType>& Writer, std::basic_string_view<UnicodeType> Parameter, SourceType const& Input) = delete;
+		bool operator()(FormatWriter<SourceType>& Writer, std::basic_string_view<UnicodeType> Parameter, SourceType const& Input) = delete;
 	};
 
 	namespace Implement
@@ -262,25 +256,25 @@ export namespace Potato::Format
 
 
 		template<std::size_t CurIndex, typename CharT, typename CharTT>
-		constexpr bool FormatExe(FormatWritter<CharT>& Writter, std::basic_string_view<CharT, CharTT> Par, std::size_t RequireSize)
+		constexpr bool FormatExe(FormatWriter<CharT>& writer, std::basic_string_view<CharT, CharTT> Par, std::size_t RequireSize)
 		{
 			return false;
 		}
 
 		template<std::size_t CurIndex, typename CharT, typename CharTT, typename CurType, typename ...OtherType>
-		constexpr bool FormatExe(FormatWritter<CharT>& Writter, std::basic_string_view<CharT, CharTT> Par, std::size_t RequireSize, CurType&& CT, OtherType&& ...OT)
+		constexpr bool FormatExe(FormatWriter<CharT>& writer, std::basic_string_view<CharT, CharTT> Par, std::size_t RequireSize, CurType&& CT, OtherType&& ...OT)
 		{
 			if (RequireSize == CurIndex)
 			{
-				return Formatter<std::remove_cvref_t<CurType>, CharT>{}(Writter, Par, CT);
+				return Formatter<std::remove_cvref_t<CurType>, CharT>{}(writer, Par, CT);
 			}
 			else {
-				return FormatExe<CurIndex + 1>(Writter, Par, RequireSize, std::forward<OtherType>(OT)...);
+				return FormatExe<CurIndex + 1>(writer, Par, RequireSize, std::forward<OtherType>(OT)...);
 			}
 		}
 
 		template<typename CharT, typename ...OtherType>
-		constexpr std::optional<std::size_t> ApplyFormat(FormatWritter<CharT>& Writter, std::size_t Index, FormatPatternT Type, std::basic_string_view<CharT> Par, OtherType&& ...OT)
+		constexpr std::optional<std::size_t> ApplyFormat(FormatWriter<CharT>& Writter, std::size_t Index, FormatPatternT Type, std::basic_string_view<CharT> Par, OtherType&& ...OT)
 		{
 			switch (Type)
 			{
@@ -305,7 +299,7 @@ export namespace Potato::Format
 	}
 
 	template<typename CharT, typename CharTraisT, typename ...OType>
-	constexpr bool Format(FormatWritter<CharT>& Writter, std::basic_string_view<CharT, CharTraisT> Formatter, OType&& ...OT)
+	constexpr bool Format(FormatWriter<CharT>& Writter, std::basic_string_view<CharT, CharTraisT> Formatter, OType&& ...OT)
 	{
 		std::size_t Index = 0;
 		while (!Formatter.empty())
@@ -324,7 +318,7 @@ export namespace Potato::Format
 	}
 
 	template<typename CharT, typename ...OType>
-	constexpr bool Format(FormatWritter<CharT>& Writter, CharT const* Formatter, OType&& ...OT)
+	constexpr bool Format(FormatWriter<CharT>& Writter, CharT const* Formatter, OType&& ...OT)
 	{
 		return Format(Writter, std::basic_string_view<CharT>{Formatter}, std::forward<OType>(OT)...);
 	}
@@ -332,13 +326,13 @@ export namespace Potato::Format
 	template<typename CharT, typename CharTrais, typename ...OType>
 	auto FormatToString(std::basic_string_view<CharT, CharTrais> Formatter, OType&& ...OT) -> std::optional<std::basic_string<CharT, CharTrais>> {
 		
-		FormatWritter<CharT> Predict;
+		FormatWriter<CharT> Predict;
 
 		if (Format(Predict, Formatter, OT...))
 		{
 			std::basic_string<CharT, CharTrais> Buffer;
 			Buffer.resize(Predict.GetWritedSize());
-			FormatWritter<CharT> Writter(Buffer);
+			FormatWriter<CharT> Writter(Buffer);
 			if (Format(Writter, Formatter, OT...))
 			{
 				return Buffer;
@@ -390,7 +384,7 @@ export namespace Potato::Format
 			= Implement::StaticFormatExe<ElementCount>(StrFormatter);
 
 		template<typename ...OT>
-		static constexpr bool Format(FormatWritter<Type>& Writter, OT&& ...ot)
+		static constexpr bool Format(FormatWriter<Type>& Writter, OT&& ...ot)
 		{
 			std::size_t Index = 0;
 			for (auto Ite : Patterns)
@@ -410,12 +404,12 @@ export namespace Potato::Format
 		template<typename ...OT>
 		static auto FormatToString(OT&& ...ot) -> std::optional<std::basic_string<Type>>
 		{
-			FormatWritter<Type> Predicte;
+			FormatWriter<Type> Predicte;
 			if (StaticFormatPattern::Format(Predicte, ot...))
 			{
 				std::basic_string<Type> Result;
 				Result.resize(Predicte.GetWritedSize());
-				FormatWritter<Type> Writter{std::span(Result)};
+				FormatWriter<Type> Writter{std::span(Result)};
 				if (StaticFormatPattern::Format(Writter, ot...))
 				{
 					return Result;
@@ -435,13 +429,13 @@ export namespace Potato::Format
 	template<typename CharT, typename CharTT, typename SourceT>
 	auto DirectFormatToString(std::basic_string_view<CharT, CharTT> Par, SourceT && S) -> std::optional<std::basic_string<CharT, CharTT>> {
 		
-		FormatWritter<CharT> Predicte;
+		FormatWriter<CharT> Predicte;
 		using Formatter = Formatter<std::remove_cvref_t<SourceT>, CharT>;
 		if (Formatter{}(Predicte, Par, S))
 		{
 			std::basic_string<CharT, CharTT> Result;
 			Result.resize(Predicte.GetWritedSize());
-			FormatWritter<CharT> Writter{ std::span(Result) };
+			FormatWriter<CharT> Writter{ std::span(Result) };
 			if (Formatter{}(Writter, Par, S))
 			{
 				return Result;
@@ -505,7 +499,7 @@ export namespace Potato::Format
 	template<typename NumberType, typename UnicodeType>
 	struct BuildInNumberFormatter
 	{
-		bool operator()(FormatWritter<UnicodeType>& Writter, std::basic_string_view<UnicodeType> Pars, NumberType Input) {
+		bool operator()(FormatWriter<UnicodeType>& Writter, std::basic_string_view<UnicodeType> Pars, NumberType Input) {
 			std::wstringstream wss;
 			wss << Input;
 			while (true)
@@ -557,7 +551,7 @@ export namespace Potato::Format
 	template<typename SUnicodeT, typename CharTrais, typename UnicodeType>
 	struct Formatter<std::basic_string_view<SUnicodeT, CharTrais>, UnicodeType>
 	{
-		bool operator()(FormatWritter<UnicodeType>& Writter, std::basic_string_view<UnicodeType> Parameter, std::basic_string_view<SUnicodeT, CharTrais> const& Input) {
+		bool operator()(FormatWriter<UnicodeType>& Writter, std::basic_string_view<UnicodeType> Parameter, std::basic_string_view<SUnicodeT, CharTrais> const& Input) {
 			
 			auto Last = Writter.GetLastBuffer();
 			if (Last.has_value())
@@ -575,5 +569,5 @@ export namespace Potato::Format
 
 	template<typename SUnicodeT, typename CharTrais, typename Allocator, typename UnicodeType>
 	struct Formatter<std::basic_string<SUnicodeT, CharTrais, Allocator>, UnicodeType>: Formatter<std::basic_string_view<SUnicodeT, CharTrais>, UnicodeType> {};
-
+	
 }

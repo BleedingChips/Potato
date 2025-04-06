@@ -1227,7 +1227,7 @@ namespace Potato::SLRX
 						auto& Source = Ite2[I];
 						Target.IsEndOfFile = Source.RequireSymbol.IsEndOfFile();
 						Target.Type = Source.Type;
-						Misc::CrossTypeSetThrow<OutOfRange>(Target.Value, Source.RequireSymbol.Value, OutOfRange::TypeT::SymbolValue, Source.RequireSymbol.Value);
+						Misc::CrossTypeSetThrow<OutOfRange>(Target.Value, Source.RequireSymbol.symbol, OutOfRange::TypeT::SymbolValue, Source.RequireSymbol.symbol);
 						RequireNodeOffsetRecord Record{ RequireNodeOffset, Ite2.size(), I, Source.ReferenceIndex };
 						switch (Target.Type)
 						{
@@ -1255,7 +1255,7 @@ namespace Potato::SLRX
 			{
 				ZipReducePropertyT Pro;
 				Misc::CrossTypeSetThrow<OutOfRange>(Pro.Mask, Ite2.Property.Reduce.Mask, OutOfRange::TypeT::Mask, Ite2.Property.Reduce.Mask);
-				Misc::CrossTypeSetThrow<OutOfRange>(Pro.NoTerminalValue, Ite2.Property.ReduceSymbol.Value, OutOfRange::TypeT::SymbolValue, Ite2.Property.ReduceSymbol.Value);
+				Misc::CrossTypeSetThrow<OutOfRange>(Pro.NoTerminalValue, Ite2.Property.ReduceSymbol.symbol, OutOfRange::TypeT::SymbolValue, Ite2.Property.ReduceSymbol.symbol);
 				Misc::CrossTypeSetThrow<OutOfRange>(Pro.ProductionIndex, Ite2.Property.Reduce.ProductionIndex, OutOfRange::TypeT::ReduceProperty, Ite2.Property.Reduce.ProductionIndex);
 				Misc::CrossTypeSetThrow<OutOfRange>(Pro.ProductionCount, Ite2.Property.Reduce.ElementCount, OutOfRange::TypeT::ReduceProperty, Ite2.Property.Reduce.ElementCount);
 				Misc::CrossTypeSetThrow<OutOfRange>(Pro.ReduceTupleCount, Ite2.Tuples.size(), OutOfRange::TypeT::ReduceProperty, Ite2.Tuples.size());
@@ -1688,7 +1688,7 @@ namespace Potato::SLRX
 		{
 			for (auto& Ite : RequireNodes)
 			{
-				if (Ite.IsEndOfFile && Value.IsEndOfFile() || (!Ite.IsEndOfFile && !Value.IsEndOfFile() && Ite.Value == Value.Value))
+				if (Ite.IsEndOfFile && Value.IsEndOfFile() || (!Ite.IsEndOfFile && !Value.IsEndOfFile() && Ite.Value == Value.symbol))
 				{
 					switch (Ite.Type)
 					{

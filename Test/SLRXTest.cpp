@@ -105,7 +105,7 @@ struct StringMaker
 struct StringMaker : ProcessorOperator
 {
 	std::any operator()(Symbol Value) {
-		return std::u8string(TerminalMapping[static_cast<Terminal>(Value.Value)]);
+		return std::u8string(TerminalMapping[static_cast<Terminal>(Value.symbol)]);
 	}
 
 	std::any HandleReduce(SymbolInfo Symbol, ReduceProduction Production) {

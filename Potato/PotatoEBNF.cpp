@@ -252,7 +252,7 @@ namespace Potato::EBNF
 
 	std::any EbnfBuilder::HandleSymbolStep2(SLRX::SymbolInfo Value)
 	{
-		T TValue = static_cast<T>(Value.Value.Value);
+		T TValue = static_cast<T>(Value.Value.symbol);
 		if (TValue == T::Rex)
 		{
 			RegMappings.push_back({
@@ -797,10 +797,10 @@ namespace Potato::EBNF
 		assert(!std::holds_alternative<std::monostate>(TableWrapper));
 		if (std::holds_alternative<Pointer::ObserverPtr<Ebnf const>>(TableWrapper))
 		{
-			return {Symbol, std::get<Pointer::ObserverPtr<Ebnf const>>(TableWrapper)->GetRegName(Symbol.Value), TokenIndex };
+			return {Symbol, std::get<Pointer::ObserverPtr<Ebnf const>>(TableWrapper)->GetRegName(Symbol.symbol), TokenIndex };
 		}
 		else {
-			return { Symbol, std::get<EbnfBinaryTableWrapper>(TableWrapper).GetRegName(Symbol.Value), TokenIndex };
+			return { Symbol, std::get<EbnfBinaryTableWrapper>(TableWrapper).GetRegName(Symbol.symbol), TokenIndex };
 		}
 	}
 
@@ -916,7 +916,7 @@ namespace Potato::EBNF
 	bool EbnfProcessor::AddTerminalSymbol(std::size_t RegIndex, Misc::IndexSpan<> TokenIndex)
 	{
 		auto [Sym, UserMask] = Tranlate(RegIndex, TokenIndex);
-		if (Sym.Symbol.Value == 0)
+		if (Sym.Symbol.symbol == 0)
 		{
 			return true;
 		}
@@ -1063,15 +1063,15 @@ namespace Potato::EBNF::Exception
 					Result.push_back({ TMap{UR"($EndOfFile)"}});
 				}
 				else {
-					assert(Ite.Value.Value < TMapping.size());
-					Result.push_back({ TMap{TMapping[Ite.Value.Value]} });
+					assert(Ite.Value.symbol < TMapping.size());
+					Result.push_back({ TMap{TMapping[Ite.Value.symbol]} });
 				}
 			}
 			else if(Ite.IsNoTerminal()) 
 			{
-				if (Ite.Value.Value < NTMapping.size())
+				if (Ite.Value.symbol < NTMapping.size())
 				{
-					Result.push_back({ NTMap{NTMapping[Ite.Value.Value], Ite.Reduce.ElementCount, Ite.Reduce.Mask} });
+					Result.push_back({ NTMap{NTMapping[Ite.Value.symbol], Ite.Reduce.ElementCount, Ite.Reduce.Mask} });
 				}
 				else {
 					switch (Ite.Reduce.Mask)
