@@ -238,7 +238,6 @@ export namespace Potato::TaskFlow
 		{
 			TaskFlow::Node::Ptr node;
 			TaskFlow::Node::Parameter parameter;
-			bool has_template_edge = false;
 		};
 
 		struct TemplateEdge

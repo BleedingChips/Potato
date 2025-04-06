@@ -922,6 +922,174 @@ namespace Potato::TaskFlow
 		if(execute_state == ExecuteState::State::Ready || execute_state == ExecuteState::State::Running)
 		{
 
+			TemplateNode t_node;
+			t_node.node = &target_node;
+			t_node.parameter = parameter;
+
+			template_node.emplace_back(std::move(t_node));
+
+			std::size_t template_in_degree = 0;
+			bool template_need_template = false;
+
+			struct TemplateSearch
+			{
+				ExecuteState::State state = ExecuteState::State::Ready;
+				std::uint8_t reached : 1 = false;
+				std::uint8_t need_mutex : 1 = false;
+				std::size_t in_degree = 0;
+			};
+
+			std::pmr::vector<TemplateSearch> template_search{ resource };
+
+			template_search.resize(encoded_flow_execute_state.size());
+
+			for (std::size_t index = 0; index < encoded_flow_execute_state.size(); ++index)
+			{
+				auto const& ref = encoded_flow_execute_state[index];
+				auto& tar = template_search[index];
+				if (ref.state != ExecuteState::State::Ready && ref.state != ExecuteState::State::Running && ref.state != ExecuteState::State::Pause)
+				{
+					tar.reached = true;
+				}else
+				{
+					tar.in_degree = ref.in_degree;
+				}
+				tar.state = ref.state;
+			}
+
+			bool modify = true;
+			while (modify)
+			{
+				modify = false;
+
+				for (std::size_t index = 0; index < template_search.size(); ++index)
+				{
+					auto& tar = template_search[index];
+					if (!tar.reached && tar.in_degree == 0)
+					{
+						tar.reached = true;
+
+						if (func != nullptr)
+						{
+							TemplateSequencer sequencer;
+							tar.need_mutex = func(append_data, sequencer, index);
+						}
+
+						bool has_template_edge = encoded_flow_execute_state[index].has_template_edges;
+
+						if (index < encoded_flow_node_count_for_template)
+						{
+							auto& ref = encoded_flow.encode_infos[index];
+							auto dir = ref.direct_edges.Slice(std::span(encoded_flow.edges));
+
+							if (tar.need_mutex && tar.state == ExecuteState::State::Ready)
+							{
+								for (auto ite : dir)
+								{
+									auto& search = template_search[ite];
+									search.reached = true;
+								}
+							}
+							else {
+								for (auto ite : dir)
+								{
+									auto& search = template_search[ite];
+									assert(search.in_degree > 0);
+									search.in_degree -= 1;
+								}
+							}
+						}
+
+						if (has_template_edge)
+						{
+							if (
+								tar.need_mutex 
+								&& tar.state == ExecuteState::State::Ready 
+								&& index < encoded_flow_node_count_for_execute
+								)
+							{
+								for (auto ite : template_edges)
+								{
+									if (ite.from == index)
+									{
+										auto& search = template_search[ite.to];
+										search.reached = true;
+									}
+								}
+							}
+							else {
+								for (auto ite : template_edges)
+								{
+									if (ite.from == index)
+									{
+										auto& search = template_search[ite.to];
+										assert(search.in_degree > 0);
+										search.in_degree -= 1;
+										if (search.in_degree == 0 && ite.to < index)
+										{
+											modify = true;
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+	
+			bool has_director = false;
+			for (std::size_t index = 0; index < template_search.size(); ++index)
+			{
+				auto& ref = template_search[index];
+				if (ref.need_mutex)
+				{
+					auto& tar = encoded_flow_execute_state[index];
+
+					if (tar.state == ExecuteState::State::Ready && index < encoded_flow_node_count_for_execute)
+					{
+						template_edges.emplace_back(encoded_flow_execute_state.size(), index);
+						tar.in_degree += 1;
+						template_need_template = true;
+					}
+					else {
+						tar.has_template_edges = true;
+						template_edges.emplace_back(index, encoded_flow_execute_state.size());
+						++template_in_degree;
+						has_director = true;
+					}
+				}
+			}
+
+			if (!has_director)
+			{
+				if (start_up_index == std::numeric_limits<std::size_t>::max())
+				{
+					for (std::size_t index = 0; index < template_search.size(); ++index)
+					{
+						auto& ref = template_search[index];
+						if (ref.state == ExecuteState::State::Running || ref.state == ExecuteState::State::Pause)
+						{
+							start_up_index = index;
+							break;
+						}
+					}
+				}
+
+				if (start_up_index != std::numeric_limits<std::size_t>::max())
+				{
+					auto& ref = encoded_flow_execute_state[start_up_index];
+					ref.has_template_edges = true;
+					++template_in_degree;
+					template_edges.emplace_back(start_up_index, encoded_flow_execute_state.size());
+				}
+			}
+
+			ExecuteState state;
+			state.has_template_edges = template_need_template;
+			state.in_degree = template_in_degree;
+
+			encoded_flow_execute_state.emplace_back(state);
+			++execute_out_degree;
 		}
 		return false;
 	}
