@@ -10,9 +10,9 @@ using namespace Potato;
 
 std::mutex print_mutex;
 
-void Print(TaskFlow::Node::Parameter parameter,  TaskFlow::FlowController& controller, std::thread::id thread_id)
+void Print(TaskFlow::Controller& controller, std::thread::id thread_id)
 {
-	auto wstr = *Potato::Encode::StrEncoder<char8_t, wchar_t>::EncodeToString(std::u8string_view{ parameter.node_name});
+	auto wstr = *Potato::Encode::StrEncoder<char8_t, wchar_t>::EncodeToString(std::u8string_view{ controller.GetParameter().node_name});
 	auto sstr = *Potato::Encode::StrEncoder<wchar_t, char>::EncodeToString(std::wstring_view{wstr});
 
 	if (controller.GetCategory() != TaskFlow::EncodedFlow::Category::SubFlowEnd)
@@ -37,9 +37,9 @@ void Print(TaskFlow::Node::Parameter parameter,  TaskFlow::FlowController& contr
 struct TestNode : public TaskFlow::Node
 {
 
-	virtual void TaskFlowNodeExecute(Context& context, TaskFlow::FlowController& controller, TaskFlow::Node::Parameter& parameter)
+	virtual void TaskFlowNodeExecute(Context& context, TaskFlow::Controller& controller)
 	{
-		Print(parameter, controller, std::this_thread::get_id());
+		Print(controller, std::this_thread::get_id());
 	}
 
 protected:
@@ -71,9 +71,9 @@ int main()
 	auto n2_3 = flow2.AddNode(tnode, { u8"n2_3" });
 	auto n2_4 = flow2.AddNode(tnode, { u8"n2_4" });
 
-	auto n2_5 = flow2.AddNode([](Context& context, TaskFlow::FlowController& controller, TaskFlow::Node::Parameter& parameter)
+	auto n2_5 = flow2.AddNode([](Context& context, TaskFlow::Controller& controller)
 		{
-			Print(parameter, controller, std::this_thread::get_id());
+			Print(controller, std::this_thread::get_id());
 
 			auto mp = controller.MarkCurrentAsPause();
 
@@ -93,6 +93,30 @@ int main()
 
 					mp.Continue(context);
 			});
+
+			controller.AddTemplateNode(
+				[](Task::Context& context, TaskFlow::Controller& controller) 
+				{ 
+					{
+						std::lock_guard lg(print_mutex);
+						std::println("template - {0}", std::this_thread::get_id());
+					}
+
+					std::this_thread::sleep_for(std::chrono::milliseconds{ 5000 });
+
+					{
+						std::lock_guard lg(print_mutex);
+						std::println("template done - {0}", std::this_thread::get_id());
+					}
+				},
+				[](TaskFlow::Sequencer& sequencer) {  
+					auto cur = sequencer.GetCurrentParameter();
+					auto ms = sequencer.GetCurrentSubFlow();
+					
+					return true; 
+				}
+			);
+
 		}, {u8"lambda"});
 
 	flow2.AddDirectEdge(n2_1, n2_2);
@@ -116,7 +140,7 @@ int main()
 
 	auto n3_1 = flow3.AddFlowAsNode(flow1, &tnode, {u8"flow1"});
 
-	auto instance = TaskFlow::FlowExecutor::Create();
+	auto instance = TaskFlow::Executor::Create();
 
 	instance->UpdateFromFlow(flow3);
 

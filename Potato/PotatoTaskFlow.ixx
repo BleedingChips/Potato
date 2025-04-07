@@ -22,8 +22,9 @@ export namespace Potato::TaskFlow
 	using Graph::GraphEdge;
 
 	export struct Flow;
-	export struct FlowExecutor;
-	export struct FlowController;
+	export struct Executor;
+	export struct Controller;
+	export struct Sequencer;
 
 	export struct Node
 	{
@@ -43,7 +44,7 @@ export namespace Potato::TaskFlow
 			Task::CustomData custom_data;
 		};
 
-		virtual void TaskFlowNodeExecute(Task::Context& context, FlowController& controller, Parameter& parameter) = 0;
+		virtual void TaskFlowNodeExecute(Task::Context& context, Controller& controller) = 0;
 
 	protected:
 
@@ -79,7 +80,10 @@ export namespace Potato::TaskFlow
 	};
 
 	template<typename Type>
-	concept AcceptableTaskFlowNode = std::is_invocable_v < Type, Task::Context&, FlowController&, Node::Parameter&> ;
+	concept AcceptableTaskFlowNode = std::is_invocable_v < Type, Task::Context&, Controller&> ;
+
+	template<typename Type>
+	concept AcceptableTemplateOrder = std::is_invocable_v<Type, Sequencer&>;
 
 	export struct Flow
 	{
@@ -147,20 +151,20 @@ export namespace Potato::TaskFlow
 
 		EncodedFlow encoded_flow;
 
-		friend struct FlowExecutor;
+		friend struct Executor;
 	};
 
-	export struct FlowExecutor : protected Task::Node
+	export struct Executor : protected Task::Node
 	{
 
 		struct Wrapper
 		{
-			void AddRef(FlowExecutor const* ptr) { ptr->AddTaskFlowExecutorRef(); }
-			void SubRef(FlowExecutor const* ptr) { ptr->SubTaskFlowExecutorRef(); }
+			void AddRef(Executor const* ptr) { ptr->AddTaskFlowExecutorRef(); }
+			void SubRef(Executor const* ptr) { ptr->SubTaskFlowExecutorRef(); }
 			operator Task::Node::Wrapper() const { return {}; }
 		};
 
-		using Ptr = Pointer::IntrusivePtr<FlowExecutor, Wrapper>;
+		using Ptr = Pointer::IntrusivePtr<Executor, Wrapper>;
 
 		struct PauseMountPoint
 		{
@@ -169,15 +173,15 @@ export namespace Potato::TaskFlow
 			bool Continue(Task::Context& context);
 			operator bool() const { return exectutor; }
 		protected:
-			PauseMountPoint(FlowExecutor::Ptr exectutor, std::size_t encoded_flow_index)
+			PauseMountPoint(Executor::Ptr exectutor, std::size_t encoded_flow_index)
 				: exectutor(std::move(exectutor)), encoded_flow_index(encoded_flow_index)
 			{
 			}
 			PauseMountPoint() = default;
-			FlowExecutor::Ptr exectutor;
+			Executor::Ptr exectutor;
 			std::size_t encoded_flow_index = std::numeric_limits<std::size_t>::max();
 
-			friend struct FlowExecutor;
+			friend struct Executor;
 		};
 
 		static Ptr Create(std::pmr::memory_resource* resource = std::pmr::get_default_resource());
@@ -186,11 +190,35 @@ export namespace Potato::TaskFlow
 		bool UpdateState();
 		bool Commit(Task::Context& context, Task::Node::Parameter flow_parameter = {});
 
-
-		struct TemplateSequencer
+		template<AcceptableTaskFlowNode NodeT, AcceptableTemplateOrder OrderT>
+		bool AddTemplateNode(
+			NodeT&& node, OrderT&& order, TaskFlow::Node::Parameter parameter = {}, 
+			std::size_t startup_encoded_flow_index = std::numeric_limits<std::size_t>::max(),
+			std::pmr::memory_resource* node_resource = std::pmr::get_default_resource(),
+			std::pmr::memory_resource* resource = std::pmr::get_default_resource()
+		)
 		{
+			auto node_ptr = Flow::CreateNode(std::forward<NodeT>(node), node_resource);
+			if (node_ptr)
+			{
+				return this->AddTemplateNode(*node_ptr, std::forward<OrderT>(order), parameter, startup_encoded_flow_index, resource);
+			}
+			return false;
+		}
 
-		};
+
+		template<AcceptableTemplateOrder OrderT>
+		bool AddTemplateNode(
+			TaskFlow::Node& node, OrderT&& order, TaskFlow::Node::Parameter parameter = {}, 
+			std::size_t startup_encoded_flow_index = std::numeric_limits<std::size_t>::max(), 
+			std::pmr::memory_resource* resource = std::pmr::get_default_resource()
+		)
+		{
+			return AddTemplateNode(node, parameter, [](void* data, Sequencer& sequencer) -> bool {
+				return (*static_cast<OrderT*>(data))(sequencer);
+				}, &order, startup_encoded_flow_index, resource);
+		}
+
 
 	protected:
 
@@ -205,13 +233,13 @@ export namespace Potato::TaskFlow
 		bool TerminalPauseMountPoint(std::size_t encoded_flow_index);
 		virtual void AddTaskFlowExecutorRef() const = 0;
 		virtual void SubTaskFlowExecutorRef() const = 0;
-		bool AddTemplateNode(TaskFlow::Node& target_node, TaskFlow::Node::Parameter parameter, bool (*func)(void* data, TemplateSequencer& sequencer, std::size_t), void* append_data, std::size_t startup_index, std::pmr::memory_resource* resource);
+		bool AddTemplateNode(TaskFlow::Node& target_node, TaskFlow::Node::Parameter parameter, bool (*func)(void* data, Sequencer& sequencer), void* append_data, std::size_t startup_index, std::pmr::memory_resource* resource);
 
-		FlowExecutor(std::pmr::memory_resource* resource);
+		Executor(std::pmr::memory_resource* resource);
 
 		void TryStartupNode_AssumedLocked(Task::Context& context, std::size_t encoded_flow_index);
 		void FinishNode_AssumedLocked(Task::Context& context, std::size_t encoded_flow_index);
-		std::shared_mutex encoded_flow_mutex;
+		mutable std::shared_mutex encoded_flow_mutex;
 		EncodedFlow encoded_flow;
 		std::size_t encoded_flow_out_degree = 0;
 
@@ -230,8 +258,8 @@ export namespace Potato::TaskFlow
 			std::size_t in_degree = 0;
 			std::size_t mutex_degree = 0;
 			std::size_t pause_count = 0;
-			State state : 7 = State::Ready;
-			std::uint8_t has_template_edges : 1 = false;
+			State state = State::Ready;
+			std::uint8_t has_template_edges = false;
 		};
 
 		struct TemplateNode
@@ -246,39 +274,72 @@ export namespace Potato::TaskFlow
 			std::size_t to = 0;
 		};
 
-		std::shared_mutex template_node_mutex;
+		mutable std::shared_mutex template_node_mutex;
 		std::pmr::vector<TemplateNode> template_node;
-		std::pmr::vector<TemplateEdge> template_edges;
-		std::size_t encoded_flow_node_count_for_template = 0;
 
-		std::mutex execute_state_mutex;
+		mutable std::mutex execute_state_mutex;
 		Task::Node::Parameter executor_parameter;
 		ExecuteState::State execute_state = ExecuteState::State::Ready;
 		std::pmr::vector<ExecuteState> encoded_flow_execute_state;
+		std::pmr::vector<TemplateEdge> template_edges;
 		std::size_t execute_out_degree = 0;
 		std::size_t encoded_flow_node_count_for_execute = 0;
 
-		friend struct FlowController;
+		friend struct Controller;
+		friend struct Sequencer;
 	};
 
-	export struct FlowController
+	export struct Controller
 	{
 
 		EncodedFlow::Category GetCategory() const { return category; }
-		FlowExecutor::PauseMountPoint MarkCurrentAsPause();
+		Executor::PauseMountPoint MarkCurrentAsPause();
+		Node::Parameter& GetParameter() const { return parameter; }
+
+		template<AcceptableTaskFlowNode NodeT, AcceptableTemplateOrder OrderT>
+		bool AddTemplateNode(NodeT&& node, OrderT&& order, TaskFlow::Node::Parameter t_parameter = {}, std::pmr::memory_resource* node_resource = std::pmr::get_default_resource(), std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+		{
+			return executor.AddTemplateNode(std::forward<NodeT>(node), std::forward<OrderT>(order), t_parameter, encoded_flow_index, node_resource, resource);
+		}
 
 	protected:
 
-		FlowController(FlowExecutor& exe, std::size_t encoded_flow_index)
-			: executor(exe), encoded_flow_index(encoded_flow_index)
+		Controller(Executor& exe, Node::Parameter& parameter, std::size_t encoded_flow_index)
+			: executor(exe), parameter(parameter), encoded_flow_index(encoded_flow_index)
 		{
 			
 		}
-		FlowExecutor& executor;
+		Executor& executor;
+		Node::Parameter& parameter;
 		std::size_t encoded_flow_index;
 		EncodedFlow::Category category = EncodedFlow::Category::NormalNode;
 
-		friend struct FlowExecutor;
+		friend struct Executor;
+	};
+
+	struct Sequencer
+	{
+
+		Node::Parameter GetCurrentParameter() const { return *GetParameter(current_encoded_node_index); }
+		std::optional<Node::Parameter> GetParameter(std::size_t index) const;
+		Misc::IndexSpan<> GetSubFlow(std::size_t index) const;
+		Misc::IndexSpan<> GetCurrentSubFlow() const { return GetSubFlow(GetCurrentIndex()); }
+
+
+		std::size_t GetCurrentIndex() const { return current_encoded_node_index; };
+
+	protected:
+
+		Sequencer(Executor const& executor, std::size_t current_encoded_node_index)
+			: executor(executor), current_encoded_node_index(current_encoded_node_index)
+		{
+
+		}
+
+		Executor const& executor;
+		std::size_t current_encoded_node_index;
+
+		friend struct Executor;
 	};
 
 }
@@ -299,9 +360,9 @@ namespace Potato::TaskFlow
 
 		void AddTaskGraphicNodeRef() const override { MemoryResourceRecordIntrusiveInterface::AddRef(); }
 		void SubTaskGraphicNodeRef() const override { MemoryResourceRecordIntrusiveInterface::SubRef(); }
-		void TaskFlowNodeExecute(Task::Context& context, FlowController& controller, Parameter& parameter) override
+		void TaskFlowNodeExecute(Task::Context& context, Controller& controller) override
 		{
-			task_flow_node(context, controller, parameter);
+			task_flow_node(context, controller);
 		}
 
 		TaskFlowNodeT task_flow_node;

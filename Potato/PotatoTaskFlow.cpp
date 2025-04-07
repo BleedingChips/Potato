@@ -552,13 +552,13 @@ namespace Potato::TaskFlow
 	}
 
 
-	FlowExecutor::FlowExecutor(std::pmr::memory_resource* resource)
+	Executor::Executor(std::pmr::memory_resource* resource)
 		: encoded_flow(resource), encoded_flow_execute_state(resource), template_node(resource), template_edges(resource)
 	{
 		
 	}
 
-	bool FlowExecutor::UpdateFromFlow(Flow const& target_flow, std::pmr::memory_resource* temporary_resource)
+	bool Executor::UpdateFromFlow(Flow const& target_flow, std::pmr::memory_resource* temporary_resource)
 	{
 		std::lock_guard lg(execute_state_mutex);
 
@@ -589,11 +589,11 @@ namespace Potato::TaskFlow
 			}
 
 			encoded_flow_node_count_for_execute = encoded_flow.encode_infos.size();
+			template_edges.clear();
 
 			std::lock_guard lg3(template_node_mutex);
 			template_node.clear();
-			template_edges.clear();
-			encoded_flow_node_count_for_template = encoded_flow.encode_infos.size();
+			
 
 			return true;
 		}
@@ -601,7 +601,7 @@ namespace Potato::TaskFlow
 	}
 
 
-	bool FlowExecutor::UpdateState()
+	bool Executor::UpdateState()
 	{
 		std::lock_guard lg(execute_state_mutex);
 		if (execute_state == ExecuteState::State::Done)
@@ -619,17 +619,18 @@ namespace Potato::TaskFlow
 				tar.state = ExecuteState::State::Ready;
 				tar.has_template_edges = false;
 			}
+			template_edges.clear();
 
 			std::lock_guard lg3(template_node_mutex);
 			template_node.clear();
-			template_edges.clear();
+			
 
 			return true;
 		}
 		return false;
 	}
 
-	void FlowExecutor::TaskExecute(Task::Context& context, Parameter& parameter)
+	void Executor::TaskExecute(Task::Context& context, Parameter& parameter)
 	{
 		auto index = parameter.custom_data.data1;
 
@@ -644,10 +645,7 @@ namespace Potato::TaskFlow
 			std::shared_lock sl(encoded_flow_mutex);
 			for (std::size_t index = 0; index < encoded_flow_execute_state.size(); ++index)
 			{
-				if (encoded_flow_execute_state[index].in_degree == 0)
-				{
-					TryStartupNode_AssumedLocked(context, index);
-				}
+				TryStartupNode_AssumedLocked(context, index);
 			}
 			if (execute_out_degree == 0)
 			{
@@ -672,7 +670,7 @@ namespace Potato::TaskFlow
 
 		TaskFlow::Node::Ptr node;
 		TaskFlow::Node::Parameter current_node_parameter;
-		FlowController controller{ *this, index };
+		EncodedFlow::Category category = EncodedFlow::Category::NormalNode;
 
 		{
 
@@ -683,33 +681,36 @@ namespace Potato::TaskFlow
 				auto& ref = encoded_flow.encode_infos[index];
 				node = ref.node;
 				current_node_parameter = ref.parameter;
-				controller.category = ref.category;
+				category = ref.category;
 			}else
 			{
 				std::shared_lock sl(template_node_mutex);
 				auto tem_index = index - std::numeric_limits<std::size_t>::max() / 2;
-				assert(tem_index < template_node.size());
-				index = tem_index + encoded_flow_node_count_for_template;
-				auto& ref = template_node[index];
+				auto& ref = template_node[tem_index];
 				node = ref.node;
 				current_node_parameter = ref.parameter;
 			}
 		}
 
+		Controller controller{ *this, current_node_parameter, index };
+		controller.category = category;
+
 		if (node)
 		{
-			node->TaskFlowNodeExecute(context, controller, current_node_parameter);
+			node->TaskFlowNodeExecute(context, controller);
 		}
 
 		{
 			std::lock_guard lg(execute_state_mutex);
-			std::shared_lock sl(encoded_flow_mutex);
-			std::shared_lock sl2(template_node_mutex);
+			if (index >= std::numeric_limits<std::size_t>::max() / 2)
+			{
+				index = index - std::numeric_limits<std::size_t>::max() / 2 + encoded_flow_node_count_for_execute;
+			}
 			FinishNode_AssumedLocked(context, index);
 		}
 	}
 
-	void FlowExecutor::FinishNode_AssumedLocked(Task::Context& context, std::size_t index)
+	void Executor::FinishNode_AssumedLocked(Task::Context& context, std::size_t index)
 	{
 		auto& ref = encoded_flow_execute_state[index];
 
@@ -722,8 +723,9 @@ namespace Potato::TaskFlow
 		{
 			ref.state = ExecuteState::State::Done;
 
-			if (index < encoded_flow.encode_infos.size())
+			if (index < encoded_flow_node_count_for_execute)
 			{
+				std::shared_lock sl(encoded_flow_mutex);
 				auto& encode_node = encoded_flow.encode_infos[index];
 				auto dir_edges = encode_node.direct_edges.Slice(std::span(encoded_flow.edges));
 				auto mut_edges = encode_node.mutex_edges.Slice(std::span(encoded_flow.edges));
@@ -749,21 +751,20 @@ namespace Potato::TaskFlow
 						TryStartupNode_AssumedLocked(context, ite);
 					}
 				}
-			}else
-			{
+			}
+			else {
 				execute_out_degree -= 1;
 			}
 
 			if (ref.has_template_edges)
 			{
-				for (auto& ite : template_edges)
+				for (auto& edge : template_edges)
 				{
-					if (ite.from == index)
+					if (edge.from == index)
 					{
-						auto& ref = encoded_flow_execute_state[ite.to];
-						assert(ref.in_degree > 0);
-						ref.in_degree -= 1;
-						TryStartupNode_AssumedLocked(context, ite.to);
+						assert(encoded_flow_execute_state[edge.to].in_degree > 0);
+						encoded_flow_execute_state[edge.to].in_degree -= 1;
+						TryStartupNode_AssumedLocked(context, edge.to);
 					}
 				}
 			}
@@ -778,42 +779,52 @@ namespace Potato::TaskFlow
 		}
 	}
 
-	void FlowExecutor::TryStartupNode_AssumedLocked(Task::Context& context, std::size_t index)
+	void Executor::TryStartupNode_AssumedLocked(Task::Context& context, std::size_t index)
 	{
 		auto& state = encoded_flow_execute_state[index];
 		if (state.in_degree == 0 && state.mutex_degree == 0 && state.state == ExecuteState::State::Ready)
 		{
-			auto& encode_node = encoded_flow.encode_infos[index];
-			if (encode_node.category != EncodedFlow::Category::SubFlowEnd)
-			{
-				auto span_mutex_edge = encode_node.mutex_edges.Slice(std::span(encoded_flow.edges));
-				for (auto edge : span_mutex_edge)
-				{
-					encoded_flow_execute_state[edge].mutex_degree += 1;
-				}
-			}
-
 			Task::Node::Parameter node_parameter;
 
-			if (index > encoded_flow_node_count_for_execute)
+			if (index < encoded_flow_node_count_for_execute)
+			{
+				std::shared_lock sl(encoded_flow_mutex);
+				auto& encoded_node = encoded_flow.encode_infos[index];
+				if (encoded_node.category != EncodedFlow::Category::SubFlowEnd)
+				{
+					auto span_mutex_edge = encoded_node.mutex_edges.Slice(std::span(encoded_flow.edges));
+					for (auto edge : span_mutex_edge)
+					{
+						encoded_flow_execute_state[edge].mutex_degree += 1;
+					}
+				}
+				node_parameter.acceptable_mask = encoded_node.parameter.acceptable_mask;
+				node_parameter.node_name = encoded_node.parameter.node_name;
+			}
+			else {
+				std::shared_lock sl(template_node_mutex);
+				auto& temp_node = template_node[index - encoded_flow_node_count_for_execute];
+				node_parameter.acceptable_mask = temp_node.parameter.acceptable_mask;
+				node_parameter.node_name = temp_node.parameter.node_name;
+			}
+
+			if (index >= encoded_flow_node_count_for_execute)
 			{
 				index = index - encoded_flow_node_count_for_execute + std::numeric_limits<std::size_t>::max() / 2;
 			}
 
 			node_parameter.custom_data.data1 = index;
 			node_parameter.custom_data.data2 = 0;
-			node_parameter.acceptable_mask = encode_node.parameter.acceptable_mask;
-			node_parameter.node_name = encode_node.parameter.node_name;
 			auto node = context.Commit(*this, node_parameter);
 			assert(node);
 			state.state = ExecuteState::State::Running;
 		}
 	}
 
-	void FlowExecutor::AddTaskNodeRef() const { AddTaskFlowExecutorRef(); }
-	void FlowExecutor::SubTaskNodeRef() const { SubTaskFlowExecutorRef(); }
+	void Executor::AddTaskNodeRef() const { AddTaskFlowExecutorRef(); }
+	void Executor::SubTaskNodeRef() const { SubTaskFlowExecutorRef(); }
 
-	FlowExecutor::PauseMountPoint FlowExecutor::CreatePauseMountPoint(std::size_t encoded_flow_index)
+	Executor::PauseMountPoint Executor::CreatePauseMountPoint(std::size_t encoded_flow_index)
 	{
 		std::lock_guard lg(execute_state_mutex);
 		if (encoded_flow_index < encoded_flow_execute_state.size())
@@ -829,12 +840,12 @@ namespace Potato::TaskFlow
 		return {};
 	}
 
-	FlowExecutor::PauseMountPoint::PauseMountPoint(PauseMountPoint&& point)
+	Executor::PauseMountPoint::PauseMountPoint(PauseMountPoint&& point)
 		: exectutor(std::move(point.exectutor)), encoded_flow_index(point.encoded_flow_index)
 	{
 	}
 
-	FlowExecutor::PauseMountPoint::~PauseMountPoint()
+	Executor::PauseMountPoint::~PauseMountPoint()
 	{
 		assert(!exectutor);
 		if(exectutor)
@@ -844,7 +855,7 @@ namespace Potato::TaskFlow
 		}
 	}
 
-	bool FlowExecutor::PauseMountPoint::Continue(Task::Context& context)
+	bool Executor::PauseMountPoint::Continue(Task::Context& context)
 	{
 		if (exectutor)
 		{
@@ -856,7 +867,7 @@ namespace Potato::TaskFlow
 	}
 
 
-	bool FlowExecutor::ContinuePauseMountPoint(Task::Context& context, std::size_t encoded_flow_index)
+	bool Executor::ContinuePauseMountPoint(Task::Context& context, std::size_t encoded_flow_index)
 	{
 		std::lock_guard lg(execute_state_mutex);
 		if (encoded_flow_index < encoded_flow_execute_state.size())
@@ -876,7 +887,7 @@ namespace Potato::TaskFlow
 		return false;
 	}
 
-	bool FlowExecutor::TerminalPauseMountPoint(std::size_t encoded_flow_index)
+	bool Executor::TerminalPauseMountPoint(std::size_t encoded_flow_index)
 	{
 		std::lock_guard lg(execute_state_mutex);
 		if (encoded_flow_index < encoded_flow_execute_state.size())
@@ -894,7 +905,7 @@ namespace Potato::TaskFlow
 		return false;
 	}
 
-	void FlowExecutor::TaskTerminal(Parameter& parameter) noexcept
+	void Executor::TaskTerminal(Parameter& parameter) noexcept
 	{
 		auto index = parameter.custom_data.data1;
 		std::lock_guard lg(execute_state_mutex);
@@ -916,9 +927,11 @@ namespace Potato::TaskFlow
 		}
 	}
 
-	bool FlowExecutor::AddTemplateNode(TaskFlow::Node& target_node, TaskFlow::Node::Parameter parameter, bool(*func)(void* data, TemplateSequencer& sequencer, std::size_t), void* append_data, std::size_t start_up_index, std::pmr::memory_resource* resource)
+	bool Executor::AddTemplateNode(TaskFlow::Node& target_node, TaskFlow::Node::Parameter parameter, bool(*func)(void* data, Sequencer& sequencer), void* append_data, std::size_t start_up_index, std::pmr::memory_resource* resource)
 	{
 		std::lock_guard lg(execute_state_mutex);
+		std::shared_lock sl1(encoded_flow_mutex);
+		std::shared_lock sl2(template_node_mutex);
 		if(execute_state == ExecuteState::State::Ready || execute_state == ExecuteState::State::Running)
 		{
 
@@ -971,13 +984,13 @@ namespace Potato::TaskFlow
 
 						if (func != nullptr)
 						{
-							TemplateSequencer sequencer;
-							tar.need_mutex = func(append_data, sequencer, index);
+							Sequencer sequencer{*this, index };
+							tar.need_mutex = func(append_data, sequencer);
 						}
 
 						bool has_template_edge = encoded_flow_execute_state[index].has_template_edges;
 
-						if (index < encoded_flow_node_count_for_template)
+						if (index < encoded_flow_node_count_for_execute)
 						{
 							auto& ref = encoded_flow.encode_infos[index];
 							auto dir = ref.direct_edges.Slice(std::span(encoded_flow.edges));
@@ -1095,15 +1108,39 @@ namespace Potato::TaskFlow
 	}
 
 
-	FlowExecutor::PauseMountPoint FlowController::MarkCurrentAsPause()
+	Executor::PauseMountPoint Controller::MarkCurrentAsPause()
 	{
 		return executor.CreatePauseMountPoint(encoded_flow_index);
 	}
 
-	struct DefaultFlow : public FlowExecutor, public IR::MemoryResourceRecordIntrusiveInterface
+	std::optional<Node::Parameter> Sequencer::GetParameter(std::size_t index) const
+	{
+		if (index < executor.encoded_flow_node_count_for_execute)
+		{
+			std::shared_lock sl(executor.encoded_flow_mutex);
+			return executor.encoded_flow.encode_infos[index].parameter;
+		}
+		else {
+			std::shared_lock sl(executor.template_node_mutex);
+			return executor.template_node[index].parameter;
+		}
+	}
+	Misc::IndexSpan<> Sequencer::GetSubFlow(std::size_t index) const
+	{
+		if (index < executor.encoded_flow_node_count_for_execute)
+		{
+			std::shared_lock sl(executor.encoded_flow_mutex);
+			return executor.encoded_flow.encode_infos[index].owning_sub_flow;
+		}
+		else {
+			return {};
+		}
+	}
+
+	struct DefaultFlow : public Executor, public IR::MemoryResourceRecordIntrusiveInterface
 	{
 		DefaultFlow(IR::MemoryResourceRecord record)
-			: FlowExecutor(record.GetMemoryResource()), MemoryResourceRecordIntrusiveInterface(record)
+			: Executor(record.GetMemoryResource()), MemoryResourceRecordIntrusiveInterface(record)
 		{
 			
 		}
@@ -1111,7 +1148,7 @@ namespace Potato::TaskFlow
 		virtual void SubTaskFlowExecutorRef() const { MemoryResourceRecordIntrusiveInterface::SubRef(); }
 	};
 
-	FlowExecutor::Ptr FlowExecutor::Create(std::pmr::memory_resource* resource)
+	Executor::Ptr Executor::Create(std::pmr::memory_resource* resource)
 	{
 		auto re = IR::MemoryResourceRecord::Allocate<DefaultFlow>(resource);
 		if (re)
@@ -1121,7 +1158,7 @@ namespace Potato::TaskFlow
 		return {};
 	}
 
-	bool FlowExecutor::Commit(Task::Context& context, Task::Node::Parameter flow_parameter)
+	bool Executor::Commit(Task::Context& context, Task::Node::Parameter flow_parameter)
 	{
 		std::lock_guard lg(execute_state_mutex);
 		if (execute_state == ExecuteState::State::Ready)
