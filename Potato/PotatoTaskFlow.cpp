@@ -447,6 +447,11 @@ namespace Potato::TaskFlow
 					}
 				}
 
+				if (new_added_node_span.empty())
+				{
+					encode_node.in_degree += 1;
+				}
+
 				old_edge_count = output_encoded_flow.edges.size();
 
 				if (edges_count == 0)
@@ -590,6 +595,7 @@ namespace Potato::TaskFlow
 
 			encoded_flow_node_count_for_execute = encoded_flow.encode_infos.size();
 			template_edges.clear();
+			current_template_node_count = 0;
 
 			std::lock_guard lg3(template_node_mutex);
 			template_node.clear();
@@ -620,6 +626,7 @@ namespace Potato::TaskFlow
 				tar.has_template_edges = false;
 			}
 			template_edges.clear();
+			current_template_node_count = 0;
 
 			std::lock_guard lg3(template_node_mutex);
 			template_node.clear();
@@ -752,9 +759,6 @@ namespace Potato::TaskFlow
 					}
 				}
 			}
-			else {
-				execute_out_degree -= 1;
-			}
 
 			if (ref.has_template_edges)
 			{
@@ -766,6 +770,25 @@ namespace Potato::TaskFlow
 						encoded_flow_execute_state[edge.to].in_degree -= 1;
 						TryStartupNode_AssumedLocked(context, edge.to);
 					}
+				}
+			}
+
+			if (index >= encoded_flow_node_count_for_execute)
+			{
+				execute_out_degree -= 1;
+				current_template_node_count -= 1;
+				if (current_template_node_count == 0)
+				{
+					template_edges.clear();
+
+					encoded_flow_execute_state.resize(encoded_flow_node_count_for_execute);
+					for (auto& ite : encoded_flow_execute_state)
+					{
+						ite.has_template_edges = false;
+					}
+
+					std::lock_guard lg(template_node_mutex);
+					template_node.clear();
 				}
 			}
 
@@ -940,6 +963,7 @@ namespace Potato::TaskFlow
 			t_node.parameter = parameter;
 
 			template_node.emplace_back(std::move(t_node));
+			++current_template_node_count;
 
 			std::size_t template_in_degree = 0;
 			bool template_need_template = false;

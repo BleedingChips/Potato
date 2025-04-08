@@ -284,6 +284,7 @@ export namespace Potato::TaskFlow
 		std::pmr::vector<TemplateEdge> template_edges;
 		std::size_t execute_out_degree = 0;
 		std::size_t encoded_flow_node_count_for_execute = 0;
+		std::size_t current_template_node_count = 0;
 
 		friend struct Controller;
 		friend struct Sequencer;
