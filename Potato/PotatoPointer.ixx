@@ -48,6 +48,9 @@ export namespace Potato::Pointer
 	template<typename PtrT, typename WrapperT = DefaultIntrusiveWrapper>
 	struct IntrusivePtr : public WrapperT
 	{
+
+		using CurrentWrapper = WrapperT;
+
 		static_assert(!std::is_reference_v<PtrT>, "SmartPtr : Type should not be reference Type");
 
 		using Type = PtrT;
