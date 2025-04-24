@@ -408,10 +408,10 @@ export namespace Potato::IR
 	{
 		void AddRef() const { ref_count.AddRef(); }
 		void SubRef() const;
+		virtual ~MemoryResourceRecordIntrusiveInterface() = default;
 	protected:
 		MemoryResourceRecordIntrusiveInterface(MemoryResourceRecord record)
 			: record(record) {}
-		virtual ~MemoryResourceRecordIntrusiveInterface() = default;
 		MemoryResourceRecord record;
 		mutable Misc::AtomicRefCount ref_count;
 	};
