@@ -227,11 +227,7 @@ export namespace Potato::Encode
 	};
 
 	template<typename UnicodeT>
-	struct UnicodeLineSymbol
-	{
-		//static constexpr UnicodeT R;
-		//static constexpr UnicodeT L;
-	};
+	struct UnicodeLineSymbol;
 
 	template<>
 	struct UnicodeLineSymbol<char32_t>
@@ -259,6 +255,13 @@ export namespace Potato::Encode
 	{
 		static constexpr wchar_t R = L'\r';
 		static constexpr wchar_t N = L'\n';
+	};
+
+	template<>
+	struct UnicodeLineSymbol<char>
+	{
+		static constexpr char R = '\r';
+		static constexpr char N = '\n';
 	};
 
 	template<typename SourceT, typename TargetT>
@@ -380,96 +383,39 @@ export namespace Potato::Encode
 		}
 	};
 
+
+#ifdef _WIN32
+
 	template<>
 	struct StrEncoder<char, wchar_t>
 	{
-		static EncodeInfo RequireSpaceUnSafe(std::span<char const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())
-#ifndef _WIN32
-		{
-			return StrEncoder<char8_t, wchar_t>::RequireSpaceUnSafe(
-				std::span{ reinterpret_cast<char8_t const*>(Source.data()), Source.size()},
-				MaxCharacter
-			);
-		}
-#else
-		;
-#endif
+		static EncodeInfo RequireSpaceUnSafe(std::span<char const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
 
-		static EncodeInfo RequireSpace(std::span<char const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())
-#ifndef _WIN32
-		{
-			return StrEncoder<char8_t, wchar_t>::RequireSpace(
-				std::span{ reinterpret_cast<char8_t const*>(Source.data()), Source.size() },
-				MaxCharacter
-			);
-		}
-#else
-			;
-#endif
+		static EncodeInfo RequireSpace(std::span<char const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
 
-		static EncodeInfo EncodeUnSafe(std::span<char const> Source, std::span<wchar_t> Target, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())
-#ifndef _WIN32
-		{
-			return StrEncoder<char8_t, wchar_t>::EncodeUnSafe(
-				std::span{ reinterpret_cast<char8_t const*>(Source.data()), Source.size() },
-				Target,
-				MaxCharacter
-			);
-		}
-#else
-			;
-#endif
+		static EncodeInfo EncodeUnSafe(std::span<char const> Source, std::span<wchar_t> Target, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
 
 		static auto EncodeToString(
-			std::basic_string_view<char> Source, 
+			std::basic_string_view<char> Source,
 			std::pmr::memory_resource* resource = std::pmr::get_default_resource()
-			) -> std::optional<std::pmr::basic_string<wchar_t>>;
+		) -> std::optional<std::pmr::basic_string<wchar_t>>;
 	};
-
 
 	template<>
 	struct StrEncoder<wchar_t, char>
 	{
-		static EncodeInfo RequireSpaceUnSafe(std::span<wchar_t const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())
-#ifndef _WIN32
-			{
-				return StrEncoder<wchar_t, char8_t>::RequireSpaceUnSafe(
-					Source,
-					MaxCharacter
-				);
-			}
-#else
-			;
-#endif
+		static EncodeInfo RequireSpaceUnSafe(std::span<wchar_t const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
 
-		static EncodeInfo RequireSpace(std::span<wchar_t const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())
-#ifndef _WIN32
-		{
-			return StrEncoder<wchar_t, char8_t>::RequireSpace(
-				Source,
-				MaxCharacter
-			);
-		}
-#else
-			;
-#endif
+		static EncodeInfo RequireSpace(std::span<wchar_t const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
 
-		static EncodeInfo EncodeUnSafe(std::span<wchar_t const> Source, std::span<char> Target, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())
-#ifndef _WIN32
-		{
-			return StrEncoder<wchar_t, char8_t>::EncodeUnSafe(
-				Source,
-				std::span{ reinterpret_cast<char8_t const*>(Target.data()), Target.size() },
-				MaxCharacter
-			);
-		}
-#else
-			;
-#endif
+		static EncodeInfo EncodeUnSafe(std::span<wchar_t const> Source, std::span<char> Target, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
 
 		static auto EncodeToString(
-			std::basic_string_view<wchar_t> Source, 
+			std::basic_string_view<wchar_t> Source,
 			std::pmr::memory_resource* resource = std::pmr::get_default_resource()
-			) -> std::optional<std::pmr::basic_string<char>>;
+		) -> std::optional<std::pmr::basic_string<char>>;
 	};
+
+#endif
+
 }

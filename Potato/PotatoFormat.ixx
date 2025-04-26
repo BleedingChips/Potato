@@ -113,7 +113,6 @@ export namespace Potato::Format
 			return span;
 		}
 
-
 		template<typename FuncT>
 		struct Wrapper : public FormatWriter
 		{

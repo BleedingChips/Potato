@@ -17,3 +17,5 @@ export import PotatoGraph;
 export import PotatoTask;
 export import PotatoTaskFlow;
 export import PotatoPath;
+export import PotatoLog;
+export import PotatoMemLayout;
