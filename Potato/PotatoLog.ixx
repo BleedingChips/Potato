@@ -1,7 +1,7 @@
 export module PotatoLog;
 import std;
 import PotatoTMP;
-export import PotatoFormat;
+import PotatoEncode;
 
 export namespace Potato::Log
 {
@@ -11,73 +11,91 @@ export namespace Potato::Log
 	};
 
 	template<std::size_t N>
-	struct TypeStringW : public TMP::TypeString<wchar_t, N>
+	struct LogCategory : public TMP::TypeString<wchar_t, N>
 	{
 		using TMP::TypeString<wchar_t, N>::TypeString;
 	};
 
 	template<std::size_t N>
-	TypeStringW(const wchar_t(&str)[N]) -> Potato::Log::TypeStringW<N>;
+	LogCategory(const wchar_t(&str)[N]) -> Potato::Log::LogCategory<N>;
 }
 
-export namespace Potato::Format
+export namespace std
 {
-	export template<>
-	struct Formatter<Log::Level, char8_t>
+	template<typename CharT>
+	struct formatter<Potato::Log::Level, CharT>
 	{
-		bool operator()(Format::FormatWriter<Log::Level>& Writer, std::basic_string_view<char8_t> Parameter, Log::Level const& Input);
+		constexpr auto parse(std::basic_format_parse_context<CharT>& parse_context)
+		{
+			return parse_context.end();
+		}
+		template<typename FormatContext>
+		constexpr auto format(Potato::Log::Level level, FormatContext& format_context) const
+		{
+			switch (level)
+			{
+			case Potato::Log::Level::Log:
+				if constexpr (std::is_same_v<CharT, char>)
+					return std::format_to(format_context.out(), "Log");
+				else if constexpr (std::is_same_v<CharT, wchar_t>)
+					return std::format_to(format_context.out(), L"Log");
+				else
+					static_assert(false);
+				break;
+			}
+			return format_context.out();
+		}
 	};
 
-	
+	template<std::size_t N, typename CharT>
+	struct formatter<Potato::Log::LogCategory<N>, CharT>
+	{
+		constexpr auto parse(std::basic_format_parse_context<CharT>& parse_context)
+		{
+			return parse_context.end();
+		}
+		template<typename FormatContext>
+		constexpr auto format(Potato::Log::LogCategory<N> const& category, FormatContext& format_context) const
+		{
+			if constexpr (std::is_same_v<CharT, wchar_t>)
+				return std::format_to(format_context.out(), L"{}", category.GetStringView());
+			else
+				static_assert(false);
+			return format_context.out();
+		}
+	};
 }
 
 
 
 export namespace Potato::Log
 {
+	void DirectPrintWCout(std::wstring_view log);
 
-	
-
-
-
-	struct TerminalOutput
+	template<LogCategory category, Level Level, typename ...Pattern, typename ...Parameters>
+	constexpr void Log(std::wformat_string<Pattern...>& pattern, Parameters&& ...parameters)
 	{
-		void operator()(std::wstring_view output);
-	};
+		std::array<wchar_t, 1024> log_buffer;
 
-	struct DefaultPrinter
-	{
-		template<TypeStringW Category, Level Level, TypeStringW Pattern, typename ...Parameters>
-		void operator()(Parameters&& ...parameters)
-		{
-			auto str = Format::StaticFormatToString<Pattern>(std::forward<Parameters>(parameters)...);
-			if(str)
-			{
-				TerminalOutput{}(*str);
-			}
-		}
-	};
+		auto ite = log_buffer.begin();
 
-	template<TypeStringW Category, Level Level>
-	struct LogPrinter
-	{
-		template<TypeStringW Pattern, typename ...Parameters>
-		void operator()(Parameters&& ...parameters)
-		{
-			DefaultPrinter{}.operator()< Category, Level, Pattern >(std::forward<Parameters>(parameters)...);
-		}
-	};
+		ite = std::format_to(
+			ite,
+			L"<{}:{}>:",
+			category,
+			Level
+		);
 
-	template<TypeStringW Category, Level Level, TypeStringW Pattern, typename ...Parameters>
-	void Log(Parameters&& ...parameters)
-	{
-		LogPrinter<Category, Level>{}.operator()<Pattern>(std::forward<Parameters>(parameters)...);
-	}
+		
+		ite = std::format_to(
+			ite,
+			pattern.get(),
+			std::forward<Parameters>(parameters)...
+		);
 
-	template<TypeStringW Category, Level Level, TypeStringW Pattern>
-	void Log()
-	{
-		LogPrinter<Category, Level>{}.operator() < Pattern > ();
+		DirectPrintWCout(std::wstring_view{ log_buffer.data(), static_cast<std::size_t>(ite - log_buffer.begin())});
+
+		//LogPrinter<Category, Level>{}.operator()<Pattern>(std::forward<Parameters>(parameters)...);
 	}
 }
 

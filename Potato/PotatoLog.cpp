@@ -2,9 +2,8 @@ module PotatoLog;
 
 namespace Potato::Log
 {
-	void TerminalOutput::operator()(std::wstring_view output)
+	void DirectPrintWCout(std::wstring_view log)
 	{
-		static std::mutex print_mutex;
-		std::wcout << output << std::endl;
+		std::wcout << log << std::endl;
 	}
 }

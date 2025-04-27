@@ -9,7 +9,10 @@ using namespace Potato::Log;
 int main()
 {
 
-	Log<L"Fuck", Level::Log, L"babababaGo {}">(1);
+	auto L = std::format(L"{} {} {}", Potato::Log::Level::Log, 122345, L"ÎÒÈ¥ÄãµÄ");
+
+	//std::wcout << L << std::endl;
+	Log<L"Fuck", Level::Log>(L"1234 {}", 1);
 
 	volatile int i = 0;
 }

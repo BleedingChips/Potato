@@ -90,6 +90,37 @@ export namespace Potato::Format
 		return ProcessorScan(processor, input, other_target...);
 	}
 
+	/*
+	template<typename CharType>
+	struct StringArchive
+	{
+		constexpr StringArchive& Write(std::basic_string_view<CharType const> string_view)
+		{
+			Append(string_view);
+			auto span = WriteWithoutConstruction(string_view.size());
+			std::copy_n(&string_view, source_type.size(), span.data());
+			return *this;
+		}
+
+
+
+		constexpr StringArchive& Write(std::basic_string_view<CharType const> string_view)
+		{
+			auto span = WriteWithoutConstruction(1);
+			std::copy_n(&source_type, source_type.size(), span.data());
+			return *this;
+		}
+		constexpr StringArchive& WriteWithoutConstruction(std::size_t allocate_size)
+		{
+			auto span = Allocate(allocate_size);
+			written_byte += span;
+			return *this;
+		}
+	protected:
+		constexpr virtual std::span<CharType> Allocate(std::size_t count = 0) = 0;
+	};
+	*/
+
 	template<typename SourceType>
 	struct FormatWriter
 	{
