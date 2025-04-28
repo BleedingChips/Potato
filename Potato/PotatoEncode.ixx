@@ -162,7 +162,7 @@ export namespace Potato::Encode
 		}
 		static EncodeInfo RequireSpaceOnce(std::span<SourceT const> Source)
 		{
-			return Wrapper::RequireSpaceOnceUnSafe(std::span(reinterpret_cast<typename Wrapper::SourceT const*>(Source.data()), Source.size()));
+			return Wrapper::RequireSpaceOnce(std::span(reinterpret_cast<typename Wrapper::SourceT const*>(Source.data()), Source.size()));
 		}
 		static EncodeInfo EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
 		{

@@ -2,6 +2,7 @@ export module PotatoLog;
 import std;
 import PotatoTMP;
 import PotatoEncode;
+import PotatoPointer;
 
 export namespace Potato::Log
 {
@@ -36,11 +37,15 @@ export namespace std
 			{
 			case Potato::Log::Level::Log:
 				if constexpr (std::is_same_v<CharT, char>)
-					return std::format_to(format_context.out(), "Log");
+				{
+					auto str = std::string_view{"Log"};
+					std::copy_n(str.data(), str.size(), format_context.out());
+				}
 				else if constexpr (std::is_same_v<CharT, wchar_t>)
-					return std::format_to(format_context.out(), L"Log");
-				else
-					static_assert(false);
+				{
+					auto str = std::wstring_view{ L"Log" };
+					std::copy_n(str.data(), str.size(), format_context.out());
+				}
 				break;
 			}
 			return format_context.out();
@@ -58,9 +63,10 @@ export namespace std
 		constexpr auto format(Potato::Log::LogCategory<N> const& category, FormatContext& format_context) const
 		{
 			if constexpr (std::is_same_v<CharT, wchar_t>)
-				return std::format_to(format_context.out(), L"{}", category.GetStringView());
-			else
-				static_assert(false);
+			{
+				auto str = category.GetStringView();
+				std::copy_n(str.data(), str.size(), format_context.out());
+			}
 			return format_context.out();
 		}
 	};
@@ -70,32 +76,81 @@ export namespace std
 
 export namespace Potato::Log
 {
-	void DirectPrintWCout(std::wstring_view log);
 
-	template<LogCategory category, Level Level, typename ...Pattern, typename ...Parameters>
-	constexpr void Log(std::wformat_string<Pattern...>& pattern, Parameters&& ...parameters)
+	std::pmr::memory_resource* LogMemoryResource();
+
+	struct LogPrinter
 	{
-		std::array<wchar_t, 1024> log_buffer;
+		struct Wrapper
+		{
+			void AddRef(LogPrinter const* ptr) { ptr->AddLogPrinterRef(); }
+			void SubRef(LogPrinter const* ptr) { ptr->SubLogPrinterRef(); }
+		};
 
-		auto ite = log_buffer.begin();
+		using Ptr = Pointer::IntrusivePtr<LogPrinter, Wrapper>;
 
-		ite = std::format_to(
-			ite,
-			L"<{}:{}>:",
-			category,
-			Level
-		);
+		virtual void Print(std::wstring_view print) = 0;
 
-		
-		ite = std::format_to(
-			ite,
-			pattern.get(),
-			std::forward<Parameters>(parameters)...
-		);
+	protected:
 
-		DirectPrintWCout(std::wstring_view{ log_buffer.data(), static_cast<std::size_t>(ite - log_buffer.begin())});
+		virtual void AddLogPrinterRef() const = 0;
+		virtual void SubLogPrinterRef() const = 0;
+	};
 
-		//LogPrinter<Category, Level>{}.operator()<Pattern>(std::forward<Parameters>(parameters)...);
+	LogPrinter::Ptr GetLogPrinter();
+
+	template<LogCategory category>
+	struct LogFormatter
+	{
+		template<typename OutputIte, typename ...Parameters>
+		void operator()(OutputIte ite, Level level, std::wformat_string<std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
+		{
+			auto now = std::chrono::system_clock::now();
+			auto year = std::chrono::floor<std::chrono::years>(now);
+			auto month = std::chrono::floor<std::chrono::months>(now - year);
+			auto day = now - year - month;
+
+			auto days = std::chrono::floor<std::chrono::days>(now);
+			std::chrono::year_month_day ymd = days;
+			auto hour = std::chrono::floor<std::chrono::hours>(now - days);
+
+			ite = std::format_to(
+				ite,
+				L"[{}:{}:]<{}:{}>:",
+				ymd,
+				hour,
+				category,
+				level
+			);
+
+			ite = std::format_to(
+				ite,
+				pattern,
+				std::forward<Parameters>(parameters)...
+			);
+
+			constexpr std::wstring_view line = L"\n";
+
+			std::copy_n(
+				line.data(),
+				line.size(),
+				ite
+			);
+		}
+	};
+
+
+	template<LogCategory category, typename ...Parameters>
+	constexpr void Log(Level level, std::wformat_string<std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
+	{
+		auto printer = GetLogPrinter();
+		if (printer)
+		{
+			std::pmr::wstring output_str{ LogMemoryResource() };
+			output_str.reserve(256);
+			LogFormatter<category>{}(std::back_insert_iterator{ output_str }, level, pattern, std::forward<Parameters>(parameters)...);
+			printer->Print(output_str);
+		}
 	}
 }
 
