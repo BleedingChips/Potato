@@ -19,13 +19,14 @@ namespace Potato::Log
 					{print.data(), print.size()},
 					output_buffer
 				);
-				std::cout << std::string_view{ output_buffer.data(), info.TargetSpace} << std::endl;
+				std::cout << std::string_view{ output_buffer.data(), info.TargetSpace} ;
 				print = print.substr(info.SourceSpace);
 				if (info.SourceSpace == 0)
 				{
 					break;
 				}
 			}
+			std::cout << std::endl;
 		}
 
 	protected:

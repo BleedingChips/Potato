@@ -53,7 +53,7 @@ export namespace Potato::Task
 
 		struct Parameter
 		{
-			std::u8string_view node_name;
+			std::wstring_view node_name;
 			std::size_t acceptable_mask = std::numeric_limits<std::size_t>::max();
 			CustomData custom_data;
 			std::optional<TimeT::duration> delay_time;

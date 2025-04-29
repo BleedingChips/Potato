@@ -4,6 +4,7 @@ import PotatoTask;
 import PotatoFormat;
 import PotatoEncode;
 import PotatoGraph;
+import PotatoLog;
 
 using namespace Potato::Task;
 using namespace Potato;
@@ -12,13 +13,10 @@ std::mutex print_mutex;
 
 void Print(TaskFlow::Controller& controller, std::thread::id thread_id)
 {
-	auto wstr = *Potato::Encode::StrEncoder<char8_t, wchar_t>::EncodeToString(std::u8string_view{ controller.GetParameter().node_name});
-	auto sstr = *Potato::Encode::StrEncoder<wchar_t, char>::EncodeToString(std::wstring_view{wstr});
 
 	if (controller.GetCategory() != TaskFlow::EncodedFlow::Category::SubFlowEnd)
 	{
-		std::lock_guard lg(print_mutex);
-		std::println("{0} Begin - {1}", sstr, thread_id);
+		Log::Log<L"Printer">(Log::Level::Log, L"{} Begin - {}", controller.GetParameter().node_name, std::this_thread::get_id());
 	}
 
 	if (controller.GetCategory() == TaskFlow::EncodedFlow::Category::NormalNode)
@@ -26,8 +24,7 @@ void Print(TaskFlow::Controller& controller, std::thread::id thread_id)
 
 	if (controller.GetCategory() != TaskFlow::EncodedFlow::Category::SubFlowBegin)
 	{
-		std::lock_guard lg(print_mutex);
-		std::println("{0} End - {1}", sstr, thread_id);
+		Log::Log<L"Printer">(Log::Level::Log, L"{} End - {}", controller.GetParameter().node_name, std::this_thread::get_id());
 	}
 }
 
@@ -57,19 +54,19 @@ int main()
 	TaskFlow::Flow flow4;
 	TaskFlow::Flow flow5;
 
-	auto n1_6 = flow1.AddFlowAsNode(flow4, &tnode, { u8"flow4" });
+	auto n1_6 = flow1.AddFlowAsNode(flow4, &tnode, { L"flow4" });
 
 	auto n5_2 = flow5.AddFlowAsNode(flow1, &tnode);
 
-	auto n1_1 = flow1.AddNode(tnode, {u8"n1_1"});
-	auto n1_2 = flow1.AddNode(tnode, { u8"n1_2" });
-	auto n1_3 = flow1.AddNode(tnode, { u8"n1_3" });
-	auto n1_4 = flow1.AddNode(tnode, { u8"n1_4" });
+	auto n1_1 = flow1.AddNode(tnode, {L"n1_1"});
+	auto n1_2 = flow1.AddNode(tnode, { L"n1_2" });
+	auto n1_3 = flow1.AddNode(tnode, { L"n1_3" });
+	auto n1_4 = flow1.AddNode(tnode, { L"n1_4" });
 
-	auto n2_1 = flow2.AddNode(tnode, { u8"n2_1" });
-	auto n2_2 = flow2.AddNode(tnode, { u8"n2_2" });
-	auto n2_3 = flow2.AddNode(tnode, { u8"n2_3" });
-	auto n2_4 = flow2.AddNode(tnode, { u8"n2_4" });
+	auto n2_1 = flow2.AddNode(tnode, { L"n2_1" });
+	auto n2_2 = flow2.AddNode(tnode, { L"n2_2" });
+	auto n2_3 = flow2.AddNode(tnode, { L"n2_3" });
+	auto n2_4 = flow2.AddNode(tnode, { L"n2_4" });
 
 	auto n2_5 = flow2.AddNode([](Context& context, TaskFlow::Controller& controller)
 		{
@@ -79,17 +76,11 @@ int main()
 
 			context.Commit([mp=std::move(mp)](Task::Context& context, Node::Parameter par) mutable 
 			{
-					{
-						std::lock_guard lg(print_mutex);
-						std::println("pause - {0}", std::this_thread::get_id());
-					}
+					Log::Log<L"Printer">(Log::Level::Log, L"pause - {}", std::this_thread::get_id());
 
 					std::this_thread::sleep_for(std::chrono::milliseconds{ 5000 });
 
-					{
-						std::lock_guard lg(print_mutex);
-						std::println("pause done - {0}", std::this_thread::get_id());
-					}
+					Log::Log<L"Printer">(Log::Level::Log, L"pause done - {}", std::this_thread::get_id());
 
 					mp.Continue(context);
 			});
@@ -97,17 +88,11 @@ int main()
 			controller.AddTemplateNode(
 				[](Task::Context& context, TaskFlow::Controller& controller) 
 				{ 
-					{
-						std::lock_guard lg(print_mutex);
-						std::println("template - {0}", std::this_thread::get_id());
-					}
+					Log::Log<L"Printer">(Log::Level::Log, L"template - {}", std::this_thread::get_id());
 
 					std::this_thread::sleep_for(std::chrono::milliseconds{ 5000 });
 
-					{
-						std::lock_guard lg(print_mutex);
-						std::println("template done - {0}", std::this_thread::get_id());
-					}
+					Log::Log<L"Printer">(Log::Level::Log, L"template done - {}", std::this_thread::get_id());
 				},
 				[](TaskFlow::Sequencer& sequencer) {  
 					auto cur = sequencer.GetCurrentParameter();
@@ -117,7 +102,7 @@ int main()
 				}
 			);
 
-		}, {u8"lambda"});
+		}, {L"lambda"});
 
 	flow2.AddDirectEdge(n2_1, n2_2);
 	flow2.AddDirectEdge(n2_2, n2_3);
@@ -128,7 +113,7 @@ int main()
 
 	
 
-	auto n1_5 = flow1.AddFlowAsNode(flow2, &tnode, { u8"flow2" });
+	auto n1_5 = flow1.AddFlowAsNode(flow2, &tnode, { L"flow2" });
 
 
 	flow1.AddDirectEdge(n1_4, n1_5);
@@ -138,7 +123,7 @@ int main()
 
 	TaskFlow::Flow flow3;
 
-	auto n3_1 = flow3.AddFlowAsNode(flow1, &tnode, {u8"flow1"});
+	auto n3_1 = flow3.AddFlowAsNode(flow1, &tnode, {L"flow1"});
 
 	auto instance = TaskFlow::Executor::Create();
 
@@ -151,10 +136,7 @@ int main()
 
 	context.ExecuteContextThreadUntilNoExistTask();
 
-	{
-		std::lock_guard lg(print_mutex);
-		std::println("----------Fuckk----------");
-	}
+	Log::Log<L"Printer">(Log::Level::Log, L"Fuckk");
 	
 
 	instance->UpdateState();

@@ -106,19 +106,19 @@ export namespace Potato::Log
 		void operator()(OutputIte ite, Level level, std::wformat_string<std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
 		{
 			auto now = std::chrono::system_clock::now();
-			auto year = std::chrono::floor<std::chrono::years>(now);
-			auto month = std::chrono::floor<std::chrono::months>(now - year);
-			auto day = now - year - month;
+			//auto now_seconds = std::chrono::floor<std::chrono::seconds>(now);
 
-			auto days = std::chrono::floor<std::chrono::days>(now);
-			std::chrono::year_month_day ymd = days;
-			auto hour = std::chrono::floor<std::chrono::hours>(now - days);
+			auto zoned_time = std::chrono::zoned_time{
+				std::chrono::current_zone(),
+				now
+			};
+
+			//auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - now_seconds);
 
 			ite = std::format_to(
 				ite,
-				L"[{}:{}:]<{}:{}>:",
-				ymd,
-				hour,
+				L"[{:%m.%d-%H:%M:%S}]<{}:{}>:",
+				zoned_time,
 				category,
 				level
 			);
@@ -127,14 +127,6 @@ export namespace Potato::Log
 				ite,
 				pattern,
 				std::forward<Parameters>(parameters)...
-			);
-
-			constexpr std::wstring_view line = L"\n";
-
-			std::copy_n(
-				line.data(),
-				line.size(),
-				ite
 			);
 		}
 	};
