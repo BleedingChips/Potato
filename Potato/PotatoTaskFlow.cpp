@@ -610,31 +610,7 @@ namespace Potato::TaskFlow
 	bool Executor::UpdateState()
 	{
 		std::lock_guard lg(execute_state_mutex);
-		if (execute_state == ExecuteState::State::Done)
-		{
-			execute_state = ExecuteState::State::Ready;
-			std::shared_lock sl(encoded_flow_mutex);
-			assert(encoded_flow_execute_state.size() >= encoded_flow.encode_infos.size());
-			encoded_flow_execute_state.resize(encoded_flow.encode_infos.size());
-			for (std::size_t i = 0; i < encoded_flow.encode_infos.size(); ++i)
-			{
-				auto& tar = encoded_flow_execute_state[i];
-				tar.in_degree = encoded_flow.encode_infos[i].in_degree;
-				tar.mutex_degree = 0;
-				tar.pause_count = 0;
-				tar.state = ExecuteState::State::Ready;
-				tar.has_template_edges = false;
-			}
-			template_edges.clear();
-			current_template_node_count = 0;
-
-			std::lock_guard lg3(template_node_mutex);
-			template_node.clear();
-			
-
-			return true;
-		}
-		return false;
+		return UpdateState_AssumedLocked();
 	}
 
 	void Executor::TaskExecute(Task::Context& context, Parameter& parameter)
@@ -668,10 +644,14 @@ namespace Potato::TaskFlow
 			Node::Parameter exe_parameter = parameter;
 			{
 				std::lock_guard lg(execute_state_mutex);
-				execute_state = ExecuteState::State::Done;
 				exe_parameter.custom_data = executor_parameter.custom_data;
 			}
 			EndFlow(context, exe_parameter);
+			{
+				std::lock_guard lg(execute_state_mutex);
+				FinishFlow_AssumedLocked(context, exe_parameter);
+			}
+			
 			return;
 		}
 
@@ -800,6 +780,56 @@ namespace Potato::TaskFlow
 				context.Commit(*this, end_parameter);
 			}
 		}
+	}
+
+	bool Executor::Commit_AssumedLocked(Task::Context& context, Task::Node::Parameter flow_parameter)
+	{
+		if (execute_state == ExecuteState::State::Ready)
+		{
+			execute_state = ExecuteState::State::Running;
+			executor_parameter = flow_parameter;
+			flow_parameter.custom_data.data1 = std::numeric_limits<std::size_t>::max() - 1;
+			if (context.Commit(*this, flow_parameter))
+			{
+				return true;
+			}
+			execute_state = ExecuteState::State::Ready;
+		}
+		return false;
+	}
+
+	bool Executor::UpdateState_AssumedLocked()
+	{
+		if (execute_state == ExecuteState::State::Done)
+		{
+			execute_state = ExecuteState::State::Ready;
+			std::shared_lock sl(encoded_flow_mutex);
+			assert(encoded_flow_execute_state.size() >= encoded_flow.encode_infos.size());
+			encoded_flow_execute_state.resize(encoded_flow.encode_infos.size());
+			for (std::size_t i = 0; i < encoded_flow.encode_infos.size(); ++i)
+			{
+				auto& tar = encoded_flow_execute_state[i];
+				tar.in_degree = encoded_flow.encode_infos[i].in_degree;
+				tar.mutex_degree = 0;
+				tar.pause_count = 0;
+				tar.state = ExecuteState::State::Ready;
+				tar.has_template_edges = false;
+			}
+			template_edges.clear();
+			current_template_node_count = 0;
+
+			std::lock_guard lg3(template_node_mutex);
+			template_node.clear();
+
+
+			return true;
+		}
+		return false;
+	}
+	
+	void Executor::FinishFlow_AssumedLocked(Task::Context& context, Task::Node::Parameter parameter)
+	{
+		execute_state = ExecuteState::State::Done;
 	}
 
 	void Executor::TryStartupNode_AssumedLocked(Task::Context& context, std::size_t index)
@@ -1185,18 +1215,7 @@ namespace Potato::TaskFlow
 	bool Executor::Commit(Task::Context& context, Task::Node::Parameter flow_parameter)
 	{
 		std::lock_guard lg(execute_state_mutex);
-		if (execute_state == ExecuteState::State::Ready)
-		{
-			execute_state = ExecuteState::State::Running;
-			executor_parameter = flow_parameter;
-			flow_parameter.custom_data.data1 = std::numeric_limits<std::size_t>::max() - 1;
-			if (context.Commit(*this, flow_parameter))
-			{
-				return true;
-			}
-			execute_state = ExecuteState::State::Ready;
-		}
-		return false;
+		return Commit_AssumedLocked(context, flow_parameter);
 	}
 
 }
