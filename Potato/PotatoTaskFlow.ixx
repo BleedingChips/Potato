@@ -224,9 +224,11 @@ export namespace Potato::TaskFlow
 
 		virtual void BeginFlow(Task::Context& context, Task::Node::Parameter parameter) {};
 		virtual void EndFlow(Task::Context& context, Task::Node::Parameter parameter) {};
+		virtual void ExecuteNode(Task::Context& context, TaskFlow::Node& target_node, Controller& controller);
 		bool Commit_AssumedLocked(Task::Context& context, Task::Node::Parameter parameter);
 		bool UpdateState_AssumedLocked();
 		virtual void FinishFlow_AssumedLocked(Task::Context& context, Task::Node::Parameter parameter);
+		bool UpdateFromFlow_AssumedLocked(Flow const& target_flow, std::pmr::memory_resource* temporary_resource);
 		virtual void TaskExecute(Task::Context& context, Parameter& parameter) override;
 		virtual void TaskTerminal(Parameter& parameter) noexcept override;
 		virtual void AddTaskNodeRef() const override;

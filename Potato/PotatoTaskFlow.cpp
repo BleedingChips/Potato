@@ -566,7 +566,11 @@ namespace Potato::TaskFlow
 	bool Executor::UpdateFromFlow(Flow const& target_flow, std::pmr::memory_resource* temporary_resource)
 	{
 		std::lock_guard lg(execute_state_mutex);
+		return UpdateFromFlow_AssumedLocked(target_flow, temporary_resource);
+	}
 
+	bool Executor::UpdateFromFlow_AssumedLocked(Flow const& target_flow, std::pmr::memory_resource* temporary_resource)
+	{
 		if (execute_state == ExecuteState::State::Running)
 		{
 			return false;
@@ -599,13 +603,12 @@ namespace Potato::TaskFlow
 
 			std::lock_guard lg3(template_node_mutex);
 			template_node.clear();
-			
+
 
 			return true;
 		}
 		return false;
 	}
-
 
 	bool Executor::UpdateState()
 	{
@@ -684,7 +687,7 @@ namespace Potato::TaskFlow
 
 		if (node)
 		{
-			node->TaskFlowNodeExecute(context, controller);
+			ExecuteNode(context, *node, controller);
 		}
 
 		{
@@ -695,6 +698,11 @@ namespace Potato::TaskFlow
 			}
 			FinishNode_AssumedLocked(context, index);
 		}
+	}
+
+	void Executor::ExecuteNode(Task::Context& context, TaskFlow::Node& target_node, Controller& controller)
+	{
+		target_node.TaskFlowNodeExecute(context, controller);
 	}
 
 	void Executor::FinishNode_AssumedLocked(Task::Context& context, std::size_t index)
@@ -820,8 +828,6 @@ namespace Potato::TaskFlow
 
 			std::lock_guard lg3(template_node_mutex);
 			template_node.clear();
-
-
 			return true;
 		}
 		return false;
