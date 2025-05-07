@@ -1,4 +1,7 @@
+#include <cassert>
+
 module PotatoLog;
+
 
 namespace Potato::Log
 {
@@ -17,6 +20,8 @@ namespace Potato::Log
 				{ print.data(), print.size() },
 				output_buffer
 			);
+
+			assert(info.SourceSpace == print.size());
 
 			std::cout << std::string_view{ output_buffer.data(), info.TargetSpace };
 		}
