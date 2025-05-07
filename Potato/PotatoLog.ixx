@@ -106,19 +106,20 @@ export namespace Potato::Log
 		void operator()(OutputIte ite, Level level, std::wformat_string<std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
 		{
 			auto now = std::chrono::system_clock::now();
-			//auto now_seconds = std::chrono::floor<std::chrono::seconds>(now);
-
+			auto second_now = std::chrono::floor<std::chrono::seconds>(now);
+			
 			auto zoned_time = std::chrono::zoned_time{
 				std::chrono::current_zone(),
-				now
+				second_now
 			};
 
-			//auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - now_seconds);
+			auto mil_second = std::chrono::floor<std::chrono::milliseconds>(now - second_now);
 
 			ite = std::format_to(
 				ite,
-				L"[{:%m.%d-%H:%M:%S}]<{}:{}>:",
+				L"[{:%m.%d-%H:%M:%S}.{:0>3}]<{}>[{}]:",
 				zoned_time,
+				mil_second.count(),
 				category,
 				level
 			);
@@ -128,6 +129,8 @@ export namespace Potato::Log
 				pattern,
 				std::forward<Parameters>(parameters)...
 			);
+
+			*ite++ = L'\n';
 		}
 	};
 

@@ -43,10 +43,9 @@ namespace Potato::Task
 			return false;
 		}
 
-		if (parameter.delay_time.has_value())
+		if (parameter.trigger_time.has_value())
 		{
-			auto now = TimeT::now();
-			auto delay_time = now + *parameter.delay_time;
+			auto delay_time = *parameter.trigger_time;
 			std::lock_guard lg(delay_node_sequencer_mutex);
 			if (!min_time_point.has_value() || delay_time < *min_time_point)
 				min_time_point = delay_time;

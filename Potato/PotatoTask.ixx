@@ -56,7 +56,7 @@ export namespace Potato::Task
 			std::wstring_view node_name;
 			std::size_t acceptable_mask = std::numeric_limits<std::size_t>::max();
 			CustomData custom_data;
-			std::optional<TimeT::duration> delay_time;
+			std::optional<TimeT::time_point> trigger_time;
 		};
 
 		virtual void TaskExecute(Context& context, Parameter& parameter) = 0;

@@ -825,6 +825,7 @@ namespace Potato::TaskFlow
 			}
 			template_edges.clear();
 			current_template_node_count = 0;
+			execute_out_degree = encoded_flow_out_degree;
 
 			std::lock_guard lg3(template_node_mutex);
 			template_node.clear();

@@ -11,22 +11,14 @@ namespace Potato::Log
 
 		void Print(std::wstring_view print)
 		{
-			std::array<char, 256> output_buffer;
-			std::lock_guard lg(output_mutex);
-			while (!print.empty())
-			{
-				auto info = Encode::StrEncoder<wchar_t, char>::EncodeUnSafe(
-					{print.data(), print.size()},
-					output_buffer
-				);
-				std::cout << std::string_view{ output_buffer.data(), info.TargetSpace} ;
-				print = print.substr(info.SourceSpace);
-				if (info.SourceSpace == 0)
-				{
-					break;
-				}
-			}
-			std::cout << std::endl;
+			std::array<char, 2048> output_buffer;
+
+			auto info = Encode::StrEncoder<wchar_t, char>::EncodeUnSafe(
+				{ print.data(), print.size() },
+				output_buffer
+			);
+
+			std::cout << std::string_view{ output_buffer.data(), info.TargetSpace };
 		}
 
 	protected:
