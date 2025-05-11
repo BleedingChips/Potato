@@ -76,7 +76,7 @@ export namespace Potato::Document
 		BinaryStreamReader() = default;
 		BinaryStreamReader(BinaryStreamReader&& reader);
 		operator bool() const;
-		std::span<std::byte> Read(std::span<std::byte> output);
+		std::size_t Read(std::span<std::byte> output);
 		std::uint64_t GetStreamSize() const;
 		bool Open(std::filesystem::path const& path);
 		void Close();
@@ -117,76 +117,85 @@ export namespace Potato::Document
 #endif
 	};
 
-	template<typename Type>
-	concept AcceptableCharType = TMP::IsOneOfV<Type, char8_t, wchar_t, char16_t, char32_t>;
-
-	struct StringSerializer
+	struct DocumentReader
 	{
-		template<typename CharT> struct Holder{};
-		StringSerializer(BomT bom = BomT::NoBom) : bom(bom) {}
-		StringSerializer(StringSerializer const&) = default;
+		DocumentReader(BinaryStreamReader& reader, std::optional<BomT> force_bom = std::nullopt);
 		BomT GetBom() const { return bom; }
-		void OverrideBom(BomT bom) { this->bom = bom; }
+		operator bool() const { return reader; }
+		template<typename OutIterator>
+		OutIterator ReadLine(OutIterator out_iterator);
+		~DocumentReader();
+	protected:
+		std::size_t FlushBuffer();
+		BinaryStreamReader& reader;
+		BomT bom = BomT::NoBom;
+		std::array<wchar_t, 256> temporary_buffer;
+		Misc::IndexSpan<> available_buffer_index;
+	};
 
-		std::span<std::byte const> ConsumeBom(std::span<std::byte const> input);
-		std::span<std::byte const> GetBinaryBom() const;
+	template<typename OutIterator>
+	OutIterator DocumentReader::ReadLine(OutIterator out_iterator)
+	{
+		while (true)
+		{
+			if (available_buffer_index.Size() == 0)
+			{
+				if (FlushBuffer() == 0)
+				{
+					return out_iterator;
+				}
+			}
+			auto span = available_buffer_index.Slice(std::wstring_view{ temporary_buffer });
+			auto ite = std::find(span.begin(), span.end(), L'\n');
+			if (ite != span.end())
+				ite += 1;
+			out_iterator = std::copy(span.begin(), ite, out_iterator);
+			available_buffer_index = available_buffer_index.SubIndex(ite - span.begin());
+			if (ite != span.end())
+			{
+				return out_iterator;
+			}
+		}
+	}
 
-		template<AcceptableCharType CharT>
-		EncodeInfo RequireSpace(std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) { return RequireSpace(Holder<CharT>{}, input, max_character); }
+	struct DocumentWriter
+	{
+		DocumentWriter(BinaryStreamWriter& writer, BomT force_bom = BomT::NoBom, bool append_bom = false);
+		BomT GetBom() const { return bom; }
+		operator bool() const { return writer; }
+		void Write(std::wstring_view str);
 
-		template<AcceptableCharType CharT>
-		EncodeInfo SerializerToUnsafe(std::span<CharT> output, std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) { return SerializerToUnsafe(Holder<CharT>{}, output, input, max_character); }
+		struct OutIterator
+		{
+			using iterator_category = std::output_iterator_tag;
+			using value_type = void;
+			using pointer = void;
+			using reference = void;
+			using difference_type = ptrdiff_t;
+			using container_type = DocumentWriter;
 
-		template<AcceptableCharType CharT>
-		std::optional<std::basic_string_view<CharT>> TryDirectCastToStringView(std::span<std::byte const> input) const { return TryDirectCastToStringView(Holder<CharT>{}, input); }
 
-		bool SerializerBomTo(BinaryStreamWriter& writer) const { return writer.Write(GetBinaryBom()); }
-		bool SerializerTo(BinaryStreamWriter& writer, std::span<char8_t const> input) const;
-		bool IsNativeEnding() const { return IsNativeEndian(bom); }
+			OutIterator(DocumentWriter& writer) : writer(&writer) {}
+			OutIterator(OutIterator const&) = default;
+			OutIterator& operator*() { return *this; }
+			OutIterator& operator=(wchar_t const& symbol) { writer->Write({ &symbol, 1 }); return *this; }
+			OutIterator operator++(int) { return *this; }
+			OutIterator& operator++() { return *this; }
+			OutIterator& operator=(OutIterator const&) = default;
+		protected:
+			DocumentWriter* writer = nullptr;
+			friend struct DocumentWriter;
+		};
+
+		OutIterator AsOutputIterator() { return OutIterator{*this}; }
+		~DocumentWriter() { TryFlush(); }
 
 	protected:
 
-		EncodeInfo RequireSpace(Holder<char8_t> holder, std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) const;
-		EncodeInfo RequireSpace(Holder<char16_t> holder, std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) const { return {false}; }
-		EncodeInfo RequireSpace(Holder<char32_t> holder, std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) const { return { false }; }
-		EncodeInfo RequireSpace(Holder<wchar_t> holder, std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) const { return {false }; }
-
-		EncodeInfo SerializerToUnsafe(Holder<char8_t> holder, std::span<char8_t> output, std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) const;
-		EncodeInfo SerializerToUnsafe(Holder<char16_t> holder, std::span<char16_t> output, std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) const { return {false}; }
-		EncodeInfo SerializerToUnsafe(Holder<char32_t> holder, std::span<char32_t> output, std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) const { return { false }; }
-		EncodeInfo SerializerToUnsafe(Holder<wchar_t> holder, std::span<wchar_t> output, std::span<std::byte const> input, std::size_t max_character = std::numeric_limits<std::size_t>::max()) const { return {false }; }
-
-		std::optional<std::basic_string_view<char8_t>> TryDirectCastToStringView(Holder<char8_t> holder, std::span<std::byte const> input) const;
-		std::optional<std::basic_string_view<char16_t>> TryDirectCastToStringView(Holder<char16_t> holder, std::span<std::byte const> input) const { return std::nullopt; }
-		std::optional<std::basic_string_view<char32_t>> TryDirectCastToStringView(Holder<char32_t> holder, std::span<std::byte const> input) const { return std::nullopt; }
-		std::optional<std::basic_string_view<wchar_t>> TryDirectCastToStringView(Holder<wchar_t> holder, std::span<std::byte const> input) const { return std::nullopt; }
-
+		std::size_t TryFlush();
+		std::array<wchar_t, 256> cache_buffer;
+		std::size_t buffer_space = 0;
+		BinaryStreamWriter& writer;
 		BomT bom = BomT::NoBom;
-	};
-
-
-	struct StringSplitter
-	{
-		struct Line
-		{
-			enum class Mode
-			{
-				None,
-				N,
-				RN
-			};
-			Mode mode = Mode::None;
-			Misc::IndexSpan<> index_without_line;
-			Misc::IndexSpan<> index_with_line;
-			std::size_t GetLineEnd() const { return index_with_line.End(); }
-			template<typename CharT>
-			std::basic_string_view<CharT> SliceWithoutLine(std::basic_string_view<CharT> str) const { return index_without_line.Slice(str);  }
-			template<typename CharT>
-			std::basic_string_view<CharT> SliceWithLine(std::basic_string_view<CharT> str) const { return index_with_line.Slice(str);  }
-			std::size_t SizeWithoutLine() const { return index_without_line.Size(); }
-			std::size_t SizeWithLine() const { return index_with_line.Size(); }
-		};
-
-		static Line SplitLine(std::u8string_view str, std::size_t offset = 0);
 	};
 }

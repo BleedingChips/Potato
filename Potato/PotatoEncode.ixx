@@ -6,416 +6,476 @@ export module PotatoEncode;
 
 import std;
 import PotatoMisc;
+import PotatoTMP;
 
 export namespace Potato::Encode
 {
 
 	struct EncodeInfo
 	{
-		bool GoodString = true;
-		std::size_t CharacterCount = 0;
-		std::size_t SourceSpace = 0;
-		std::size_t TargetSpace = 0;
-		explicit operator bool() const { return GoodString; }
+		bool good = true;
+		std::size_t character_count = 0;
+		std::size_t source_space = 0;
+		std::size_t target_space = 0;
+		explicit operator bool() const { return good; }
 	};
 
-	template<typename ST, typename TT>
+	struct EncodeOption
+	{
+		bool untrusted = false;
+		bool predict = false;
+		std::size_t max_character = std::numeric_limits<std::size_t>::max();
+	};
+
+	template<typename Source>
 	struct CharEncoder
 	{
-		using SourceT = ST;
-		using TargetT = TT;
-		static constexpr std::size_t MaxSourceBufferLength = 1;
-		static constexpr std::size_t MaxTargetBufferLength = 1;
-		static EncodeInfo RequireSpaceOnceUnSafe(std::span<SourceT const> Source);
-		static EncodeInfo RequireSpaceOnce(std::span<SourceT const> Source);
-		static EncodeInfo EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target);
+		constexpr std::optional<std::size_t> GetCharacterSize(std::span<Source const> source, bool untrusted = false);
 	};
 
 	template<>
-	struct CharEncoder<char32_t, char16_t>
+	struct CharEncoder<char8_t>
 	{
-		using SourceT = char32_t;
-		using TargetT = char16_t;
-		static constexpr std::size_t MaxSourceBufferLength = 1;
-		static constexpr std::size_t MaxTargetBufferLength = 1;
-		static EncodeInfo RequireSpaceOnceUnSafe(std::span<SourceT const> Source);
-		static EncodeInfo RequireSpaceOnce(std::span<SourceT const> Source);
-		static EncodeInfo EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target);
-	};
-
-	template<>
-	struct CharEncoder<char32_t, char8_t>
-	{
-		using SourceT = char32_t;
-		using TargetT = char8_t;
-		static constexpr std::size_t MaxSourceBufferLength = 1;
-		static constexpr std::size_t MaxTargetBufferLength = 4;
-		static EncodeInfo RequireSpaceOnceUnSafe(std::span<SourceT const> Source);
-		static EncodeInfo RequireSpaceOnce(std::span<SourceT const> Source);
-		static EncodeInfo EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target);
-	};
-
-	template<>
-	struct CharEncoder<char32_t, char32_t>
-	{
-		using SourceT = char32_t;
-		using TargetT = char32_t;
-		static constexpr std::size_t MaxSourceBufferLength = 1;
-		static constexpr std::size_t MaxTargetBufferLength = 1;
-		static EncodeInfo RequireSpaceOnceUnSafe(std::span<SourceT const> Source){ return {true, 1, 1, 1}; }
-		static EncodeInfo RequireSpaceOnce(std::span<SourceT const> Source);
-		static EncodeInfo EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target){ Target[0] = Source[0]; return { true, 1, 1, 1}; }
-	};
-
-	template<>
-	struct CharEncoder<char16_t, char32_t>
-	{
-		using SourceT = char16_t;
-		using TargetT = char32_t;
-		static constexpr std::size_t MaxSourceBufferLength = 2;
-		static constexpr std::size_t MaxTargetBufferLength = 1;
-		static EncodeInfo RequireSpaceOnceUnSafe(std::span<SourceT const> Source);
-		static EncodeInfo RequireSpaceOnce(std::span<SourceT const> Source);
-		static EncodeInfo EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target);
-	};
-
-	template<>
-	struct CharEncoder<char16_t, char8_t>
-	{
-		using SourceT = char16_t;
-		using TargetT = char8_t;
-		static constexpr std::size_t MaxSourceBufferLength = 2;
-		static constexpr std::size_t MaxTargetBufferLength = 2;
-		static EncodeInfo RequireSpaceOnceUnSafe(std::span<SourceT const> Source);
-		static EncodeInfo RequireSpaceOnce(std::span<SourceT const> Source);
-		static EncodeInfo EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target);
-	};
-
-	template<>
-	struct CharEncoder<char8_t, char32_t>
-	{
-		using SourceT = char8_t;
-		using TargetT = char32_t;
-		static constexpr std::size_t MaxSourceBufferLength = 4;
-		static constexpr std::size_t MaxTargetBufferLength = 1;
-		static EncodeInfo RequireSpaceOnceUnSafe(std::span<SourceT const> Source);
-		static EncodeInfo RequireSpaceOnce(std::span<SourceT const> Source);
-		static EncodeInfo EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target);
-	};
-
-	template<>
-	struct CharEncoder<char8_t, char16_t>
-	{
-		using SourceT = char8_t;
-		using TargetT = char16_t;
-		static constexpr std::size_t MaxSourceBufferLength = 4;
-		static constexpr std::size_t MaxTargetBufferLength = 2;
-		static EncodeInfo RequireSpaceOnceUnSafe(std::span<SourceT const> Source);
-		static EncodeInfo RequireSpaceOnce(std::span<SourceT const> Source);
-		static EncodeInfo EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target);
-	};
-
-	template<typename UnicodeT>
-	struct CharEncoder<UnicodeT, wchar_t>
-	{
-		using SourceT = UnicodeT;
-		using TargetT = wchar_t;
-	private:
-		using Wrapper = std::conditional_t<sizeof(wchar_t) == sizeof(char16_t), CharEncoder<UnicodeT, char16_t>, CharEncoder<UnicodeT, char32_t>>;
-		static_assert(sizeof(wchar_t) == sizeof(char16_t) || sizeof(wchar_t) == sizeof(char32_t));
-
-	public:
-
-		static constexpr std::size_t MaxSourceBufferLength = Wrapper::MaxSourceBufferLength;
-		static constexpr std::size_t MaxTargetBufferLength = Wrapper::MaxTargetBufferLength;
-
-		static EncodeInfo RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
+		constexpr std::optional<std::size_t> GetCharacterSize(std::span<char8_t const> source, bool untrusted = false)
 		{
-			return Wrapper::RequireSpaceOnceUnSafe(Source);
-		}
-		static EncodeInfo RequireSpaceOnce(std::span<SourceT const> Source)
-		{
-			return Wrapper::RequireSpaceOnceUnSafe(Source);
-		}
-		static EncodeInfo EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
-		{
-			return Wrapper::EncodeOnceUnSafe(Source, std::span(reinterpret_cast<typename Wrapper::TargetT*>(Target.data()), Target.size()));
-		}
-	};
-
-	template<typename UnicodeT>
-	struct CharEncoder<wchar_t, UnicodeT>
-	{
-		using SourceT = wchar_t;
-		using TargetT = UnicodeT;
-	private:
-		using Wrapper = std::conditional_t<sizeof(wchar_t) == sizeof(char16_t), CharEncoder<char16_t, UnicodeT>, CharEncoder<char32_t, UnicodeT>>;
-		static_assert(sizeof(wchar_t) == sizeof(char16_t) || sizeof(wchar_t) == sizeof(char32_t));
-	public:
-
-		static constexpr std::size_t MaxSourceBufferLength = Wrapper::MaxSourceBufferLength;
-		static constexpr std::size_t MaxTargetBufferLength = Wrapper::MaxTargetBufferLength;
-
-		static EncodeInfo RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
-		{
-			return Wrapper::RequireSpaceOnceUnSafe(std::span(reinterpret_cast<typename Wrapper::SourceT const*>(Source.data()), Source.size()));
-		}
-		static EncodeInfo RequireSpaceOnce(std::span<SourceT const> Source)
-		{
-			return Wrapper::RequireSpaceOnce(std::span(reinterpret_cast<typename Wrapper::SourceT const*>(Source.data()), Source.size()));
-		}
-		static EncodeInfo EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
-		{
-			return Wrapper::EncodeOnceUnSafe(std::span(reinterpret_cast<typename Wrapper::SourceT const*>(Source.data()), Source.size()), Target);
-		}
-	};
-
-	template<typename UnicodeT>
-	struct CharEncoder<UnicodeT, UnicodeT>
-	{
-		using SourceT = UnicodeT;
-		using TargetT = UnicodeT;
-
-		static constexpr std::size_t MaxSourceBufferLength = CharEncoder<UnicodeT, char32_t>::MaxSourceBufferLength;
-		static constexpr std::size_t MaxTargetBufferLength = CharEncoder<char32_t, UnicodeT>::MaxTargetBufferLength;
-
-		static EncodeInfo RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
-		{
-			auto Re = CharEncoder<UnicodeT, char32_t>::RequireSpaceOnceUnSafe(Source);
-			Re.TargetSpace = Re.SourceSpace;
-			return Re;
-		}
-		static EncodeInfo RequireSpaceOnce(std::span<SourceT const> Source)
-		{
-			auto Re = CharEncoder<UnicodeT, char32_t>::RequireSpaceOnce(Source);
-			if(Re.TargetSpace != 0)
-				Re.TargetSpace = Re.SourceSpace;
-			return Re;
-		}
-		static EncodeInfo EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
-		{
-			auto EncodeInfo = RequireSpaceOnceUnSafe(Source);
-			std::memcpy(Target.data(), Source.data(), EncodeInfo.TargetSpace * sizeof(TargetT));
-			return EncodeInfo;
-		}
-	};
-
-	template<>
-	struct CharEncoder<wchar_t, wchar_t>
-	{
-		using SourceT = wchar_t;
-		using TargetT = wchar_t;
-	private:
-		using Wrapper = std::conditional_t<sizeof(wchar_t) == sizeof(char16_t), CharEncoder<char16_t, char16_t>, CharEncoder<char32_t, char32_t>>;
-		static_assert(sizeof(wchar_t) == sizeof(char16_t) || sizeof(wchar_t) == sizeof(char32_t));
-	public:
-		static EncodeInfo RequireSpaceOnceUnSafe(std::span<SourceT const> Source)
-		{
-			return Wrapper::RequireSpaceOnceUnSafe(std::span(reinterpret_cast<typename Wrapper::SourceT const*>(Source.data()), Source.size()));
-		}
-		static EncodeInfo RequireSpaceOnce(std::span<SourceT const> Source)
-		{
-			return Wrapper::RequireSpaceOnceUnSafe(std::span(reinterpret_cast<typename Wrapper::SourceT const*>(Source.data()), Source.size()));
-		}
-		static EncodeInfo EncodeOnceUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target)
-		{
-			return Wrapper::EncodeOnceUnSafe(
-				std::span(reinterpret_cast<typename Wrapper::SourceT const*>(Source.data()), Source.size()), 
-				std::span(reinterpret_cast<typename Wrapper::TargetT*>(Target.data()), Target.size())
-			);
-		}
-	};
-
-	template<typename UnicodeT>
-	struct UnicodeLineSymbol;
-
-	template<>
-	struct UnicodeLineSymbol<char32_t>
-	{
-		static constexpr char32_t R = U'\r';
-		static constexpr char32_t N = U'\n';
-	};
-
-	template<>
-	struct UnicodeLineSymbol<char16_t>
-	{
-		static constexpr char16_t R = u'\r';
-		static constexpr char16_t N = u'\n';
-	};
-
-	template<>
-	struct UnicodeLineSymbol<char8_t>
-	{
-		static constexpr char8_t R = u8'\r';
-		static constexpr char8_t N = u8'\n';
-	};
-
-	template<>
-	struct UnicodeLineSymbol<wchar_t>
-	{
-		static constexpr wchar_t R = L'\r';
-		static constexpr wchar_t N = L'\n';
-	};
-
-	template<>
-	struct UnicodeLineSymbol<char>
-	{
-		static constexpr char R = '\r';
-		static constexpr char N = '\n';
-	};
-
-	template<typename SourceT, typename TargetT>
-	struct StrEncoder
-	{
-		static EncodeInfo RequireSpaceUnSafe(std::span<SourceT const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max()) {
-			EncodeInfo Result;
-			while (!Source.empty() && Result.CharacterCount < MaxCharacter)
+			if (!source.empty())
 			{
-				auto Res = CharEncoder<SourceT, TargetT>::RequireSpaceOnceUnSafe(Source);
-				assert(Res.SourceSpace != 0);
-				Result.CharacterCount += 1;
-				Result.TargetSpace += Res.TargetSpace;
-				Result.SourceSpace += Res.SourceSpace;
-				Source = Source.subspan(Res.SourceSpace);
-			}
-			return Result;
-		}
-
-		static EncodeInfo RequireSpace(std::span<SourceT const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max())
-		{
-			EncodeInfo Result;
-			while (!Source.empty() && Result.CharacterCount < MaxCharacter)
-			{
-				auto Res = CharEncoder<SourceT, TargetT>::RequireSpaceOnce(Source);
-				if (Res.SourceSpace == 0) [[unlikely]]
+				auto cur = source[0];
+				if (!untrusted)
 				{
-					Result.GoodString = false;
-					return Result;
-				}
-				Result.CharacterCount += 1;
-				Result.TargetSpace += Res.TargetSpace;
-				Result.SourceSpace += Res.SourceSpace;
-				Source = Source.subspan(Res.SourceSpace);
-			}
-			return Result;
-		}
-
-		static EncodeInfo RequireSpaceLineUnsafe(std::span<SourceT const> Source, bool KeepLine = true)
-		{
-			EncodeInfo Result;
-			bool MeetR = false;
-			while (!Source.empty())
-			{
-				EncodeInfo Res = CharEncoder<SourceT, TargetT>::RequireSpaceOnceUnSafe(Source);
-				Result.SourceSpace += Res.SourceSpace;
-				if (Res.SourceSpace == 1)
-				{
-					auto Cur = Source[0];
-					switch (Cur)
-					{
-					case UnicodeLineSymbol<SourceT>::R:
-					{
-						if (!MeetR)
-							MeetR = true;
-						else {
-							Result.CharacterCount += 1;
-							Result.TargetSpace += 1;
-						}
-						break;
-					}
-					case UnicodeLineSymbol<SourceT>::N:
-					{
-						if (MeetR && KeepLine)
-						{
-							Result.CharacterCount += 2;
-							Result.TargetSpace += 2;
-						}
-						else if (KeepLine)
-						{
-							Result.CharacterCount += 1;
-							Result.TargetSpace += 1;
-						}
-						return Result;
-					}
-					default:
-						Result.CharacterCount += 1;
-						Result.TargetSpace += Res.TargetSpace;
-						break;
-					}
+					if ((cur & 0x80) == 0) return 1;
+					else if ((cur & 0xE0) == 0xC0) return 2;
+					else if ((cur & 0xF0) == 0xE0) return 3;
+					else return 4;
 				}
 				else {
-					Result.CharacterCount += 1;
-					Result.TargetSpace += Res.TargetSpace;
+					std::size_t count = 0;
+					if ((cur & 0x80) == 0)
+						count = 1;
+					else if ((cur & 0xE0) == 0xC0)
+						count = 2;
+					else if ((cur & 0xF0) == 0xE0)
+						count = 3;
+					else if ((cur & 0xF8) == 0xF0)
+						count = 4;
+					if (count <= source.size() && count != 0)
+					{
+						bool Succeed = true;
+						for (std::size_t index = 1; index < count; ++index)
+						{
+							auto Ite = source[index];
+							if ((Ite & 0x80) != 0x80)
+							{
+								Succeed = false;
+								break;
+							}
+						}
+						if (Succeed)
+							return count;
+					}
+					return {};
 				}
-				Source = Source.subspan(Res.SourceSpace);
 			}
-			return Result;
+			return 0;
 		}
-
-		static EncodeInfo EncodeUnSafe(std::span<SourceT const> Source, std::span<TargetT> Target, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max()) {
-			EncodeInfo Result;
-			while (!Source.empty() && Result.CharacterCount < MaxCharacter)
-			{
-				auto Res = CharEncoder<SourceT, TargetT>::EncodeOnceUnSafe(Source, Target);
-				Result.CharacterCount += 1;
-				Result.TargetSpace += Res.TargetSpace;
-				Result.SourceSpace += Res.SourceSpace;
-				Source = Source.subspan(Res.SourceSpace);
-				Target = Target.subspan(Res.TargetSpace);
-			}
-			return Result;
-		}
-
-		static auto EncodeToString(
-			std::basic_string_view<SourceT> Source,
-			std::pmr::memory_resource* resource = std::pmr::get_default_resource()
-			) -> std::optional<std::pmr::basic_string<TargetT>>
+		constexpr char32_t EncodeTo(std::size_t character_space, std::span<char8_t const> source)
 		{
-			auto Info = RequireSpaceUnSafe(Source);
-			if (Info)
+			switch (character_space)
 			{
-				std::pmr::basic_string<TargetT> Result{  resource };
-				Result.resize(Info.TargetSpace);
-				EncodeUnSafe(Source, Result);
-				return Result;
+			case 1:
+				return source[0];
+			case 2:
+				return (static_cast<char32_t>(source[0] & 0x1F) << 6) | static_cast<char32_t>(source[1] & 0x3F);
+			case 3:
+				return (static_cast<char32_t>(source[0] & 0x0F) << 12) | (static_cast<char32_t>(source[1] & 0x3F) << 6)
+					| static_cast<char32_t>(source[2] & 0x3F);
+			default:
+				return (static_cast<char32_t>(source[0] & 0x07) << 18) | (static_cast<char32_t>(source[1] & 0x3F) << 12)
+					| (static_cast<char32_t>(source[2] & 0x3F) << 6) | static_cast<char32_t>(source[3] & 0x3F);
+				break;
 			}
-			return {};
+		}
+		constexpr std::size_t DecodeCharacterSize(char32_t source)
+		{
+			if (source <= 0x7F)
+				return 1;
+			else if (source <= 0x7FF)
+				return 2;
+			else if (source <= 0xFFFF)
+				return 3;
+			else
+				return 4;
+		}
+		constexpr bool DecodeFrom(char32_t source, std::size_t character_size, std::span<char8_t> target)
+		{
+			if (character_size <= target.size())
+			{
+				switch (character_size)
+				{
+				case 1:
+					target[0] = static_cast<char8_t>(source);
+					break;
+				case 2:
+					target[0] = 0xC0 | static_cast<char8_t>((source & 0x07C0) >> 6);
+					target[1] = 0x80 | static_cast<char8_t>((source & 0x3F));
+					break;
+				case 3:
+					target[0] = 0xE0 | static_cast<char8_t>((source & 0xF000) >> 12);
+					target[1] = 0x80 | static_cast<char8_t>((source & 0xFC0) >> 6);
+					target[2] = 0x80 | static_cast<char8_t>((source & 0x3F));
+					break;
+				default:
+					target[0] = 0xF0 | static_cast<char>((source & 0x1C0000) >> 18);
+					target[1] = 0x80 | static_cast<char>((source & 0x3F000) >> 12);
+					target[2] = 0x80 | static_cast<char>((source & 0xFC0) >> 6);
+					target[3] = 0x80 | static_cast<char>((source & 0x3F));
+					break;
+				}
+				return true;
+			}
+			return false;
 		}
 	};
 
+	template<>
+	struct CharEncoder<char16_t>
+	{
+		constexpr std::optional<std::size_t> GetCharacterSize(std::span<char16_t const> source, bool untrusted = false)
+		{
+			if (!source.empty())
+			{
+				if (!untrusted)
+				{
+					if (source[0] >= 0xD800 && source[0] < 0xE000)
+						return 2;
+					else
+						return 1;
+				}
+				else {
+					if (source[0] >= 0xD800 && source[0] < 0xE00)
+					{
+						if (source.size() >= 2 && source[1] >= 0xDC00 && source[1] < 0xE000)
+						{
+							return 2;
+						}
+					}
+					else {
+						return 1;
+					}
+				}
+			}
+			return std::nullopt;
+		}
+		constexpr char32_t EncodeTo(std::size_t character_space, std::span<char16_t const> source)
+		{
+			switch (character_space)
+			{
+			case 1:
+				return source[0];
+			default:
+				return (static_cast<char32_t>(source[0] & 0x3FF) << 10) + static_cast<char32_t>(source[1] & 0x3FF) + 0x10000;
+			}
+		}
+		
+		constexpr std::size_t DecodeCharacterSize(char32_t source)
+		{
+			if (source <= 0x010000)
+				return 1;
+			else
+				return 2;
+		}
 
-#ifdef _WIN32
+		constexpr bool DecodeFrom(char32_t source, std::size_t character_size, std::span<char16_t> target)
+		{
+			if (character_size <= target.size())
+			{
+				switch (character_size)
+				{
+				case 1:
+					target[0] = static_cast<char16_t>(source);
+					break;
+				default:
+					source -= 0x10000;
+					target[0] = static_cast<char16_t>(0xd800 | (source >> 10));
+					target[1] = static_cast<char16_t>(0xdc00 | (source & 0x3FF));
+					break;
+				}
+				return true;
+			}
+			return false;
+		}
+	};
+
+	template<>
+	struct CharEncoder<char32_t>
+	{
+		constexpr std::optional<std::size_t> GetCharacterSize(std::span<char32_t const> source, bool untrusted = false)
+		{
+			if (!source.empty())
+			{
+				if (!untrusted)
+				{
+					return 1;
+				}
+				else {
+					if (source[0] <= 0x10FFFF)
+					{
+						return 1;
+					}
+				}
+			}
+			return std::nullopt;
+		}
+		constexpr char32_t EncodeTo(std::size_t character_space, std::span<char32_t const> source)
+		{
+			return source[0];
+		}
+
+		constexpr std::size_t DecodeCharacterSize(char32_t source)
+		{
+			return 1;
+		}
+
+		constexpr bool DecodeFrom(char32_t source, std::size_t character_size, std::span<char32_t> target)
+		{
+			if (character_size <= target.size())
+			{
+				target[0] = source;
+				return true;
+			}
+			return false;
+		}
+	};
+
+	template<>
+	struct CharEncoder<wchar_t> : 
+		CharEncoder<
+			std::conditional_t<
+				sizeof(wchar_t) == sizeof(char16_t), char16_t, char32_t
+			>
+		>
+	{
+		static_assert(sizeof(wchar_t) == sizeof(char16_t) || sizeof(wchar_t) == sizeof(char32_t));
+
+		using WrapperType = std::conditional_t<
+			sizeof(wchar_t) == sizeof(char16_t), char16_t, char32_t
+		>;
+
+		constexpr std::optional<std::size_t> GetCharacterSize(std::span<wchar_t const> source, bool untrusted = false)
+		{
+			return CharEncoder<WrapperType>::GetCharacterSize({reinterpret_cast<WrapperType const*>(source.data()), source.size()});
+		}
+		constexpr char32_t EncodeTo(std::size_t character_space, std::span<wchar_t const> source)
+		{
+			return CharEncoder<WrapperType>::EncodeTo(character_space, { reinterpret_cast<WrapperType const*>(source.data()), source.size() });
+		}
+
+		constexpr std::size_t DecodeCharacterSize(char32_t source)
+		{
+			return CharEncoder<WrapperType>::DecodeCharacterSize(source);
+		}
+
+		constexpr bool DecodeFrom(char32_t source, std::size_t character_size, std::span<wchar_t> target)
+		{
+			return CharEncoder<WrapperType>::DecodeFrom(source, character_size, { reinterpret_cast<WrapperType*>(target.data()), target.size() });
+		}
+	};
+
+	template<typename Source, typename Target>
+	struct StrEncoder
+	{
+		template<std::size_t S1>
+		constexpr EncodeInfo Encode(std::span<Source const, S1> source, std::span<Target> target, EncodeOption option = {})
+		{
+			if constexpr (sizeof(Source) != sizeof(Target))
+			{
+				CharEncoder<Source> encoder_source;
+				CharEncoder<Target> encoder_target;
+				EncodeInfo info;
+				while (
+					option.max_character != 0
+					&& (option.predict || info.target_space < target.size())
+					&& info.source_space < source.size()
+					)
+				{
+					auto ite_span = source.subspan(info.source_space);
+					auto count = encoder_source.GetCharacterSize(ite_span, option.untrusted);
+					if (count.has_value())
+					{
+						char32_t temp = encoder_source.EncodeTo(*count, ite_span);
+						auto target_count = encoder_target.DecodeCharacterSize(temp);
+
+						if (!option.predict)
+						{
+							if (!encoder_target.DecodeFrom(temp, target_count, target.subspan(info.target_space)))
+							{
+								break;
+							}
+						}
+						info.target_space += target_count;
+						info.source_space += *count;
+						++info.character_count;
+						--option.max_character;
+					}
+					else {
+						info.good = false;
+						break;
+					}
+				}
+				return info;
+			}
+			else {
+				EncodeInfo info;
+				CharEncoder<Source> encoder;
+				while (
+					option.max_character != 0
+					&& (option.predict || info.target_space < target.size())
+					&& info.source_space < source.size()
+					)
+				{
+					auto count = encoder.GetCharacterSize(source.subspan(info.source_space), option.untrusted);
+					if (count.has_value())
+					{
+						if (option.predict || info.target_space + *count <= target.size())
+						{
+							info.character_count += 1;
+							info.source_space += *count;
+							info.target_space += *count;
+							--option.max_character;
+						}
+						else {
+							break;
+						}
+					}
+					else {
+						info.good = false;
+						break;
+					}
+				}
+				if (!option.predict && info.target_space <= target.size())
+				{
+					std::copy_n(source.data(), info.target_space, reinterpret_cast<Source*>(target.data()));
+				}
+				return info;
+			}
+		}
+		constexpr EncodeInfo Encode(std::basic_string_view<Source> source, std::span<Target> target, EncodeOption option = {})
+		{
+			return this->Encode(std::span<Source const>(source.data(), source.size()), target, option);
+		}
+		template<std::size_t S1>
+		constexpr EncodeInfo Encode(std::span<Source, S1> source, std::span<Target> target, EncodeOption option = {})
+		{
+			return this->Encode(std::span<Source const, S1>(source), target, option);
+		}
+	};
+
 
 	template<>
 	struct StrEncoder<char, wchar_t>
+
+#if !_WIN32
+		: protected  StrEncoder<char8_t, wchar_t>
+#endif
+
 	{
-		static EncodeInfo RequireSpaceUnSafe(std::span<char const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
-
-		static EncodeInfo RequireSpace(std::span<char const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
-
-		static EncodeInfo EncodeUnSafe(std::span<char const> Source, std::span<wchar_t> Target, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
-
-		static auto EncodeToString(
-			std::basic_string_view<char> Source,
-			std::pmr::memory_resource* resource = std::pmr::get_default_resource()
-		) -> std::optional<std::pmr::basic_string<wchar_t>>;
+#if _WIN32
+		EncodeInfo Encode(std::span<char const> source, std::span<wchar_t> target, EncodeOption option = {});
+		EncodeInfo Encode(std::basic_string_view<char> source, std::span<wchar_t> target, EncodeOption option = {})
+		{
+			return this->Encode(std::span<char const>(source.data(), source.size()), target, option);
+		}
+#else
+		template<std::size_t S1>
+		constexpr EncodeInfo Encode(std::span<char const, S1> source, std::span<wchar_t> target, EncodeOption option = {})
+		{
+			return StrEncoder<char8_t, wchar_t>::Encode(std::span<char8_t const>(reinterpret_cast<char8_t const*>(source.data()), source.size()), target, option);
+		}
+		constexpr EncodeInfo Encode(std::basic_string_view<char> source, std::span<wchar_t> target, EncodeOption option = {})
+		{
+			return this->Encode(std::span<char8_t const>(reinterpret_cast<char8_t const*>(source.data()), source.size()), target, option);
+		}
+#endif
 	};
 
 	template<>
 	struct StrEncoder<wchar_t, char>
-	{
-		static EncodeInfo RequireSpaceUnSafe(std::span<wchar_t const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
 
-		static EncodeInfo RequireSpace(std::span<wchar_t const> Source, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
-
-		static EncodeInfo EncodeUnSafe(std::span<wchar_t const> Source, std::span<char> Target, std::size_t MaxCharacter = std::numeric_limits<std::size_t>::max());
-
-		static auto EncodeToString(
-			std::basic_string_view<wchar_t> Source,
-			std::pmr::memory_resource* resource = std::pmr::get_default_resource()
-		) -> std::optional<std::pmr::basic_string<char>>;
-	};
-
+#if !_WIN32
+		: protected  StrEncoder<wchar_t, char8_t>
 #endif
 
+	{
+#if _WIN32
+		EncodeInfo Encode(std::span<wchar_t const> source, std::span<char> target, EncodeOption option = {});
+		EncodeInfo Encode(std::basic_string_view<wchar_t> source, std::span<char> target, EncodeOption option = {})
+		{
+			return this->Encode(std::span<wchar_t const>(source.data(), source.size()), target, option);
+		}
+#else
+		constexpr EncodeInfo Encode(std::span<wchar_t const> source, std::span<char> target, EncodeOption option = {})
+		{
+			return StrEncoder<wchar_t, char8_t>::Encode(source, std::span<wchar_t const>(reinterpret_cast<char8_t const*>(target.data()), target.size()), option);
+		}
+		constexpr EncodeInfo Encode(std::basic_string_view<wchar_t> source, std::span<char> target, EncodeOption option = {})
+		{
+			return this->Encode(std::span<source, char8_t const>(reinterpret_cast<char8_t const*>(target.data()), target.size()), option);
+		}
+		template<std::size_t S1>
+		constexpr EncodeInfo Encode(std::span<wchar_t, S1> source, std::span<char> target, EncodeOption option = {})
+		{
+			return this->Encode(std::span<wchar_t const, S1>(source), target, option);
+		}
+#endif
+	};
+}
+
+namespace std
+{
+	template<class CharT>
+	concept PotatoEncodeableChar = Potato::TMP::IsOneOfV<CharT, char8_t, char16_t, char32_t>;
+
+	template<PotatoEncodeableChar CharT>
+	struct formatter<std::basic_string_view<CharT>, wchar_t>
+	{
+		constexpr auto parse(std::basic_format_parse_context<wchar_t>& parse_context)
+		{
+			return parse_context.end();
+		}
+		template<typename FormatContext>
+		constexpr auto format(std::basic_string_view<CharT> view, FormatContext& format_context) const
+		{
+			wchar_t tem_buffer[2];
+			Potato::Encode::StrEncoder<CharT, wchar_t> encoder;
+			while (!view.empty())
+			{
+				auto info = encoder.Encode(view, std::span<wchar_t, 2>{ tem_buffer, 2 });
+				std::copy_n(
+					tem_buffer,
+					info.target_space,
+					format_context.out()
+				);
+				view = view.substr(info.source_space);
+				if (info.source_space == 0)
+					break;
+			}
+			return format_context.out();
+		}
+	};
+
+	template<PotatoEncodeableChar CharT, std::size_t N>
+	struct formatter<CharT[N], wchar_t>
+		: formatter<std::basic_string_view<CharT>, wchar_t>
+	{
+		using ParentType = formatter<std::basic_string_view<CharT>, wchar_t>;
+		constexpr auto parse(std::basic_format_parse_context<wchar_t>& parse_context)
+		{
+			return ParentType::parse(parse_context);
+		}
+		template<typename FormatContext>
+		constexpr auto format(CharT const str[N], FormatContext& format_context) const
+		{
+			return ParentType::format(std::basic_string_view<CharT>(str), format_context);
+		}
+	};
 }

@@ -2791,10 +2791,14 @@ namespace Potato::Reg
 		}
 
 		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u8string_view Str, Misc::IndexSpan<> BadIndex)
+		
 			: UnaccaptableRegexTokenIndex(Type, BadIndex)
 		{
-			TotalString.resize(Encode::StrEncoder<char8_t, wchar_t>::RequireSpace(Str).TargetSpace);
-			Encode::StrEncoder<char8_t, wchar_t>::EncodeUnSafe(Str, TotalString);
+			Encode::StrEncoder<char8_t, wchar_t> encoder;
+			Encode::EncodeOption option;
+			option.predict = true;
+			TotalString.resize(encoder.Encode(Str, {}, option).target_space);
+			encoder.Encode(Str, std::span(TotalString));
 		}
 
 		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::wstring_view Str, Misc::IndexSpan<> BadIndex)
@@ -2802,9 +2806,11 @@ namespace Potato::Reg
 		{
 		}
 
+		/*
 		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u16string_view Str, Misc::IndexSpan<> BadIndex)
 			: UnaccaptableRegexTokenIndex(Type, BadIndex)
 		{
+
 			TotalString.resize(Encode::StrEncoder<char16_t, wchar_t>::RequireSpace(Str).TargetSpace);
 			Encode::StrEncoder<char16_t, wchar_t>::EncodeUnSafe(Str, TotalString);
 		}
@@ -2815,6 +2821,7 @@ namespace Potato::Reg
 			TotalString.resize(Encode::StrEncoder<char32_t, wchar_t>::RequireSpace(Str).TargetSpace);
 			Encode::StrEncoder<char32_t, wchar_t>::EncodeUnSafe(Str, TotalString);
 		}
+		*/
 
 		char const* UnaccaptableRegex::what() const
 		{

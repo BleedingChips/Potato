@@ -542,36 +542,37 @@ export namespace Potato::Reg
 	
 
 	template<typename CharT, typename CharTraidT>
-	ProcessorAcceptRef Process(DfaProcessor& Pro, std::basic_string_view<CharT, CharTraidT> Str)
+	ProcessorAcceptRef Process(DfaProcessor& processor, std::basic_string_view<CharT, CharTraidT> str)
 	{
-		char32_t TemBuffer = 0;
-		std::span<char32_t> OutputSpan{ &TemBuffer, 1 };
+		char32_t tem_input = 0;
+		std::span<char32_t> output_span{ &tem_input, 1 };
 
-		using EncoderT = Potato::Encode::CharEncoder<CharT, char32_t>;
+		using EncoderT = Potato::Encode::StrEncoder<CharT, char32_t>;
+		EncoderT encoder;
 
-		auto IteStr = std::span(Str);
+		auto ite_str = std::span(str);
 
-		bool NeedEndOfFile = true;
+		bool need_end_of_file = true;
 
-		std::size_t TokeIndex = 0;
+		std::size_t token_index = 0;
 
-		while (!IteStr.empty())
+		while (!ite_str.empty())
 		{
-			auto EncodeRe = EncoderT::EncodeOnceUnSafe(IteStr, OutputSpan);
-			auto Re = Pro.Consume(TemBuffer, TokeIndex);
-			IteStr = IteStr.subspan(EncodeRe.SourceSpace);
-			TokeIndex += EncodeRe.SourceSpace;
-			if (!Re)
+			auto info = encoder.Encode(ite_str, output_span);
+			auto re = processor.Consume(tem_input, token_index);
+			ite_str = ite_str.subspan(info.source_space);
+			token_index += info.source_space;
+			if (!re)
 			{
-				NeedEndOfFile = false;
+				need_end_of_file = false;
 				break;
 			}
 		}
 
-		if (NeedEndOfFile)
-			Pro.EndOfFile(TokeIndex);
+		if (need_end_of_file)
+			processor.EndOfFile(token_index);
 
-		return Pro.GetAccept();
+		return processor.GetAccept();
 	}
 
 	template<typename ProcessorT, typename CharT>
@@ -712,8 +713,8 @@ export namespace Potato::Reg
 
 		BuilderT Lex(Mask, IsRaw);
 
-		using EncodeT = Encode::CharEncoder<CharT, char32_t>;
-		using EncodeT = Encode::CharEncoder<CharT, char32_t>;
+		using EncodeT = Encode::StrEncoder<CharT, char32_t>;
+		//using EncodeT = Encode::CharEncoder<CharT, char32_t>;
 
 		auto IteSpan = std::span(Str);
 
@@ -721,13 +722,15 @@ export namespace Potato::Reg
 
 		std::span<char32_t> OutputSpan = { &TemBuffer, 1 };
 
+		EncodeT encoder;
+
 		while (!IteSpan.empty())
 		{
 			auto StartIndex = Str.size() - IteSpan.size();
-			auto EncodeRe = EncodeT::EncodeOnceUnSafe(IteSpan, OutputSpan);
-			if (!Lex.Consume(TemBuffer, { StartIndex, StartIndex + EncodeRe.SourceSpace }))
+			auto EncodeRe = encoder.Encode(IteSpan, OutputSpan);
+			if (!Lex.Consume(TemBuffer, { StartIndex, StartIndex + EncodeRe.source_space }))
 				throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {StartIndex, Str.size()} };
-			IteSpan = IteSpan.subspan(EncodeRe.SourceSpace);
+			IteSpan = IteSpan.subspan(EncodeRe.source_space);
 		}
 		if (!Lex.EndOfFile())
 			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {Str.size(), Str.size()} };

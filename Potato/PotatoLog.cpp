@@ -1,6 +1,7 @@
-#include <cassert>
 
 module PotatoLog;
+
+
 
 
 namespace Potato::Log
@@ -10,23 +11,21 @@ namespace Potato::Log
 
 	struct TerminalLogPrinter : public LogPrinter
 	{
-		std::mutex output_mutex;
 
 		void Print(std::wstring_view print)
 		{
-			std::array<char, 2048> output_buffer;
-
-			auto info = Encode::StrEncoder<wchar_t, char>::EncodeUnSafe(
-				{ print.data(), print.size() },
-				output_buffer
-			);
-
-			assert(info.SourceSpace == print.size());
-
-			std::cout << std::string_view{ output_buffer.data(), info.TargetSpace };
+			std::wcout << print;
 		}
 
+		TerminalLogPrinter()
+		{
+			constexpr char locale_name[] = "";
+			std::locale::global(std::locale(locale_name));
+			std::wcin.imbue(std::locale());
+			std::wcout.imbue(std::locale());
+		}
 	protected:
+
 
 		virtual void AddLogPrinterRef() const {}
 		virtual void SubLogPrinterRef() const {}

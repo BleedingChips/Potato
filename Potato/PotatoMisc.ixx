@@ -33,8 +33,8 @@ export namespace Potato::Misc
 
 		constexpr bool IsInclude(Type Value) const { return Begin()<= Value && Value < End(); }
 
-		template<typename ArrayType>
-		constexpr auto Slice(std::span<ArrayType> Span) const ->std::span<ArrayType>
+		template<typename ArrayType, std::size_t ArrayCount>
+		constexpr auto Slice(std::span<ArrayType, ArrayCount> Span) const ->std::span<ArrayType>
 		{
 			return Span.subspan(Begin(), Size());
 		};
