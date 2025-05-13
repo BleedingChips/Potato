@@ -78,19 +78,19 @@ namespace Potato::Document
 #endif
 	}
 
-	std::uint64_t BinaryStreamReader::GetStreamSize() const
+	std::size_t BinaryStreamReader::GetStreamSize() const
 	{
 #ifdef _WIN32
-		std::int64_t result = 0;
+		std::ptrdiff_t result = 0;
 		::GetFileSizeEx(file, reinterpret_cast<PLARGE_INTEGER>(&result));
-		return static_cast<std::uint64_t>(result);
+		return static_cast<std::size_t>(result);
 #endif
 	}
 
-	std::optional<std::int64_t> BinaryStreamReader::SetPointerOffsetFromBegin(std::int64_t offset)
+	std::optional<std::ptrdiff_t> BinaryStreamReader::SetPointerOffsetFromBegin(std::ptrdiff_t offset)
 	{
 #ifdef _WIN32
-		std::int64_t new_position = 0;
+		std::ptrdiff_t new_position = 0;
 		if(offset >= 0)
 		{
 			if(::SetFilePointerEx(
@@ -107,10 +107,10 @@ namespace Potato::Document
 #endif
 	}
 
-	std::optional<std::int64_t> BinaryStreamReader::SetPointerOffsetFromEnd(std::int64_t offset)
+	std::optional<std::ptrdiff_t> BinaryStreamReader::SetPointerOffsetFromEnd(std::ptrdiff_t offset)
 	{
 #ifdef _WIN32
-		std::int64_t new_position = 0;
+		std::ptrdiff_t new_position = 0;
 		if(::SetFilePointerEx(
 			file,
 			*reinterpret_cast<LARGE_INTEGER*>(&offset),
@@ -124,10 +124,10 @@ namespace Potato::Document
 #endif
 	}
 
-	std::optional<std::int64_t> BinaryStreamReader::SetPointerOffsetFromCurrent(std::int64_t offset)
+	std::optional<std::ptrdiff_t> BinaryStreamReader::SetPointerOffsetFromCurrent(std::ptrdiff_t offset)
 	{
 #ifdef _WIN32
-		std::int64_t new_position = 0;
+		std::ptrdiff_t new_position = 0;
 		if(::SetFilePointerEx(
 			file,
 			*reinterpret_cast<LARGE_INTEGER*>(&offset),
@@ -233,30 +233,35 @@ namespace Potato::Document
 			}
 			else {
 				std::array<unsigned char, 4> input = {0xCC, 0xCC, 0xCC, 0xCC};
-				auto re = reader.Read(std::span<std::byte>(reinterpret_cast<std::byte*>(input.data()), 4));
+				auto re = static_cast<std::int64_t>(reader.Read(std::span<std::byte>(reinterpret_cast<std::byte*>(input.data()), 4)));
 				if (std::memcmp(input.data(), utf8_bom, std::size(utf8_bom)) == 0)
 				{
 					bom = BomT::UTF8;
-					reader.SetPointerOffsetFromCurrent(std::size(utf8_bom) - std::max(re, std::size_t(utf8_bom)));
+					auto bom_offset = static_cast<std::int64_t>(std::size(utf8_bom));
+					reader.SetPointerOffsetFromCurrent(bom_offset - re);
 				}
 				if (input.size() >= std::size(utf16_le_bom) && std::memcmp(input.data(), utf16_le_bom, std::size(utf16_le_bom)) == 0)
 				{
 					bom = BomT::UTF16LE;
-					reader.SetPointerOffsetFromCurrent(std::size(utf16_le_bom) - std::max(re, std::size_t(utf16_le_bom)));
+					auto bom_offset = static_cast<std::int64_t>(std::size(utf16_le_bom));
+					reader.SetPointerOffsetFromCurrent(bom_offset - re);
 				}
 				if (input.size() >= std::size(utf32_le_bom) && std::memcmp(input.data(), utf32_le_bom, std::size(utf32_le_bom)) == 0)
 				{
 					bom = BomT::UTF32LE;
-					reader.SetPointerOffsetFromCurrent(std::size(utf32_le_bom) - std::max(re, std::size_t(utf32_le_bom)));
+					auto bom_offset = static_cast<std::int64_t>(std::size(utf32_le_bom));
+					reader.SetPointerOffsetFromCurrent(bom_offset - re);
 				}
 				if (input.size() >= std::size(utf16_be_bom) && std::memcmp(input.data(), utf16_be_bom, std::size(utf16_be_bom)) == 0)
 				{
 					bom = BomT::UTF16BE;
-					reader.SetPointerOffsetFromCurrent(std::size(utf16_be_bom) - std::max(re, std::size_t(utf16_be_bom)));
+					auto bom_offset = static_cast<std::int64_t>(std::size(utf16_be_bom));
+					reader.SetPointerOffsetFromCurrent(bom_offset - re);
 				}if (input.size() >= std::size(utf32_be_bom) && std::memcmp(input.data(), utf32_be_bom, std::size(utf32_be_bom)) == 0)
 				{
 					bom = BomT::UTF32BE;
-					reader.SetPointerOffsetFromCurrent(std::size(utf32_be_bom) - std::max(re, std::size_t(utf32_be_bom)));
+					auto bom_offset = static_cast<std::int64_t>(std::size(utf32_be_bom));
+					reader.SetPointerOffsetFromCurrent(bom_offset - re);
 				}
 				else {
 					bom = BomT::NoBom;

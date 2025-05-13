@@ -77,12 +77,12 @@ export namespace Potato::Document
 		BinaryStreamReader(BinaryStreamReader&& reader);
 		operator bool() const;
 		std::size_t Read(std::span<std::byte> output);
-		std::uint64_t GetStreamSize() const;
+		std::size_t GetStreamSize() const;
 		bool Open(std::filesystem::path const& path);
 		void Close();
-		std::optional<std::int64_t> SetPointerOffsetFromBegin(std::int64_t offset = 0);
-		std::optional<std::int64_t> SetPointerOffsetFromEnd(std::int64_t offset = 0);
-		std::optional<std::int64_t> SetPointerOffsetFromCurrent(std::int64_t offset = 0);
+		std::optional<std::ptrdiff_t> SetPointerOffsetFromBegin(std::ptrdiff_t offset = 0);
+		std::optional<std::ptrdiff_t> SetPointerOffsetFromEnd(std::ptrdiff_t offset = 0);
+		std::optional<std::ptrdiff_t> SetPointerOffsetFromCurrent(std::ptrdiff_t offset = 0);
 		~BinaryStreamReader();
 	protected:
 #ifdef _WIN32
@@ -147,11 +147,15 @@ export namespace Potato::Document
 			}
 			auto span = available_buffer_index.Slice(std::wstring_view{ temporary_buffer });
 			auto ite = std::find(span.begin(), span.end(), L'\n');
+			bool has_switch_line = false;
 			if (ite != span.end())
+			{
+				has_switch_line = true;
 				ite += 1;
+			}
 			out_iterator = std::copy(span.begin(), ite, out_iterator);
 			available_buffer_index = available_buffer_index.SubIndex(ite - span.begin());
-			if (ite != span.end())
+			if (has_switch_line)
 			{
 				return out_iterator;
 			}
