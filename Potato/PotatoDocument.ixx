@@ -129,7 +129,7 @@ export namespace Potato::Document
 		std::size_t FlushBuffer();
 		BinaryStreamReader& reader;
 		BomT bom = BomT::NoBom;
-		std::array<wchar_t, 256> temporary_buffer;
+		std::array<wchar_t, 2048> temporary_buffer;
 		Misc::IndexSpan<> available_buffer_index;
 	};
 
@@ -197,7 +197,7 @@ export namespace Potato::Document
 	protected:
 
 		std::size_t TryFlush();
-		std::array<wchar_t, 256> cache_buffer;
+		std::array<wchar_t, 4096> cache_buffer;
 		std::size_t buffer_space = 0;
 		BinaryStreamWriter& writer;
 		BomT bom = BomT::NoBom;

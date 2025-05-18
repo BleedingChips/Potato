@@ -308,7 +308,7 @@ namespace Potato::Document
 		case BomT::NoBom:
 		case BomT::UTF8:
 		{
-			std::array<char8_t, 512> tem_buffer;
+			std::array<char8_t, 4096> tem_buffer;
 			auto readed = reader.Read(std::span<std::byte>(reinterpret_cast<std::byte*>(tem_buffer.data()), tem_buffer.size()));
 			Encode::EncodeOption option;
 			option.untrusted = true;
@@ -373,7 +373,7 @@ namespace Potato::Document
 		case BomT::NoBom:
 		{
 			Encode::StrEncoder<wchar_t, char8_t> encoder;
-			std::array<char8_t, 256> tem_buffer;
+			std::array<char8_t, 4096 * 2> tem_buffer;
 			std::size_t total = 0;
 			std::wstring_view str{ cache_buffer.data(), buffer_space };
 			while (!str.empty())
