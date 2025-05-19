@@ -119,44 +119,37 @@ export namespace Potato::Document
 
 	struct DocumentReader
 	{
-		DocumentReader(BinaryStreamReader& reader, std::optional<BomT> force_bom = std::nullopt);
-		BomT GetBom() const { return bom; }
-		operator bool() const { return reader; }
+		DocumentReader(std::span<std::byte const> stream, std::optional<BomT> force_bom = std::nullopt);
+
+		std::optional<Encode::EncodeInfo> ReadSome(std::span<wchar_t> output, std::size_t max_character_count = std::numeric_limits<std::size_t>::max());
+
 		template<typename OutIterator>
-		OutIterator ReadLine(OutIterator out_iterator);
-		~DocumentReader();
+		OutIterator Read(OutIterator out_iterator, std::size_t max_character_count = std::numeric_limits<std::size_t>::max());
+		BomT GetBom() const { return bom; }
+		operator bool() const { return !stream.empty(); }
 	protected:
-		std::size_t FlushBuffer();
-		BinaryStreamReader& reader;
+
+		std::span<std::byte const> stream;
 		BomT bom = BomT::NoBom;
-		std::array<wchar_t, 2048> temporary_buffer;
-		Misc::IndexSpan<> available_buffer_index;
 	};
 
 	template<typename OutIterator>
-	OutIterator DocumentReader::ReadLine(OutIterator out_iterator)
+	OutIterator DocumentReader::Read(OutIterator out_iterator, std::size_t max_character)
 	{
+		std::array<wchar_t, 1024> tem_buffer;
 		while (true)
 		{
-			if (available_buffer_index.Size() == 0)
+			auto info = this->ReadSome(std::span(tem_buffer), max_character);
+			if (info.has_value())
 			{
-				if (FlushBuffer() == 0)
+				max_character -= info->character_count;
+				out_iterator = std::copy_n(tem_buffer.begin(), info->target_space, out_iterator);
+				if (!info->good)
 				{
 					return out_iterator;
 				}
 			}
-			auto span = available_buffer_index.Slice(std::wstring_view{ temporary_buffer });
-			auto ite = std::find(span.begin(), span.end(), L'\n');
-			bool has_switch_line = false;
-			if (ite != span.end())
-			{
-				has_switch_line = true;
-				ite += 1;
-			}
-			out_iterator = std::copy(span.begin(), ite, out_iterator);
-			available_buffer_index = available_buffer_index.SubIndex(ite - span.begin());
-			if (has_switch_line)
-			{
+			else {
 				return out_iterator;
 			}
 		}
@@ -164,42 +157,12 @@ export namespace Potato::Document
 
 	struct DocumentWriter
 	{
-		DocumentWriter(BinaryStreamWriter& writer, BomT force_bom = BomT::NoBom, bool append_bom = false);
+		DocumentWriter(BomT force_bom = BomT::NoBom, bool need_bom = true, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 		BomT GetBom() const { return bom; }
-		operator bool() const { return writer; }
-		void Write(std::wstring_view str);
-
-		struct OutIterator
-		{
-			using iterator_category = std::output_iterator_tag;
-			using value_type = void;
-			using pointer = void;
-			using reference = void;
-			using difference_type = ptrdiff_t;
-			using container_type = DocumentWriter;
-
-
-			OutIterator(DocumentWriter& writer) : writer(&writer) {}
-			OutIterator(OutIterator const&) = default;
-			OutIterator& operator*() { return *this; }
-			OutIterator& operator=(wchar_t const& symbol) { writer->Write({ &symbol, 1 }); return *this; }
-			OutIterator operator++(int) { return *this; }
-			OutIterator& operator++() { return *this; }
-			OutIterator& operator=(OutIterator const&) = default;
-		protected:
-			DocumentWriter* writer = nullptr;
-			friend struct DocumentWriter;
-		};
-
-		OutIterator AsOutputIterator() { return OutIterator{*this}; }
-		~DocumentWriter() { TryFlush(); }
-
+		std::size_t Write(std::wstring_view str);
+		bool FlushTo(BinaryStreamWriter& writer);
 	protected:
-
-		std::size_t TryFlush();
-		std::array<wchar_t, 4096> cache_buffer;
-		std::size_t buffer_space = 0;
-		BinaryStreamWriter& writer;
+		std::pmr::vector<std::byte> cache_buffer;
 		BomT bom = BomT::NoBom;
 	};
 }

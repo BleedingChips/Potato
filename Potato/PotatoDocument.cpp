@@ -222,184 +222,118 @@ namespace Potato::Document
 		Close();
 	}
 
-	DocumentReader::DocumentReader(BinaryStreamReader& reader, std::optional<BomT> force_bom)
-		:reader(reader)
+	DocumentReader::DocumentReader(std::span<std::byte const> in_stream, std::optional<BomT> force_bom)
+		:stream(in_stream)
 	{
-		if (reader)
+		if (force_bom.has_value())
 		{
-			if (force_bom.has_value())
+			bom = *force_bom;
+		}
+		else {
+			if (stream.size() >= std::size(utf8_bom) && std::memcmp(stream.data(), utf8_bom, std::size(utf8_bom)) == 0)
 			{
-				bom = *force_bom;
+				bom = BomT::UTF8;
+				stream = stream.subspan(std::size(utf8_bom));
+			}
+			else if (stream.size() >= std::size(utf16_le_bom) && std::memcmp(stream.data(), utf16_le_bom, std::size(utf16_le_bom)) == 0)
+			{
+				bom = BomT::UTF16LE;
+				stream = stream.subspan(std::size(utf16_le_bom));
+			}
+			else if (stream.size() >= std::size(utf32_le_bom) && std::memcmp(stream.data(), utf32_le_bom, std::size(utf32_le_bom)) == 0)
+			{
+				bom = BomT::UTF32LE;
+				stream = stream.subspan(std::size(utf32_le_bom));
+			}
+			else if (stream.size() >= std::size(utf16_be_bom) && std::memcmp(stream.data(), utf16_be_bom, std::size(utf16_be_bom)) == 0)
+			{
+				bom = BomT::UTF16BE;
+				stream = stream.subspan(std::size(utf16_be_bom));
+			}
+			else if (stream.size() >= std::size(utf32_be_bom) && std::memcmp(stream.data(), utf32_be_bom, std::size(utf32_be_bom)) == 0)
+			{
+				bom = BomT::UTF32BE;
+				stream = stream.subspan(std::size(utf32_be_bom));
 			}
 			else {
-				std::array<unsigned char, 4> input = {0xCC, 0xCC, 0xCC, 0xCC};
-				auto re = static_cast<std::int64_t>(reader.Read(std::span<std::byte>(reinterpret_cast<std::byte*>(input.data()), 4)));
-				if (std::memcmp(input.data(), utf8_bom, std::size(utf8_bom)) == 0)
-				{
-					bom = BomT::UTF8;
-					auto bom_offset = static_cast<std::int64_t>(std::size(utf8_bom));
-					reader.SetPointerOffsetFromCurrent(bom_offset - re);
-				}
-				if (input.size() >= std::size(utf16_le_bom) && std::memcmp(input.data(), utf16_le_bom, std::size(utf16_le_bom)) == 0)
-				{
-					bom = BomT::UTF16LE;
-					auto bom_offset = static_cast<std::int64_t>(std::size(utf16_le_bom));
-					reader.SetPointerOffsetFromCurrent(bom_offset - re);
-				}
-				if (input.size() >= std::size(utf32_le_bom) && std::memcmp(input.data(), utf32_le_bom, std::size(utf32_le_bom)) == 0)
-				{
-					bom = BomT::UTF32LE;
-					auto bom_offset = static_cast<std::int64_t>(std::size(utf32_le_bom));
-					reader.SetPointerOffsetFromCurrent(bom_offset - re);
-				}
-				if (input.size() >= std::size(utf16_be_bom) && std::memcmp(input.data(), utf16_be_bom, std::size(utf16_be_bom)) == 0)
-				{
-					bom = BomT::UTF16BE;
-					auto bom_offset = static_cast<std::int64_t>(std::size(utf16_be_bom));
-					reader.SetPointerOffsetFromCurrent(bom_offset - re);
-				}if (input.size() >= std::size(utf32_be_bom) && std::memcmp(input.data(), utf32_be_bom, std::size(utf32_be_bom)) == 0)
-				{
-					bom = BomT::UTF32BE;
-					auto bom_offset = static_cast<std::int64_t>(std::size(utf32_be_bom));
-					reader.SetPointerOffsetFromCurrent(bom_offset - re);
-				}
-				else {
-					bom = BomT::NoBom;
-					reader.SetPointerOffsetFromCurrent(-re);
-				}
+				bom = BomT::NoBom;
 			}
 		}
 	}
 
-	DocumentReader::~DocumentReader()
+	std::optional<Encode::EncodeInfo> DocumentReader::ReadSome(std::span<wchar_t> output, std::size_t max_character)
 	{
-		if (reader)
+		if (!stream.empty())
 		{
-			auto span = available_buffer_index.Slice(std::span(temporary_buffer));
-			Encode::EncodeOption option;
-			option.predict = true;
-			
 			switch (bom)
 			{
-			case Potato::Document::BomT::UTF8:
-			case Potato::Document::BomT::NoBom:
+			case BomT::NoBom:
+			case BomT::UTF8:
 			{
-				auto info = Encode::StrEncoder<wchar_t, char8_t>{}.Encode(span, {}, option);
-				reader.SetPointerOffsetFromCurrent(-info.target_space);
-			}
-				break;
-			default:
-				assert(false);
-				break;
-			}
-		}
-		
-	}
-
-	std::size_t DocumentReader::FlushBuffer()
-	{
-		if (available_buffer_index.Begin() > temporary_buffer.size() / 2)
-		{
-			std::memcpy(temporary_buffer.data(), temporary_buffer.data() + available_buffer_index.Begin(), available_buffer_index.Size() * sizeof(wchar_t));
-			available_buffer_index.WholeForward(available_buffer_index.Begin());
-		}
-		switch (bom)
-		{
-		case BomT::NoBom:
-		case BomT::UTF8:
-		{
-			std::array<char8_t, 4096> tem_buffer;
-			auto readed = reader.Read(std::span<std::byte>(reinterpret_cast<std::byte*>(tem_buffer.data()), tem_buffer.size()));
-			Encode::EncodeOption option;
-			option.untrusted = true;
-			auto read_span = std::span(tem_buffer).subspan(0, readed);
-			auto info = Encode::StrEncoder<char8_t, wchar_t>{}.Encode(read_span,
-				Misc::IndexSpan<>{available_buffer_index.End(), temporary_buffer.size()}.Slice(std::span(temporary_buffer)),
-				option
-			);
-			reader.SetPointerOffsetFromCurrent(info.source_space - readed);
-			available_buffer_index.BackwardEnd(info.target_space);
-			return info.character_count;
-		}
-		default:
-			return 0;
-		}
-		
-	}
-
-	DocumentWriter::DocumentWriter(BinaryStreamWriter& writer, BomT force_bom, bool append_bom)
-		: writer(writer), bom(force_bom)
-	{
-		if (append_bom && force_bom != BomT::NoBom && writer)
-		{
-			switch (force_bom)
-			{
-			case Potato::Document::BomT::UTF8:
-				writer.Write(reinterpret_cast<std::byte const*>(utf8_bom), std::size(utf8_bom) * sizeof(unsigned char));
-				break;
-			case Potato::Document::BomT::NoBom:
-				break;
-			default:
-				assert(false);
-				break;
-			}
-		}
-	}
-
-	void DocumentWriter::Write(std::wstring_view str)
-	{
-		while (!str.empty())
-		{
-			std::size_t readed_size = std::min( str.size(), cache_buffer.size() - buffer_space);
-			std::copy(
-				str.begin(),
-				str.begin() + readed_size,
-				cache_buffer.data() + buffer_space
-			);
-			buffer_space += readed_size;
-			str = str.substr(readed_size);
-			if (buffer_space >= cache_buffer.size())
-			{
-				TryFlush();
-			}
-		}
-	}
-
-	std::size_t DocumentWriter::TryFlush()
-	{
-		switch (bom)
-		{
-		case BomT::UTF8:
-		case BomT::NoBom:
-		{
-			Encode::StrEncoder<wchar_t, char8_t> encoder;
-			std::array<char8_t, 4096 * 2> tem_buffer;
-			std::size_t total = 0;
-			std::wstring_view str{ cache_buffer.data(), buffer_space };
-			while (!str.empty())
-			{
-				auto info = encoder.Encode(str, std::span(tem_buffer));
-				writer.Write(
-					reinterpret_cast<std::byte const*>(tem_buffer.data()),
-					info.target_space * sizeof(char8_t)
-				);
-				str = str.substr(info.source_space);
-				total += info.target_space;
-				if (info.source_space == 0)
-					break;
-			}
-			std::size_t readed = buffer_space - str.size();
-			if (readed * 2 >= buffer_space)
-			{
-				std::copy(cache_buffer.begin() + readed, cache_buffer.begin() + buffer_space, cache_buffer.data());
-				buffer_space = str.size();
+				Encode::StrEncoder<char8_t, wchar_t> encoder;
+				Encode::EncodeOption option;
+				option.max_character = max_character;
+				option.predict = false;
+				option.untrusted = true;
+				auto info = encoder.Encode(std::u8string_view{ reinterpret_cast<char8_t const*>(stream.data()), stream.size() / sizeof(char8_t) }, output, option);
+				stream = stream.subspan(info.source_space);
+				return info;
 			}
 			break;
+			}
 		}
-		default:
-			assert(false);
+		return std::nullopt;
+	}
+
+	DocumentWriter::DocumentWriter(BomT force_bom, bool need_bom, std::pmr::memory_resource* resource)
+		: cache_buffer(resource), bom(force_bom)
+	{
+		if (need_bom)
+		{
+			switch (bom)
+			{
+			case BomT::UTF8:
+			{
+				 auto bom_span = std::span<std::byte const>{reinterpret_cast<std::byte const*>(utf8_bom), std::size(utf8_bom) * sizeof(unsigned char)};
+				 cache_buffer.append_range(bom_span);
+			}
+				break;
+			}
+		}
+	}
+
+	std::size_t DocumentWriter::Write(std::wstring_view str)
+	{
+		switch (bom)
+		{
+		case BomT::NoBom:
+		case BomT::UTF8:
+		{
+			std::size_t total_count = 0;
+			std::array<char8_t, 1024> temp_buffer;
+			Encode::StrEncoder<wchar_t, char8_t> encoder;
+			while (!str.empty())
+			{
+				auto info = encoder.Encode(str, std::span(temp_buffer));
+				auto span = std::span<std::byte>(reinterpret_cast<std::byte*>(temp_buffer.data()), info.target_space * sizeof(char8_t));
+				cache_buffer.append_range(span);
+				total_count += info.target_space;
+				str = str.substr(info.source_space);
+				if (!info.good)
+					break;
+			}
+			return total_count;
+		}
 			break;
 		}
 		return 0;
+	}
+
+	bool DocumentWriter::FlushTo(BinaryStreamWriter& writer)
+	{
+		return writer.Write(
+			cache_buffer.data(),
+			cache_buffer.size()
+		);
 	}
 }
