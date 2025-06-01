@@ -87,13 +87,7 @@ export namespace Potato::TaskFlow
 
 	export struct Flow
 	{
-
-		struct NodeIndex
-		{
-			std::size_t index = std::numeric_limits<std::size_t>::max();
-			std::size_t version = 0;
-			std::strong_ordering operator<=>(const NodeIndex&) const = default;
-		};
+		using NodeIndex = Misc::VersionIndex;
 
 		NodeIndex AddNode(Node& node, Node::Parameter parameter = {});
 
@@ -301,6 +295,7 @@ export namespace Potato::TaskFlow
 		EncodedFlow::Category GetCategory() const { return category; }
 		Executor::PauseMountPoint MarkCurrentAsPause();
 		Node::Parameter& GetParameter() const { return parameter; }
+		Executor& GetExecutor() const { return executor; }
 
 		template<AcceptableTaskFlowNode NodeT, AcceptableTemplateOrder OrderT>
 		bool AddTemplateNode(NodeT&& node, OrderT&& order, TaskFlow::Node::Parameter t_parameter = {}, std::pmr::memory_resource* node_resource = std::pmr::get_default_resource(), std::pmr::memory_resource* resource = std::pmr::get_default_resource())

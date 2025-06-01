@@ -67,6 +67,15 @@ export namespace Potato::Misc
 		Type EndPoint;
 	};
 
+	struct VersionIndex
+	{
+		std::size_t index = std::numeric_limits<std::size_t>::max();
+		std::size_t version = 0;
+		operator bool() const { return index != std::numeric_limits<std::size_t>::max(); }
+		std::strong_ordering operator<=>(VersionIndex const&) const = default;
+		bool operator==(VersionIndex const&) const = default;
+	};
+
 	struct AtomicRefCount
 	{
 		bool TryAddRefNotFromZero() const noexcept;
