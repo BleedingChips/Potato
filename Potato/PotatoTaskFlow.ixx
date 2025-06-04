@@ -83,7 +83,7 @@ export namespace Potato::TaskFlow
 	concept AcceptableTaskFlowNode = std::is_invocable_v < Type, Task::Context&, Controller&> ;
 
 	template<typename Type>
-	concept AcceptableTemplateOrder = std::is_invocable_v<Type, Sequencer&>;
+	concept AcceptableTemplateOrder = std::is_invocable_r_v<bool, Type, Sequencer&>;
 
 	export struct Flow
 	{
