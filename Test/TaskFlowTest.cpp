@@ -86,6 +86,7 @@ int main()
 			});
 
 			controller.AddTemplateNode(
+				context,
 				[](Task::Context& context, TaskFlow::Controller& controller) 
 				{ 
 					Log::Log<L"Printer">(Log::Level::Log, L"template - {}", std::this_thread::get_id());

@@ -987,12 +987,12 @@ namespace Potato::TaskFlow
 		}
 	}
 
-	bool Executor::AddTemplateNode(TaskFlow::Node& target_node, TaskFlow::Node::Parameter parameter, bool(*func)(void* data, Sequencer& sequencer), void* append_data, std::size_t start_up_index, std::pmr::memory_resource* resource)
+	bool Executor::AddTemplateNode(Task::Context& context, TaskFlow::Node& target_node, TaskFlow::Node::Parameter parameter, bool(*func)(void* data, Sequencer& sequencer), void* append_data, std::pmr::memory_resource* resource)
 	{
 		std::lock_guard lg(execute_state_mutex);
 		std::shared_lock sl1(encoded_flow_mutex);
 		std::shared_lock sl2(template_node_mutex);
-		if(execute_state == ExecuteState::State::Ready || execute_state == ExecuteState::State::Running)
+		if(execute_state == ExecuteState::State::Running)
 		{
 
 			TemplateNode t_node;
@@ -1134,36 +1134,18 @@ namespace Potato::TaskFlow
 				}
 			}
 
-			if (!has_director)
-			{
-				if (start_up_index == std::numeric_limits<std::size_t>::max())
-				{
-					for (std::size_t index = 0; index < template_search.size(); ++index)
-					{
-						auto& ref = template_search[index];
-						if (ref.state == ExecuteState::State::Running || ref.state == ExecuteState::State::Pause)
-						{
-							start_up_index = index;
-							break;
-						}
-					}
-				}
-
-				if (start_up_index != std::numeric_limits<std::size_t>::max())
-				{
-					auto& ref = encoded_flow_execute_state[start_up_index];
-					ref.has_template_edges = true;
-					++template_in_degree;
-					template_edges.emplace_back(start_up_index, encoded_flow_execute_state.size());
-				}
-			}
-
 			ExecuteState state;
 			state.has_template_edges = template_need_template;
 			state.in_degree = template_in_degree;
 
 			encoded_flow_execute_state.emplace_back(state);
 			++execute_out_degree;
+
+			if (!has_director)
+			{
+				TryStartupNode_AssumedLocked(context, encoded_flow_execute_state.size() - 1);
+			}
+			return true;
 		}
 		return false;
 	}

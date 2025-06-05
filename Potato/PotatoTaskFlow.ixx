@@ -186,8 +186,7 @@ export namespace Potato::TaskFlow
 
 		template<AcceptableTaskFlowNode NodeT, AcceptableTemplateOrder OrderT>
 		bool AddTemplateNode(
-			NodeT&& node, OrderT&& order, TaskFlow::Node::Parameter parameter = {}, 
-			std::size_t startup_encoded_flow_index = std::numeric_limits<std::size_t>::max(),
+			Task::Context& context, NodeT&& node, OrderT&& order, TaskFlow::Node::Parameter parameter = {},
 			std::pmr::memory_resource* node_resource = std::pmr::get_default_resource(),
 			std::pmr::memory_resource* resource = std::pmr::get_default_resource()
 		)
@@ -195,24 +194,21 @@ export namespace Potato::TaskFlow
 			auto node_ptr = Flow::CreateNode(std::forward<NodeT>(node), node_resource);
 			if (node_ptr)
 			{
-				return this->AddTemplateNode(*node_ptr, std::forward<OrderT>(order), parameter, startup_encoded_flow_index, resource);
+				return this->AddTemplateNode(context, *node_ptr, std::forward<OrderT>(order), parameter, resource);
 			}
 			return false;
 		}
 
-
 		template<AcceptableTemplateOrder OrderT>
 		bool AddTemplateNode(
-			TaskFlow::Node& node, OrderT&& order, TaskFlow::Node::Parameter parameter = {}, 
-			std::size_t startup_encoded_flow_index = std::numeric_limits<std::size_t>::max(), 
+			Task::Context& context, TaskFlow::Node& node, OrderT&& order, TaskFlow::Node::Parameter parameter = {},
 			std::pmr::memory_resource* resource = std::pmr::get_default_resource()
 		)
 		{
-			return AddTemplateNode(node, parameter, [](void* data, Sequencer& sequencer) -> bool {
+			return AddTemplateNode(context, node, parameter, [](void* data, Sequencer& sequencer) -> bool {
 				return (*static_cast<OrderT*>(data))(sequencer);
-				}, &order, startup_encoded_flow_index, resource);
+				}, &order, resource);
 		}
-
 
 	protected:
 
@@ -232,7 +228,7 @@ export namespace Potato::TaskFlow
 		bool TerminalPauseMountPoint(std::size_t encoded_flow_index);
 		virtual void AddTaskFlowExecutorRef() const = 0;
 		virtual void SubTaskFlowExecutorRef() const = 0;
-		bool AddTemplateNode(TaskFlow::Node& target_node, TaskFlow::Node::Parameter parameter, bool (*func)(void* data, Sequencer& sequencer), void* append_data, std::size_t startup_index, std::pmr::memory_resource* resource);
+		bool AddTemplateNode(Task::Context& context, TaskFlow::Node& target_node, TaskFlow::Node::Parameter parameter, bool (*func)(void* data, Sequencer& sequencer), void* append_data, std::pmr::memory_resource* resource);
 
 		Executor(std::pmr::memory_resource* resource);
 
@@ -298,9 +294,9 @@ export namespace Potato::TaskFlow
 		Executor& GetExecutor() const { return executor; }
 
 		template<AcceptableTaskFlowNode NodeT, AcceptableTemplateOrder OrderT>
-		bool AddTemplateNode(NodeT&& node, OrderT&& order, TaskFlow::Node::Parameter t_parameter = {}, std::pmr::memory_resource* node_resource = std::pmr::get_default_resource(), std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+		bool AddTemplateNode(Task::Context& context, NodeT&& node, OrderT&& order, TaskFlow::Node::Parameter t_parameter = {}, std::pmr::memory_resource* node_resource = std::pmr::get_default_resource(), std::pmr::memory_resource* resource = std::pmr::get_default_resource())
 		{
-			return executor.AddTemplateNode(std::forward<NodeT>(node), std::forward<OrderT>(order), t_parameter, encoded_flow_index, node_resource, resource);
+			return executor.AddTemplateNode(context, std::forward<NodeT>(node), std::forward<OrderT>(order), t_parameter, node_resource, resource);
 		}
 
 	protected:
