@@ -625,6 +625,8 @@ namespace Potato::TaskFlow
 			Node::Parameter current_parameter = parameter;
 			{
 				std::lock_guard lg(execute_state_mutex);
+				assert(execute_state == ExecuteState::State::WaitingBegin);
+				execute_state = ExecuteState::State::Running;
 				current_parameter.custom_data = executor_parameter.custom_data;
 			}
 			BeginFlow(context, current_parameter);
@@ -635,6 +637,9 @@ namespace Potato::TaskFlow
 			}
 			if (execute_out_degree == 0)
 			{
+				std::lock_guard lg(execute_state_mutex);
+				assert(execute_state == ExecuteState::State::Running);
+				execute_state = ExecuteState::State::WaitingEnd;
 				index = std::numeric_limits<std::size_t>::max();
 			}else
 			{
@@ -647,6 +652,7 @@ namespace Potato::TaskFlow
 			Node::Parameter exe_parameter = parameter;
 			{
 				std::lock_guard lg(execute_state_mutex);
+				assert(execute_state == ExecuteState::State::WaitingEnd);
 				exe_parameter.custom_data = executor_parameter.custom_data;
 			}
 			EndFlow(context, exe_parameter);
@@ -782,6 +788,7 @@ namespace Potato::TaskFlow
 
 			if (execute_out_degree == 0)
 			{
+				execute_state = ExecuteState::State::WaitingEnd;
 				auto end_parameter = executor_parameter;
 				end_parameter.custom_data.data1 = std::numeric_limits<std::size_t>::max();
 				end_parameter.custom_data.data2 = 0;
@@ -794,7 +801,7 @@ namespace Potato::TaskFlow
 	{
 		if (execute_state == ExecuteState::State::Ready)
 		{
-			execute_state = ExecuteState::State::Running;
+			execute_state = ExecuteState::State::WaitingBegin;
 			executor_parameter = flow_parameter;
 			flow_parameter.custom_data.data1 = std::numeric_limits<std::size_t>::max() - 1;
 			if (context.Commit(*this, flow_parameter))

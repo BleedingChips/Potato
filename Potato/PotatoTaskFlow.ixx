@@ -243,6 +243,8 @@ export namespace Potato::TaskFlow
 			enum class State : std::uint8_t
 			{
 				Ready,
+				WaitingBegin,
+				WaitingEnd,
 				Running,
 				Pause,
 				Done,
