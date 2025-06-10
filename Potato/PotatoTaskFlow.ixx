@@ -83,7 +83,7 @@ export namespace Potato::TaskFlow
 	concept AcceptableTaskFlowNode = std::is_invocable_v < Type, Task::Context&, Controller&> ;
 
 	template<typename Type>
-	concept AcceptableTemplateOrder = std::is_invocable_r_v<bool, Type, Sequencer&>;
+	concept AcceptableTemporaryOrder = std::is_invocable_r_v<bool, Type, Sequencer&>;
 
 	export struct Flow
 	{
@@ -184,8 +184,8 @@ export namespace Potato::TaskFlow
 		bool UpdateState();
 		bool Commit(Task::Context& context, Task::Node::Parameter flow_parameter = {});
 
-		template<AcceptableTaskFlowNode NodeT, AcceptableTemplateOrder OrderT>
-		bool AddTemplateNode(
+		template<AcceptableTaskFlowNode NodeT, AcceptableTemporaryOrder OrderT>
+		bool AddTemporaryNode(
 			Task::Context& context, NodeT&& node, OrderT&& order, TaskFlow::Node::Parameter parameter = {},
 			std::pmr::memory_resource* node_resource = std::pmr::get_default_resource(),
 			std::pmr::memory_resource* resource = std::pmr::get_default_resource()
@@ -194,18 +194,18 @@ export namespace Potato::TaskFlow
 			auto node_ptr = Flow::CreateNode(std::forward<NodeT>(node), node_resource);
 			if (node_ptr)
 			{
-				return this->AddTemplateNode(context, *node_ptr, std::forward<OrderT>(order), parameter, resource);
+				return this->AddTemporaryNode(context, *node_ptr, std::forward<OrderT>(order), parameter, resource);
 			}
 			return false;
 		}
 
-		template<AcceptableTemplateOrder OrderT>
-		bool AddTemplateNode(
+		template<AcceptableTemporaryOrder OrderT>
+		bool AddTemporaryNode(
 			Task::Context& context, TaskFlow::Node& node, OrderT&& order, TaskFlow::Node::Parameter parameter = {},
 			std::pmr::memory_resource* resource = std::pmr::get_default_resource()
 		)
 		{
-			return AddTemplateNode(context, node, parameter, [](void* data, Sequencer& sequencer) -> bool {
+			return AddTemporaryNode(context, node, parameter, [](void* data, Sequencer& sequencer) -> bool {
 				return (*static_cast<OrderT*>(data))(sequencer);
 				}, &order, resource);
 		}
@@ -228,7 +228,7 @@ export namespace Potato::TaskFlow
 		bool TerminalPauseMountPoint(std::size_t encoded_flow_index);
 		virtual void AddTaskFlowExecutorRef() const = 0;
 		virtual void SubTaskFlowExecutorRef() const = 0;
-		bool AddTemplateNode(Task::Context& context, TaskFlow::Node& target_node, TaskFlow::Node::Parameter parameter, bool (*func)(void* data, Sequencer& sequencer), void* append_data, std::pmr::memory_resource* resource);
+		bool AddTemporaryNode(Task::Context& context, TaskFlow::Node& target_node, TaskFlow::Node::Parameter parameter, bool (*func)(void* data, Sequencer& sequencer), void* append_data, std::pmr::memory_resource* resource);
 
 		Executor(std::pmr::memory_resource* resource);
 
@@ -295,10 +295,10 @@ export namespace Potato::TaskFlow
 		Node::Parameter& GetParameter() const { return parameter; }
 		Executor& GetExecutor() const { return executor; }
 
-		template<AcceptableTaskFlowNode NodeT, AcceptableTemplateOrder OrderT>
-		bool AddTemplateNode(Task::Context& context, NodeT&& node, OrderT&& order, TaskFlow::Node::Parameter t_parameter = {}, std::pmr::memory_resource* node_resource = std::pmr::get_default_resource(), std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+		template<AcceptableTaskFlowNode NodeT, AcceptableTemporaryOrder OrderT>
+		bool AddTemporaryNode(Task::Context& context, NodeT&& node, OrderT&& order, TaskFlow::Node::Parameter t_parameter = {}, std::pmr::memory_resource* node_resource = std::pmr::get_default_resource(), std::pmr::memory_resource* resource = std::pmr::get_default_resource())
 		{
-			return executor.AddTemplateNode(context, std::forward<NodeT>(node), std::forward<OrderT>(order), t_parameter, node_resource, resource);
+			return executor.AddTemporaryNode(context, std::forward<NodeT>(node), std::forward<OrderT>(order), t_parameter, node_resource, resource);
 		}
 
 	protected:

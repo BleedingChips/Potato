@@ -994,7 +994,7 @@ namespace Potato::TaskFlow
 		}
 	}
 
-	bool Executor::AddTemplateNode(Task::Context& context, TaskFlow::Node& target_node, TaskFlow::Node::Parameter parameter, bool(*func)(void* data, Sequencer& sequencer), void* append_data, std::pmr::memory_resource* resource)
+	bool Executor::AddTemporaryNode(Task::Context& context, TaskFlow::Node& target_node, TaskFlow::Node::Parameter parameter, bool(*func)(void* data, Sequencer& sequencer), void* append_data, std::pmr::memory_resource* resource)
 	{
 		std::lock_guard lg(execute_state_mutex);
 		std::shared_lock sl1(encoded_flow_mutex);

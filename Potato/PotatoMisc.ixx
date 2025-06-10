@@ -74,6 +74,7 @@ export namespace Potato::Misc
 		explicit operator bool() const { return index != std::numeric_limits<std::size_t>::max(); }
 		std::strong_ordering operator<=>(VersionIndex const&) const = default;
 		bool operator==(VersionIndex const&) const = default;
+		VersionIndex& operator=(VersionIndex const&) = default;
 	};
 
 	struct AtomicRefCount
