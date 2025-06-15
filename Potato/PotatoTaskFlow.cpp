@@ -1016,7 +1016,7 @@ namespace Potato::TaskFlow
 	{
 		std::lock_guard lg(execute_state_mutex);
 		std::shared_lock sl1(encoded_flow_mutex);
-		std::shared_lock sl2(template_node_mutex);
+
 		if(execute_state == ExecuteState::State::Running)
 		{
 
@@ -1024,8 +1024,12 @@ namespace Potato::TaskFlow
 			t_node.node = &target_node;
 			t_node.parameter = parameter;
 
-			template_node.emplace_back(std::move(t_node));
+			{
+				std::lock_guard sl2(template_node_mutex);
+				template_node.emplace_back(std::move(t_node));
+			}
 			++current_template_node_count;
+			
 
 			std::size_t template_in_degree = 0;
 			bool template_need_template = false;
@@ -1074,10 +1078,12 @@ namespace Potato::TaskFlow
 							tar.need_mutex = func(append_data, sequencer);
 						}
 
+						assert(index < encoded_flow_execute_state.size());
 						bool has_template_edge = encoded_flow_execute_state[index].has_template_edges;
 
 						if (index < encoded_flow_node_count_for_execute)
 						{
+							assert(index < encoded_flow.encode_infos.size());
 							auto& ref = encoded_flow.encode_infos[index];
 							auto dir = ref.direct_edges.Slice(std::span(encoded_flow.edges));
 
@@ -1085,16 +1091,24 @@ namespace Potato::TaskFlow
 							{
 								for (auto ite : dir)
 								{
-									auto& search = template_search[ite];
-									search.reached = true;
+									if (ite != std::numeric_limits<std::size_t>::max())
+									{
+										assert(ite < template_search.size());
+										auto& search = template_search[ite];
+										search.reached = true;
+									}
 								}
 							}
 							else {
 								for (auto ite : dir)
 								{
-									auto& search = template_search[ite];
-									assert(search.in_degree > 0);
-									search.in_degree -= 1;
+									if (ite != std::numeric_limits<std::size_t>::max())
+									{
+										assert(ite < template_search.size());
+										auto& search = template_search[ite];
+										assert(search.in_degree > 0);
+										search.in_degree -= 1;
+									}
 								}
 							}
 						}
@@ -1111,6 +1125,7 @@ namespace Potato::TaskFlow
 								{
 									if (ite.from == index)
 									{
+										assert(ite.to < template_search.size());
 										auto& search = template_search[ite.to];
 										search.reached = true;
 									}
@@ -1121,6 +1136,7 @@ namespace Potato::TaskFlow
 								{
 									if (ite.from == index)
 									{
+										assert(ite.to < template_search.size());
 										auto& search = template_search[ite.to];
 										assert(search.in_degree > 0);
 										search.in_degree -= 1;

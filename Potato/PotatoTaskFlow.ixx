@@ -301,6 +301,12 @@ export namespace Potato::TaskFlow
 			return executor.AddTemporaryNode(context, std::forward<NodeT>(node), std::forward<OrderT>(order), t_parameter, node_resource, resource);
 		}
 
+		template<AcceptableTemporaryOrder OrderT>
+		bool AddTemporaryNode(Task::Context& context, TaskFlow::Node& node, OrderT&& order, TaskFlow::Node::Parameter t_parameter = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+		{
+			return executor.AddTemporaryNode(context, node, std::forward<OrderT>(order), t_parameter, resource);
+		}
+
 	protected:
 
 		Controller(Executor& exe, Node::Parameter& parameter, std::size_t encoded_flow_index)
