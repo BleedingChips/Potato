@@ -585,6 +585,25 @@ namespace Potato::TaskFlow
 			encoded_flow_out_degree = *encode_result;
 			encoded_flow.encode_infos.erase(encoded_flow.encode_infos.begin(), encoded_flow.encode_infos.begin() + old_flow_node_count);
 			encoded_flow.edges.erase(encoded_flow.edges.begin(), encoded_flow.edges.begin() + old_flow_edge_count);
+			
+			if (old_flow_edge_count != 0)
+			{
+				for (auto& ite : encoded_flow.encode_infos)
+				{
+					ite.direct_edges.WholeForward(old_flow_edge_count);
+					ite.mutex_edges.WholeForward(old_flow_edge_count);
+				}
+			}
+
+			if (old_flow_node_count != 0)
+			{
+				for (auto& ite : encoded_flow.edges)
+				{
+					if (ite != std::numeric_limits<std::size_t>::max())
+						ite -= old_flow_node_count;
+				}
+			}
+
 			execute_state = ExecuteState::State::Ready;
 
 			execute_out_degree = encoded_flow_out_degree;
@@ -603,7 +622,6 @@ namespace Potato::TaskFlow
 
 			std::lock_guard lg3(template_node_mutex);
 			template_node.clear();
-
 
 			return true;
 		}
