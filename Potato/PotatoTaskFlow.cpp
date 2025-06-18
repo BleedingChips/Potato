@@ -1206,7 +1206,8 @@ namespace Potato::TaskFlow
 		}
 		else {
 			std::shared_lock sl(executor.template_node_mutex);
-			return executor.template_node[index].parameter;
+			assert(index - executor.encoded_flow_node_count_for_execute < executor.template_node.size());
+			return executor.template_node[index - executor.encoded_flow_node_count_for_execute].parameter;
 		}
 	}
 	Misc::IndexSpan<> Sequencer::GetSubFlow(std::size_t index) const
