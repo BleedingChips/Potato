@@ -1040,6 +1040,7 @@ namespace Potato::TaskFlow
 				std::uint8_t reached : 1 = false;
 				std::uint8_t need_mutex : 1 = false;
 				std::size_t in_degree = 0;
+				std::size_t depth = 0;
 			};
 
 			std::pmr::vector<TemplateSearch> template_search{ resource };
@@ -1074,7 +1075,7 @@ namespace Potato::TaskFlow
 
 						if (func != nullptr)
 						{
-							Sequencer sequencer{*this, index };
+							Sequencer sequencer{*this, index, tar.depth };
 							tar.need_mutex = func(append_data, sequencer);
 						}
 
@@ -1108,6 +1109,10 @@ namespace Potato::TaskFlow
 										auto& search = template_search[ite];
 										assert(search.in_degree > 0);
 										search.in_degree -= 1;
+										if (search.in_degree == 0)
+										{
+											search.depth = tar.depth + 1;
+										}
 									}
 								}
 							}

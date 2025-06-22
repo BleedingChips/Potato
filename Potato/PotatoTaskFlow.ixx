@@ -329,20 +329,22 @@ export namespace Potato::TaskFlow
 		std::optional<Node::Parameter> GetParameter(std::size_t index) const;
 		Misc::IndexSpan<> GetSubFlow(std::size_t index) const;
 		Misc::IndexSpan<> GetCurrentSubFlow() const { return GetSubFlow(GetCurrentIndex()); }
+		std::size_t GetSearchDepth() const { return searche_depth; }
 
 
 		std::size_t GetCurrentIndex() const { return current_encoded_node_index; };
 
 	protected:
 
-		Sequencer(Executor const& executor, std::size_t current_encoded_node_index)
-			: executor(executor), current_encoded_node_index(current_encoded_node_index)
+		Sequencer(Executor const& executor, std::size_t current_encoded_node_index, std::size_t searche_depth)
+			: executor(executor), current_encoded_node_index(current_encoded_node_index), searche_depth(searche_depth)
 		{
 
 		}
 
 		Executor const& executor;
 		std::size_t current_encoded_node_index;
+		std::size_t searche_depth;
 
 		friend struct Executor;
 	};

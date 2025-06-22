@@ -85,7 +85,7 @@ int main()
 					mp.Continue(context);
 			});
 
-			controller.AddTemplateNode(
+			controller.AddTemporaryNode(
 				context,
 				[](Task::Context& context, TaskFlow::Controller& controller) 
 				{ 
