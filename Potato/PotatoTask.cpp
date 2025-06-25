@@ -8,9 +8,8 @@ namespace Potato::Task
 {
 
 	Context::Context(Config config)
-		:delay_node_sequencer(config.resource), node_sequencer(config.resource), thread_infos(config.resource), startup_acceptable_mask(config.startup_acceptable_mask)
+		:delay_node_sequencer(config.resource), node_sequencer(config.resource), thread_infos(config.resource)
 	{
-		acceptable_mask = startup_acceptable_mask;
 	}
 
 	std::optional<std::size_t> Context::CreateThreads(std::size_t thread_count, ThreadProperty thread_property)
@@ -29,7 +28,6 @@ namespace Potato::Task
 					ThreadExecute(thread_property, token);
 				} };
 			auto thread_id = current_thread.get_id();
-			acceptable_mask |= thread_property.acceptable_mask;
 			thread_infos.emplace_back(std::move(current_thread), std::move(thread_id), std::move(thread_property));
 		}
 		return thread_infos.size();
@@ -38,7 +36,7 @@ namespace Potato::Task
 	bool Context::Commit(Node& node, Node::Parameter parameter)
 	{
 		std::shared_lock sl(infos_mutex);
-		if (current_state != Status::Normal || (acceptable_mask & parameter.acceptable_mask) == 0)
+		if (current_state != Status::Normal)
 		{
 			return false;
 		}
@@ -226,12 +224,12 @@ namespace Potato::Task
 		}
 	}
 
-	void Context::ExecuteContextThreadUntilNoExistTask()
+	void Context::ExecuteContextThreadUntilNoExistTask(Potato::Task::ThreadProperty property = {})
 	{
 		ExecuteResult result;
 		while (true)
 		{
-			ExecuteContextThreadOnce(result, { startup_acceptable_mask });
+			ExecuteContextThreadOnce(result, property);
 			if (result.exist_delay_node.has_value() && *result.exist_delay_node == 0 && result.exist_node ==0)
 			{
 				break;

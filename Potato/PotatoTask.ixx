@@ -89,7 +89,6 @@ export namespace Potato::Task
 
 		struct Config
 		{
-			std::size_t startup_acceptable_mask = std::numeric_limits<std::size_t>::max();
 			std::pmr::memory_resource* resource = std::pmr::get_default_resource();
 		};
 
@@ -108,7 +107,7 @@ export namespace Potato::Task
 		void ExecuteContextThreadOnce(ExecuteResult& result, ThreadProperty thread_property, TimeT::time_point now = TimeT::now());
 		void FinishExecuteContext(ExecuteResult& result);
 
-		void ExecuteContextThreadUntilNoExistTask();
+		void ExecuteContextThreadUntilNoExistTask(ThreadProperty thread_property);
 
 		bool Commit(Node& node, Node::Parameter parameter = {});
 
@@ -171,10 +170,7 @@ export namespace Potato::Task
 
 		std::shared_mutex infos_mutex;
 		Status current_state = Status::Normal;
-		std::size_t acceptable_mask = 0;
 		std::pmr::vector<ThreadInfo> thread_infos;
-
-		std::size_t const startup_acceptable_mask = 0;
 
 	private:
 
