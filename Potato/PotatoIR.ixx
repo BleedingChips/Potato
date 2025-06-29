@@ -254,7 +254,7 @@ export namespace Potato::IR
 		virtual bool DefaultConstruction(void* target, std::size_t array_count = 1) const override
 		{
 			assert(target != nullptr);
-			if constexpr (std::is_constructible_v<AtomicType, AtomicType const&>)
+			if constexpr (std::is_constructible_v<AtomicType>)
 			{
 				AtomicType* tar = static_cast<AtomicType*>(target);
 				for(std::size_t i = 0; i < array_count; ++i)
@@ -262,8 +262,9 @@ export namespace Potato::IR
 					new (tar + i) AtomicType{};
 				}
 				return true;
-			}else
-			{
+			}
+			else {
+				assert(false);
 				return false;
 			}
 		}
@@ -281,7 +282,10 @@ export namespace Potato::IR
 				}
 				return true;
 			}
-			return false;
+			else {
+				assert(false);
+				return false;
+			}
 		}
 
 		virtual bool MoveConstruction(void* target, void* source, std::size_t array_count = 1) const override
@@ -297,7 +301,10 @@ export namespace Potato::IR
 				}
 				return true;
 			}
-			return false;
+			else {
+				assert(false);
+				return false;
+			}
 		}
 
 		virtual bool CopyAssigned(void* target, void* source, std::size_t array_count = 1) const override
@@ -313,7 +320,10 @@ export namespace Potato::IR
 				}
 				return true;
 			}
-			return false;
+			else {
+				assert(false);
+				return false;
+			}
 		}
 
 		virtual bool MoveAssigned(void* target, void* source, std::size_t array_count = 1) const override
@@ -329,7 +339,10 @@ export namespace Potato::IR
 				}
 				return true;
 			}
-			return false;
+			else {
+				assert(false);
+				return false;
+			}
 		}
 
 		std::size_t GetHashCode() const override { return typeid(AtomicType).hash_code(); }

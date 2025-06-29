@@ -587,5 +587,4 @@ export namespace Potato::TMP
 
 	template<std::size_t N>
 	TypeString(const char(&str)[N])-> TypeString<char, N>;
-
 }

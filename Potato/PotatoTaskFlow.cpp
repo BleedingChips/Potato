@@ -648,14 +648,13 @@ namespace Potato::TaskFlow
 				current_parameter.custom_data = executor_parameter.custom_data;
 			}
 			BeginFlow(context, current_parameter);
-			std::shared_lock sl(encoded_flow_mutex);
+			std::lock_guard sl(execute_state_mutex);
 			for (std::size_t index = 0; index < encoded_flow_execute_state.size(); ++index)
 			{
 				TryStartupNode_AssumedLocked(context, index);
 			}
 			if (execute_out_degree == 0)
 			{
-				std::lock_guard lg(execute_state_mutex);
 				assert(execute_state == ExecuteState::State::Running);
 				execute_state = ExecuteState::State::WaitingEnd;
 				index = std::numeric_limits<std::size_t>::max();

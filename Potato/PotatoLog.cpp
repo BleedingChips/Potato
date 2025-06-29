@@ -19,6 +19,7 @@ namespace Potato::Log
 
 		TerminalLogPrinter()
 		{
+			std::ios::sync_with_stdio(false);
 			constexpr char locale_name[] = "";
 			std::locale::global(std::locale(locale_name));
 			std::wcin.imbue(std::locale());
