@@ -159,6 +159,7 @@ export namespace Potato::IR
 	{
 
 		using Ptr = Pointer::IntrusivePtr<StructLayoutObject>;
+		using ConstPtr = Pointer::IntrusivePtr<StructLayoutObject const>;
 
 
 		static Ptr DefaultConstruct(StructLayout::Ptr layout, std::size_t array_count = 1,  std::pmr::memory_resource* resource = std::pmr::get_default_resource());
