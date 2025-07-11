@@ -145,6 +145,8 @@ export namespace Potato::IR
 		}
 		virtual std::size_t GetHashCode() const = 0;
 		virtual ~StructLayout() = default;
+		template<typename Type>
+		bool IsStatic() const { return operator==(*GetStatic<Type>()); }
 		
 		bool operator== (StructLayout const& other) const;
 
@@ -174,6 +176,11 @@ export namespace Potato::IR
 		std::size_t GetArrayCount() const { return array_count; }
 		void* GetData() const { return start; }
 		void* GetData(std::size_t index) const { return static_cast<std::byte*>(start) + layout->GetLayout().size * index; }
+		
+		template<typename Type>
+		Type* GetStaticCastData() const { return static_cast<Type*>(GetData()); }
+		template<typename Type>
+		Type* GetStaticCastData(std::size_t index) const { return static_cast<Type*>(GetData(index)); }
 
 	protected:
 
