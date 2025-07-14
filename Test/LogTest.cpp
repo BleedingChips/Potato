@@ -10,7 +10,7 @@ int main()
 {
 
 
-	auto L = std::format(L"{} {} {}", Potato::Log::Level::Log, 122345, L"ÎÒÈ¥ÄãµÄ");
+	auto L = std::format(L"{} {} {}", Potato::Log::Level::Log, 122345, L"è¾“å‡ºæµ‹è¯•");
 
 	//std::wcout << L << std::endl;
 	Log<L"Fuck">(Level::Log, L"1234 {}", 1);

@@ -224,7 +224,7 @@ namespace Potato::Task
 		}
 	}
 
-	void Context::ExecuteContextThreadUntilNoExistTask(Potato::Task::ThreadProperty property = {})
+	void Context::ExecuteContextThreadUntilNoExistTask(Potato::Task::ThreadProperty property)
 	{
 		ExecuteResult result;
 		while (true)

@@ -279,6 +279,7 @@ namespace Potato::Document
 				stream = stream.subspan(info.source_space);
 				return info;
 			}
+			default:
 			break;
 			}
 		}
@@ -296,7 +297,9 @@ namespace Potato::Document
 			{
 				 auto bom_span = std::span<std::byte const>{reinterpret_cast<std::byte const*>(utf8_bom), std::size(utf8_bom) * sizeof(unsigned char)};
 				 cache_buffer.append_range(bom_span);
+				 break;
 			}
+			default:
 				break;
 			}
 		}
@@ -324,6 +327,7 @@ namespace Potato::Document
 			}
 			return total_count;
 		}
+		default:
 			break;
 		}
 		return 0;

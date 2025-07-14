@@ -277,7 +277,7 @@ export namespace Potato::SLRX
 		std::size_t StartupTokenIndex;
 	};
 
-	export struct LRXProcessor;
+	struct LRXProcessor;
 
 	struct LRX
 	{
@@ -429,23 +429,23 @@ export namespace Potato::SLRX
 
 	struct LRXBinaryTable
 	{
-		LRXBinaryTable(LRXBinaryTable const& Input) : Datas(Input.Datas) { Wrapper = LRXBinaryTableWrapper{ Datas }; }
-		LRXBinaryTable(LRXBinaryTable&& Input) : Datas(std::move(Input.Datas)) { Wrapper = LRXBinaryTableWrapper{ Datas }; Input.Wrapper = {}; }
+		LRXBinaryTable(LRXBinaryTable const& Input) : Datas(Input.Datas) { Wrapper = LRXBinaryTableWrapper{ std::span{Datas.data(), Datas.size()} }; }
+		LRXBinaryTable(LRXBinaryTable&& Input) : Datas(std::move(Input.Datas)) { Wrapper = LRXBinaryTableWrapper{ std::span{Datas.data(), Datas.size()}}; Input.Wrapper = {}; }
 		LRXBinaryTable& operator=(LRXBinaryTable const& Input) {
 			Datas = Input.Datas;
-			Wrapper = LRXBinaryTableWrapper{ Datas };
+			Wrapper = LRXBinaryTableWrapper{ std::span<LRXBinaryTableWrapper::StandardT const>(Datas.data(), Datas.size())};
 			return *this;
 		}
 		LRXBinaryTable& operator=(LRXBinaryTable&& Input) noexcept {
 			Datas = std::move(Input.Datas);
-			Wrapper = LRXBinaryTableWrapper{ Datas };
+			Wrapper = LRXBinaryTableWrapper{ std::span<LRXBinaryTableWrapper::StandardT const>(Datas.data(), Datas.size()) };
 			return *this;
 		}
 		LRXBinaryTable() = default;
 		LRXBinaryTable(SLRX::LRX const& Table)
 		{
 			Datas = LRXBinaryTableWrapper::Create(Table);
-			Wrapper = LRXBinaryTableWrapper(Datas);
+			Wrapper = LRXBinaryTableWrapper(std::span<LRXBinaryTableWrapper::StandardT const>(Datas.data(), Datas.size()));
 		}
 		LRXBinaryTable(Symbol StartSymbol, std::vector<ProductionBuilder> Production, std::vector<OpePriority> Priority, std::size_t MaxForwardDetected)
 			: LRXBinaryTable(SLRX::LRX{ StartSymbol, std::move(Production), std::move(Priority), MaxForwardDetected })
@@ -463,7 +463,7 @@ export namespace Potato::SLRX
 	};
 
 
-	export struct LRXProcessor
+	 struct LRXProcessor
 	{
 
 		bool Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, std::any AppendInfo);

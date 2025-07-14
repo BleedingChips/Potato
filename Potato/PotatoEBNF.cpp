@@ -6,7 +6,6 @@ module PotatoEBNF;
 
 namespace Potato::EBNF
 {
-
 	using namespace Exception;
 
 	static constexpr std::size_t SmallBrace = 1;

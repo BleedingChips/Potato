@@ -12,15 +12,14 @@ import PotatoSLRX;
 
 export namespace Potato::Reg
 {
-
 	using Interval = Misc::IntervalT<char32_t>;
 
 	inline constexpr char32_t MaxChar() { return 0x110000; };
 	inline constexpr char32_t EndOfFile() { return 0; }
 
-	export struct DfaBinaryTableWrapper;
-	export struct Dfa;
-	export struct DfaProcessor;
+	struct DfaBinaryTableWrapper;
+	struct Dfa;
+	struct DfaProcessor;
 
 	struct Nfa
 	{
@@ -262,7 +261,7 @@ export namespace Potato::Reg
 
 	struct DfaProcessor;
 
-	export struct Dfa
+	struct Dfa
 	{
 
 		enum class FormatE
@@ -402,11 +401,10 @@ export namespace Potato::Reg
 		
 		friend struct DfaProcessor;
 		friend struct DfaBinaryTableWrapper;
-		friend struct DfaBinaryTableProcessor;
 	};
 
 
-	export struct DfaBinaryTableWrapper
+	struct DfaBinaryTableWrapper
 	{
 		using StandardT = uint32_t;
 		using HalfStandardT = uint16_t;
@@ -469,7 +467,6 @@ export namespace Potato::Reg
 
 		std::span<StandardT const> Wrapper;
 
-		friend struct DfaBinaryTableProcessor;
 		friend struct DfaProcessor;
 	};
 
@@ -507,7 +504,7 @@ export namespace Potato::Reg
 		return CreateDfaBinaryTable(Dfa{ Format, std::basic_string_view<CharT>{Str}, IsRaw, Mask }, std::allocator<DfaBinaryTableWrapper::StandardT>{});
 	}
 	
-	export struct DfaProcessor
+	struct DfaProcessor
 	{
 
 		DfaProcessor(DfaProcessor const&) = default;
@@ -595,14 +592,6 @@ export namespace Potato::Reg
 		Process(Table, std::basic_string_view<CharT>(Str), std::forward<Func>(Fun));
 	}
 
-	template<typename CharT, typename CharTrais, typename Func>
-	void Process(DfaBinaryTableWrapper const& Table, std::basic_string_view<CharT, CharTrais> Str, Func&& Fun)
-	{
-		DfaBinaryTableProcessor Processor;
-		Processor.SetObserverTable(Table);
-		Fun(Process(Processor, Str));
-	}
-
 	struct MulityRegCreater
 	{
 		template<typename CharT, typename CharTraits>
@@ -632,7 +621,7 @@ export namespace Potato::Reg
 		std::optional<Nfa> Table;
 	};
 
-	export namespace Exception
+	namespace Exception
 	{
 		struct Interface : public std::exception
 		{
@@ -669,7 +658,6 @@ export namespace Potato::Reg
 			UnaccaptableRegex(TypeT Type, std::wstring_view Str, Misc::IndexSpan<> BadIndex);
 			UnaccaptableRegex(TypeT Type, std::u16string_view Str, Misc::IndexSpan<> BadIndex);
 			UnaccaptableRegex(TypeT Type, std::u32string_view Str, Misc::IndexSpan<> BadIndex);
-			UnaccaptableRegex() = default;
 			UnaccaptableRegex(UnaccaptableRegex const&) = default;
 			virtual char const* what() const override;
 		};

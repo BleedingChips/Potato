@@ -16,8 +16,8 @@ export namespace Potato::Task
 
 	using TimeT = std::chrono::steady_clock;
 
-	export struct Context;
-	export struct Node;
+	 struct Context;
+	 struct Node;
 
 	enum class Status : std::size_t
 	{
@@ -40,7 +40,7 @@ export namespace Potato::Task
 		std::size_t data2 = 0;
 	};
 
-	export struct Node
+	struct Node
 	{
 
 		struct Wrapper
@@ -80,17 +80,18 @@ export namespace Potato::Task
 		std::size_t acceptable_mask = std::numeric_limits<std::size_t>::max();
 	};
 
+	struct ContextConfig
+	{
+		std::pmr::memory_resource* resource = std::pmr::get_default_resource();
+	};
 
-	export struct Context
+	struct Context
 	{
 		static std::size_t GetSuggestThreadCount() { return std::thread::hardware_concurrency(); }
 
 		std::optional<std::size_t> CreateThreads(std::size_t thread_count = 1, ThreadProperty thread_property = {});
 
-		struct Config
-		{
-			std::pmr::memory_resource* resource = std::pmr::get_default_resource();
-		};
+		using Config = ContextConfig;
 
 		Context(Config config = {});
 		~Context();
@@ -107,7 +108,7 @@ export namespace Potato::Task
 		void ExecuteContextThreadOnce(ExecuteResult& result, ThreadProperty thread_property, TimeT::time_point now = TimeT::now());
 		void FinishExecuteContext(ExecuteResult& result);
 
-		void ExecuteContextThreadUntilNoExistTask(ThreadProperty thread_property);
+		void ExecuteContextThreadUntilNoExistTask(ThreadProperty thread_property = {});
 
 		bool Commit(Node& node, Node::Parameter parameter = {});
 

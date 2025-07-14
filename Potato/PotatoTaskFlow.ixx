@@ -21,12 +21,12 @@ export namespace Potato::TaskFlow
 	using Graph::EdgeOptimize;
 	using Graph::GraphEdge;
 
-	export struct Flow;
-	export struct Executor;
-	export struct Controller;
-	export struct Sequencer;
+	struct Flow;
+	struct Executor;
+	struct Controller;
+	struct Sequencer;
 
-	export struct Node
+	struct Node
 	{
 		struct Wrapper
 		{
@@ -85,7 +85,7 @@ export namespace Potato::TaskFlow
 	template<typename Type>
 	concept AcceptableTemporaryOrder = std::is_invocable_r_v<bool, Type, Sequencer&>;
 
-	export struct Flow
+	struct Flow
 	{
 		using NodeIndex = Misc::VersionIndex;
 
@@ -148,7 +148,7 @@ export namespace Potato::TaskFlow
 		friend struct Executor;
 	};
 
-	export struct Executor : protected Task::Node
+	struct Executor : protected Task::Node
 	{
 
 		struct Wrapper
@@ -287,7 +287,7 @@ export namespace Potato::TaskFlow
 		friend struct Sequencer;
 	};
 
-	export struct Controller
+	struct Controller
 	{
 
 		EncodedFlow::Category GetCategory() const { return category; }

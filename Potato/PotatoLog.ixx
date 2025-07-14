@@ -18,7 +18,7 @@ export namespace Potato::Log
 	};
 
 	template<std::size_t N>
-	LogCategory(const wchar_t(&str)[N]) -> Potato::Log::LogCategory<N>;
+	LogCategory(const wchar_t(&str)[N]) -> LogCategory<N>;
 }
 
 export namespace std

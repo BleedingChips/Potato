@@ -1,5 +1,6 @@
 import PotatoIR;
 import std;
+import Potato;
 
 
 struct K
@@ -12,21 +13,16 @@ struct K
 using namespace Potato;
 using namespace Potato::IR;
 
-namespace IOP
-{
-	struct ÄãºÃ
-	{
-		
-	};
-}
 
+struct test_class{
 
+};
 
 int main()
 {
 
 
-	auto j = StaticAtomicStructLayout<IOP::ÄãºÃ>::Create();
+	auto j = StructLayout::GetStatic<test_class>();
 	auto n = j->GetName();
 
 	std::size_t u = 100;

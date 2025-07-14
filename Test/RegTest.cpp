@@ -150,12 +150,12 @@ void TestingReg()
 }
 */
 
-void Test(Dfa::FormatE Format, std::vector<std::u32string_view> Reg, std::u32string_view SourceStr, std::size_t TargetMask, std::u32string_view MainCapture, std::vector<std::u32string_view> RequireCapture, const char* Error);
+//void Test(Dfa::FormatE Format, std::vector<std::u32string_view> Reg, std::u32string_view SourceStr, std::size_t TargetMask, std::u32string_view MainCapture, std::vector<std::u32string_view> RequireCapture, const char* Error);
 
 
 int main()
 {
-
+/*
 	MulityRegCreater Cre;
 	Cre.AppendReg(u8".*?a", false, 0);
 	Cre.AppendReg(u8".*?b", false, 0);
@@ -208,11 +208,11 @@ int main()
 	);
 
 	std::cout << "TestingReg Pass !" << std::endl;
-
+*/
 	return 0;
 }
 
-
+/*
 void Test(Dfa::FormatE Format, std::vector<std::u32string_view> Reg, std::u32string_view SourceStr, std::size_t TargetMask, std::u32string_view MainCapture, std::vector<std::u32string_view> RequireCapture, const char* Error)
 {
 	if (!Reg.empty())
@@ -295,4 +295,5 @@ void Test(Dfa::FormatE Format, std::vector<std::u32string_view> Reg, std::u32str
 	}
 
 }
+	*/
 

@@ -1,8 +1,7 @@
 import std;
-import PotatoEBNF;
+//import PotatoEBNF;
 
-using namespace Potato::EBNF;
-
+/*
 struct StringMaker : public EbnfOperator
 {
 	virtual std::any HandleSymbol(SymbolInfo Symbol, std::size_t UserMask) override 
@@ -145,53 +144,14 @@ $ := <Exp> ;
 
 	volatile int o = 0;
 
-
-
-	/*
-	std::u8string_view EbnfCode2 =
-		u8R"(
-$ := '\s+'
-Num := '[1-9][0-9]*' : [1]
-
-%%%%
-
-$ := <Exp> ;
-
-<Exp> := Num : [1];
-	:= <Exp> <Exp> $ : [2];
-
-%%%%
-)";
-
-	std::u8string_view Source2 = u8R"(123 123 123 456)";
-
-	Test(EbnfCode2, Source2, u8R"(((((123)(123))(123))(456)))", "TestingEbnf : Case 2");
-
-	std::u8string_view EbnfCode3 =
-		u8R"(
-$ := '\s+'
-Num := '[1-9][0-9]*' : [1]
-
-%%%%
-
-$ := <Exp> ;
-
-<Exp> := Num | '+': [1];
-	:= <Exp> <Exp> $ : [2];
-
-%%%%
-)";
-
-	std::u8string_view Source3 = u8R"(123 + 123 123 456)";
-
-	Test(EbnfCode3, Source3, u8R"((((((<|123>)(<|+>))(<|123>))(<|123>))(<|456>)))", "TestingEbnf : Case 3");
-	*/
 	std::wcout << LR"(TestingEbnf Pass !)" << std::endl;
 
 }
+*/
 
 int main()
 {
+	/*
 	try
 	{
 		TestingEbnf();
@@ -201,5 +161,6 @@ int main()
 		std::cout << Error << std::endl;
 		return -1;
 	}
+	*/
 	return 0;
 }

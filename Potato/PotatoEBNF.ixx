@@ -10,11 +10,12 @@ import PotatoEncode;
 import PotatoFormat;
 import PotatoSLRX;
 import PotatoMisc;
+import PotatoPointer;
 
 export namespace Potato::EBNF
 {
-	
-	export struct Ebnf;
+
+	struct Ebnf;
 
 	struct EbnfBuilder : protected SLRX::ProcessorOperator
 	{
@@ -164,10 +165,10 @@ export namespace Potato::EBNF
 		virtual std::any HandleReduce(SymbolInfo Symbol, ReduceProduction Production) { return {}; };
 	};
 
-	export struct EbnfProcessor;
-	export struct EbnfBinaryTableWrapper;
+	struct EbnfProcessor;
+	struct EbnfBinaryTableWrapper;
 
-	export struct Ebnf
+	struct Ebnf
 	{
 		template<typename CharT, typename CharTraisT>
 		Ebnf(std::basic_string_view<CharT, CharTraisT> EbnfStr);
@@ -209,7 +210,7 @@ export namespace Potato::EBNF
 	};
 
 
-	export struct EbnfBinaryTableWrapper
+	struct EbnfBinaryTableWrapper
 	{
 		using StandardT = std::uint32_t;
 
@@ -257,7 +258,7 @@ export namespace Potato::EBNF
 
 	std::vector<EbnfBinaryTableWrapper::StandardT> CreateEbnfBinaryTable(Ebnf const& Table);
 
-	export struct EbnfProcessor : protected SLRX::ProcessorOperator
+	struct EbnfProcessor : protected SLRX::ProcessorOperator
 	{
 
 		void Clear(std::size_t Startup = 0);
@@ -317,8 +318,10 @@ export namespace Potato::EBNF
 				if (LastRequireSize != RequireSize)
 				{
 					auto InputSpan = Str.substr(RequireSize);
-					auto EncodeInfo = Encode::CharEncoder<CharT, char32_t>::EncodeOnceUnSafe(InputSpan, OutputBuffer);
-					TokenIndex = Misc::IndexSpan<>{ RequireSize, RequireSize + EncodeInfo.SourceSpace };
+					Encode::EncodeOption option;
+					option.max_character = 1;
+					auto EncodeInfo = Encode::StrEncoder<CharT, char32_t>{}.Encode(InputSpan, OutputBuffer, option);
+					TokenIndex = Misc::IndexSpan<>{ RequireSize, RequireSize + EncodeInfo.source_space };
 					LastRequireSize = RequireSize;
 				}
 
@@ -442,6 +445,7 @@ export namespace Potato::EBNF
 		Misc::IndexSpan<> TokenIndex;
 	};
 
+
 	template<typename CharT, typename CharTraisT>
 	Ebnf::Ebnf(std::basic_string_view<CharT, CharTraisT> EbnfStr)
 	{
@@ -457,8 +461,10 @@ export namespace Potato::EBNF
 				if (RequireSize < EbnfStr.size())
 				{
 					auto InputSpan = EbnfStr.substr(RequireSize);
-					auto EncodeInfo = Encode::CharEncoder<CharT, char32_t>::EncodeOnceUnSafe(InputSpan, OutputBuffer);
-					auto TokenIndex = Misc::IndexSpan<>{ RequireSize, RequireSize + EncodeInfo.SourceSpace };
+					Encode::EncodeOption option;
+					option.max_character = 1;
+					auto EncodeInfo = Encode::StrEncoder<CharT, char32_t>{}.Encode(InputSpan, OutputBuffer, option);
+					auto TokenIndex = Misc::IndexSpan<>{ RequireSize, RequireSize + EncodeInfo.source_space };
 
 					if (!Builder.Consume(InputValue, TokenIndex.End()))
 					{
@@ -551,7 +557,10 @@ export namespace Potato::EBNF
 
 			for (auto& Ite : Mapping)
 			{
-				RquireSize += Encode::StrEncoder<CharT, wchar_t>::RequireSpaceUnSafe(Ite.first).TargetSpace;
+				Encode::EncodeOption option;
+				option.predict = true;
+
+				RquireSize += Encode::StrEncoder<CharT, wchar_t>{}.Encode(Ite.first, {}, option).target_space;
 			}
 
 			TotalString.resize(RquireSize);
@@ -559,7 +568,7 @@ export namespace Potato::EBNF
 			std::size_t Writed = 0;
 			for (auto& Ite : Mapping)
 			{
-				auto W = Encode::StrEncoder<CharT, wchar_t>::EncodeUnSafe(Ite.first, std::span(TotalString).subspan(Writed)).TargetSpace;
+				auto W = Encode::StrEncoder<CharT, wchar_t>{}.Encode(Ite.first, std::span(TotalString).subspan(Writed)).target_space;
 				SymbolMap[Ite.second].StrIndex = { Writed, Writed + W};
 				Writed = Writed + W;
 			}

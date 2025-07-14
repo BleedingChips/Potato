@@ -554,7 +554,6 @@ export namespace Potato::TMP
 	{
 		CharT string[N];
 		constexpr std::basic_string_view<CharT> GetStringView() const { return {string, N}; }
-		template<typename CharT>
 		constexpr TypeString(const CharT(&str)[N]) : string{}
 		{
 			std::copy_n(str, N, string);

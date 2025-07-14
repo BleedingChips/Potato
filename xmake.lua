@@ -11,9 +11,7 @@ if os.scriptdir() == os.projectdir() then
     set_project("Potato")
 
     for _, file in ipairs(os.files("Test/*.cpp")) do
-
         local name = "ZTest_" .. path.basename(file)
-
         target(name)
             set_kind("binary")
             add_files(file)

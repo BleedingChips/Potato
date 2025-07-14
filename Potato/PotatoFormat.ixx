@@ -14,7 +14,6 @@ import PotatoReg;
 export namespace Potato::Format
 {
 
-	
 	template<typename SourceType, typename UnicodeType>
 	struct Scanner
 	{
@@ -93,7 +92,6 @@ export namespace Potato::Format
 
 export namespace Potato::Format
 {
-
 	template<typename NumberType, typename UnicodeType>
 	struct BuildInNumberScanner
 	{
@@ -135,7 +133,7 @@ export namespace Potato::Format
 		{
 			std::size_t OldSize = Output.size();
 			Encode::EncodeInfo Str = Encode::StrEncoder<UnicodeT, TargetType>::RequireSpaceUnSafe(Par);
-			Output.resize(Output.size() + Str.TargetSpace);
+			Output.resize(Output.size() + Str.target_space);
 			auto OutputSpan = std::span(Output).subspan(OldSize);
 			Encode::StrEncoder<UnicodeT, TargetType>::EncodeUnSafe(Par, OutputSpan);
 			return true;

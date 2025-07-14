@@ -158,10 +158,10 @@ export namespace Potato::Misc
 
 		std::pmr::vector<ElementT> Elements;
 
-		template<typename Type, typename Wrapper>
+		template<typename, typename>
 		friend struct IntervalWrapperT;
 
-		template<typename Type, typename Wrapper>
+		template<typename, typename>
 		friend struct IntervalT;
 	};
 

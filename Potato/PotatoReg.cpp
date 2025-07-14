@@ -6,15 +6,14 @@ module PotatoReg;
 
 namespace Potato::Reg
 {
-
 	using namespace Exception;
 
 	using SLRX::Symbol;
 
 	enum class T
 	{
-		SingleChar = 0, // µ¥×Ö·û
-		CharSet, // ¶à×Ö·û
+		SingleChar = 0, // 
+		CharSet, //
 		Min, // -
 		BracketsLeft, //[
 		BracketsRight, // ]
@@ -56,9 +55,7 @@ namespace Potato::Reg
 
 	const SLRX::LRXBinaryTableWrapper RexSLRXWrapper()
 	{
-#ifdef _DEBUG
 		try {
-#endif
 			static SLRX::LRXBinaryTable Table(
 				*NT::ExpressionStatement,
 				{
@@ -110,7 +107,6 @@ namespace Potato::Reg
 				}, {}
 			);
 			return Table.Wrapper;
-#ifdef _DEBUG
 		}
 		catch (SLRX::Exception::IllegalSLRXProduction const& Pro)
 		{
@@ -135,10 +131,10 @@ namespace Potato::Reg
 			{
 				if (Ite.IsTerminal())
 				{
-					Symbols.push_back(Ter{ static_cast<T>(Ite.Value.Value) });
+					Symbols.push_back(Ter{ static_cast<T>(Ite.Value.symbol) });
 				}
 				else {
-					Symbols.push_back(NTer{ static_cast<NT>(Ite.Value.Value), Ite.Reduce.ElementCount, Ite.Reduce.Mask });
+					Symbols.push_back(NTer{ static_cast<NT>(Ite.Value.symbol), Ite.Reduce.ElementCount, Ite.Reduce.Mask });
 				}
 			}
 
@@ -146,17 +142,16 @@ namespace Potato::Reg
 			{
 				if (Ite.IsTerminal())
 				{
-					Symbols2.push_back(Ter{ static_cast<T>(Ite.Value.Value) });
+					Symbols2.push_back(Ter{ static_cast<T>(Ite.Value.symbol) });
 				}
 				else {
-					Symbols2.push_back(NTer{ static_cast<NT>(Ite.Value.Value), Ite.Reduce.ElementCount, Ite.Reduce.Mask });
+					Symbols2.push_back(NTer{ static_cast<NT>(Ite.Value.symbol), Ite.Reduce.ElementCount, Ite.Reduce.Mask });
 				}
 			}
 
 
 			throw;
 		}
-#endif
 
 	}
 
@@ -2805,23 +2800,6 @@ namespace Potato::Reg
 			: UnaccaptableRegexTokenIndex(Type, BadIndex), TotalString(Str)
 		{
 		}
-
-		/*
-		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u16string_view Str, Misc::IndexSpan<> BadIndex)
-			: UnaccaptableRegexTokenIndex(Type, BadIndex)
-		{
-
-			TotalString.resize(Encode::StrEncoder<char16_t, wchar_t>::RequireSpace(Str).TargetSpace);
-			Encode::StrEncoder<char16_t, wchar_t>::EncodeUnSafe(Str, TotalString);
-		}
-
-		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u32string_view Str, Misc::IndexSpan<> BadIndex)
-			: UnaccaptableRegexTokenIndex(Type, BadIndex)
-		{
-			TotalString.resize(Encode::StrEncoder<char32_t, wchar_t>::RequireSpace(Str).TargetSpace);
-			Encode::StrEncoder<char32_t, wchar_t>::EncodeUnSafe(Str, TotalString);
-		}
-		*/
 
 		char const* UnaccaptableRegex::what() const
 		{
