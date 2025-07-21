@@ -553,7 +553,7 @@ export namespace Potato::TMP
 	struct TypeString
 	{
 		CharT string[N];
-		constexpr std::basic_string_view<CharT> GetStringView() const { return {string, N}; }
+		constexpr std::basic_string_view<CharT> GetStringView() const { return {string}; }
 		constexpr TypeString(const CharT(&str)[N]) : string{}
 		{
 			std::copy_n(str, N, string);

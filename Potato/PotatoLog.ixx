@@ -23,51 +23,52 @@ export namespace Potato::Log
 
 export namespace std
 {
-	template<typename CharT>
-	struct formatter<Potato::Log::Level, CharT>
+	template<>
+	struct formatter<Potato::Log::Level, wchar_t>
 	{
-		constexpr auto parse(std::basic_format_parse_context<CharT>& parse_context)
+		constexpr auto parse(std::basic_format_parse_context<wchar_t>& parse_context)
 		{
-			return parse_context.end();
+			return parse_context.begin();
 		}
+
 		template<typename FormatContext>
 		constexpr auto format(Potato::Log::Level level, FormatContext& format_context) const
 		{
 			switch (level)
 			{
 			case Potato::Log::Level::Log:
-				if constexpr (std::is_same_v<CharT, char>)
+			{
+				constexpr std::wstring_view str = L"Log";
+				auto out_ite = format_context.out();
+				for (auto ite : str)
 				{
-					auto str = std::string_view{"Log"};
-					std::copy_n(str.data(), str.size(), format_context.out());
+					*(out_ite++) = ite;
 				}
-				else if constexpr (std::is_same_v<CharT, wchar_t>)
-				{
-					auto str = std::wstring_view{ L"Log" };
-					std::copy_n(str.data(), str.size(), format_context.out());
-				}
-				break;
+				return out_ite;
 			}
-			return format_context.out();
+			default:
+				return format_context.out();
+			}
 		}
 	};
 
-	template<std::size_t N, typename CharT>
-	struct formatter<Potato::Log::LogCategory<N>, CharT>
+	template<std::size_t N>
+	struct formatter<Potato::Log::LogCategory<N>, wchar_t>
 	{
-		constexpr auto parse(std::basic_format_parse_context<CharT>& parse_context)
+		constexpr auto parse(std::basic_format_parse_context<wchar_t>& parse_context)
 		{
-			return parse_context.end();
+			return parse_context.begin();
 		}
 		template<typename FormatContext>
 		constexpr auto format(Potato::Log::LogCategory<N> const& category, FormatContext& format_context) const
 		{
-			if constexpr (std::is_same_v<CharT, wchar_t>)
+			auto str = category.GetStringView();
+			auto out_ite = format_context.out();
+			for (auto ite : str)
 			{
-				auto str = category.GetStringView();
-				std::copy_n(str.data(), str.size(), format_context.out());
+				*(out_ite++) = ite;
 			}
-			return format_context.out();
+			return out_ite;
 		}
 	};
 }
@@ -117,7 +118,7 @@ export namespace Potato::Log
 
 			ite = std::format_to(
 				ite,
-				L"[{:%m.%d-%H:%M:%S}.{:0>3}]<{}>[{}]:",
+				L"[{:%m.%d-%H:%M:%S}.{:0>3}]<{}><{}>",
 				zoned_time,
 				mil_second.count(),
 				category,
@@ -142,7 +143,7 @@ export namespace Potato::Log
 		if (printer)
 		{
 			std::pmr::wstring output_str{ LogMemoryResource() };
-			output_str.reserve(256);
+			//output_str.reserve(256);
 			LogFormatter<category>{}(std::back_insert_iterator{ output_str }, level, pattern, std::forward<Parameters>(parameters)...);
 			printer->Print(output_str);
 		}
