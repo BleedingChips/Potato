@@ -352,11 +352,10 @@ namespace Potato::TaskFlow
 				encode_node.category = EncodedFlow::Category::SubFlowBegin;
 				encode_node.parameter = target_flow_node.parameter;
 				encode_node.node = target_flow_node.node;
-				
 
 				std::size_t old_edge_count = output_encoded_flow.edges.size();
 
-				auto sub_node_span = target_flow_node.encode_nodes.Slice(std::span(target_flow.encoded_flow.encode_infos));
+				auto sub_node_span = target_flow_node.encode_nodes.Slice(std::span(target_flow.encoded_flow.encode_infos.data(), target_flow.encoded_flow.encode_infos.size()));
 
 				Misc::IndexSpan<> owning_sub_flow = { output_encoded_flow.encode_infos.size(), output_encoded_flow.encode_infos.size() + sub_node_span.size() + 2};
 				encode_node.owning_sub_flow = owning_sub_flow;
@@ -405,7 +404,7 @@ namespace Potato::TaskFlow
 
 				output_encoded_flow.encode_infos.insert(output_encoded_flow.encode_infos.end(), sub_node_span.begin(), sub_node_span.end());
 
-				auto new_added_node_span = std::span(output_encoded_flow.encode_infos).subspan(sub_node_start_index);
+				auto new_added_node_span = std::span(output_encoded_flow.encode_infos.data(), output_encoded_flow.encode_infos.size()).subspan(sub_node_start_index);
 
 				for(auto& ite : new_added_node_span)
 				{
@@ -422,11 +421,13 @@ namespace Potato::TaskFlow
 						ite.owning_sub_flow.WholeOffset(sub_node_start_index);
 					}
 
+					ite.direct_edges.WholeForward(target_flow_node.encode_edges.Begin());
 					ite.direct_edges.WholeOffset(old_edge_count);
+					ite.mutex_edges.WholeForward(target_flow_node.encode_edges.Begin());
 					ite.mutex_edges.WholeOffset(old_edge_count);
 				}
 
-				auto old_edge_span = target_flow_node.encode_edges.Slice(std::span(target_flow.encoded_flow.edges));
+				auto old_edge_span = target_flow_node.encode_edges.Slice(std::span(target_flow.encoded_flow.edges.data(), target_flow.encoded_flow.edges.size()));
 
 				output_encoded_flow.edges.insert(output_encoded_flow.edges.end(), old_edge_span.begin(), old_edge_span.end());
 
