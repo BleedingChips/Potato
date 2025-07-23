@@ -126,6 +126,7 @@ export namespace Potato::IR
 		MemberView operator[](std::size_t index) const { auto span = GetMemberView(); assert(span.size() > index);  return span[index]; }
 		virtual std::u8string_view GetName() const = 0;
 		std::optional<MemberView> FindMemberView(std::u8string_view member_name) const;
+		std::optional<MemberView> FindMemberView(std::size_t index) const;
 		virtual Layout GetLayout() const = 0;
 		Layout GetLayout(std::size_t array_count) const;
 		static void* GetData(MemberView const&, void* target);
@@ -165,7 +166,7 @@ export namespace Potato::IR
 
 
 		static Ptr DefaultConstruct(StructLayout::Ptr layout, std::size_t array_count = 1,  std::pmr::memory_resource* resource = std::pmr::get_default_resource());
-		static Ptr CopyConstruct(StructLayout::Ptr layout, StructLayoutObject& source, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+		static Ptr CopyConstruct(StructLayout::Ptr layout, StructLayoutObject const& source, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 		static Ptr MoveConstruct(StructLayout::Ptr layout, StructLayoutObject& source, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
 		static Ptr CopyConstruct(StructLayout::Ptr layout, void* source, std::size_t array_count = 1, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
@@ -176,11 +177,16 @@ export namespace Potato::IR
 		std::size_t GetArrayCount() const { return array_count; }
 		void* GetData() const { return start; }
 		void* GetData(std::size_t index) const { return static_cast<std::byte*>(start) + layout->GetLayout().size * index; }
-		
+		void* GetMemberData(StructLayout::MemberView const& mv) const { return Potato::IR::StructLayout::GetData(mv, GetData()); };
+
 		template<typename Type>
-		Type* GetStaticCastData() const { return static_cast<Type*>(GetData()); }
+		Type* GetStaticCastMemberData(StructLayout::MemberView const& mv) const { return static_cast<Type*>(GetMemberData(mv)); }
+
+
 		template<typename Type>
-		Type* GetStaticCastData(std::size_t index) const { return static_cast<Type*>(GetData(index)); }
+		Type* GetStaticCastData() const { assert(GetStructLayout()->IsStatic<Type>()); return static_cast<Type*>(GetData()); }
+		template<typename Type>
+		Type* GetStaticCastData(std::size_t index) const { assert(GetStructLayout()->IsStatic<Type>());  return static_cast<Type*>(GetData(index)); }
 
 	protected:
 

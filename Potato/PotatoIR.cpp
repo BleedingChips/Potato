@@ -158,6 +158,16 @@ namespace Potato::IR
 		}
 	}
 
+	std::optional<StructLayout::MemberView> StructLayout::FindMemberView(std::size_t index) const
+	{
+		auto span = GetMemberView();
+		if (index < span.size())
+		{
+			return span[index];
+		}
+		return std::nullopt;
+	}
+
 	Layout StructLayout::GetLayout(std::size_t array_count) const 
 	{
 		auto layout = GetLayout();
@@ -236,7 +246,7 @@ namespace Potato::IR
 		return {};
 	}
 
-	auto StructLayoutObject::CopyConstruct(StructLayout::Ptr layout, StructLayoutObject& source, std::pmr::memory_resource* resource)
+	auto StructLayoutObject::CopyConstruct(StructLayout::Ptr layout, StructLayoutObject const& source, std::pmr::memory_resource* resource)
 		-> Ptr
 	{
 		return CopyConstruct(std::move(layout), source.GetData(), source.GetArrayCount(), resource);
