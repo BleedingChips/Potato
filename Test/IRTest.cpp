@@ -33,25 +33,22 @@ int main()
 	{
 		{
 			StaticAtomicStructLayout<std::size_t>::Create(),
-			u8"k",
-			1,
-			&u
+			L"k",
+			1
 		},
 		{
 			StaticAtomicStructLayout<float>::Create(),
-			u8"I",
-			1,
-			&icc
+			L"I",
+			1
 		},
 		{
 			StaticAtomicStructLayout<std::size_t>::Create(),
-			u8"o",
-			2,
-			kl
+			L"o",
+			2
 		},
 	};
 
-	auto P = DynamicStructLayout::Create(u8"K", me);
+	auto P = DynamicStructLayout::Create(L"K", me);
 
 	K i;
 
@@ -62,38 +59,38 @@ int main()
 
 	auto span = P->GetMemberView();
 
-	auto ref1 = P->GetDataAs<std::size_t>(span[0], &i);
+	auto ref1 = P->GetMemberDataWithStaticCast<std::size_t>(span[0], &i);
 	*ref1 = 10086;
-	auto ref2 = P->GetDataAs<float>(span[1], &i);
+	auto ref2 = P->GetMemberDataWithStaticCast<float>(span[1], &i);
 	*ref2 = 1.0f;
 
-	auto ref3 = P->GetDataAs<std::size_t>(span[2], &i);
+	auto ref3 = P->GetMemberDataWithStaticCast<std::size_t>(span[2], &i);
 
 	ref3[0] = 3;
 	ref3[1] = 4;
 
-	auto ref4 = P->GetDataSpanAs<std::size_t>(span[2], &i);
+	auto ref4 = P->GetMemberDataArrayWithStaticCast<std::size_t>(span[2], &i);
 
 	auto iop = StructLayoutObject::DefaultConstruct(P, 2);
 
-	K* iop2 = static_cast<K*>(iop->GetData());
-	K* iop3 = static_cast<K*>(iop->GetData(1));
+	K* iop2 = static_cast<K*>(iop->GetArrayData());
+	K* iop3 = static_cast<K*>(iop->GetArrayData(1));
 
 	auto socc = StructLayoutObject::CopyConstruct(P, &pp, 2);
 
-	K* iop22 = static_cast<K*>(socc->GetData());
-	K* iop32 = static_cast<K*>(socc->GetData(1));
+	K* iop22 = static_cast<K*>(socc->GetArrayData());
+	K* iop32 = static_cast<K*>(socc->GetArrayData(1));
 
 	auto so = StructLayoutObject::CopyConstruct(P, &i);
 
-	K* io = static_cast<K*>(so->GetData());
+	K* io = static_cast<K*>(so->GetArrayData());
 
-	auto so2 = StructLayoutObject::CopyConstruct(P, *so);
+	auto so2 = StructLayoutObject::CopyConstruct(*so);
 
 
-	K* io2 = static_cast<K*>(so2->GetData());
+	K* io2 = static_cast<K*>(so2->GetArrayData());
 
-	std::cout << "TMP Pass !" << std::endl;
+	std::cout << "IR Pass !" << std::endl;
 
 	return 0;
 }

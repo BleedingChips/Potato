@@ -139,6 +139,7 @@ export namespace Potato::Log
 	template<LogCategory category, typename ...Parameters>
 	constexpr void Log(Level level, std::wformat_string<std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
 	{
+		return;
 		auto printer = GetLogPrinter();
 		if (printer)
 		{
