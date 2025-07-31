@@ -14,7 +14,7 @@ namespace Implement
 	template<std::size_t index, typename T, typename CT, typename ...AT>
 	struct LocateByTypeImp<index, T, CT, AT...>
 	{
-		static constexpr std::size_t Value = LocateByTypeImp<index + 1, T, AT...>::value;
+		static constexpr std::size_t Value = LocateByTypeImp<index + 1, T, AT...>::Value;
 	};
 
 	template<std::size_t index, typename T, typename ...AT>

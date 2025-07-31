@@ -100,6 +100,8 @@ export namespace Potato::Log
 
 	LogPrinter::Ptr GetLogPrinter();
 
+	struct DefaultLogFormatter;
+
 	template<LogCategory category>
 	struct LogFormatter
 	{
@@ -139,12 +141,10 @@ export namespace Potato::Log
 	template<LogCategory category, typename ...Parameters>
 	constexpr void Log(Level level, std::wformat_string<std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
 	{
-		return;
 		auto printer = GetLogPrinter();
 		if (printer)
 		{
 			std::pmr::wstring output_str{ LogMemoryResource() };
-			//output_str.reserve(256);
 			LogFormatter<category>{}(std::back_insert_iterator{ output_str }, level, pattern, std::forward<Parameters>(parameters)...);
 			printer->Print(output_str);
 		}
