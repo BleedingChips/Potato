@@ -81,7 +81,7 @@ export namespace Potato::Misc
 	{
 		bool TryAddRefNotFromZero() const noexcept;
 		bool TryAddRefFromZero() const noexcept;
-		void AddRef() const noexcept;
+		bool AddRef() const noexcept;
 		bool SubRef() const noexcept;
 		size_t Count() const noexcept { return ref.load(std::memory_order_relaxed); }
 		AtomicRefCount() noexcept : ref(static_cast<std::size_t>(0)) {}
@@ -293,10 +293,10 @@ export namespace Potato::Misc
 
 namespace Potato::Misc
 {
-	void AtomicRefCount::AddRef() const noexcept
+	bool AtomicRefCount::AddRef() const noexcept
 	{
 		assert(static_cast<std::ptrdiff_t>(ref.load(std::memory_order_relaxed)) >= 0);
-		ref.fetch_add(1, std::memory_order_relaxed);
+		return ref.fetch_add(1, std::memory_order_relaxed) == 0;
 	}
 
 	bool AtomicRefCount::SubRef() const noexcept
