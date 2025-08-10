@@ -291,6 +291,8 @@ export namespace Potato::Misc
 
 }
 
+module:private;
+
 namespace Potato::Misc
 {
 	bool AtomicRefCount::AddRef() const noexcept

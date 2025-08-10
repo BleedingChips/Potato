@@ -14,6 +14,7 @@ namespace Potato::Log
 
 		void Print(std::wstring_view print)
 		{
+			return;
 			std::wcout << print;
 		}
 
