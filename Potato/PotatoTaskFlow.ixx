@@ -274,7 +274,7 @@ export namespace Potato::TaskFlow
 		mutable std::shared_mutex template_node_mutex;
 		std::pmr::vector<TemplateNode> template_node;
 
-		mutable std::mutex execute_state_mutex;
+		mutable std::shared_mutex execute_state_mutex;
 		Task::Node::Parameter executor_parameter;
 		ExecuteState::State execute_state = ExecuteState::State::Ready;
 		std::pmr::vector<ExecuteState> encoded_flow_execute_state;
