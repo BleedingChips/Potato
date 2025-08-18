@@ -118,6 +118,38 @@ namespace Potato::IR
 		};
 	}
 
+	
+
+	struct DynamicStructLayout : public StructLayout, public MemoryResourceRecordIntrusiveInterface
+	{
+		virtual std::wstring_view GetName() const override { return name; }
+		virtual void AddStructLayoutRef() const override { MemoryResourceRecordIntrusiveInterface::AddRef(); }
+		virtual void SubStructLayoutRef() const override { MemoryResourceRecordIntrusiveInterface::SubRef(); }
+		Layout GetLayout() const override;
+		std::span<MemberView const> GetMemberView() const override;
+		OperateProperty GetOperateProperty() const override { return construct_property; }
+		virtual std::size_t GetHashCode() const override { return hash_code; }
+
+	protected:
+
+		DynamicStructLayout(OperateProperty construct_property, std::wstring_view name, Layout total_layout, std::span<MemberView> member_view, std::size_t hash_code, MemoryResourceRecord record)
+			: MemoryResourceRecordIntrusiveInterface(record), name(name), total_layout(total_layout), hash_code(hash_code), member_view(member_view), construct_property(construct_property)
+		{
+
+		}
+
+		~DynamicStructLayout();
+
+		std::wstring_view name;
+		Layout total_layout;
+		std::span<MemberView> member_view;
+		OperateProperty construct_property;
+		std::size_t hash_code;
+
+		friend struct StructLayout;
+		friend struct StructLayoutObject;
+	};
+
 	DynamicStructLayout::~DynamicStructLayout()
 	{
 		for (auto& ite : member_view)
@@ -137,9 +169,7 @@ namespace Potato::IR
 		return member_view;
 	}
 
-
-	auto DynamicStructLayout::Create(std::wstring_view name, std::span<Member const> members, std::pmr::memory_resource* resource)
-		-> Ptr
+	StructLayout::Ptr StructLayout::CreateDynamic(std::wstring_view name, std::span<Member const> members, LayoutCategory category, std::pmr::memory_resource* resource)
 	{
 		std::size_t hash_code = 0;
 		OperateProperty ope_property;
@@ -156,7 +186,7 @@ namespace Potato::IR
 			++index;
 		}
 
-		auto cur_layout_cpp = MemLayout::MemLayoutCPP::Get<DynamicStructLayout>();
+		auto cur_layout_cpp = MemLayout::MemLayout::Get<DynamicStructLayout>(category);
 		std::size_t member_offset = cur_layout_cpp.Insert(Layout::GetArray<MemberView>(members.size()));
 		std::size_t name_offset = cur_layout_cpp.Insert(Layout::GetArray<wchar_t>(name_size));
 
@@ -166,7 +196,7 @@ namespace Potato::IR
 		auto re = MemoryResourceRecord::Allocate(resource, cur_layout);
 		if (re)
 		{
-			MemLayout::MemLayoutCPP total_layout_cpp;
+			MemLayout::MemLayout total_layout_cpp{};
 			auto member_span = std::span(reinterpret_cast<MemberView*>(re.GetByte(member_offset)), members.size());
 			auto str_span = std::span(reinterpret_cast<wchar_t*>(re.GetByte(name_offset)), name_size);
 			std::memcpy(str_span.data(), name.data(), name.size() * sizeof(wchar_t));
@@ -181,7 +211,13 @@ namespace Potato::IR
 				std::size_t offset = 0;
 				if (i == 0)
 				{
-					total_layout_cpp = cur.struct_layout->GetLayout(cur.array_count);
+					switch (category)
+					{
+					case LayoutCategory::CLike:
+						total_layout_cpp = cur.struct_layout->GetLayout(cur.array_count);
+						break;
+					}
+					
 				}
 				else
 				{
@@ -227,7 +263,7 @@ namespace Potato::IR
 		if (!struct_layout->GetOperateProperty().construct_default)
 			return {};
 
-		MemLayout::MemLayoutCPP layout_cpp = Layout::Get<StructLayoutObject>();
+		MemLayout::MemLayout layout_cpp = Layout::Get<StructLayoutObject>();
 		auto m_layout = struct_layout->GetLayout(array_count);
 		auto offset = layout_cpp.Insert(m_layout);
 		auto o_layout = layout_cpp.Get();
@@ -256,7 +292,7 @@ namespace Potato::IR
 		if (!struct_layout || !struct_layout->GetOperateProperty().construct_copy || source == nullptr || array_count == 0)
 			return {};
 		
-		auto cpp_layout = MemLayout::MemLayoutCPP::Get<StructLayoutObject>();
+		auto cpp_layout = MemLayout::MemLayout::Get<StructLayoutObject>();
 		
 		auto m_layout = struct_layout->GetLayout(array_count);
 		
@@ -287,7 +323,7 @@ namespace Potato::IR
 		if (!struct_layout || !struct_layout->GetOperateProperty().construct_copy || source == nullptr || array_count == 0)
 			return {};
 
-		auto cpp_layout = MemLayout::MemLayoutCPP::Get<StructLayoutObject>();
+		auto cpp_layout = MemLayout::MemLayout::Get<StructLayoutObject>();
 		
 		auto m_layout = struct_layout->GetLayout(array_count);
 
@@ -341,7 +377,7 @@ namespace Potato::IR
 			}
 		}
 
-		auto cpp_layout = MemLayout::MemLayoutCPP::Get<StructLayoutObject>();
+		auto cpp_layout = MemLayout::MemLayout::Get<StructLayoutObject>();
 		auto m_layout = struct_layout->GetLayout();
 		auto offset = cpp_layout.Insert(m_layout);
 		auto o_layout = cpp_layout.Get();

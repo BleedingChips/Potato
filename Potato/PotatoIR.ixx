@@ -18,6 +18,7 @@ namespace Potato::IR
 export namespace Potato::IR
 {
 	using MemLayout::Layout;
+	using MemLayout::LayoutCategory;
 
 	struct MemoryResourceRecord
 	{
@@ -81,6 +82,7 @@ export namespace Potato::IR
 
 	struct StructLayout
 	{
+
 		struct OperateProperty
 		{
 			bool construct_default = true;
@@ -118,6 +120,8 @@ export namespace Potato::IR
 			std::wstring_view name;
 			std::size_t array_count = 1;
 		};
+
+		static StructLayout::Ptr CreateDynamic(std::wstring_view name, std::span<Member const> members, LayoutCategory category = LayoutCategory::CLike, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
 		virtual OperateProperty GetOperateProperty() const = 0;
 		virtual bool DefaultConstruction(void* target, std::size_t array_count = 1) const;
@@ -193,6 +197,7 @@ export namespace Potato::IR
 		virtual bool IsEqual(StructLayout const* other) const { return false; }
 		virtual void AddStructLayoutRef() const = 0;
 		virtual void SubStructLayoutRef() const = 0;
+		virtual LayoutCategory GetLayoutCategory() const { return LayoutCategory::CLike; }
 	};
 
 	struct StructLayoutObject : public MemoryResourceRecordIntrusiveInterface
@@ -445,36 +450,6 @@ export namespace Potato::IR
 		return StaticAtomicStructLayout<std::remove_cvref_t<Type>>::Create();
 	}
 
-	struct DynamicStructLayout : public StructLayout, public MemoryResourceRecordIntrusiveInterface
-	{
-		static StructLayout::Ptr Create(std::wstring_view name, std::span<Member const> members, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
-
-		virtual std::wstring_view GetName() const override { return name; }
-		virtual void AddStructLayoutRef() const override { MemoryResourceRecordIntrusiveInterface::AddRef(); }
-		virtual void SubStructLayoutRef() const override { MemoryResourceRecordIntrusiveInterface::SubRef(); }
-		Layout GetLayout() const override;
-		std::span<MemberView const> GetMemberView() const override;
-		OperateProperty GetOperateProperty() const override { return construct_property; }
-		virtual std::size_t GetHashCode() const override { return hash_code; }
-
-	protected:
-
-		DynamicStructLayout(OperateProperty construct_property, std::wstring_view name, Layout total_layout, std::span<MemberView> member_view, std::size_t hash_code, MemoryResourceRecord record)
-			: MemoryResourceRecordIntrusiveInterface(record), name(name), total_layout(total_layout), hash_code(hash_code), member_view(member_view), construct_property(construct_property)
-		{
-
-		}
-
-		~DynamicStructLayout();
-
-		std::wstring_view name;
-		Layout total_layout;
-		std::span<MemberView> member_view;
-		OperateProperty construct_property;
-		std::size_t hash_code;
-
-		friend struct StructLayout;
-		friend struct StructLayoutObject;
-	};
+	
 
 }
