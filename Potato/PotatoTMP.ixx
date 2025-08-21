@@ -586,4 +586,60 @@ export namespace Potato::TMP
 
 	template<std::size_t N>
 	TypeString(const char(&str)[N])-> TypeString<char, N>;
+
+	template<typename FuncT>
+	struct FunctionRef;
+
+	template<typename ReturnT, typename ...ParameterT>
+	struct FunctionRef<ReturnT(ParameterT...)>
+	{
+		using FunctionT = ReturnT(*)(ParameterT...);
+		using CallableObjectFunctionT = ReturnT(*)(void*, ParameterT&&...);
+		operator bool() const {
+			return !(
+				std::holds_alternative<FunctionT>(function_ref)
+				&& std::get<FunctionT>(function_ref) == nullptr
+				);
+		}
+		FunctionRef() : function_ref(FunctionT{ nullptr }) {}
+		template<typename CallableObjectT>
+		FunctionRef(CallableObjectT object) requires(std::is_convertible_v<CallableObjectT, FunctionT>)
+			: FunctionRef(static_cast<CallableObjectT>(object)) {
+		}
+		template<typename CallableObjectT>
+		FunctionRef(CallableObjectT&& object) requires(
+			!std::is_convertible_v<CallableObjectT, FunctionT> 
+			&& std::is_invocable_r_v<ReturnT, CallableObjectT, ParameterT...>
+			)
+			: FunctionRef(std::tuple<CallableObjectFunctionT, void*>{
+			[](void* pointer, ParameterT&&... parameter) -> ReturnT{
+				return (*static_cast<CallableObjectT&&>(pointer))(std::forward<ParameterT>(parameter)...);
+			},
+				static_cast<void*>(&object)
+		}) {
+		}
+		FunctionRef(FunctionRef const&) = default;
+		FunctionRef(FunctionRef&& other)
+			: function_ref(other.function_ref)
+		{
+			other.function_ref = FunctionT{ nullptr };
+		}
+		template<typename ...OtherParameterT>
+		ReturnT operator()(OtherParameterT&&... pars) const
+		{
+			if (std::holds_alternative<FunctionT>(function_ref))
+			{
+				return (*std::get<FunctionT>(function_ref))(std::forward<OtherParameterT>(pars)...);
+			}
+			else {
+				auto [func, pointer] = std::get<std::tuple<CallableObjectFunctionT, void*>>(function_ref);
+				return (*func)(pointer, std::forward<OtherParameterT>(pars)...);
+			}
+		}
+	protected:
+		std::variant<
+			FunctionT,
+			std::tuple<CallableObjectFunctionT, void*>
+		> function_ref;
+	};
 }
