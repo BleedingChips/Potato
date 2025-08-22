@@ -596,50 +596,50 @@ export namespace Potato::TMP
 		using FunctionT = ReturnT(*)(ParameterT...);
 		using CallableObjectFunctionT = ReturnT(*)(void*, ParameterT&&...);
 		operator bool() const {
-			return !(
-				std::holds_alternative<FunctionT>(function_ref)
-				&& std::get<FunctionT>(function_ref) == nullptr
-				);
+			return function_ptr.normal != nullptr;
 		}
-		FunctionRef() : function_ref(FunctionT{ nullptr }) {}
+		FunctionRef() { function_ptr.normal = nullptr; }
+		FunctionRef(FunctionT function) { function_ptr.normal = function; }
 		template<typename CallableObjectT>
 		FunctionRef(CallableObjectT object) requires(std::is_convertible_v<CallableObjectT, FunctionT>)
-			: FunctionRef(static_cast<CallableObjectT>(object)) {
-		}
+			: FunctionRef(static_cast<FunctionT>(object)) {}
 		template<typename CallableObjectT>
 		FunctionRef(CallableObjectT&& object) requires(
 			!std::is_convertible_v<CallableObjectT, FunctionT> 
 			&& std::is_invocable_r_v<ReturnT, CallableObjectT, ParameterT...>
 			)
-			: FunctionRef(std::tuple<CallableObjectFunctionT, void*>{
-			[](void* pointer, ParameterT&&... parameter) -> ReturnT{
-				return (*static_cast<CallableObjectT&&>(pointer))(std::forward<ParameterT>(parameter)...);
-			},
-				static_cast<void*>(&object)
-		}) {
+		{
+			function_ptr.callable_object = [](void* pointer, ParameterT&&... parameter) -> ReturnT {
+				return (*static_cast<CallableObjectT*>(pointer))(std::forward<ParameterT>(parameter)...);
+				};
+			callable_object = static_cast<void*>(&object);
 		}
 		FunctionRef(FunctionRef const&) = default;
 		FunctionRef(FunctionRef&& other)
-			: function_ref(other.function_ref)
 		{
-			other.function_ref = FunctionT{ nullptr };
+			callable_object = other.callable_object;
+			function_ptr.normal = other.function_ptr.normal;
+			other.function_ptr.normal = nullptr;
+			other.callable_object = nullptr;
 		}
 		template<typename ...OtherParameterT>
 		ReturnT operator()(OtherParameterT&&... pars) const
 		{
-			if (std::holds_alternative<FunctionT>(function_ref))
+			if (callable_object != nullptr)
 			{
-				return (*std::get<FunctionT>(function_ref))(std::forward<OtherParameterT>(pars)...);
+				return (*function_ptr.callable_object)(callable_object, std::forward<OtherParameterT>(pars)...);
 			}
-			else {
-				auto [func, pointer] = std::get<std::tuple<CallableObjectFunctionT, void*>>(function_ref);
-				return (*func)(pointer, std::forward<OtherParameterT>(pars)...);
+			else
+			{
+				return (*function_ptr.normal)(std::forward<OtherParameterT>(pars)...);
 			}
 		}
 	protected:
-		std::variant<
-			FunctionT,
-			std::tuple<CallableObjectFunctionT, void*>
-		> function_ref;
+		void* callable_object = nullptr;
+		union FunctionPointerT
+		{
+			FunctionT normal;
+			CallableObjectFunctionT callable_object;
+		}function_ptr;
 	};
 }

@@ -31,19 +31,19 @@ int main()
 {
 	using namespace Potato::TMP;
 
-	// IsOneOf ²é¿´ÀàĞÍÊÇ·ñÖØ¸´
+	// IsOneOf æŸ¥çœ‹ç±»å‹æ˜¯å¦é‡å¤
 	static_assert(IsOneOfV<Type1, Type1, Type2, Type3>, "Tmp::IsOneOf Not Pass");
 	static_assert(!IsOneOfV<Type1, Type2, Type3>, "Tmp::IsOneOf Not Pass");
 
-	// IsNotOneOf IsOneOf µÄ·ñ
+	// IsNotOneOf IsOneOf çš„å¦
 	static_assert(!IsNotOneOfV<Type1, Type1, Type2, Type3>, "Tmp::IsNotOneOfV Not Pass");
 	static_assert(IsNotOneOfV<Type1, Type2, Type3>, "Tmp::IsNotOneOfV Not Pass");
 	
-	// IsRepeat ÀàĞÍÊÇ·ñÖØ¸´
+	// IsRepeat ç±»å‹æ˜¯å¦é‡å¤
 	static_assert(IsRepeat<Type1, Type1, Type2, Type3>::Value, "Tmp::IsRepeat Not Pass");
 	static_assert(!IsRepeat<Type1, Type2, Type3>::Value, "Tmp::IsRepeat Not Pass");
 
-	// Instant ¶ÔÓÚÒ»Ğ©template<typename ...> ÀàĞÍµÄÑÓ³Ù¹¹Ôì£¬Í¨³£ÓÃÔÚÀàĞÍÔËËãµÄÖĞ¼ä
+	// Instant å¯¹äºä¸€äº›template<typename ...> ç±»å‹çš„å»¶è¿Ÿæ„é€ ï¼Œé€šå¸¸ç”¨åœ¨ç±»å‹è¿ç®—çš„ä¸­é—´
 	{
 		using T1 = Instant<TTuple, Type2>;
 		using T2 = T1:: template Append<Type3>;
@@ -59,7 +59,7 @@ int main()
 		static_assert(std::is_same_v<T4, TTuple<Type1, Type2, Type3, Type1>>, "Tmp::Instance Not Pass");
 	}
 
-	// Replace ¶ÔÓÚÒ»Ğ©template<typename ...> ÀàĞÍµÄÌæ»»£¬Í¨³£ÓÃÔÚÀàĞÍÔËËãµÄÖĞ¼ä
+	// Replace å¯¹äºä¸€äº›template<typename ...> ç±»å‹çš„æ›¿æ¢ï¼Œé€šå¸¸ç”¨åœ¨ç±»å‹è¿ç®—çš„ä¸­é—´
 	{
 		using T1 = TTuple<Type1, Type2, Type3, Type1>;
 
@@ -68,7 +68,7 @@ int main()
 		static_assert(std::is_same_v<T2, TTuple2<Type1, Type2, Type3, Type1>>, "Tmp::Replace Not Pass");
 	}
 
-	// FunctionInfo İÍÈ¡º¯ÊıÀàĞÍ
+	// FunctionInfo èƒå–å‡½æ•°ç±»å‹
 	{
 		struct Sample1
 		{
@@ -106,12 +106,34 @@ int main()
 		static_assert(std::is_same_v<Info4::OwnerType, void>, "FunctionInfo Not Pass");
 	}
 
-	// TempString ÓÃÓÚÄ£°å²ÎÊıµÄ×Ö·û´®³£Á¿
+	// TempString ç”¨äºæ¨¡æ¿å‚æ•°çš„å­—ç¬¦ä¸²å¸¸é‡
 	{
 		static_assert(std::is_same_v<CST<u"1234">, CST<u"1234">>, "ConstString Not Pass");
 		static_assert(!std::is_same_v<CST<u"1234">, CST<"1234">>, "ConstString Not Pass");
 		static_assert(!std::is_same_v<CST<"12345">, CST<u"1234">>, "ConstString Not Pass");
 	}
+
+	FunctionRef<void(int32_t)> function1{ [](int32_t cc) {
+		volatile int k = 0;
+		} };
+
+	bool k1 = function1;
+
+	function1(678);
+
+	int io = 1233;
+
+	FunctionRef<void(int32_t)> function2{ [&io](int32_t cc) {
+		volatile int k = 0;
+		} };
+
+	bool k2 = function2;
+
+	function2(678);
+
+	FunctionRef<void(int32_t)> function3;
+
+	bool k3 = function3;
 
 	std::cout << "TMP Pass !" << std::endl;
 
