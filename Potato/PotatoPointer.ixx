@@ -34,6 +34,12 @@ export namespace Potato::Pointer
 	};
 
 	template<typename WrapperT>
+	concept EnablePointerReferenceAccess = requires(WrapperT wra)
+	{
+		typename WrapperT::PotatoPointerEnablePointerAccess;
+	};
+
+	template<typename WrapperT>
 	concept ForbidPointerConstruct = requires(WrapperT wra)
 	{
 		typename WrapperT::PotatoPointerForbidPointerConstruct;
@@ -45,8 +51,8 @@ export namespace Potato::Pointer
 		typename WrapperT::PotatoPointerIsomer;
 	};
 
-	template<typename PtrT, typename WrapperT = DefaultIntrusiveWrapper>
-	struct IntrusivePtr : public WrapperT
+	template<typename PtrT, class WrapperT = DefaultIntrusiveWrapper>
+	struct IntrusivePtr : protected WrapperT
 	{
 
 		using CurrentWrapper = WrapperT;
@@ -157,6 +163,9 @@ export namespace Potato::Pointer
 		}
 
 		decltype(auto) GetPointer() const requires(!ForbidPointerAccess<WrapperT>) { return ptr; }
+		PtrT*& GetPointerReference() requires(EnablePointerReferenceAccess<WrapperT>) { return ptr; }
+		PtrT* const& GetPointerReference() const requires(EnablePointerReferenceAccess<WrapperT>) { return ptr; }
+
 		constexpr decltype(auto) operator->() const requires(!ForbidPointerAccess<WrapperT>) { return ptr; }
 		constexpr decltype(auto) operator*() const requires(!ForbidPointerAccess<WrapperT>) { return *ptr; }
 

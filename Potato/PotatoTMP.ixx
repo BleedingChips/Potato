@@ -594,14 +594,14 @@ export namespace Potato::TMP
 	struct FunctionRef<ReturnT(ParameterT...)>
 	{
 		using FunctionT = ReturnT(*)(ParameterT...);
-		using CallableObjectFunctionT = ReturnT(*)(void*, ParameterT&&...);
+		using CallableObjectFunctionT = ReturnT(*)(void*, ParameterT...);
 		operator bool() const {
 			return function_ptr.normal != nullptr;
 		}
 		FunctionRef() { function_ptr.normal = nullptr; }
 		FunctionRef(FunctionT function) { function_ptr.normal = function; }
 		template<typename CallableObjectT>
-		FunctionRef(CallableObjectT object) requires(std::is_convertible_v<CallableObjectT, FunctionT>)
+		FunctionRef(CallableObjectT&& object) requires(std::is_convertible_v<CallableObjectT, FunctionT>)
 			: FunctionRef(static_cast<FunctionT>(object)) {}
 		template<typename CallableObjectT>
 		FunctionRef(CallableObjectT&& object) requires(
@@ -627,11 +627,11 @@ export namespace Potato::TMP
 		{
 			if (callable_object != nullptr)
 			{
-				return (*function_ptr.callable_object)(callable_object, std::forward<OtherParameterT>(pars)...);
+				return (*function_ptr.callable_object)(callable_object, std::forward<OtherParameterT&&>(pars)...);
 			}
 			else
 			{
-				return (*function_ptr.normal)(std::forward<OtherParameterT>(pars)...);
+				return (*function_ptr.normal)(std::forward<OtherParameterT&&>(pars)...);
 			}
 		}
 	protected:
