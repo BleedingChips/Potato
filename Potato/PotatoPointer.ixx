@@ -52,7 +52,7 @@ export namespace Potato::Pointer
 	};
 
 	template<typename PtrT, class WrapperT = DefaultIntrusiveWrapper>
-	struct IntrusivePtr : protected WrapperT
+	struct IntrusivePtr : public WrapperT
 	{
 
 		using CurrentWrapper = WrapperT;
@@ -163,8 +163,13 @@ export namespace Potato::Pointer
 		}
 
 		decltype(auto) GetPointer() const requires(!ForbidPointerAccess<WrapperT>) { return ptr; }
+
 		PtrT*& GetPointerReference() requires(EnablePointerReferenceAccess<WrapperT>) { return ptr; }
 		PtrT* const& GetPointerReference() const requires(EnablePointerReferenceAccess<WrapperT>) { return ptr; }
+		PtrT** GetPointerAdress() requires(EnablePointerReferenceAccess<WrapperT>) { return &ptr; }
+		PtrT* const* GetPointerAdress() const requires(EnablePointerReferenceAccess<WrapperT>) { return &ptr; }
+		void** GetPointerVoidAdress() requires(EnablePointerReferenceAccess<WrapperT>) { return reinterpret_cast<void**>(&ptr); }
+		void* const* GetPointerVoidAdress() const requires(EnablePointerReferenceAccess<WrapperT>) { return reinterpret_cast<void**>(&ptr); }
 
 		constexpr decltype(auto) operator->() const requires(!ForbidPointerAccess<WrapperT>) { return ptr; }
 		constexpr decltype(auto) operator*() const requires(!ForbidPointerAccess<WrapperT>) { return *ptr; }
