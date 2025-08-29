@@ -601,12 +601,16 @@ export namespace Potato::TMP
 		FunctionRef() { function_ptr.normal = nullptr; }
 		FunctionRef(FunctionT function) { function_ptr.normal = function; }
 		template<typename CallableObjectT>
-		FunctionRef(CallableObjectT&& object) requires(std::is_convertible_v<CallableObjectT, FunctionT>)
+		FunctionRef(CallableObjectT&& object) requires(
+			std::is_convertible_v<CallableObjectT, FunctionT>
+			&& !std::is_same_v<std::remove_cvref_t<CallableObjectT>, FunctionRef>
+			)
 			: FunctionRef(static_cast<FunctionT>(object)) {}
 		template<typename CallableObjectT>
 		FunctionRef(CallableObjectT&& object) requires(
 			!std::is_convertible_v<CallableObjectT, FunctionT> 
 			&& std::is_invocable_r_v<ReturnT, CallableObjectT, ParameterT...>
+			&& !std::is_same_v<std::remove_cvref_t<CallableObjectT>, FunctionRef>
 			)
 		{
 			function_ptr.callable_object = [](void* pointer, ParameterT&&... parameter) -> ReturnT {
