@@ -595,19 +595,19 @@ export namespace Potato::TMP
 	{
 		using FunctionT = ReturnT(*)(ParameterT...);
 		using CallableObjectFunctionT = ReturnT(*)(void*, ParameterT...);
-		operator bool() const {
+		constexpr operator bool() const {
 			return function_ptr.normal != nullptr;
 		}
-		FunctionRef() { function_ptr.normal = nullptr; }
-		FunctionRef(FunctionT function) { function_ptr.normal = function; }
+		constexpr FunctionRef() { function_ptr.normal = nullptr; }
+		constexpr FunctionRef(FunctionT function) { function_ptr.normal = function; }
 		template<typename CallableObjectT>
-		FunctionRef(CallableObjectT&& object) requires(
+		constexpr FunctionRef(CallableObjectT&& object) requires(
 			std::is_convertible_v<CallableObjectT, FunctionT>
 			&& !std::is_same_v<std::remove_cvref_t<CallableObjectT>, FunctionRef>
 			)
 			: FunctionRef(static_cast<FunctionT>(object)) {}
 		template<typename CallableObjectT>
-		FunctionRef(CallableObjectT&& object) requires(
+		constexpr FunctionRef(CallableObjectT&& object) requires(
 			!std::is_convertible_v<CallableObjectT, FunctionT> 
 			&& std::is_invocable_r_v<ReturnT, CallableObjectT, ParameterT...>
 			&& !std::is_same_v<std::remove_cvref_t<CallableObjectT>, FunctionRef>
@@ -618,8 +618,8 @@ export namespace Potato::TMP
 				};
 			callable_object = static_cast<void*>(&object);
 		}
-		FunctionRef(FunctionRef const&) = default;
-		FunctionRef(FunctionRef&& other)
+		constexpr FunctionRef(FunctionRef const&) = default;
+		constexpr FunctionRef(FunctionRef&& other)
 		{
 			callable_object = other.callable_object;
 			function_ptr.normal = other.function_ptr.normal;
@@ -627,7 +627,7 @@ export namespace Potato::TMP
 			other.callable_object = nullptr;
 		}
 		template<typename ...OtherParameterT>
-		ReturnT operator()(OtherParameterT&&... pars) const
+		constexpr ReturnT operator()(OtherParameterT&&... pars) const
 		{
 			if (callable_object != nullptr)
 			{
