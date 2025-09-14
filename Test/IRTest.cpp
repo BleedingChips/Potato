@@ -48,7 +48,7 @@ int main()
 		},
 	};
 
-	auto P = DynamicStructLayout::Create(L"K", me);
+	auto P = StructLayout::CreateDynamic(L"K", me);
 
 	K i;
 

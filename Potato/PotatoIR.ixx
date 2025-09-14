@@ -18,7 +18,8 @@ namespace Potato::IR
 export namespace Potato::IR
 {
 	using MemLayout::Layout;
-	using MemLayout::LayoutCategory;
+	using MemLayout::LayoutPolicyRef;
+	using MemLayout::PolicyLayout;
 
 	struct MemoryResourceRecord
 	{
@@ -121,7 +122,7 @@ export namespace Potato::IR
 			std::size_t array_count = 1;
 		};
 
-		static StructLayout::Ptr CreateDynamic(std::wstring_view name, std::span<Member const> members, LayoutCategory category = LayoutCategory::CLike, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+		static StructLayout::Ptr CreateDynamic(std::wstring_view name, std::span<Member const> members, LayoutPolicyRef layout_policy = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
 		virtual OperateProperty GetOperateProperty() const = 0;
 		virtual bool DefaultConstruction(void* target, std::size_t array_count = 1) const;
@@ -139,7 +140,7 @@ export namespace Potato::IR
 			Ptr struct_layout;
 			std::wstring_view name;
 			std::size_t array_count;
-			std::size_t offset;
+			Misc::IndexSpan<> combined_offset;
 		};
 
 		virtual std::span<MemberView const> GetMemberView() const = 0;
@@ -148,9 +149,8 @@ export namespace Potato::IR
 		std::optional<MemberView> FindMemberView(std::wstring_view member_name) const;
 		std::optional<MemberView> FindMemberView(std::size_t index) const;
 		virtual Layout GetLayout() const = 0;
-		Layout GetLayout(std::size_t array_count) const;
 
-		static void* GetMemberData(MemberView const& member_view, void* target) { assert(target != nullptr); return static_cast<std::byte*>(target) + member_view.offset; }
+		static void* GetMemberData(MemberView const& member_view, void* target) { assert(target != nullptr); return static_cast<std::byte*>(target) + member_view.combined_offset.Begin(); }
 		static void const* GetMemberData(MemberView const& member_view, void const* target) { return GetMemberData(member_view, const_cast<void*>(target)); }
 		
 		template<typename Type>
@@ -165,7 +165,12 @@ export namespace Potato::IR
 			return static_cast<Type*>(GetMemberData(view, target));
 		}
 
-		static std::span<std::byte> GetMemberDataBuffer(MemberView const& member_view, void* target);
+		static std::span<std::byte> GetMemberDataBuffer(MemberView const& member_view, void* target) {
+			return {
+				static_cast<std::byte*>(target) + member_view.combined_offset.Begin(),
+				member_view.combined_offset.Size()
+			};
+		}
 		static std::span<std::byte const> GetMemberDataBuffer(MemberView const& member_view, void const* target) {
 			return GetMemberDataBuffer(member_view, const_cast<void*>(target));
 		}
@@ -197,7 +202,6 @@ export namespace Potato::IR
 		virtual bool IsEqual(StructLayout const* other) const { return false; }
 		virtual void AddStructLayoutRef() const = 0;
 		virtual void SubStructLayoutRef() const = 0;
-		virtual LayoutCategory GetLayoutCategory() const { return LayoutCategory::CLike; }
 	};
 
 	struct StructLayoutObject : public MemoryResourceRecordIntrusiveInterface

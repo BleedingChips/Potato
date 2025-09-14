@@ -6,6 +6,7 @@ export module PotatoMemLayout;
 
 import std;
 import PotatoTMP;
+import PotatoMisc;
 
 export namespace Potato::MemLayout
 {
@@ -20,131 +21,71 @@ export namespace Potato::MemLayout
 		static constexpr Layout GetArray(std::size_t array_count) { return { alignof(std::remove_cvref_t<Type>), sizeof(std::remove_cvref_t<Type>) * array_count }; }
 		bool operator==(Layout const& l) const noexcept = default;
 		std::strong_ordering operator<=>(Layout const& l2) const noexcept = default;
-		Layout WithArray(std::size_t array_count = 1) const { return {align, size * array_count}; }
+		Layout WithArray(std::size_t array_count = 1) const { return { align, size * array_count }; }
 	};
 
-	constexpr std::optional<std::size_t> CPPCombinationMemberFunc(Layout&, Layout, std::optional<std::size_t>);
-	constexpr std::optional<std::size_t> HLSLCombinationMemberFunc(Layout&, Layout, std::optional<std::size_t>);
-	constexpr std::optional<Layout> CPPCompletionLayoutFunc(Layout);
+	constexpr std::optional<Misc::IndexSpan<>> CPPCombineMemberFunc(Layout&, Layout, std::optional<std::size_t>);
+	constexpr std::optional<Misc::IndexSpan<>> HLSLCombineMemberFunc(Layout&, Layout, std::optional<std::size_t>);
+	constexpr std::optional<Layout> CPPCompleteLayoutFunc(Layout);
 
 	struct LayoutPolicyRef
 	{
-		using CombinationMemberFuncType = TMP::FunctionRef<std::optional<std::size_t>(Layout& current, Layout member, std::optional<std::size_t> array_count)>;
+		using CombinationMemberFuncType = TMP::FunctionRef<std::optional<Misc::IndexSpan<>>(Layout& current, Layout member, std::optional<std::size_t> array_count)>;
 		using CompletionLayoutFuncType = TMP::FunctionRef<std::optional<Layout>(Layout current)>;
 		constexpr LayoutPolicyRef(
-			CombinationMemberFuncType combination_func = CPPCombinationMemberFunc,
-			CompletionLayoutFuncType completion_func = CPPCompletionLayoutFunc
+			CombinationMemberFuncType combine_func = CPPCombineMemberFunc,
+			CompletionLayoutFuncType complete_func = CPPCompleteLayoutFunc
 		)
-			:combination_func(combination_func), completion_func(completion_func)
+			:combine_func(combine_func), complete_func(complete_func)
 		{
 
 		}
 		constexpr LayoutPolicyRef(LayoutPolicyRef const&) = default;
-		constexpr operator bool() const { return combination_func && completion_func; }
-		constexpr std::optional<std::size_t> Combination(Layout& current_layout, Layout member_layout, std::optional<std::size_t> array_count = std::nullopt) const
+		constexpr operator bool() const { return combine_func && complete_func; }
+		constexpr std::optional<Misc::IndexSpan<>> Combine(Layout& current_layout, Layout member_layout, std::optional<std::size_t> array_count = std::nullopt) const
 		{
-			return combination_func(current_layout, member_layout, array_count);
+			return combine_func(current_layout, member_layout, array_count);
 		}
-		constexpr std::optional<Layout> Completion(Layout current_layout) const
+		constexpr std::optional<Layout> Complete(Layout current_layout) const
 		{
-			return completion_func(current_layout);
+			return complete_func(current_layout);
 		}
 	protected:
-		TMP::FunctionRef<std::optional<std::size_t>(Layout& current, Layout member, std::optional<std::size_t> array_count)> combination_func;
-		TMP::FunctionRef<std::optional<Layout>(Layout current)> completion_func;
+		CombinationMemberFuncType combine_func;
+		CompletionLayoutFuncType complete_func;
 	};
 
-	LayoutPolicyRef GetCPPLikePolicy() { return LayoutPolicyRef(CPPCombinationMemberFunc, CPPCompletionLayoutFunc); }
-	
+	struct PolicyLayout
+	{
+		PolicyLayout(Layout& layout_reference, LayoutPolicyRef ref = {})
+			: layout(layout_reference), policy(std::move(ref))
+		{
+		}
+		constexpr std::optional<Misc::IndexSpan<>> Combine(Layout member_layout, std::optional<std::size_t> array_count = std::nullopt)
+		{
+			return policy.Combine(layout, member_layout, array_count);
+		}
+		constexpr std::optional<Layout> Complete() const
+		{
+			return policy.Complete(layout);
+		}
+	protected:
+		Layout& layout;
+		LayoutPolicyRef policy;
+	};
+
+	LayoutPolicyRef GetCPPLikePolicy() { return LayoutPolicyRef(CPPCombineMemberFunc, CPPCompleteLayoutFunc); }
+
 	//LayoutPolicyRef GetHLSLConstBufferPolicy() { return LayoutPolicyRef(CPPCombinationMemberFunc, CPPCompletionLayoutFunc); }
 
-	enum class LayoutCategory
+	constexpr std::optional<Misc::IndexSpan<>> CPPCombineMemberFunc(Layout& target_layout, Layout member, std::optional<std::size_t> array_count)
 	{
-		CLike,
-		HLSLCBuffer
-	};
-
-	struct MemLayout
-	{
-		constexpr MemLayout(LayoutCategory category = LayoutCategory::CLike)
-			: category(category) {
-			if (category == LayoutCategory::HLSLCBuffer)
-			{
-				target.align = 64;
-			}
-		}
-		MemLayout(Layout layout, LayoutCategory category = LayoutCategory::CLike)
-			: target(layout), category(category) 
+		if (array_count.has_value())
 		{
-			if (category == LayoutCategory::HLSLCBuffer)
-			{
-				target.align = sizeof(float);
-			}
-		}
-		MemLayout(MemLayout const&) = default;
-		MemLayout& operator=(MemLayout const&) = default;
-		template<typename Type>
-		static constexpr MemLayout Get(LayoutCategory category = LayoutCategory::CLike) { return { {alignof(std::remove_cvref_t<Type>), sizeof(std::remove_cvref_t<Type>)}, category }; }
-	
-		constexpr std::size_t Insert(Layout const inserted_layout, std::size_t array_count = 1)
-		{
-			switch (category)
-			{
-			case LayoutCategory::CLike:
-			{
-				if (target.align < inserted_layout.align)
-					target.align = inserted_layout.align;
-				if (target.size % inserted_layout.align != 0)
-					target.size += inserted_layout.align - (target.size % inserted_layout.align);
-				std::size_t Offset = target.size;
-				target.size += inserted_layout.size * array_count;
-				return Offset;
-			}
-			case LayoutCategory::HLSLCBuffer:
-			{
-				
-			}
-			default:
-				return std::numeric_limits<std::size_t>::max();
-			}
-		}
-
-		inline constexpr Layout Get() const
-		{
-			auto ModedSize = (target.size % target.align);
-			if (ModedSize != 0)
-			{
-				return {
-					target.align,
-					target.size + target.align - ModedSize
-				};
-			}
-			return target;
-		}
-
-		inline constexpr Layout GetRawLayout() const
-		{
-			return target;
-		}
-
-		static inline constexpr Layout Sum(std::span<Layout> Layouts, LayoutCategory category = LayoutCategory::CLike)
-		{
-			MemLayout target{category};
-			for (auto Ite : Layouts)
-				target.Insert(Ite);
-			return target.Get();
-		}
-	
-	protected:
-		Layout target;
-		LayoutCategory category;
-	};
-
-	constexpr std::optional<std::size_t> CPPCombinationMemberFunc(Layout& target_layout, Layout member, std::optional<std::size_t> array_count)
-	{
-		if (array_count.has_value() && *array_count > 1)
-		{
-			member.size *= *array_count;
+			if (*array_count > 1)
+				member.size *= *array_count;
+			else if (*array_count == 0)
+				return Misc::IndexSpan<>{ target_layout.size, 0 };
 		}
 		if (target_layout.align < member.align)
 			target_layout.align = member.align;
@@ -152,15 +93,15 @@ export namespace Potato::MemLayout
 			target_layout.size += member.align - (target_layout.size % member.align);
 		std::size_t Offset = target_layout.size;
 		target_layout.size += member.size;
-		return Offset;
+		return Misc::IndexSpan<>{ Offset, Offset + member.size };
 	}
 
-	constexpr std::optional<std::size_t> HLSLCombinationMemberFunc(Layout&, Layout, std::optional<std::size_t>)
+	constexpr std::optional<Misc::IndexSpan<>> HLSLCombineMemberFunc(Layout&, Layout, std::optional<std::size_t>)
 	{
 		return std::nullopt;
 	}
 
-	constexpr std::optional<Layout> CPPCompletionLayoutFunc(Layout target_layout)
+	constexpr std::optional<Layout> CPPCompleteLayoutFunc(Layout target_layout)
 	{
 		auto moded_size = (target_layout.size % target_layout.align);
 		if (moded_size != 0)
@@ -173,3 +114,5 @@ export namespace Potato::MemLayout
 		return target_layout;
 	}
 }
+
+	
