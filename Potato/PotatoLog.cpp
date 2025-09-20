@@ -6,12 +6,14 @@ module;
 
 module PotatoLog;
 
-
-
-
 namespace Potato::Log
 {
+	LogPrinter::Ptr GetLogPrinter()
+	{
+		return {};
+	}
 
+	/*
 	std::pmr::memory_resource* LogMemoryResource() { return std::pmr::get_default_resource(); }
 
 	struct TerminalLogPrinter : public LogPrinter
@@ -49,4 +51,5 @@ namespace Potato::Log
 	}
 
 	LogPrinter::Ptr GetLogPrinter();
+	*/
 }

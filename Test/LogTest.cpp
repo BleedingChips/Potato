@@ -1,5 +1,6 @@
 
 #include <Windows.h>
+#include <clocale>
 import PotatoLog;
 import std;
 
@@ -11,8 +12,7 @@ int main()
 {
 	SetConsoleCP(CP_UTF8);
 	SetConsoleOutputCP(CP_UTF8);
-
-
+	std::setlocale(LC_ALL, ".UTF8");
 	std::ios::sync_with_stdio(false);
 	bool l = SetConsoleCP(CP_UTF8);
 	//constexpr char locale_name[] = "en_US.UTF-8";
@@ -21,15 +21,16 @@ int main()
 	//std::cout.imbue(std::locale());
 
 	std::u8string_view output = u8"中国人不骗中国人";
+	std::string_view output2 = "中国人不骗中国人";
 	//std::print(std::cout, "{}", std::string_view{reinterpret_cast<char const*>(output.data()), output.size()});
 
-	std::cout << std::string_view{ reinterpret_cast<char const*>(output.data()), output.size() } << std::endl;
+	std::cout << std::string_view{ reinterpret_cast<char const*>(output2.data()), output2.size() } << std::endl;
 
 
 	//auto L = std::format("{} {} {}", Potato::Log::Level::Log, 122345, "输出测试");
 
 	//std::wcout << L << std::endl;
-	Log<u8"Fuck">(Level::Log, u8"1234 {}", 1);
+	Log<"Fuck">(Level::Log, "1234 {}", 1);
 
 	volatile int i = 0;
 }

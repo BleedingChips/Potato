@@ -71,7 +71,7 @@ namespace Potato::IR
 		return true;
 	}
 
-	auto StructLayout::FindMemberView(std::string_view member_name) const -> std::optional<MemberView>
+	auto StructLayout::FindMemberView(std::u8string_view member_name) const -> std::optional<MemberView>
 	{
 		auto span = GetMemberView();
 		auto ite = std::find_if(span.begin(), span.end(), [=](MemberView const& ref) -> bool { return ref.name == member_name; });
@@ -98,7 +98,7 @@ namespace Potato::IR
 
 	struct DynamicStructLayout : public StructLayout, public MemoryResourceRecordIntrusiveInterface
 	{
-		virtual std::string_view GetName() const override { return name; }
+		virtual std::u8string_view GetName() const override { return name; }
 		virtual void AddStructLayoutRef() const override { MemoryResourceRecordIntrusiveInterface::AddRef(); }
 		virtual void SubStructLayoutRef() const override { MemoryResourceRecordIntrusiveInterface::SubRef(); }
 		Layout GetLayout() const override;
@@ -108,7 +108,7 @@ namespace Potato::IR
 
 	protected:
 
-		DynamicStructLayout(OperateProperty construct_property, std::string_view name, Layout total_layout, std::span<MemberView> member_view, std::size_t hash_code, MemoryResourceRecord record)
+		DynamicStructLayout(OperateProperty construct_property, std::u8string_view name, Layout total_layout, std::span<MemberView> member_view, std::size_t hash_code, MemoryResourceRecord record)
 			: MemoryResourceRecordIntrusiveInterface(record), name(name), total_layout(total_layout), hash_code(hash_code), member_view(member_view), construct_property(construct_property)
 		{
 
@@ -116,7 +116,7 @@ namespace Potato::IR
 
 		~DynamicStructLayout();
 
-		std::string_view name;
+		std::u8string_view name;
 		Layout total_layout;
 		std::span<MemberView> member_view;
 		OperateProperty construct_property;
@@ -145,7 +145,7 @@ namespace Potato::IR
 		return member_view;
 	}
 
-	StructLayout::Ptr StructLayout::CreateDynamic(std::string_view name, std::span<Member const> members, LayoutPolicyRef layout_policy, std::pmr::memory_resource* resource)
+	StructLayout::Ptr StructLayout::CreateDynamic(std::u8string_view name, std::span<Member const> members, LayoutPolicyRef layout_policy, std::pmr::memory_resource* resource)
 	{
 		std::size_t hash_code = 0;
 		OperateProperty ope_property;
@@ -172,9 +172,9 @@ namespace Potato::IR
 		{
 			Layout total_layout;
 			auto member_span = std::span(reinterpret_cast<MemberView*>(re.GetByte(member_offset.Begin())), members.size());
-			auto str_span = std::span(reinterpret_cast<char*>(re.GetByte(name_offset.Begin())), name_size);
-			std::memcpy(str_span.data(), name.data(), name.size() * sizeof(char));
-			name = std::string_view{ str_span.subspan(0, name.size()) };
+			auto str_span = std::span(reinterpret_cast<char8_t*>(re.GetByte(name_offset.Begin())), name_size);
+			std::memcpy(str_span.data(), name.data(), name.size() * sizeof(char8_t));
+			name = std::u8string_view{ str_span.subspan(0, name.size()) };
 			str_span = str_span.subspan(name.size());
 
 			for (std::size_t i = 0; i < members.size(); ++i)
@@ -184,11 +184,11 @@ namespace Potato::IR
 				auto new_layout = cur.struct_layout->GetLayout();
 				auto offset = *layout_policy.Combine(total_layout, new_layout, cur.array_count);
 
-				std::memcpy(str_span.data(), cur.name.data(), cur.name.size() * sizeof(wchar_t));
+				std::memcpy(str_span.data(), cur.name.data(), cur.name.size() * sizeof(char8_t));
 
 				new (&tar) MemberView{
 					cur.struct_layout,
-					std::string_view{str_span.data(), cur.name.size()},
+					std::u8string_view{str_span.data(), cur.name.size()},
 					cur.array_count,
 					offset
 				};

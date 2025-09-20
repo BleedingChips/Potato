@@ -261,7 +261,7 @@ namespace Potato::Document
 		}
 	}
 
-	std::optional<Encode::EncodeInfo> DocumentReader::ReadSome(std::span<char> output, std::size_t max_character)
+	std::optional<Encode::EncodeInfo> DocumentReader::ReadSome(std::span<char8_t> output, std::size_t max_character)
 	{
 		if (!stream.empty())
 		{
@@ -270,12 +270,12 @@ namespace Potato::Document
 			case BomT::NoBom:
 			case BomT::UTF8:
 			{
-				Encode::StrEncoder<char, char> encoder;
+				Encode::StrEncoder<char8_t, char8_t> encoder;
 				Encode::EncodeOption option;
 				option.max_character = max_character;
 				option.predict = false;
 				option.untrusted = true;
-				auto info = encoder.Encode(std::string_view{ reinterpret_cast<char const*>(stream.data()), stream.size() / sizeof(char) }, output, option);
+				auto info = encoder.Encode(std::u8string_view{ reinterpret_cast<char8_t const*>(stream.data()), stream.size() / sizeof(char8_t) }, output, option);
 				stream = stream.subspan(info.source_space);
 				return info;
 			}
@@ -305,7 +305,7 @@ namespace Potato::Document
 		}
 	}
 
-	std::size_t DocumentWriter::Write(std::string_view str)
+	std::size_t DocumentWriter::Write(std::u8string_view str)
 	{
 		switch (bom)
 		{

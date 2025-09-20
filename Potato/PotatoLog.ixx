@@ -12,13 +12,23 @@ export namespace Potato::Log
 	};
 
 	template<std::size_t N>
-	struct LogCategory : public TMP::TypeString<char8_t, N>
+	struct LogCategory : public TMP::TypeString<char, N>
 	{
-		using TMP::TypeString<char8_t, N>::TypeString;
+		using TMP::TypeString<char, N>::TypeString;
 	};
 
 	template<std::size_t N>
-	LogCategory(const char8_t(&str)[N]) -> LogCategory<N>;
+	LogCategory(const char(&str)[N]) -> LogCategory<N>;
+
+	struct FormatedSystemTime
+	{
+		std::chrono::system_clock::time_point current_time;
+
+		FormatedSystemTime(std::chrono::system_clock::time_point current_time = std::chrono::system_clock::now())
+			:current_time(current_time)
+		{
+		}
+	};
 }
 
 export namespace std
@@ -38,7 +48,7 @@ export namespace std
 			{
 			case Potato::Log::Level::Log:
 			{
-				constexpr std::string_view str = u8"Log";
+				constexpr std::string_view str = "Log";
 				auto out_ite = format_context.out();
 				for (auto ite : str)
 				{
@@ -71,6 +81,35 @@ export namespace std
 			return out_ite;
 		}
 	};
+
+	template<>
+	struct formatter<Potato::Log::FormatedSystemTime, char>
+	{
+		constexpr auto parse(std::basic_format_parse_context<char>& parse_context)
+		{
+			return parse_context.begin();
+		}
+
+		template<typename FormatContext>
+		constexpr auto format(Potato::Log::FormatedSystemTime time, FormatContext& format_context) const
+		{
+			auto second_now = std::chrono::floor<std::chrono::seconds>(time.current_time);
+
+			auto zoned_time = std::chrono::zoned_time{
+				std::chrono::current_zone(),
+				second_now
+			};
+
+			auto mil_second = std::chrono::floor<std::chrono::milliseconds>(time.current_time - second_now);
+
+			return std::format_to(
+				format_context.out(),
+				"[{:%m.%d-%H:%M:%S}.{:0>3}]",
+				zoned_time,
+				mil_second.count()
+			);
+		}
+	};
 }
 
 
@@ -80,6 +119,23 @@ export namespace Potato::Log
 
 	std::pmr::memory_resource* LogMemoryResource();
 
+	struct LogProperty
+	{
+		LogProperty(LogProperty&&) = default;
+		LogProperty(
+			std::pmr::memory_resource* resource = std::pmr::get_default_resource(),
+			TMP::FunctionRef<void(std::pmr::memory_resource*)> destructor = {}
+		)
+			:resource(resource), destructor(std::move(destructor))
+		{
+		}
+		~LogProperty() { if (destructor) destructor(resource); }
+		std::pmr::memory_resource* GetMemoryResource() const { return resource; }
+	protected:
+		std::pmr::memory_resource* resource = std::pmr::get_default_resource();
+		TMP::FunctionRef<void(std::pmr::memory_resource*)> destructor;
+	};
+
 	struct LogPrinter
 	{
 		struct Wrapper
@@ -87,13 +143,9 @@ export namespace Potato::Log
 			void AddRef(LogPrinter const* ptr) { ptr->AddLogPrinterRef(); }
 			void SubRef(LogPrinter const* ptr) { ptr->SubLogPrinterRef(); }
 		};
-
+		LogProperty StartLog(Level level) const { return {}; }
 		using Ptr = Pointer::IntrusivePtr<LogPrinter, Wrapper>;
-
-		virtual void Print(std::u8string_view print) = 0;
-
 	protected:
-
 		virtual void AddLogPrinterRef() const = 0;
 		virtual void SubLogPrinterRef() const = 0;
 	};
@@ -103,71 +155,43 @@ export namespace Potato::Log
 	struct DefaultLogFormatter;
 
 	template<LogCategory category>
-	struct LogFormatter
+	struct LogCategoryProperty
 	{
-		template<typename OutputIte, typename ...Parameters>
-		void operator()(OutputIte ite, Level level, std::basic_format_string<char8_t, std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
+		static bool IsLogEnable(Level level) { return true; }
+	};
+
+	template<LogCategory category>
+	struct LogCategoryFormatter
+	{
+		template<typename OutputIterator, typename ...Parameters>
+		OutputIterator operator()(OutputIterator iterator, Level level, std::basic_format_string<char, std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
 		{
-			auto now = std::chrono::system_clock::now();
-			auto second_now = std::chrono::floor<std::chrono::seconds>(now);
-			
-			auto zoned_time = std::chrono::zoned_time{
-				std::chrono::current_zone(),
-				second_now
-			};
-
-			auto mil_second = std::chrono::floor<std::chrono::milliseconds>(now - second_now);
-
-			ite = std::format_to(
-				ite,
-				"[{:%m.%d-%H:%M:%S}.{:0>3}]<{}><{}>",
-				zoned_time,
-				mil_second.count(),
-				category,
-				level
-			);
-
-			ite = std::format_to(
-				ite,
+			iterator = std::format_to(
+				std::move(iterator),
 				pattern,
 				std::forward<Parameters>(parameters)...
 			);
 
-			*ite++ = '\n';
+			*iterator++ = '\n';
+
+			return iterator;
 		}
 	};
-	/*
-	template<typename ...Parameters>
-	struct FormatStringWrapper : std::format_string<std::type_identity_t<Parameters>...>
-	{
-		consteval FormatStringWrapper(std::basic_string_view<char8_t> str)
-			: std::format_string<std::type_identity_t<Parameters>...>(std::string_view{ reinterpret_cast<char const*>(str.data()), str.size() })
-		{
-
-		}
-		template<std::size_t N>
-		consteval FormatStringWrapper(const char8_t(&str)[N])
-			: std::format_string<std::type_identity_t<Parameters>...>(reinterpret_cast<const char& [N]>(str))
-		{
-
-		}
-		FormatStringWrapper(FormatStringWrapper const&) = default;
-	};
-	*/
 
 	template<LogCategory category, typename ...Parameters>
-	constexpr void Log(Level level, std::u8string_view pattern, Parameters&& ...parameters)
+	constexpr void Log(Level level, std::basic_format_string<char, std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
 	{
-		/*
-		auto printer = GetLogPrinter();
-		if (printer)
+		if (LogCategoryProperty<category>::IsLogEnable(level))
 		{
-			std::pmr::string output_str{ LogMemoryResource() };
-			LogFormatter<category>{}(std::back_insert_iterator{ output_str }, level, pattern, std::forward<Parameters>(parameters)...);
-			std::u8string_view output_view = { reinterpret_cast<char8_t const*>(output_str.data()), output_str.size() };
-			printer->Print(output_view);
+			auto printer = GetLogPrinter();
+			if (printer)
+			{
+				auto property = printer->StartLog(level);
+				std::pmr::string cache_log{ property.GetMemoryResource() };
+				cache_log.reserve(1024);
+				LogCategoryFormatter<category>{}(std::back_insert_iterator{ cache_log }, level, pattern, std::forward<Parameters>(parameters)...);
+			}
 		}
-		*/
 	}
 }
 

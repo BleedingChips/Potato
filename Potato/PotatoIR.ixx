@@ -113,11 +113,11 @@ export namespace Potato::IR
 		struct Member
 		{
 			Ptr struct_layout;
-			std::string_view name;
+			std::u8string_view name;
 			std::size_t array_count = 1;
 		};
 
-		static StructLayout::Ptr CreateDynamic(std::string_view name, std::span<Member const> members, LayoutPolicyRef policy = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+		static StructLayout::Ptr CreateDynamic(std::u8string_view name, std::span<Member const> members, LayoutPolicyRef policy = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
 		virtual OperateProperty GetOperateProperty() const = 0;
 		virtual bool DefaultConstruction(void* target, std::size_t array_count = 1) const;
@@ -133,15 +133,15 @@ export namespace Potato::IR
 		struct MemberView
 		{
 			Ptr struct_layout;
-			std::string_view name;
+			std::u8string_view name;
 			std::size_t array_count;
 			Misc::IndexSpan<> combined_offset;
 		};
 
 		virtual std::span<MemberView const> GetMemberView() const = 0;
 		MemberView operator[](std::size_t index) const { auto span = GetMemberView(); assert(span.size() > index);  return span[index]; }
-		virtual std::string_view GetName() const = 0;
-		std::optional<MemberView> FindMemberView(std::string_view member_name) const;
+		virtual std::u8string_view GetName() const = 0;
+		std::optional<MemberView> FindMemberView(std::u8string_view member_name) const;
 		std::optional<MemberView> FindMemberView(std::size_t index) const;
 		virtual Layout GetLayout() const = 0;
 
