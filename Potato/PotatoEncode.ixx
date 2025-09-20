@@ -281,6 +281,29 @@ export namespace Potato::Encode
 		}
 	};
 
+	template<>
+	struct CharEncoder<char> : CharEncoder<char8_t>
+	{
+		constexpr std::optional<std::size_t> GetCharacterSize(std::span<char const> source, bool untrusted = false)
+		{
+			return CharEncoder<char8_t>::GetCharacterSize({ reinterpret_cast<char8_t const*>(source.data()), source.size() });
+		}
+		constexpr char32_t EncodeTo(std::size_t character_space, std::span<char const> source)
+		{
+			return CharEncoder<char8_t>::EncodeTo(character_space, { reinterpret_cast<char8_t const*>(source.data()), source.size() });
+		}
+
+		constexpr std::size_t DecodeCharacterSize(char32_t source)
+		{
+			return CharEncoder<char8_t>::DecodeCharacterSize(source);
+		}
+
+		constexpr bool DecodeFrom(char32_t source, std::size_t character_size, std::span<char> target)
+		{
+			return CharEncoder<char8_t>::DecodeFrom(source, character_size, { reinterpret_cast<char8_t*>(target.data()), target.size() });
+		}
+	};
+
 	template<typename Source, typename Target>
 	struct StrEncoder
 	{
@@ -367,115 +390,6 @@ export namespace Potato::Encode
 		constexpr EncodeInfo Encode(std::span<Source, S1> source, std::span<Target> target, EncodeOption option = {})
 		{
 			return this->Encode(std::span<Source const, S1>(source), target, option);
-		}
-	};
-
-
-	template<>
-	struct StrEncoder<char, wchar_t>
-
-#if !_WIN32
-		: protected  StrEncoder<char8_t, wchar_t>
-#endif
-
-	{
-#if _WIN32
-		EncodeInfo Encode(std::span<char const> source, std::span<wchar_t> target, EncodeOption option = {});
-		EncodeInfo Encode(std::basic_string_view<char> source, std::span<wchar_t> target, EncodeOption option = {})
-		{
-			return this->Encode(std::span<char const>(source.data(), source.size()), target, option);
-		}
-#else
-		template<std::size_t S1>
-		constexpr EncodeInfo Encode(std::span<char const, S1> source, std::span<wchar_t> target, EncodeOption option = {})
-		{
-			return StrEncoder<char8_t, wchar_t>::Encode(std::span<char8_t const>(reinterpret_cast<char8_t const*>(source.data()), source.size()), target, option);
-		}
-		constexpr EncodeInfo Encode(std::basic_string_view<char> source, std::span<wchar_t> target, EncodeOption option = {})
-		{
-			return this->Encode(std::span<char8_t const>(reinterpret_cast<char8_t const*>(source.data()), source.size()), target, option);
-		}
-#endif
-	};
-
-	template<>
-	struct StrEncoder<wchar_t, char>
-
-#if !_WIN32
-		: protected  StrEncoder<wchar_t, char8_t>
-#endif
-
-	{
-#if _WIN32
-		EncodeInfo Encode(std::span<wchar_t const> source, std::span<char> target, EncodeOption option = {});
-		EncodeInfo Encode(std::basic_string_view<wchar_t> source, std::span<char> target, EncodeOption option = {})
-		{
-			return this->Encode(std::span<wchar_t const>(source.data(), source.size()), target, option);
-		}
-#else
-		constexpr EncodeInfo Encode(std::span<wchar_t const> source, std::span<char> target, EncodeOption option = {})
-		{
-			return StrEncoder<wchar_t, char8_t>::Encode(source, std::span<wchar_t const>(reinterpret_cast<char8_t const*>(target.data()), target.size()), option);
-		}
-		constexpr EncodeInfo Encode(std::basic_string_view<wchar_t> source, std::span<char> target, EncodeOption option = {})
-		{
-			return this->Encode(std::span<source, char8_t const>(reinterpret_cast<char8_t const*>(target.data()), target.size()), option);
-		}
-		template<std::size_t S1>
-		constexpr EncodeInfo Encode(std::span<wchar_t, S1> source, std::span<char> target, EncodeOption option = {})
-		{
-			return this->Encode(std::span<wchar_t const, S1>(source), target, option);
-		}
-#endif
-	};
-}
-
-namespace std
-{
-	template<class CharT>
-	concept PotatoEncodeableChar = Potato::TMP::IsOneOfV<CharT, char8_t, char16_t, char32_t>;
-
-	template<PotatoEncodeableChar CharT>
-	struct formatter<std::basic_string_view<CharT>, wchar_t>
-	{
-		constexpr auto parse(std::basic_format_parse_context<wchar_t>& parse_context)
-		{
-			return parse_context.end();
-		}
-		template<typename FormatContext>
-		constexpr auto format(std::basic_string_view<CharT> view, FormatContext& format_context) const
-		{
-			wchar_t tem_buffer[2];
-			Potato::Encode::StrEncoder<CharT, wchar_t> encoder;
-			while (!view.empty())
-			{
-				auto info = encoder.Encode(view, std::span<wchar_t, 2>{ tem_buffer, 2 });
-				std::copy_n(
-					tem_buffer,
-					info.target_space,
-					format_context.out()
-				);
-				view = view.substr(info.source_space);
-				if (info.source_space == 0)
-					break;
-			}
-			return format_context.out();
-		}
-	};
-
-	template<PotatoEncodeableChar CharT, std::size_t N>
-	struct formatter<CharT[N], wchar_t>
-		: formatter<std::basic_string_view<CharT>, wchar_t>
-	{
-		using ParentType = formatter<std::basic_string_view<CharT>, wchar_t>;
-		constexpr auto parse(std::basic_format_parse_context<wchar_t>& parse_context)
-		{
-			return ParentType::parse(parse_context);
-		}
-		template<typename FormatContext>
-		constexpr auto format(CharT const str[N], FormatContext& format_context) const
-		{
-			return ParentType::format(std::basic_string_view<CharT>(str), format_context);
 		}
 	};
 }

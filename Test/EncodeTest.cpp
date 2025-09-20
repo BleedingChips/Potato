@@ -69,7 +69,7 @@ void TestingStrEncode()
 int main()
 {
 
-	auto p = std::format(L"sdad {}", U"sdaasd");
+	auto p = std::format("sdad {}", "sdaasd");
 
 	try {
 		TestingStrEncode();

@@ -1,3 +1,8 @@
+module;
+#ifdef _WIN32
+#include "Windows.h"
+#endif
+
 
 module PotatoLog;
 
@@ -12,19 +17,22 @@ namespace Potato::Log
 	struct TerminalLogPrinter : public LogPrinter
 	{
 
-		void Print(std::wstring_view print)
+		void Print(std::u8string_view print)
 		{
 			return;
-			std::wcout << print;
+			std::cout << std::string_view(reinterpret_cast<char const*>(print.data()), print.size());
 		}
 
 		TerminalLogPrinter()
 		{
+#ifdef _WIN32
+
+#endif
 			std::ios::sync_with_stdio(false);
-			constexpr char locale_name[] = "";
+			constexpr char locale_name[] = "UTF-8";
 			std::locale::global(std::locale(locale_name));
-			std::wcin.imbue(std::locale());
-			std::wcout.imbue(std::locale());
+			std::cin.imbue(std::locale());
+			std::cout.imbue(std::locale());
 		}
 	protected:
 

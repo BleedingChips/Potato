@@ -613,7 +613,7 @@ export namespace Potato::TMP
 			&& !std::is_same_v<std::remove_cvref_t<CallableObjectT>, FunctionRef>
 			)
 		{
-			function_ptr.callable_object = [](void* pointer, ParameterT&&... parameter) -> ReturnT {
+			function_ptr.callable_object = [](void* pointer, ParameterT... parameter) -> ReturnT {
 				return (*static_cast<CallableObjectT*>(pointer))(std::forward<ParameterT>(parameter)...);
 				};
 			callable_object = static_cast<void*>(&object);
@@ -631,11 +631,11 @@ export namespace Potato::TMP
 		{
 			if (callable_object != nullptr)
 			{
-				return (*function_ptr.callable_object)(callable_object, std::forward<OtherParameterT&&>(pars)...);
+				return (*function_ptr.callable_object)(callable_object, std::forward<OtherParameterT>(pars)...);
 			}
 			else
 			{
-				return (*function_ptr.normal)(std::forward<OtherParameterT&&>(pars)...);
+				return (*function_ptr.normal)(std::forward<OtherParameterT>(pars)...);
 			}
 		}
 	protected:

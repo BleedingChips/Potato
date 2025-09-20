@@ -10,11 +10,6 @@ import PotatoMisc;
 export import PotatoMemLayout;
 import PotatoEncode;
 
-namespace Potato::IR
-{
-	std::wstring TranslateTypeName(std::string_view type_name);
-}
-
 export namespace Potato::IR
 {
 	using MemLayout::Layout;
@@ -118,11 +113,11 @@ export namespace Potato::IR
 		struct Member
 		{
 			Ptr struct_layout;
-			std::wstring_view name;
+			std::string_view name;
 			std::size_t array_count = 1;
 		};
 
-		static StructLayout::Ptr CreateDynamic(std::wstring_view name, std::span<Member const> members, LayoutPolicyRef layout_policy = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+		static StructLayout::Ptr CreateDynamic(std::string_view name, std::span<Member const> members, LayoutPolicyRef policy = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
 		virtual OperateProperty GetOperateProperty() const = 0;
 		virtual bool DefaultConstruction(void* target, std::size_t array_count = 1) const;
@@ -138,15 +133,15 @@ export namespace Potato::IR
 		struct MemberView
 		{
 			Ptr struct_layout;
-			std::wstring_view name;
+			std::string_view name;
 			std::size_t array_count;
 			Misc::IndexSpan<> combined_offset;
 		};
 
 		virtual std::span<MemberView const> GetMemberView() const = 0;
 		MemberView operator[](std::size_t index) const { auto span = GetMemberView(); assert(span.size() > index);  return span[index]; }
-		virtual std::wstring_view GetName() const = 0;
-		std::optional<MemberView> FindMemberView(std::wstring_view member_name) const;
+		virtual std::string_view GetName() const = 0;
+		std::optional<MemberView> FindMemberView(std::string_view member_name) const;
 		std::optional<MemberView> FindMemberView(std::size_t index) const;
 		virtual Layout GetLayout() const = 0;
 
@@ -323,10 +318,9 @@ export namespace Potato::IR
 		virtual Layout GetLayout() const override { return Layout::Get<AtomicType>(); }
 		virtual void AddStructLayoutRef() const override { }
 		virtual void SubStructLayoutRef() const override {  }
-		virtual std::wstring_view GetName() const override
+		virtual std::string_view GetName() const override
 		{
-			static std::wstring type_name = TranslateTypeName(typeid(AtomicType).name());
-			return type_name;
+			return typeid(AtomicType).name();
 		}
 		std::span<MemberView const> GetMemberView() const override { return {}; }
 		OperateProperty GetOperateProperty() const override

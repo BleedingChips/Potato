@@ -140,3 +140,56 @@ export namespace Potato::Format
 		}
 	};
 }
+
+namespace std
+{
+	template<class CharT>
+	concept PotatoEncodeableChar = Potato::TMP::IsOneOfV<CharT, char8_t, char16_t, char32_t>;
+
+	template<class CharT>
+	concept PotatoEncodeableTarget = Potato::TMP::IsOneOfV<CharT, char, wchar_t>;
+
+	template<PotatoEncodeableChar CharT, PotatoEncodeableTarget TargetCharT>
+	struct formatter<std::basic_string_view<CharT>, TargetCharT>
+	{
+		constexpr auto parse(std::basic_format_parse_context<TargetCharT>& parse_context)
+		{
+			return parse_context.end();
+		}
+		template<typename FormatContext>
+		constexpr auto format(std::basic_string_view<CharT> view, FormatContext& format_context) const
+		{
+			TargetCharT tem_buffer[4];
+			Potato::Encode::StrEncoder<CharT, TargetCharT> encoder;
+			while (!view.empty())
+			{
+				auto info = encoder.Encode(view, std::span<TargetCharT, 4>{ tem_buffer, 4 });
+				std::copy_n(
+					tem_buffer,
+					info.target_space,
+					format_context.out()
+				);
+				view = view.substr(info.source_space);
+				if (info.source_space == 0)
+					break;
+			}
+			return format_context.out();
+		}
+	};
+
+	template<PotatoEncodeableChar CharT, std::size_t N, PotatoEncodeableTarget TargetCharT>
+	struct formatter<CharT[N], TargetCharT>
+		: formatter<std::basic_string_view<CharT>, TargetCharT>
+	{
+		using ParentType = formatter<std::basic_string_view<CharT>, TargetCharT>;
+		constexpr auto parse(std::basic_format_parse_context<TargetCharT>& parse_context)
+		{
+			return ParentType::parse(parse_context);
+		}
+		template<typename FormatContext>
+		constexpr auto format(CharT const str[N], FormatContext& format_context) const
+		{
+			return ParentType::format(std::basic_string_view<CharT>(str), format_context);
+		}
+	};
+}

@@ -12,21 +12,21 @@ export namespace Potato::Log
 	};
 
 	template<std::size_t N>
-	struct LogCategory : public TMP::TypeString<wchar_t, N>
+	struct LogCategory : public TMP::TypeString<char8_t, N>
 	{
-		using TMP::TypeString<wchar_t, N>::TypeString;
+		using TMP::TypeString<char8_t, N>::TypeString;
 	};
 
 	template<std::size_t N>
-	LogCategory(const wchar_t(&str)[N]) -> LogCategory<N>;
+	LogCategory(const char8_t(&str)[N]) -> LogCategory<N>;
 }
 
 export namespace std
 {
 	template<>
-	struct formatter<Potato::Log::Level, wchar_t>
+	struct formatter<Potato::Log::Level, char>
 	{
-		constexpr auto parse(std::basic_format_parse_context<wchar_t>& parse_context)
+		constexpr auto parse(std::basic_format_parse_context<char>& parse_context)
 		{
 			return parse_context.begin();
 		}
@@ -38,7 +38,7 @@ export namespace std
 			{
 			case Potato::Log::Level::Log:
 			{
-				constexpr std::wstring_view str = L"Log";
+				constexpr std::string_view str = u8"Log";
 				auto out_ite = format_context.out();
 				for (auto ite : str)
 				{
@@ -53,9 +53,9 @@ export namespace std
 	};
 
 	template<std::size_t N>
-	struct formatter<Potato::Log::LogCategory<N>, wchar_t>
+	struct formatter<Potato::Log::LogCategory<N>, char>
 	{
-		constexpr auto parse(std::basic_format_parse_context<wchar_t>& parse_context)
+		constexpr auto parse(std::basic_format_parse_context<char>& parse_context)
 		{
 			return parse_context.begin();
 		}
@@ -90,7 +90,7 @@ export namespace Potato::Log
 
 		using Ptr = Pointer::IntrusivePtr<LogPrinter, Wrapper>;
 
-		virtual void Print(std::wstring_view print) = 0;
+		virtual void Print(std::u8string_view print) = 0;
 
 	protected:
 
@@ -106,7 +106,7 @@ export namespace Potato::Log
 	struct LogFormatter
 	{
 		template<typename OutputIte, typename ...Parameters>
-		void operator()(OutputIte ite, Level level, std::wformat_string<std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
+		void operator()(OutputIte ite, Level level, std::basic_format_string<char8_t, std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
 		{
 			auto now = std::chrono::system_clock::now();
 			auto second_now = std::chrono::floor<std::chrono::seconds>(now);
@@ -120,7 +120,7 @@ export namespace Potato::Log
 
 			ite = std::format_to(
 				ite,
-				L"[{:%m.%d-%H:%M:%S}.{:0>3}]<{}><{}>",
+				"[{:%m.%d-%H:%M:%S}.{:0>3}]<{}><{}>",
 				zoned_time,
 				mil_second.count(),
 				category,
@@ -133,21 +133,41 @@ export namespace Potato::Log
 				std::forward<Parameters>(parameters)...
 			);
 
-			*ite++ = L'\n';
+			*ite++ = '\n';
 		}
 	};
+	/*
+	template<typename ...Parameters>
+	struct FormatStringWrapper : std::format_string<std::type_identity_t<Parameters>...>
+	{
+		consteval FormatStringWrapper(std::basic_string_view<char8_t> str)
+			: std::format_string<std::type_identity_t<Parameters>...>(std::string_view{ reinterpret_cast<char const*>(str.data()), str.size() })
+		{
 
+		}
+		template<std::size_t N>
+		consteval FormatStringWrapper(const char8_t(&str)[N])
+			: std::format_string<std::type_identity_t<Parameters>...>(reinterpret_cast<const char& [N]>(str))
+		{
+
+		}
+		FormatStringWrapper(FormatStringWrapper const&) = default;
+	};
+	*/
 
 	template<LogCategory category, typename ...Parameters>
-	constexpr void Log(Level level, std::wformat_string<std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
+	constexpr void Log(Level level, std::u8string_view pattern, Parameters&& ...parameters)
 	{
+		/*
 		auto printer = GetLogPrinter();
 		if (printer)
 		{
-			std::pmr::wstring output_str{ LogMemoryResource() };
+			std::pmr::string output_str{ LogMemoryResource() };
 			LogFormatter<category>{}(std::back_insert_iterator{ output_str }, level, pattern, std::forward<Parameters>(parameters)...);
-			printer->Print(output_str);
+			std::u8string_view output_view = { reinterpret_cast<char8_t const*>(output_str.data()), output_str.size() };
+			printer->Print(output_view);
 		}
+		*/
 	}
 }
 

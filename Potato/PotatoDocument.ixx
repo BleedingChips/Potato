@@ -121,7 +121,7 @@ export namespace Potato::Document
 	{
 		DocumentReader(std::span<std::byte const> stream, std::optional<BomT> force_bom = std::nullopt);
 
-		std::optional<Encode::EncodeInfo> ReadSome(std::span<wchar_t> output, std::size_t max_character_count = std::numeric_limits<std::size_t>::max());
+		std::optional<Encode::EncodeInfo> ReadSome(std::span<char> output, std::size_t max_character_count = std::numeric_limits<std::size_t>::max());
 
 		template<typename OutIterator>
 		OutIterator Read(OutIterator out_iterator, std::size_t max_character_count = std::numeric_limits<std::size_t>::max());
@@ -136,7 +136,7 @@ export namespace Potato::Document
 	template<typename OutIterator>
 	OutIterator DocumentReader::Read(OutIterator out_iterator, std::size_t max_character)
 	{
-		std::array<wchar_t, 1024> tem_buffer;
+		std::array<char, 2048> tem_buffer;
 		while (true)
 		{
 			auto info = this->ReadSome(std::span(tem_buffer), max_character);
@@ -159,7 +159,7 @@ export namespace Potato::Document
 	{
 		DocumentWriter(BomT force_bom = BomT::NoBom, bool need_bom = true, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 		BomT GetBom() const { return bom; }
-		std::size_t Write(std::wstring_view str);
+		std::size_t Write(std::string_view str);
 		bool FlushTo(BinaryStreamWriter& writer);
 	protected:
 		std::pmr::vector<std::byte> cache_buffer;

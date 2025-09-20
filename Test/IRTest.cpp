@@ -33,22 +33,22 @@ int main()
 	{
 		{
 			StaticAtomicStructLayout<std::size_t>::Create(),
-			L"k",
+			"k",
 			1
 		},
 		{
 			StaticAtomicStructLayout<float>::Create(),
-			L"I",
+			"I",
 			1
 		},
 		{
 			StaticAtomicStructLayout<std::size_t>::Create(),
-			L"o",
+			"o",
 			2
 		},
 	};
 
-	auto P = StructLayout::CreateDynamic(L"K", me);
+	auto P = StructLayout::CreateDynamic("K", me);
 
 	K i;
 
