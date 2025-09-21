@@ -318,9 +318,10 @@ export namespace Potato::IR
 		virtual Layout GetLayout() const override { return Layout::Get<AtomicType>(); }
 		virtual void AddStructLayoutRef() const override { }
 		virtual void SubStructLayoutRef() const override {  }
-		virtual std::string_view GetName() const override
+		virtual std::u8string_view GetName() const override
 		{
-			return typeid(AtomicType).name();
+			std::u8string_view type_name = {reinterpret_cast<char8_t const*>(typeid(AtomicType).name())};
+			return type_name;
 		}
 		std::span<MemberView const> GetMemberView() const override { return {}; }
 		OperateProperty GetOperateProperty() const override
