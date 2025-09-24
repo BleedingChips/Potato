@@ -69,7 +69,8 @@ int main()
 	ref3[0] = 3;
 	ref3[1] = 4;
 
-	auto ref4 = P->GetMemberDataArrayWithStaticCast<std::size_t>(span[2], &i);
+	auto ref4 = P->GetMemberDataWithStaticCast<std::size_t>(span[2], &i, 0);
+	auto ref4_1 = P->GetMemberDataWithStaticCast<std::size_t>(span[2], &i, 1);
 
 	auto iop = StructLayoutObject::DefaultConstruct(P, 2);
 

@@ -61,7 +61,7 @@ namespace Potato::IR
 		{
 			if (mem[i].name != mem2[i].name)
 				return false;
-			if (mem[i].array_count != mem2[i].array_count)
+			if (mem[i].offset != mem2[i].offset)
 				return false;
 			/*
 			if (*mem[i].struct_layout != *mem2[i].struct_layout)
@@ -171,8 +171,8 @@ namespace Potato::IR
 		if (re)
 		{
 			Layout total_layout;
-			auto member_span = std::span(reinterpret_cast<MemberView*>(re.GetByte(member_offset.Begin())), members.size());
-			auto str_span = std::span(reinterpret_cast<char8_t*>(re.GetByte(name_offset.Begin())), name_size);
+			auto member_span = std::span(reinterpret_cast<MemberView*>(re.GetByte(member_offset.buffer_offset)), members.size());
+			auto str_span = std::span(reinterpret_cast<char8_t*>(re.GetByte(name_offset.buffer_offset)), name_size);
 			std::memcpy(str_span.data(), name.data(), name.size() * sizeof(char8_t));
 			name = std::u8string_view{ str_span.subspan(0, name.size()) };
 			str_span = str_span.subspan(name.size());
@@ -189,7 +189,6 @@ namespace Potato::IR
 				new (&tar) MemberView{
 					cur.struct_layout,
 					std::u8string_view{str_span.data(), cur.name.size()},
-					cur.array_count,
 					offset
 				};
 				str_span = str_span.subspan(cur.name.size());
@@ -209,8 +208,8 @@ namespace Potato::IR
 
 	StructLayoutObject::~StructLayoutObject()
 	{
-		assert(struct_layout && start != nullptr);
-		struct_layout->Destruction(start, array_count);
+		assert(struct_layout && buffer != nullptr);
+		struct_layout->Destruction(offset.GetMember(reinterpret_cast<std::byte*>(buffer)), offset.element_count, offset.next_element_offset);
 	}
 
 	auto StructLayoutObject::DefaultConstruct(StructLayout::Ptr struct_layout, std::size_t array_count, std::pmr::memory_resource* resource)
@@ -232,10 +231,10 @@ namespace Potato::IR
 		{
 			try
 			{
-				auto start = re.GetByte(offset.Begin());
-				auto re2 = struct_layout->DefaultConstruction(start, array_count);
+				auto start = offset.GetMember(re.GetByte());
+				auto re2 = struct_layout->DefaultConstruction(start, offset.element_count, offset.next_element_offset);
 				assert(re2);
-				return new (re.Get()) StructLayoutObject{ re, start, array_count, std::move(struct_layout) };
+				return new (re.Get()) StructLayoutObject{ re, re.Get(), offset, std::move(struct_layout) };
 			}
 			catch (...)
 			{
@@ -262,10 +261,10 @@ namespace Potato::IR
 		{
 			try
 			{
-				auto start = re.GetByte(offset.Begin());
-				auto re2 = struct_layout->CopyConstruction(start, source, array_count);
+				auto start = offset.GetMember(re.GetByte());
+				auto re2 = struct_layout->CopyConstruction(start, source, offset.element_count, offset.next_element_offset);
 				assert(re2);
-				return new (re.Get()) StructLayoutObject{ re, start, array_count, std::move(struct_layout) };
+				return new (re.Get()) StructLayoutObject{ re, re.Get(), offset, std::move(struct_layout)};
 			}
 			catch (...)
 			{
@@ -293,10 +292,10 @@ namespace Potato::IR
 		{
 			try
 			{
-				auto start = static_cast<std::byte*>(re.Get()) + offset.Begin();
-				auto re2 = struct_layout->MoveConstruction(start, source, array_count);
+				auto start = offset.GetMember(re.GetByte());
+				auto re2 = struct_layout->MoveConstruction(start, source, offset.element_count, offset.next_element_offset);
 				assert(re2);
-				return new (re.Get()) StructLayoutObject{ re, start, array_count, std::move(struct_layout) };
+				return new (re.Get()) StructLayoutObject{ re, re.Get(), offset, std::move(struct_layout)};
 			}
 			catch (...)
 			{
@@ -307,77 +306,33 @@ namespace Potato::IR
 		return {};
 	}
 
-	auto StructLayoutObject::Construct(StructLayout::Ptr struct_layout, std::span<MemberConstruct const> construct_parameter, std::pmr::memory_resource* resource)
+	auto StructLayoutObject::CustomConstruction(StructLayout::Ptr struct_layout, std::span<StructLayout::CustomConstruct const> construct_parameter, std::size_t array_count, std::pmr::memory_resource* resource)
 		-> Ptr
 	{
-		if (!struct_layout || struct_layout->GetMemberView().size() != construct_parameter.size())
+		if (!struct_layout)
 			return {};
-		auto member_view = struct_layout->GetMemberView();
 
-		for (std::size_t i = 0; i < member_view.size(); ++i)
-		{
-			auto operate = member_view[i].struct_layout->GetOperateProperty();
-			switch (construct_parameter[i].construct_operator)
-			{
-			case ConstructOperator::Default:
-				if (!operate.construct_default)
-					return {};
-				break;
-			case ConstructOperator::Copy:
-				if (!operate.construct_copy || construct_parameter[i].construct_parameter_object == nullptr)
-					return {};
-				break;
-			case ConstructOperator::Move:
-				if (!operate.construct_move || construct_parameter[i].construct_parameter_object == nullptr)
-					return {};
-				break;
-			default:
-				return {};
-			}
-		}
 		auto policy = MemLayout::GetCPPLikePolicy();
 		auto cpp_layout = Layout::Get<StructLayoutObject>();
 		auto m_layout = struct_layout->GetLayout();
-		auto offset = *policy.Combine(cpp_layout, m_layout);
+		auto offset = *policy.Combine(cpp_layout, m_layout, array_count);
 		auto o_layout = *policy.Complete(cpp_layout);
+		auto member_view = struct_layout->GetMemberView();
+
 		auto re = MemoryResourceRecord::Allocate(resource, o_layout);
 		if (re)
 		{
-			auto start = re.GetByte(offset.Begin());
-			for (std::size_t i = 0; i < member_view.size(); ++i)
+			auto buffer = offset.GetMember(re.GetByte());
+			if (struct_layout->CustomConstruction(buffer, construct_parameter, offset.element_count, offset.next_element_offset))
 			{
-				auto& mv = member_view[i];
-				switch (construct_parameter[i].construct_operator)
-				{
-				case ConstructOperator::Default:
-				{
-					auto result = mv.struct_layout->DefaultConstruction(start + mv.combined_offset.Begin());
-					assert(result);
-					break;
-				}
-				case ConstructOperator::Copy:
-				{
-					auto result = mv.struct_layout->CopyConstruction(start + mv.combined_offset.Begin(), construct_parameter[i].construct_parameter_object);
-					assert(result);
-					break;
-				}
-				case ConstructOperator::Move:
-				{
-					auto result = mv.struct_layout->MoveConstruction(start + mv.combined_offset.Begin(), construct_parameter[i].construct_parameter_object);
-					assert(result);
-					break;
-				}
-				default:
-					break;
-				}
+				return new (re.Get()) StructLayoutObject{ re, re.Get(), offset, std::move(struct_layout)};
 			}
-
-			return new (re.Get()) StructLayoutObject{ re, start, 1, std::move(struct_layout) };
+			re.Deallocate();
 		}
 		return {};
 	}
 
-	bool StructLayout::CopyConstruction(void* target, void const* source, std::size_t array_count) const
+	bool StructLayout::CopyConstruction(void* target, void const* source, std::size_t array_count, std::size_t next_element_offset = 0) const
 	{
 		assert(target != nullptr && source != nullptr && array_count > 0);
 		auto operate_property = GetOperateProperty();
@@ -389,13 +344,13 @@ namespace Potato::IR
 			std::byte const* sou = static_cast<std::byte const*>(source);
 			for(std::size_t i = 0; i < array_count; ++i)
 			{
-				std::byte* tar_ite = tar + layout.size * i;
-				std::byte const* sou_ite = sou + layout.size * i;
+				std::byte* tar_ite = tar + next_element_offset * i;
+				std::byte const* sou_ite = sou + next_element_offset * i;
 				for(auto& ite : member_view)
 				{
 					auto data = GetMemberData(ite, tar_ite);
 					auto data2 = GetMemberData(ite, sou_ite);
-					auto re = ite.struct_layout->CopyConstruction(data, data2, ite.array_count);
+					auto re = ite.struct_layout->CopyConstruction(data, data2, ite.offset.element_count, ite.offset.next_element_offset);
 				}
 			}
 			return true;
@@ -403,7 +358,7 @@ namespace Potato::IR
 		return false;
 	}
 
-	bool StructLayout::MoveConstruction(void* target, void* source, std::size_t array_count) const
+	bool StructLayout::MoveConstruction(void* target, void* source, std::size_t array_count, std::size_t next_element_offset) const
 	{
 		assert(target != source && target != nullptr && source != nullptr && array_count >= 1);
 		auto operate_property = GetOperateProperty();
@@ -415,13 +370,13 @@ namespace Potato::IR
 			std::byte* sou = static_cast<std::byte*>(source);
 			for(std::size_t i = 0; i < array_count; ++i)
 			{
-				std::byte* tar_ite = tar + layout.size * i;
-				std::byte* sou_ite = sou + layout.size * i;
+				std::byte* tar_ite = tar + next_element_offset * i;
+				std::byte* sou_ite = sou + next_element_offset * i;
 				for(auto& ite : member_view)
 				{
 					auto data = GetMemberData(ite, tar_ite);
 					auto data2 = GetMemberData(ite, sou_ite);
-					auto re = ite.struct_layout->MoveConstruction(data, data2, ite.array_count);
+					auto re = ite.struct_layout->MoveConstruction(data, data2, ite.offset.element_count, ite.offset.next_element_offset);
 					assert(re);
 				}
 			}
@@ -430,7 +385,7 @@ namespace Potato::IR
 		return false;
 	}
 
-	bool StructLayout::DefaultConstruction(void* target, std::size_t array_count) const
+	bool StructLayout::DefaultConstruction(void* target, std::size_t array_count, std::size_t next_element_offset) const
 	{
 		assert(target != nullptr &&  array_count >= 1);
 		auto operate_property = GetOperateProperty();
@@ -441,11 +396,11 @@ namespace Potato::IR
 			std::byte* tar = static_cast<std::byte*>(target);
 			for (std::size_t i = 0; i < array_count; ++i)
 			{
-				std::byte* tar_ite = tar + layout.size * i;
+				std::byte* tar_ite = tar + next_element_offset * i;
 				for (auto& ite : member_view)
 				{
 					auto data = GetMemberData(ite, tar_ite);
-					auto re = ite.struct_layout->DefaultConstruction(data, ite.array_count);
+					auto re = ite.struct_layout->DefaultConstruction(data, ite.offset.element_count, ite.offset.next_element_offset);
 					assert(re);
 				}
 			}
@@ -454,7 +409,7 @@ namespace Potato::IR
 		return false;
 	}
 
-	bool StructLayout::Destruction(void* target, std::size_t array_count) const
+	bool StructLayout::Destruction(void* target, std::size_t array_count, std::size_t next_element_offset) const
 	{
 		assert(target != nullptr);
 		auto member_view = GetMemberView();
@@ -462,18 +417,18 @@ namespace Potato::IR
 		std::byte* tar = static_cast<std::byte*>(target);
 		for(std::size_t i = 0; i < array_count; ++i)
 		{
-			std::byte* tar_ite = tar + layout.size * i;
+			std::byte* tar_ite = tar + next_element_offset * i;
 			for(auto& ite : member_view)
 			{
 				auto data = GetMemberData(ite, tar_ite);
-				auto re = ite.struct_layout->Destruction(data, ite.array_count);
+				auto re = ite.struct_layout->Destruction(data, ite.offset.element_count, ite.offset.next_element_offset);
 				assert(re);
 			}
 		}
 		return true;
 	}
 
-	bool StructLayout::CopyAssigned(void* target, void const* source, std::size_t array_count) const
+	bool StructLayout::CopyAssigned(void* target, void const* source, std::size_t array_count, std::size_t next_element_offset) const
 	{
 		assert(target != nullptr && source != nullptr);
 		auto member_view = GetMemberView();
@@ -485,12 +440,12 @@ namespace Potato::IR
 		{
 			for (std::size_t i = 0; i < array_count; ++i)
 			{
-				std::byte* tar_ite = tar + layout.size * i;
-				std::byte const* sou_ite = sou + layout.size * i;
+				std::byte* tar_ite = tar + next_element_offset * i;
+				std::byte const* sou_ite = sou + next_element_offset * i;
 				for (auto& ite : member_view)
 				{
 					auto data = GetMemberData(ite, tar_ite);
-					auto re = ite.struct_layout->CopyAssigned(data, sou_ite, ite.array_count);
+					auto re = ite.struct_layout->CopyAssigned(data, sou_ite, ite.offset.element_count, ite.offset.next_element_offset);
 					assert(re);
 				}
 			}
@@ -499,7 +454,7 @@ namespace Potato::IR
 		return false;
 	}
 
-	bool StructLayout::MoveAssigned(void* target, void* source, std::size_t array_count) const
+	bool StructLayout::MoveAssigned(void* target, void* source, std::size_t array_count, std::size_t next_element_offset) const
 	{
 		assert(target != nullptr && source != nullptr);
 		auto member_view = GetMemberView();
@@ -511,12 +466,12 @@ namespace Potato::IR
 		{
 			for (std::size_t i = 0; i < array_count; ++i)
 			{
-				std::byte* tar_ite = tar + layout.size * i;
-				std::byte* sou_ite = sou + layout.size * i;
+				std::byte* tar_ite = tar + next_element_offset * i;
+				std::byte* sou_ite = sou + next_element_offset * i;
 				for (auto& ite : member_view)
 				{
 					auto data = GetMemberData(ite, tar_ite);
-					auto re = ite.struct_layout->MoveAssigned(data, sou_ite, ite.array_count);
+					auto re = ite.struct_layout->MoveAssigned(data, sou_ite, ite.offset.element_count, ite.offset.next_element_offset);
 					assert(re);
 				}
 			}
@@ -525,9 +480,89 @@ namespace Potato::IR
 		return false;
 	}
 
+	bool StructLayout::CustomConstruction(void* target, std::span<CustomConstruct const> custom_construct, std::size_t array_count, std::size_t next_element_offset) const
+	{
+		auto mvs = GetMemberView();
+		if (custom_construct.size() != mvs.size())
+			return false;
+		
+		for (std::size_t mermeber_index = 0; mermeber_index < mvs.size(); ++mermeber_index)
+		{
+			auto& mv = mvs[mermeber_index];
+			auto cp = custom_construct[mermeber_index];
+			auto ope_property = mv.struct_layout->GetOperateProperty();
+			switch (cp.construct_operator)
+			{
+			case CustomConstructOperator::Default:
+				if (!ope_property.construct_default)
+				{
+					return false;
+				}
+				break;
+			case CustomConstructOperator::Copy:
+				if (!ope_property.construct_copy || cp.paramter_object.construct_parameter_const_object == nullptr)
+					return false;
+				break;
+			case CustomConstructOperator::Move:
+				if (!ope_property.construct_move || cp.paramter_object.construct_parameter_object == nullptr)
+					return false;
+				break;
+			default:
+				return false;
+				break;
+			}
+		}
+
+		for (std::size_t index = 0; index < array_count; ++index)
+		{
+			auto target_buffer = reinterpret_cast<std::byte*>(target) + index * next_element_offset;
+
+			for (std::size_t mermeber_index = 0; mermeber_index < mvs.size(); ++mermeber_index)
+			{
+				auto& mv = mvs[mermeber_index];
+				auto cp = custom_construct[mermeber_index];
+
+				switch (cp.construct_operator)
+				{
+				case CustomConstructOperator::Default:
+				{
+					auto re = mv.struct_layout->DefaultConstruction(
+						GetMemberData(mv, target_buffer),
+						mv.offset.element_count, mv.offset.next_element_offset
+					);
+					assert(re);
+					break;
+				}
+				case CustomConstructOperator::Copy:
+				{
+					auto re = mv.struct_layout->CopyConstruction(
+						GetMemberData(mv, target_buffer),
+						cp.paramter_object.construct_parameter_const_object,
+						mv.offset.element_count, mv.offset.next_element_offset
+					);
+					assert(re);
+					break;
+				}
+				case CustomConstructOperator::Move:
+				{
+					auto re = mv.struct_layout->MoveConstruction(
+						GetMemberData(mv, target_buffer),
+						cp.paramter_object.construct_parameter_object,
+						mv.offset.element_count, mv.offset.next_element_offset
+					);
+					assert(re);
+					break;
+				}
+				}
+			}
+		}
+
+		return true;
+	}
+
 	void* StructLayoutObject::GetArrayMemberData(StructLayout::MemberView const& member_view, std::size_t element_index)
 	{
-		return static_cast<std::byte*>(GetArrayData(element_index)) + member_view.combined_offset.Begin();
+		return member_view.offset.GetMember(offset.GetMember(reinterpret_cast<std::byte*>(buffer)), element_index);
 	}
 
 	void* StructLayoutObject::GetArrayMemberData(std::size_t member_index, std::size_t element_index)

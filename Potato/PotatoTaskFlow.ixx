@@ -39,7 +39,7 @@ export namespace Potato::TaskFlow
 
 		struct Parameter
 		{
-			std::string_view node_name;
+			std::u8string_view node_name;
 			std::size_t acceptable_mask = std::numeric_limits<std::size_t>::max();
 			Task::CustomData custom_data;
 		};

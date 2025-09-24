@@ -17,20 +17,37 @@ export namespace Potato::MemLayout
 
 		template<typename Type>
 		static constexpr Layout Get() { return { alignof(std::remove_cvref_t<Type>), sizeof(std::remove_cvref_t<Type>) }; }
-		template<typename Type>
-		static constexpr Layout GetArray(std::size_t array_count) { return { alignof(std::remove_cvref_t<Type>), sizeof(std::remove_cvref_t<Type>) * array_count }; }
 		bool operator==(Layout const& l) const noexcept = default;
 		std::strong_ordering operator<=>(Layout const& l2) const noexcept = default;
-		Layout WithArray(std::size_t array_count = 1) const { return { align, size * array_count }; }
 	};
 
-	constexpr std::optional<Misc::IndexSpan<>> CPPCombineMemberFunc(Layout&, Layout, std::optional<std::size_t>);
-	constexpr std::optional<Misc::IndexSpan<>> HLSLCombineMemberFunc(Layout&, Layout, std::optional<std::size_t>);
+	struct MermberOffset
+	{
+		std::size_t buffer_offset;
+		std::size_t element_count;
+		std::size_t next_element_offset;
+
+		std::byte* GetMember(std::byte* buffer, std::size_t array_index) const { assert(array_index < element_count);  return buffer + buffer_offset + array_index * next_element_offset; };
+		std::byte* GetMember(std::byte* buffer) const { return buffer + buffer_offset; }
+		std::byte const* GetMember(std::byte const* buffer, std::size_t array_index = 0) const { assert(array_index < element_count);  return buffer + buffer_offset + array_index * next_element_offset; };
+		std::byte const * GetMember(std::byte const* buffer) const { return buffer + buffer_offset; }
+		std::span<std::byte> GetMemberBuffer(std::byte* buffer) const {
+			return std::span<std::byte>{ buffer + buffer_offset, buffer + buffer_offset + element_count * next_element_offset };
+		};
+		std::span<std::byte const> GetMemberBuffer(std::byte const* buffer) const {
+			return std::span<std::byte const>{ buffer + buffer_offset, buffer + buffer_offset + element_count * next_element_offset };
+		};
+
+		bool operator==(MermberOffset const&) const = default;
+	};
+
+	constexpr std::optional<MermberOffset> CPPCombineMemberFunc(Layout&, Layout, std::optional<std::size_t>);
+	constexpr std::optional<MermberOffset> HLSLConstBufferCombineMemberFunc(Layout&, Layout, std::optional<std::size_t>);
 	constexpr std::optional<Layout> CPPCompleteLayoutFunc(Layout);
 
 	struct LayoutPolicyRef
 	{
-		using CombinationMemberFuncType = TMP::FunctionRef<std::optional<Misc::IndexSpan<>>(Layout& current, Layout member, std::optional<std::size_t> array_count)>;
+		using CombinationMemberFuncType = TMP::FunctionRef<std::optional<MermberOffset>(Layout& current, Layout member, std::optional<std::size_t> array_count)>;
 		using CompletionLayoutFuncType = TMP::FunctionRef<std::optional<Layout>(Layout current)>;
 		constexpr LayoutPolicyRef(
 			CombinationMemberFuncType combine_func = CPPCombineMemberFunc,
@@ -42,7 +59,7 @@ export namespace Potato::MemLayout
 		}
 		constexpr LayoutPolicyRef(LayoutPolicyRef const&) = default;
 		constexpr operator bool() const { return combine_func && complete_func; }
-		constexpr std::optional<Misc::IndexSpan<>> Combine(Layout& current_layout, Layout member_layout, std::optional<std::size_t> array_count = std::nullopt) const
+		constexpr std::optional<MermberOffset> Combine(Layout& current_layout, Layout member_layout, std::optional<std::size_t> array_count = std::nullopt) const
 		{
 			return combine_func(current_layout, member_layout, array_count);
 		}
@@ -61,7 +78,7 @@ export namespace Potato::MemLayout
 			: layout(layout_reference), policy(std::move(ref))
 		{
 		}
-		constexpr std::optional<Misc::IndexSpan<>> Combine(Layout member_layout, std::optional<std::size_t> array_count = std::nullopt)
+		constexpr std::optional<MermberOffset> Combine(Layout member_layout, std::optional<std::size_t> array_count = std::nullopt)
 		{
 			return policy.Combine(layout, member_layout, array_count);
 		}
@@ -78,26 +95,35 @@ export namespace Potato::MemLayout
 
 	//LayoutPolicyRef GetHLSLConstBufferPolicy() { return LayoutPolicyRef(CPPCombinationMemberFunc, CPPCompletionLayoutFunc); }
 
-	constexpr std::optional<Misc::IndexSpan<>> CPPCombineMemberFunc(Layout& target_layout, Layout member, std::optional<std::size_t> array_count)
+	constexpr std::optional<MermberOffset> CPPCombineMemberFunc(Layout& target_layout, Layout member, std::optional<std::size_t> array_count)
 	{
+		MermberOffset offset;
+
+		offset.element_count = 1;
+		offset.next_element_offset = member.size;
+
 		if (array_count.has_value())
 		{
+			offset.element_count = *array_count;
+			if (*array_count == 0)
+				return std::nullopt;
+
 			if (*array_count > 1)
 				member.size *= *array_count;
-			else if (*array_count == 0)
-				return Misc::IndexSpan<>{ target_layout.size, 0 };
 		}
+
 		if (target_layout.align < member.align)
 			target_layout.align = member.align;
 		if (target_layout.size % member.align != 0)
 			target_layout.size += member.align - (target_layout.size % member.align);
-		std::size_t Offset = target_layout.size;
+		offset.buffer_offset = target_layout.size;
 		target_layout.size += member.size;
-		return Misc::IndexSpan<>{ Offset, Offset + member.size };
+		return offset;
 	}
 
-	constexpr std::optional<Misc::IndexSpan<>> HLSLCombineMemberFunc(Layout&, Layout, std::optional<std::size_t>)
+	constexpr std::optional<MermberOffset> HLSLConstBufferCombineMemberFunc(Layout& target_layout, Layout layout, std::optional<std::size_t>)
 	{
+		MermberOffset offset;
 		return std::nullopt;
 	}
 
