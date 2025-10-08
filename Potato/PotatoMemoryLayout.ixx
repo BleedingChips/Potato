@@ -121,9 +121,41 @@ export namespace Potato::MemLayout
 		return offset;
 	}
 
-	constexpr std::optional<MermberOffset> HLSLConstBufferCombineMemberFunc(Layout& target_layout, Layout layout, std::optional<std::size_t>)
+	constexpr std::optional<MermberOffset> HLSLConstBufferCombineMemberFunc(Layout& target_layout, Layout member, std::optional<std::size_t> array_count)
 	{
+
+		if (array_count.has_value() && *array_count == 0)
+			return std::nullopt;
+
+		if (member.align >= sizeof(float) * 4)
+			return std::nullopt;
+
 		MermberOffset offset;
+		offset.element_count = 1;
+		offset.next_element_offset = member.size;
+
+		if (array_count.has_value())
+		{
+			offset.element_count = *array_count;
+
+			if (*array_count > 1)
+			{
+				if (member.align % member.size != 0)
+				{
+					auto fill = (member.size % member.align);
+					member.size += member.align - fill;
+				}
+				else {
+					offset.next_element_offset = std::max(member.align, member.size);
+				}
+				if (member.size % member.align == 0)
+				{
+					member.align += 1;
+				}
+			}
+				
+		}
+
 		return std::nullopt;
 	}
 

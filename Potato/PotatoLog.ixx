@@ -12,13 +12,13 @@ export namespace Potato::Log
 	};
 
 	template<std::size_t N>
-	struct LogCategory : public TMP::TypeString<char, N>
+	struct LogCategory : public TMP::TypeString<char8_t, N>
 	{
-		using TMP::TypeString<char, N>::TypeString;
+		using TMP::TypeString<char8_t, N>::TypeString;
 	};
 
 	template<std::size_t N>
-	LogCategory(const char(&str)[N]) -> LogCategory<N>;
+	LogCategory(const char8_t(&str)[N]) -> LogCategory<N>;
 
 	struct FormatedSystemTime
 	{
@@ -117,8 +117,6 @@ export namespace std
 export namespace Potato::Log
 {
 
-	std::pmr::memory_resource* LogMemoryResource();
-
 	struct LogProperty
 	{
 		LogProperty(LogProperty&&) = default;
@@ -143,7 +141,9 @@ export namespace Potato::Log
 			void AddRef(LogPrinter const* ptr) { ptr->AddLogPrinterRef(); }
 			void SubRef(LogPrinter const* ptr) { ptr->SubLogPrinterRef(); }
 		};
-		LogProperty StartLog(Level level) const { return {}; }
+		virtual std::pmr::memory_resource* GetMemoryResource(Level level) { return std::pmr::get_default_resource(); };
+		virtual void Print(Level level, std::string_view output) = 0;
+		virtual void Done(std::pmr::memory_resource* resource) {}
 		using Ptr = Pointer::IntrusivePtr<LogPrinter, Wrapper>;
 	protected:
 		virtual void AddLogPrinterRef() const = 0;
@@ -186,10 +186,14 @@ export namespace Potato::Log
 			auto printer = GetLogPrinter();
 			if (printer)
 			{
-				auto property = printer->StartLog(level);
-				std::pmr::string cache_log{ property.GetMemoryResource() };
-				cache_log.reserve(1024);
-				LogCategoryFormatter<category>{}(std::back_insert_iterator{ cache_log }, level, pattern, std::forward<Parameters>(parameters)...);
+				auto resource = printer->GetMemoryResource(level);
+				{
+					std::pmr::string cache_log{ resource };
+					cache_log.reserve(1024);
+					LogCategoryFormatter<category>{}(std::back_insert_iterator{ cache_log }, level, pattern, std::forward<Parameters>(parameters)...);
+					printer->Print(level, cache_log);
+				}
+				printer->Done(resource);
 			}
 		}
 	}

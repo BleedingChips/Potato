@@ -88,6 +88,7 @@ export namespace Potato::Format
 		processor.Clear();
 		return ProcessorScan(processor, input, other_target...);
 	}
+
 }
 
 export namespace Potato::Format

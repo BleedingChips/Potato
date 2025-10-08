@@ -30,7 +30,7 @@ int main()
 	//auto L = std::format("{} {} {}", Potato::Log::Level::Log, 122345, "输出测试");
 
 	//std::wcout << L << std::endl;
-	Log<"Fuck">(Level::Log, "1234 {}", 1);
+	Log<u8"Fuck">(Level::Log, "1234 {} {}>", 1, std::this_thread::get_id());
 
 	volatile int i = 0;
 }
