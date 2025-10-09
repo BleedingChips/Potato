@@ -104,7 +104,7 @@ export namespace std
 
 			return std::format_to(
 				format_context.out(),
-				"[{:%m.%d-%H:%M:%S}.{:0>3}]",
+				"{:%m.%d-%H:%M:%S}.{:0>3}",
 				zoned_time,
 				mil_second.count()
 			);
@@ -116,23 +116,6 @@ export namespace std
 
 export namespace Potato::Log
 {
-
-	struct LogProperty
-	{
-		LogProperty(LogProperty&&) = default;
-		LogProperty(
-			std::pmr::memory_resource* resource = std::pmr::get_default_resource(),
-			TMP::FunctionRef<void(std::pmr::memory_resource*)> destructor = {}
-		)
-			:resource(resource), destructor(std::move(destructor))
-		{
-		}
-		~LogProperty() { if (destructor) destructor(resource); }
-		std::pmr::memory_resource* GetMemoryResource() const { return resource; }
-	protected:
-		std::pmr::memory_resource* resource = std::pmr::get_default_resource();
-		TMP::FunctionRef<void(std::pmr::memory_resource*)> destructor;
-	};
 
 	struct LogPrinter
 	{
@@ -166,6 +149,15 @@ export namespace Potato::Log
 		template<typename OutputIterator, typename ...Parameters>
 		OutputIterator operator()(OutputIterator iterator, Level level, std::basic_format_string<char, std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
 		{
+
+			FormatedSystemTime time;
+
+			iterator = std::format_to(
+				std::move(iterator),
+				"[{}]{}<{}>",
+				time, category, level
+			);
+
 			iterator = std::format_to(
 				std::move(iterator),
 				pattern,

@@ -44,6 +44,7 @@ export namespace Potato::MemLayout
 	constexpr std::optional<MermberOffset> CPPCombineMemberFunc(Layout&, Layout, std::optional<std::size_t>);
 	constexpr std::optional<MermberOffset> HLSLConstBufferCombineMemberFunc(Layout&, Layout, std::optional<std::size_t>);
 	constexpr std::optional<Layout> CPPCompleteLayoutFunc(Layout);
+	constexpr std::optional<Layout> HLSLConstBufferCompleteLayoutFunc(Layout layout) { return CPPCompleteLayoutFunc(layout); }
 
 	struct LayoutPolicyRef
 	{
@@ -134,8 +135,15 @@ export namespace Potato::MemLayout
 		offset.element_count = 1;
 		offset.next_element_offset = member.size;
 
-		if (array_count.has_value())
+		if (array_count.has_value() && *array_count > 1)
 		{
+
+
+
+
+
+
+
 			offset.element_count = *array_count;
 
 			if (*array_count > 1)

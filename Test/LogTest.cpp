@@ -24,7 +24,7 @@ int main()
 	std::string_view output2 = "中国人不骗中国人";
 	//std::print(std::cout, "{}", std::string_view{reinterpret_cast<char const*>(output.data()), output.size()});
 
-	std::cout << std::string_view{ reinterpret_cast<char const*>(output2.data()), output2.size() } << std::endl;
+	//std::cout << std::string_view{ reinterpret_cast<char const*>(output2.data()), output2.size() } << std::endl;
 
 
 	//auto L = std::format("{} {} {}", Potato::Log::Level::Log, 122345, "输出测试");
