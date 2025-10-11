@@ -209,7 +209,7 @@ namespace Potato::IR
 	StructLayoutObject::~StructLayoutObject()
 	{
 		assert(struct_layout && buffer != nullptr);
-		struct_layout->Destruction(offset.GetMember(reinterpret_cast<std::byte*>(buffer)), offset.element_count, offset.next_element_offset);
+		struct_layout->Destruction(buffer, offset);
 	}
 
 	auto StructLayoutObject::DefaultConstruct(StructLayout::Ptr struct_layout, std::size_t array_count, std::pmr::memory_resource* resource)
@@ -231,8 +231,7 @@ namespace Potato::IR
 		{
 			try
 			{
-				auto start = offset.GetMember(re.GetByte());
-				auto re2 = struct_layout->DefaultConstruction(start, offset.element_count, offset.next_element_offset);
+				auto re2 = struct_layout->DefaultConstruction(re.GetByte(), offset);
 				assert(re2);
 				return new (re.Get()) StructLayoutObject{ re, re.Get(), offset, std::move(struct_layout) };
 			}
@@ -261,8 +260,7 @@ namespace Potato::IR
 		{
 			try
 			{
-				auto start = offset.GetMember(re.GetByte());
-				auto re2 = struct_layout->CopyConstruction(start, source, offset.element_count, offset.next_element_offset);
+				auto re2 = struct_layout->CopyConstruction(re.GetByte(), source, offset);
 				assert(re2);
 				return new (re.Get()) StructLayoutObject{ re, re.Get(), offset, std::move(struct_layout)};
 			}

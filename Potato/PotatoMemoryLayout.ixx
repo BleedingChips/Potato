@@ -21,34 +21,56 @@ export namespace Potato::MemLayout
 		std::strong_ordering operator<=>(Layout const& l2) const noexcept = default;
 	};
 
-	struct MermberOffset
+	struct ArrayLayout
 	{
-		std::size_t buffer_offset;
-		std::size_t element_count;
-		std::size_t next_element_offset;
+		std::size_t count = 0;
+		std::size_t each_element_offset = 0;
 
-		std::byte* GetMember(std::byte* buffer, std::size_t array_index) const { assert(array_index < element_count);  return buffer + buffer_offset + array_index * next_element_offset; };
-		std::byte* GetMember(std::byte* buffer) const { return buffer + buffer_offset; }
-		std::byte const* GetMember(std::byte const* buffer, std::size_t array_index = 0) const { assert(array_index < element_count);  return buffer + buffer_offset + array_index * next_element_offset; };
-		std::byte const * GetMember(std::byte const* buffer) const { return buffer + buffer_offset; }
-		std::span<std::byte> GetMemberBuffer(std::byte* buffer) const {
-			return std::span<std::byte>{ buffer + buffer_offset, buffer + buffer_offset + element_count * next_element_offset };
-		};
-		std::span<std::byte const> GetMemberBuffer(std::byte const* buffer) const {
-			return std::span<std::byte const>{ buffer + buffer_offset, buffer + buffer_offset + element_count * next_element_offset };
-		};
+		bool IsAnArray() const { return count > 0; }
+		std::optional<std::size_t> GetArrayCount() const { if (count > 0) return count; else return std::nullopt; }
 
-		bool operator==(MermberOffset const&) const = default;
+		std::byte* GetElement(std::byte* buffer, std::size_t index) const { assert(index == 0 || index < count); return buffer + index * each_element_offset; };
+		std::byte const* GetElement(std::byte const* buffer, std::size_t index) const { return GetElement(const_cast<std::byte*>(buffer), index); };
+		std::span<std::byte> GetSpanByte(std::byte* buffer, std::size_t max = std::numeric_limits<std::size_t>::max()) const {
+			return std::span<std::byte>{buffer, buffer + std::clamp(count, std::size_t{ 1 }, max)};
+		}
+
+		std::span<std::byte const> GetSpanByte(std::byte const* buffer, std::size_t max = std::numeric_limits<std::size_t>::max()) const {
+			return GetSpanByte(const_cast<std::byte*>(buffer), max);
+		}
+		bool operator==(ArrayLayout const&) const = default;
 	};
 
-	constexpr std::optional<MermberOffset> CPPCombineMemberFunc(Layout&, Layout, std::optional<std::size_t>);
-	constexpr std::optional<MermberOffset> HLSLConstBufferCombineMemberFunc(Layout&, Layout, std::optional<std::size_t>);
+	struct MermberLayout
+	{
+		std::size_t offset = 0;
+		ArrayLayout array_layout;
+
+		std::byte* GetMember(std::byte* buffer) const { return buffer + offset; }
+		std::byte const* GetMember(std::byte const* buffer) const { return GetMember(const_cast<std::byte*>(buffer)); }
+
+		std::byte* GetMember(std::byte* buffer, std::size_t array_index) const { return array_layout.GetElement(GetMember(buffer), array_index); };
+		std::byte const* GetMember(std::byte const* buffer, std::size_t array_index) const { return GetMember(const_cast<std::byte*>(buffer), array_index); };
+
+		std::span<std::byte> GetSpanByte(std::byte* buffer) const {
+			return array_layout.GetSpanByte(GetMember(buffer));
+		};
+
+		std::span<std::byte const> GetSpanByte(std::byte const* buffer) const {
+			return GetSpanByte(const_cast<std::byte*>(buffer));
+		};
+
+		bool operator==(MermberLayout const&) const = default;
+	};
+
+	constexpr std::optional<MermberLayout> CPPCombineMemberFunc(Layout&, Layout, std::size_t array_count);
+	constexpr std::optional<MermberLayout> HLSLConstBufferCombineMemberFunc(Layout&, Layout, std::size_t array_count);
 	constexpr std::optional<Layout> CPPCompleteLayoutFunc(Layout);
 	constexpr std::optional<Layout> HLSLConstBufferCompleteLayoutFunc(Layout layout) { return CPPCompleteLayoutFunc(layout); }
 
 	struct LayoutPolicyRef
 	{
-		using CombinationMemberFuncType = TMP::FunctionRef<std::optional<MermberOffset>(Layout& current, Layout member, std::optional<std::size_t> array_count)>;
+		using CombinationMemberFuncType = TMP::FunctionRef<std::optional<MermberLayout>(Layout& current, Layout member, std::size_t array_count)>;
 		using CompletionLayoutFuncType = TMP::FunctionRef<std::optional<Layout>(Layout current)>;
 		constexpr LayoutPolicyRef(
 			CombinationMemberFuncType combine_func = CPPCombineMemberFunc,
@@ -60,7 +82,7 @@ export namespace Potato::MemLayout
 		}
 		constexpr LayoutPolicyRef(LayoutPolicyRef const&) = default;
 		constexpr operator bool() const { return combine_func && complete_func; }
-		constexpr std::optional<MermberOffset> Combine(Layout& current_layout, Layout member_layout, std::optional<std::size_t> array_count = std::nullopt) const
+		constexpr std::optional<MermberLayout> Combine(Layout& current_layout, Layout member_layout, std::size_t array_count = 0) const
 		{
 			return combine_func(current_layout, member_layout, array_count);
 		}
@@ -79,7 +101,7 @@ export namespace Potato::MemLayout
 			: layout(layout_reference), policy(std::move(ref))
 		{
 		}
-		constexpr std::optional<MermberOffset> Combine(Layout member_layout, std::optional<std::size_t> array_count = std::nullopt)
+		constexpr std::optional<MermberLayout> Combine(Layout member_layout, std::size_t array_count = 0)
 		{
 			return policy.Combine(layout, member_layout, array_count);
 		}
@@ -96,73 +118,36 @@ export namespace Potato::MemLayout
 
 	//LayoutPolicyRef GetHLSLConstBufferPolicy() { return LayoutPolicyRef(CPPCombinationMemberFunc, CPPCompletionLayoutFunc); }
 
-	constexpr std::optional<MermberOffset> CPPCombineMemberFunc(Layout& target_layout, Layout member, std::optional<std::size_t> array_count)
+	constexpr std::optional<MermberLayout> CPPCombineMemberFunc(Layout& target_layout, Layout member, std::size_t array_count)
 	{
-		MermberOffset offset;
+		MermberLayout offset;
 
-		offset.element_count = 1;
-		offset.next_element_offset = member.size;
+		offset.array_layout.count = array_count;
+		offset.array_layout.each_element_offset = member.size;
 
-		if (array_count.has_value())
+		if (array_count > 1)
 		{
-			offset.element_count = *array_count;
-			if (*array_count == 0)
-				return std::nullopt;
-
-			if (*array_count > 1)
-				member.size *= *array_count;
+			member.size *= array_count;
 		}
 
 		if (target_layout.align < member.align)
 			target_layout.align = member.align;
 		if (target_layout.size % member.align != 0)
 			target_layout.size += member.align - (target_layout.size % member.align);
-		offset.buffer_offset = target_layout.size;
+		offset.offset = target_layout.size;
 		target_layout.size += member.size;
 		return offset;
 	}
 
-	constexpr std::optional<MermberOffset> HLSLConstBufferCombineMemberFunc(Layout& target_layout, Layout member, std::optional<std::size_t> array_count)
+	constexpr std::optional<MermberLayout> HLSLConstBufferCombineMemberFunc(Layout& target_layout, Layout member, std::size_t array_count)
 	{
-
-		if (array_count.has_value() && *array_count == 0)
-			return std::nullopt;
 
 		if (member.align >= sizeof(float) * 4)
 			return std::nullopt;
 
-		MermberOffset offset;
-		offset.element_count = 1;
-		offset.next_element_offset = member.size;
-
-		if (array_count.has_value() && *array_count > 1)
-		{
-
-
-
-
-
-
-
-			offset.element_count = *array_count;
-
-			if (*array_count > 1)
-			{
-				if (member.align % member.size != 0)
-				{
-					auto fill = (member.size % member.align);
-					member.size += member.align - fill;
-				}
-				else {
-					offset.next_element_offset = std::max(member.align, member.size);
-				}
-				if (member.size % member.align == 0)
-				{
-					member.align += 1;
-				}
-			}
-				
-		}
+		MermberLayout offset;
+		//offset.element_count = 1;
+		//offset.next_element_offset = member.size;
 
 		return std::nullopt;
 	}
