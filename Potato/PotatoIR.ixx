@@ -7,6 +7,7 @@ export module PotatoIR;
 import std;
 import PotatoPointer;
 import PotatoMisc;
+import PotatoTMP;
 export import PotatoMemLayout;
 import PotatoEncode;
 
@@ -85,6 +86,7 @@ export namespace Potato::IR
 
 	struct StructLayout
 	{
+		struct MemberView;
 
 		struct OperateProperty
 		{
@@ -132,9 +134,10 @@ export namespace Potato::IR
 		virtual bool CopyConstruction(void* target, void const* source, MemLayout::ArrayLayout target_array_layout = {}, MemLayout::ArrayLayout source_array_layout = {}) const;
 		virtual bool MoveConstruction(void* target, void* source, MemLayout::ArrayLayout target_array_layout = {}, MemLayout::ArrayLayout source_array_layout = {}) const;
 		virtual bool Destruction(void* target, MemLayout::ArrayLayout target_array_layout = {}) const;
-		virtual bool CopyAssigned(void* target, void const* source, MemLayout::ArrayLayout target_array_layout = {}, MemLayout::ArrayLayout source_array_layout = {}) const;
-		virtual bool MoveAssigned(void* target, void* source, MemLayout::ArrayLayout target_array_layout = {}, MemLayout::ArrayLayout source_array_layout = {}) const;
-		
+		virtual bool CopyAssigned(void* target, void const* source, MemLayout::ArrayLayout target_array_layout, MemLayout::ArrayLayout source_array_layout) const;
+		virtual bool MoveAssigned(void* target, void* source, MemLayout::ArrayLayout target_array_layout, MemLayout::ArrayLayout source_array_layout) const;
+
+
 		struct CustomConstruct
 		{
 			CustomConstructOperator construct_operator = CustomConstructOperator::Default;
@@ -146,7 +149,7 @@ export namespace Potato::IR
 			MemLayout::ArrayLayout array_layout = {};
 		};
 
-		virtual bool CustomConstruction(void* target, std::span<CustomConstruct const> custom_construct, MemLayout::ArrayLayout target_array_layout = {}) const;
+		virtual bool CustomConstruction(void* target, std::span<CustomConstruct const> custom_construct) const;
 
 		template<typename Type>
 		static Ptr GetStatic();
@@ -156,6 +159,18 @@ export namespace Potato::IR
 			Ptr struct_layout;
 			std::u8string_view name;
 			MemLayout::MermberLayout member_layout;
+			std::byte const* GetByte(void const* object_buffer, std::size_t array_index = 0) const { return member_layout.GetMember(object_buffer, array_index); }
+			std::byte* GetByte(void* object_buffer, std::size_t array_index = 0) const { return member_layout.GetMember(object_buffer, array_index); }
+			template<typename Type>
+			Type* As(void* object_buffer, std::size_t array_index = 0) const {
+				assert(struct_layout->IsStatic<Type>());
+				return reinterpret_cast<Type*>(GetByte(object_buffer, array_index));
+			};
+			template<typename Type>
+			Type const* As(void const* object_buffer, std::size_t array_index = 0) const {
+				assert(struct_layout->IsStatic<Type>());
+				return reinterpret_cast<Type const*>(GetByte(object_buffer, array_index));
+			};
 		};
 
 		virtual std::span<MemberView const> GetMemberView() const = 0;
@@ -191,60 +206,62 @@ export namespace Potato::IR
 		using Ptr = Potato::Pointer::IntrusivePtr<StructLayoutObject, Wrapper>;
 		using ConstPtr = Potato::Pointer::IntrusivePtr<StructLayoutObject const, Wrapper>;
 
-		static Ptr DefaultConstruct(StructLayout::Ptr struct_layout, std::size_t array_count = 0, std::pmr::memory_resource * resource = std::pmr::get_default_resource());
+		static Ptr DefaultConstruct(StructLayout::Ptr struct_layout, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 		static Ptr CopyConstruct(StructLayoutObject const& source, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
 		{
-			return CopyConstruct(source.GetStructLayout(), source.GetArrayData(), source.GetArrayCount(), resource);
+			return CopyConstruct(source.GetStructLayout(), static_cast<void const*>(source.GetBuffer()), resource);
 		}
 		static Ptr MoveConstruct(StructLayoutObject& source, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
 		{
-			return MoveConstruct(source.GetStructLayout(), source.GetArrayData(), source.GetArrayCount(), resource);
+			return MoveConstruct(source.GetStructLayout(), static_cast<void*>(source.GetBuffer()), resource);
 		}
 
-		static Ptr CopyConstruct(StructLayout::Ptr struct_layout, void const* source, std::size_t array_count = 0, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
-		static Ptr MoveConstruct(StructLayout::Ptr struct_layout, void* source, std::size_t array_count = 0, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+		static Ptr CopyConstruct(StructLayout::Ptr struct_layout, void const* source, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+		static Ptr MoveConstruct(StructLayout::Ptr struct_layout, void* source, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
-		static Ptr CustomConstruction(StructLayout::Ptr struct_layout, std::span<StructLayout::CustomConstruct const> construct_parameter, std::size_t array_count, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+		static Ptr CustomConstruction(StructLayout::Ptr struct_layout, std::span<StructLayout::CustomConstruct const> construct_parameter, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
 
 		StructLayout::Ptr GetStructLayout() const { return struct_layout; };
-		std::size_t GetArrayCount() const { return offset.element_count; }
-
-		void const* GetArrayData(std::size_t element_index = 0) const { return const_cast<StructLayoutObject*>(this)->GetArrayData(element_index); };
-		void const* GetArrayMemberData(StructLayout::MemberView const& member_view, std::size_t element_index = 0) const { return const_cast<StructLayoutObject*>(this)->GetArrayMemberData(member_view, element_index); }
-		void const* GetArrayMemberData(std::size_t member_index, std::size_t element_index = 0) const { return const_cast<StructLayoutObject*>(this)->GetArrayMemberData(member_index, element_index); }
-
-		void* GetArrayData(std::size_t element_index = 0) { return offset.GetMember(reinterpret_cast<std::byte*>(buffer), element_index); };
-		void* GetArrayMemberData(StructLayout::MemberView const& member_view, std::size_t element_index = 0);
-		void* GetArrayMemberData(std::size_t member_index, std::size_t element_index = 0);
-
+		std::byte const* GetBuffer() const { return static_cast<std::byte const*>(buffer); }
+		std::byte* GetBuffer() { return static_cast<std::byte*>(buffer); }
 		template<typename Type>
-		Type* TryGetDataWithStaticCast(std::size_t array_index = 0);
-
+		Type* As() {
+			assert(struct_layout->IsStatic<Type>());
+			return static_cast<Type*>(buffer);
+		}
 		template<typename Type>
-		Type* TryGetMemberDataWithStaticCast(std::size_t member_index, std::size_t array_index = 0);
-
-		template<typename Type>
-		Type const* TryGetDataWithStaticCast(std::size_t array_index = 0) const {
-			return const_cast<StructLayoutObject*>(this)->TryGetDataWithStaticCast<Type>(array_index);
+		Type const* As() const {
+			assert(struct_layout->IsStatic<Type>());
+			return static_cast<Type const*>(buffer);
 		}
 
 		template<typename Type>
-		Type const* TryGetMemberDataWithStaticCast(std::size_t member_index, std::size_t array_index = 0) const
+		Type* TryGetDataWithStaticCast();
+
+		template<typename Type>
+		Type* TryGetMemberDataWithStaticCast(std::size_t member_index);
+
+		template<typename Type>
+		Type const* TryGetDataWithStaticCast() const {
+			return const_cast<StructLayoutObject*>(this)->TryGetDataWithStaticCast<Type>();
+		}
+
+		template<typename Type>
+		Type const* TryGetMemberDataWithStaticCast(std::size_t member_index) const
 		{
-			return const_cast<StructLayoutObject*>(this)->TryGetMemberDataWithStaticCast<Type>(member_index, array_index);
+			return const_cast<StructLayoutObject*>(this)->TryGetMemberDataWithStaticCast<Type>(member_index);
 		}
 
 	protected:
 
-		StructLayoutObject(MemoryResourceRecord record, void* buffer, MemLayout::MermberOffset offset, StructLayout::Ptr struct_layout)
-			: MemoryResourceRecordIntrusiveInterface(record), buffer(buffer), offset(offset), struct_layout(std::move(struct_layout)) {}
+		StructLayoutObject(MemoryResourceRecord record, void* buffer, StructLayout::Ptr struct_layout)
+			: MemoryResourceRecordIntrusiveInterface(record), buffer(buffer), struct_layout(std::move(struct_layout)) {}
 
 		virtual ~StructLayoutObject();
 
 		void* buffer = nullptr;
 		StructLayout::Ptr struct_layout;
-		MemLayout::MermberOffset offset;
 
 		friend struct Pointer::DefaultIntrusiveWrapper;
 
@@ -253,22 +270,22 @@ export namespace Potato::IR
 	};
 
 	template<typename Type>
-	Type* StructLayoutObject::TryGetDataWithStaticCast(std::size_t array_index)
+	Type* StructLayoutObject::TryGetDataWithStaticCast()
 	{
 		if (struct_layout->IsStatic<Type>())
 		{
-			return static_cast<Type*>(GetArrayData(array_index));
+			return reinterpret_cast<Type*>(GetBuffer());
 		}
 		return nullptr;
 	}
 
 	template<typename Type>
-	Type* StructLayoutObject::TryGetMemberDataWithStaticCast(std::size_t member_index, std::size_t array_index)
+	Type* StructLayoutObject::TryGetMemberDataWithStaticCast(std::size_t member_index)
 	{
 		auto member = struct_layout->FindMemberView(member_index);
 		if (member.has_value() && member->struct_layout->IsStatic<Type>())
 		{
-			return static_cast<Type*>(GetArrayMemberData(*member, array_index));
+			return member->As<Type>(GetBuffer());
 		}
 		return nullptr;
 	}
@@ -302,20 +319,15 @@ export namespace Potato::IR
 			};
 		}
 
-		virtual bool DefaultConstruction(void* target, MemLayout::MermberOffset offset) const override
+		virtual bool DefaultConstruction(void* target, MemLayout::ArrayLayout array_layout) const override
 		{
 			assert(target != nullptr);
 			if constexpr (std::is_constructible_v<AtomicType>)
 			{
-				if (offset.element_count > 1)
+				auto count = std::max(array_layout.count, std::size_t{1});
+				for (std::size_t i = 0; i < count; ++i)
 				{
-					for (std::size_t i = 0; i < offset.element_count; ++i)
-					{
-						new (offset.GetMember(reinterpret_cast<std::byte*>(target), i)) AtomicType{};
-					}
-				}
-				else {
-					new (offset.GetMember(reinterpret_cast<std::byte*>(target))) AtomicType{};
+					new (array_layout.GetElement(static_cast<std::byte*>(target), i)) AtomicType{};
 				}
 				return true;
 			}
@@ -325,26 +337,24 @@ export namespace Potato::IR
 			}
 		}
 
-		virtual bool CopyConstruction(void* target, void const* source, MemLayout::MermberOffset offset, MemLayout::MermberOffset source_offset) const override
+		virtual bool CopyConstruction(void* target, void const* source, MemLayout::ArrayLayout target_array_layout, MemLayout::ArrayLayout source_array_layout) const override
 		{
-			assert(target != source && target != nullptr && source != nullptr);
 			if constexpr (std::is_constructible_v<AtomicType, AtomicType const&>)
 			{
-				std::byte* tar = static_cast<std::byte*>(target);
-				std::byte const* sou = static_cast<std::byte const*>(source);
-				if (offset.element_count > 1)
+				assert(target != source && target != nullptr && source != nullptr);
+				assert(target_array_layout.count == source_array_layout.count);
+				if (target_array_layout.count == source_array_layout.count)
 				{
-					for (std::size_t i = 0; i < offset.element_count; ++i)
+					auto count = std::max(target_array_layout.count, std::size_t{ 1 });
+					for (std::size_t i = 0; i < count; ++i)
 					{
-						new (offset.GetMember(tar, i)) AtomicType{ *reinterpret_cast<AtomicType const*>(sou + i * next_element_offset) };
+						new (target_array_layout.GetElement(target, i)) AtomicType{
+							*reinterpret_cast<AtomicType const*>(source_array_layout.GetElement(source, i))
+						};
 					}
+					return true;
 				}
-				else {
-					new (offset.GetMember(tar)) AtomicType{ *reinterpret_cast<AtomicType const*>(sou) };
-				}
-				return true;
-				
-				return true;
+				return false;
 			}
 			else {
 				assert(false);
@@ -352,18 +362,24 @@ export namespace Potato::IR
 			}
 		}
 
-		virtual bool MoveConstruction(void* target, void* source, std::size_t array_count, std::size_t next_element_offset) const override
+		virtual bool MoveConstruction(void* target, void* source, MemLayout::ArrayLayout target_array_layout, MemLayout::ArrayLayout source_array_layout) const override
 		{
-			assert(target != source && target != nullptr && source != nullptr);
 			if constexpr (std::is_constructible_v<AtomicType, AtomicType&&>)
 			{
-				std::byte* tar = static_cast<std::byte*>(target);
-				std::byte* sou = static_cast<std::byte*>(source);
-				for(std::size_t i = 0; i < array_count; ++i)
+				assert(target != source && target != nullptr && source != nullptr);
+				assert(target_array_layout.count == source_array_layout.count);
+				if (target_array_layout.count == source_array_layout.count)
 				{
-					new (tar + i * next_element_offset) AtomicType{ std::move(*reinterpret_cast<AtomicType*>(sou + i * next_element_offset)) };
+					auto count = std::max(target_array_layout.count, std::size_t{ 1 });
+					for (std::size_t i = 0; i < count; ++i)
+					{
+						new (target_array_layout.GetElement(target, i)) AtomicType{
+							std::move(*reinterpret_cast<AtomicType*>(source_array_layout.GetElement(source, i)))
+						};
+					}
+					return true;
 				}
-				return true;
+				return false;
 			}
 			else {
 				assert(false);
@@ -371,18 +387,24 @@ export namespace Potato::IR
 			}
 		}
 
-		virtual bool CopyAssigned(void* target, void const* source, std::size_t array_count, std::size_t next_element_offset) const override
+		virtual bool CopyAssigned(void* target, void const* source, MemLayout::ArrayLayout target_array_layout, MemLayout::ArrayLayout source_array_layout) const override
 		{
-			assert(target != source && target != nullptr && source != nullptr);
 			if constexpr (std::is_copy_assignable_v<AtomicType>)
 			{
-				std::byte* tar = static_cast<std::byte*>(target);
-				std::byte const* sou = static_cast<std::byte const*>(source);
-				for (std::size_t i = 0; i < array_count; ++i)
+				assert(target != source && target != nullptr && source != nullptr);
+				assert(target_array_layout.count == source_array_layout.count);
+				if (target_array_layout.count == source_array_layout.count)
 				{
-					*reinterpret_cast<AtomicType*>(tar + i * next_element_offset) = *reinterpret_cast<AtomicType const*>(sou + i * next_element_offset);
+					auto count = std::max(target_array_layout.count, std::size_t{ 1 });
+					for (std::size_t i = 0; i < count; ++i)
+					{
+						*reinterpret_cast<AtomicType*>(target_array_layout.GetElement(target, i))
+							=
+							*reinterpret_cast<AtomicType const*>(source_array_layout.GetElement(source, i));
+					}
+					return true;
 				}
-				return true;
+				return false;
 			}
 			else {
 				assert(false);
@@ -390,18 +412,24 @@ export namespace Potato::IR
 			}
 		}
 
-		virtual bool MoveAssigned(void* target, void* source, std::size_t array_count, std::size_t next_element_offset) const override
+		virtual bool MoveAssigned(void* target, void* source, MemLayout::ArrayLayout target_array_layout, MemLayout::ArrayLayout source_array_layout) const override
 		{
-			assert(target != source && target != nullptr && source != nullptr);
 			if constexpr (std::is_move_assignable_v<AtomicType>)
 			{
-				std::byte* tar = static_cast<std::byte*>(target);
-				std::byte* sou = static_cast<std::byte*>(source);
-				for (std::size_t i = 0; i < array_count; ++i)
+				assert(target != source && target != nullptr && source != nullptr);
+				assert(target_array_layout.count == source_array_layout.count);
+				if (target_array_layout.count == source_array_layout.count)
 				{
-					*reinterpret_cast<AtomicType*>(tar + i * next_element_offset) = std::move(*reinterpret_cast<AtomicType*>(sou + i * next_element_offset));
+					auto count = std::max(target_array_layout.count, std::size_t{ 1 });
+					for (std::size_t i = 0; i < count; ++i)
+					{
+						*reinterpret_cast<AtomicType*>(target_array_layout.GetElement(target, i))
+							=
+							std::move(*reinterpret_cast<AtomicType*>(source_array_layout.GetElement(source, i)));
+					}
+					return true;
 				}
-				return true;
+				return false;
 			}
 			else {
 				assert(false);
@@ -411,17 +439,17 @@ export namespace Potato::IR
 
 		std::size_t GetHashCode() const override { return typeid(AtomicType).hash_code(); }
 
-		virtual bool Destruction(void* target, std::size_t array_count, std::size_t next_element_offset) const override
+		virtual bool Destruction(void* target, MemLayout::ArrayLayout target_array_layout) const override
 		{
 			assert(target != nullptr);
-			std::byte* tar = static_cast<std::byte*>(target);
-			for(std::size_t i = 0; i < array_count; ++i)
+			auto count = std::max(target_array_layout.count, std::size_t{ 1 });
+			for (std::size_t i = 0; i < count; ++i)
 			{
-				reinterpret_cast<AtomicType*>(tar + i * next_element_offset)->~AtomicType();
+				reinterpret_cast<AtomicType*>(target_array_layout.GetElement(target, i))->~AtomicType();
 			}
 			return true;
 		}
-		virtual bool CustonConstruction(void* target, std::span<CustomConstruct const> custom_construct, std::size_t array_count, std::size_t next_element_offset) { return false; }
+		virtual bool CustomConstruction(void* target, std::span<StructLayout::CustomConstruct const> custom_construct) const override { assert(false); return false; }
 	};
 
 	template<typename Type>

@@ -30,7 +30,9 @@ export namespace Potato::MemLayout
 		std::optional<std::size_t> GetArrayCount() const { if (count > 0) return count; else return std::nullopt; }
 
 		std::byte* GetElement(std::byte* buffer, std::size_t index) const { assert(index == 0 || index < count); return buffer + index * each_element_offset; };
+		std::byte* GetElement(void* buffer, std::size_t index) const { return GetElement(static_cast<std::byte*>(buffer), index); };
 		std::byte const* GetElement(std::byte const* buffer, std::size_t index) const { return GetElement(const_cast<std::byte*>(buffer), index); };
+		std::byte const* GetElement(void const* buffer, std::size_t index) const { return GetElement(static_cast<std::byte const*>(buffer), index); };
 		std::span<std::byte> GetSpanByte(std::byte* buffer, std::size_t max = std::numeric_limits<std::size_t>::max()) const {
 			return std::span<std::byte>{buffer, buffer + std::clamp(count, std::size_t{ 1 }, max)};
 		}
@@ -47,10 +49,15 @@ export namespace Potato::MemLayout
 		ArrayLayout array_layout;
 
 		std::byte* GetMember(std::byte* buffer) const { return buffer + offset; }
+		std::byte* GetMember(void* buffer) const { return GetMember(static_cast<std::byte*>(buffer)); }
 		std::byte const* GetMember(std::byte const* buffer) const { return GetMember(const_cast<std::byte*>(buffer)); }
+		std::byte const* GetMember(void const* buffer) const { return GetMember(static_cast<std::byte const*>(buffer)); }
 
 		std::byte* GetMember(std::byte* buffer, std::size_t array_index) const { return array_layout.GetElement(GetMember(buffer), array_index); };
+		std::byte* GetMember(void* buffer, std::size_t array_index) const { return GetMember(static_cast<std::byte*>(buffer), array_index); };
+
 		std::byte const* GetMember(std::byte const* buffer, std::size_t array_index) const { return GetMember(const_cast<std::byte*>(buffer), array_index); };
+		std::byte const* GetMember(void const* buffer, std::size_t array_index) const { return GetMember(static_cast<std::byte const*>(buffer), array_index); };
 
 		std::span<std::byte> GetSpanByte(std::byte* buffer) const {
 			return array_layout.GetSpanByte(GetMember(buffer));

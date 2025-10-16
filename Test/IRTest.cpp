@@ -1,3 +1,6 @@
+
+#include <cassert>
+
 import PotatoIR;
 import std;
 import Potato;
@@ -59,37 +62,45 @@ int main()
 
 	auto span = P->GetMemberView();
 
-	auto ref1 = P->GetMemberDataWithStaticCast<std::size_t>(span[0], &i);
+	auto ref1 = span[0].As<std::size_t>(&i);
 	*ref1 = 10086;
-	auto ref2 = P->GetMemberDataWithStaticCast<float>(span[1], &i);
+	auto ref2 = span[1].As<float>(&i);
 	*ref2 = 1.0f;
 
-	auto ref3 = P->GetMemberDataWithStaticCast<std::size_t>(span[2], &i);
+	assert(i.k == 10086);
+	assert(i.I == 1.0f);
+
+	auto ref3 = span[2].As<std::size_t>(&i);
 
 	ref3[0] = 3;
 	ref3[1] = 4;
 
-	auto ref4 = P->GetMemberDataWithStaticCast<std::size_t>(span[2], &i, 0);
-	auto ref4_1 = P->GetMemberDataWithStaticCast<std::size_t>(span[2], &i, 1);
+	assert(i.o[0] == 3);
+	assert(i.o[1] == 4);
 
-	auto iop = StructLayoutObject::DefaultConstruct(P, 2);
+	auto ref4 = span[2].As<std::size_t>(&i, 0);
+	auto ref4_1 = span[2].As<std::size_t>(&i, 1);
 
-	K* iop2 = static_cast<K*>(iop->GetArrayData());
-	K* iop3 = static_cast<K*>(iop->GetArrayData(1));
-
-	auto socc = StructLayoutObject::CopyConstruct(P, &pp, 2);
-
-	K* iop22 = static_cast<K*>(socc->GetArrayData());
-	K* iop32 = static_cast<K*>(socc->GetArrayData(1));
+	assert(*ref4 == 3);
+	assert(*ref4_1 == 4);
 
 	auto so = StructLayoutObject::CopyConstruct(P, &i);
 
-	K* io = static_cast<K*>(so->GetArrayData());
+	K* k = reinterpret_cast<K*>(so->GetBuffer());
+
+	assert(k->I == i.I);
+	assert(k->k == i.k);
+	assert(k->o[0] == i.o[0]);
+	assert(k->o[1] == i.o[1]);
 
 	auto so2 = StructLayoutObject::CopyConstruct(*so);
 
+	K* k2 = reinterpret_cast<K*>(so->GetBuffer());
 
-	K* io2 = static_cast<K*>(so2->GetArrayData());
+	assert(k2->I == i.I);
+	assert(k2->k == i.k);
+	assert(k2->o[0] == i.o[0]);
+	assert(k2->o[1] == i.o[1]);
 
 	std::cout << "IR Pass !" << std::endl;
 
