@@ -125,7 +125,7 @@ export namespace Potato::MemLayout
 
 	LayoutPolicyRef GetHLSLConstBufferPolicy() { return LayoutPolicyRef(HLSLConstBufferCombineMemberFunc, HLSLConstBufferCompleteLayoutFunc); }
 
-	std::size_t AlignTo(std::size_t aglin, std::size_t target_size)
+	constexpr std::size_t AlignTo(std::size_t target_size, std::size_t aglin)
 	{
 		if (target_size % aglin == 0)
 		{
@@ -148,7 +148,7 @@ export namespace Potato::MemLayout
 
 		if (target_layout.align < member.align)
 			target_layout.align = member.align;
-		target_layout.size = AlignTo(member.align, target_layout.size);
+		target_layout.size = AlignTo(target_layout.size, member.align);
 		offset.offset = target_layout.size;
 		target_layout.size += member.size;
 		return offset;
@@ -156,41 +156,51 @@ export namespace Potato::MemLayout
 
 	constexpr std::optional<MermberLayout> HLSLConstBufferCombineMemberFunc(Layout& target_layout, Layout member, std::size_t array_count)
 	{
-		assert(member.align <= sizeof(float) * 4);
-		if (member.align > sizeof(float) * 4)
+
+		constexpr std::size_t max_align = sizeof(float) * 4;
+
+		assert(member.align <= max_align);
+		if (member.align > max_align)
 			return std::nullopt;
 
-		target_layout.align = sizeof(float) * 4;
+		target_layout.align = max_align;
 		MermberLayout offset;
 
 		if (array_count == 0)
 		{
-			offset.array_layout = { 0, member.size};
+			offset.array_layout = { 0, member.size };
 		}
 		else {
-			assert(false);
+			member.align = max_align;
+			auto aligned_size = AlignTo(member.size, max_align);
+			offset.array_layout = { array_count, aligned_size };
+			auto each_element_count = (member.size / max_align) + 1;
+			member.size = (aligned_size * (array_count - 1)) + member.size;
 		}
 
+		if (member.align == max_align)
+		{
+			target_layout.size = AlignTo(target_layout.size, member.align);
+		}
+		else {
+			auto edge = (target_layout.size % max_align);
+			if (edge + member.size > max_align)
+			{
+				target_layout.size = AlignTo(target_layout.size, member.align);
+			}
+		}
 
-
-		
-		//offset.element_count = 1;
-		//offset.next_element_offset = member.size;
-
-		return std::nullopt;
+		offset.offset = target_layout.size;
+		target_layout.size += member.size;
+		return offset;
 	}
 
 	constexpr std::optional<Layout> CPPCompleteLayoutFunc(Layout target_layout)
 	{
-		auto moded_size = (target_layout.size % target_layout.align);
-		if (moded_size != 0)
-		{
-			return Layout{
-				target_layout.align,
-				target_layout.size + target_layout.align - moded_size
-			};
-		}
-		return target_layout;
+		return Layout{
+			target_layout.align,
+			AlignTo(target_layout.size, target_layout.align)
+		};
 	}
 }
 
