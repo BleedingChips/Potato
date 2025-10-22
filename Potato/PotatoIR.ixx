@@ -124,6 +124,7 @@ export namespace Potato::IR
 			Ptr struct_layout;
 			std::u8string_view name;
 			std::size_t array_count = 0;
+			std::optional<Layout> overrided_memory_layout;
 		};
 
 		static StructLayout::Ptr CreateDynamic(std::u8string_view name, std::span<Member const> members, LayoutPolicyRef policy = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource());

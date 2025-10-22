@@ -123,7 +123,16 @@ export namespace Potato::MemLayout
 
 	LayoutPolicyRef GetCPPLikePolicy() { return LayoutPolicyRef(CPPCombineMemberFunc, CPPCompleteLayoutFunc); }
 
-	//LayoutPolicyRef GetHLSLConstBufferPolicy() { return LayoutPolicyRef(CPPCombinationMemberFunc, CPPCompletionLayoutFunc); }
+	LayoutPolicyRef GetHLSLConstBufferPolicy() { return LayoutPolicyRef(HLSLConstBufferCombineMemberFunc, HLSLConstBufferCompleteLayoutFunc); }
+
+	std::size_t AlignTo(std::size_t aglin, std::size_t target_size)
+	{
+		if (target_size % aglin == 0)
+		{
+			return target_size;
+		}
+		return target_size + aglin - (target_size % aglin);
+	}
 
 	constexpr std::optional<MermberLayout> CPPCombineMemberFunc(Layout& target_layout, Layout member, std::size_t array_count)
 	{
@@ -139,8 +148,7 @@ export namespace Potato::MemLayout
 
 		if (target_layout.align < member.align)
 			target_layout.align = member.align;
-		if (target_layout.size % member.align != 0)
-			target_layout.size += member.align - (target_layout.size % member.align);
+		target_layout.size = AlignTo(member.align, target_layout.size);
 		offset.offset = target_layout.size;
 		target_layout.size += member.size;
 		return offset;
@@ -148,11 +156,24 @@ export namespace Potato::MemLayout
 
 	constexpr std::optional<MermberLayout> HLSLConstBufferCombineMemberFunc(Layout& target_layout, Layout member, std::size_t array_count)
 	{
-
-		if (member.align >= sizeof(float) * 4)
+		assert(member.align <= sizeof(float) * 4);
+		if (member.align > sizeof(float) * 4)
 			return std::nullopt;
 
+		target_layout.align = sizeof(float) * 4;
 		MermberLayout offset;
+
+		if (array_count == 0)
+		{
+			offset.array_layout = { 0, member.size};
+		}
+		else {
+			assert(false);
+		}
+
+
+
+		
 		//offset.element_count = 1;
 		//offset.next_element_offset = member.size;
 

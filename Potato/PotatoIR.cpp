@@ -162,11 +162,12 @@ namespace Potato::IR
 			++index;
 		}
 
+		auto cpp_policy = MemLayout::GetCPPLikePolicy();
 		auto cur_layout_cpp = Layout::Get<DynamicStructLayout>();
-		auto member_offset = *layout_policy.Combine(cur_layout_cpp, Layout::Get<MemberView>(), members.size());
-		auto name_offset = *layout_policy.Combine(cur_layout_cpp, Layout::Get<char>(), name_size);
+		auto member_offset = *cpp_policy.Combine(cur_layout_cpp, Layout::Get<MemberView>(), members.size());
+		auto name_offset = *cpp_policy.Combine(cur_layout_cpp, Layout::Get<char>(), name_size);
 		auto record_layout = cur_layout_cpp;
-		auto cur_layout = *layout_policy.Complete(cur_layout_cpp);
+		auto cur_layout = *cpp_policy.Complete(cur_layout_cpp);
 		auto re = MemoryResourceRecord::Allocate(resource, cur_layout);
 		if (re)
 		{
@@ -181,7 +182,7 @@ namespace Potato::IR
 			{
 				auto& cur = members[i];
 				auto& tar = member_span[i];
-				auto new_layout = cur.struct_layout->GetLayout();
+				auto new_layout = cur.overrided_memory_layout.has_value() ? * cur.overrided_memory_layout : cur.struct_layout->GetLayout();
 				auto offset = *layout_policy.Combine(total_layout, new_layout, cur.array_count);
 
 				std::memcpy(str_span.data(), cur.name.data(), cur.name.size() * sizeof(char8_t));
