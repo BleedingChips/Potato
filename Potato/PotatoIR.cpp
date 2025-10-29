@@ -10,12 +10,9 @@ namespace Potato::IR
 
 	MemoryResourceRecord MemoryResourceRecord::Allocate(std::pmr::memory_resource* resource, Layout layout)
 	{
-		if(resource != nullptr)
-		{
-			auto adress = resource->allocate(layout.size, layout.align);
-			return { resource, layout, adress};
-		}
-		return {resource, layout, nullptr};
+		assert(resource != nullptr);
+		auto adress = resource->allocate(layout.size, layout.align);
+		return { resource, layout, adress };
 	}
 
 	MemoryResourceRecord::operator bool() const
@@ -23,16 +20,12 @@ namespace Potato::IR
 		return resource != nullptr && adress != nullptr;
 	}
 
-	bool MemoryResourceRecord::Deallocate()
+	void MemoryResourceRecord::Deallocate()
 	{
-		if(*this)
-		{
-			resource->deallocate(adress, layout.size, layout.align);
-			resource = nullptr;
-			adress = nullptr;
-			return true;
-		}
-		return false;
+		assert(*this);
+		resource->deallocate(adress, layout.size, layout.align);
+		resource = nullptr;
+		adress = nullptr;
 	}
 
 	void MemoryResourceRecordIntrusiveInterface::SubRef() const
@@ -210,32 +203,28 @@ namespace Potato::IR
 	StructLayoutObject::~StructLayoutObject()
 	{
 		assert(struct_layout && buffer != nullptr);
-		struct_layout->Destruction(buffer);
+		auto re = struct_layout->Destruction(GetObject(), array_layout);
+		assert(re);
 	}
 
-	auto StructLayoutObject::DefaultConstruct(StructLayout::Ptr struct_layout, std::pmr::memory_resource* resource)
-		->Ptr
+	auto StructLayoutObject::DefaultConstruct(StructLayout::Ptr struct_layout, std::size_t array_count, MemLayout::LayoutPolicyRef policy, std::pmr::memory_resource* resource)
+		-> Ptr
 	{
-		if (!struct_layout)
-			return {};
-
-		if (!struct_layout->GetOperateProperty().construct_default)
-			return {};
+		assert(struct_layout);
+		assert(struct_layout->GetOperateProperty().construct_default);
 
 		Layout layout_cpp = Layout::Get<StructLayoutObject>();
-		auto policy = MemLayout::GetCPPLikePolicy();
 		auto m_layout = struct_layout->GetLayout();
-		auto offset = *policy.Combine(layout_cpp, m_layout);
+		auto offset = *policy.Combine(layout_cpp, m_layout, array_count);
 		auto o_layout = *policy.Complete(layout_cpp);
 		auto re = MemoryResourceRecord::Allocate(resource, o_layout);
 		if (re)
 		{
 			try
 			{
-				auto buffer = offset.GetMember(re.GetByte());
-				auto re2 = struct_layout->DefaultConstruction(buffer);
+				auto re2 = struct_layout->DefaultConstruction(offset.GetMember(re.GetByte()), offset.array_layout);
 				assert(re2);
-				return new (re.Get()) StructLayoutObject{ re, buffer, std::move(struct_layout) };
+				return new (re.Get()) StructLayoutObject{ re, offset.GetMember(re.GetByte()), std::move(struct_layout), offset.array_layout };
 			}
 			catch (...)
 			{
@@ -246,26 +235,25 @@ namespace Potato::IR
 		return {};
 	}
 
-	auto StructLayoutObject::CopyConstruct(StructLayout::Ptr struct_layout, void const* source, std::pmr::memory_resource* resource)
+	auto StructLayoutObject::CopyConstruct(StructLayout::Ptr struct_layout, std::size_t array_count, void const* source, MemLayout::ArrayLayout source_array_layout, MemLayout::LayoutPolicyRef policy, std::pmr::memory_resource* resource)
 		-> Ptr
 	{
-		if (!struct_layout || !struct_layout->GetOperateProperty().construct_copy || source == nullptr)
-			return {};
-		auto policy = MemLayout::GetCPPLikePolicy();
+		assert(struct_layout && struct_layout->GetOperateProperty().construct_copy && source != nullptr);
+		assert(array_count == source_array_layout.count);
+
 		auto cpp_layout = Layout::Get<StructLayoutObject>();
 		auto m_layout = struct_layout->GetLayout();
 		
-		auto offset = *policy.Combine(cpp_layout, m_layout);
+		auto offset = *policy.Combine(cpp_layout, m_layout, array_count);
 		auto o_layout = *policy.Complete(cpp_layout);
 		auto re = MemoryResourceRecord::Allocate(resource, o_layout);
 		if (re)
 		{
 			try
 			{
-				auto buffer = offset.GetMember(re.Get());
-				auto re2 = struct_layout->CopyConstruction(buffer, source);
+				auto re2 = struct_layout->CopyConstruction(offset.GetMember(re.GetByte()), source, offset.array_layout, source_array_layout);
 				assert(re2);
-				return new (re.Get()) StructLayoutObject{ re, buffer, std::move(struct_layout)};
+				return new (re.Get()) StructLayoutObject{ re, offset.GetMember(re.GetByte()), std::move(struct_layout), offset.array_layout};
 			}
 			catch (...)
 			{
@@ -276,13 +264,12 @@ namespace Potato::IR
 		return {};
 	}
 
-	auto StructLayoutObject::MoveConstruct(StructLayout::Ptr struct_layout, void* source, std::pmr::memory_resource* resource)
+	auto StructLayoutObject::MoveConstruct(StructLayout::Ptr struct_layout, std::size_t array_count, void* source, MemLayout::ArrayLayout source_array_layout, MemLayout::LayoutPolicyRef policy, std::pmr::memory_resource* resource)
 		-> Ptr
 	{
-		if (!struct_layout || !struct_layout->GetOperateProperty().construct_copy || source == nullptr)
-			return {};
 
-		auto policy = MemLayout::GetCPPLikePolicy();
+		assert(struct_layout && struct_layout->GetOperateProperty().construct_move && source != nullptr);
+		assert(array_count == source_array_layout.count);
 
 		auto cpp_layout = Layout::Get<StructLayoutObject>();
 		auto m_layout = struct_layout->GetLayout();
@@ -293,10 +280,9 @@ namespace Potato::IR
 		{
 			try
 			{
-				auto buffer = offset.GetMember(re.Get());
-				auto re2 = struct_layout->MoveConstruction(buffer, source);
+				auto re2 = struct_layout->MoveConstruction(offset.GetMember(re.GetByte()), source, offset.array_layout, source_array_layout);
 				assert(re2);
-				return new (re.Get()) StructLayoutObject{ re, buffer, std::move(struct_layout)};
+				return new (re.Get()) StructLayoutObject{ re, offset.GetMember(re.GetByte()), std::move(struct_layout), offset.array_layout};
 			}
 			catch (...)
 			{
@@ -310,8 +296,7 @@ namespace Potato::IR
 	auto StructLayoutObject::CustomConstruction(StructLayout::Ptr struct_layout, std::span<StructLayout::CustomConstruct const> construct_parameter, std::pmr::memory_resource* resource)
 		-> Ptr
 	{
-		if (!struct_layout)
-			return {};
+		assert(struct_layout);
 
 		auto policy = MemLayout::GetCPPLikePolicy();
 		auto cpp_layout = Layout::Get<StructLayoutObject>();
@@ -326,7 +311,7 @@ namespace Potato::IR
 			auto buffer = offset.GetMember(re.GetByte());
 			if (struct_layout->CustomConstruction(buffer, construct_parameter))
 			{
-				return new (re.Get()) StructLayoutObject{ re, buffer, std::move(struct_layout)};
+				return new (re.Get()) StructLayoutObject{ re, buffer, std::move(struct_layout), {0, o_layout.size} };
 			}
 			re.Deallocate();
 		}
@@ -335,13 +320,12 @@ namespace Potato::IR
 
 	bool StructLayout::CopyConstruction(void* target, void const* source, MemLayout::ArrayLayout target_array_layout, MemLayout::ArrayLayout source_array_layout) const
 	{
-		
 		auto operate_property = GetOperateProperty();
 		assert(operate_property.construct_copy);
+		assert(target != nullptr && source != nullptr && target != source);
+		assert(target_array_layout.count == source_array_layout.count);
 		if(operate_property.construct_copy)
 		{
-			assert(target != nullptr && source != nullptr && target != source);
-			assert(target_array_layout.count == source_array_layout.count);
 			auto count = std::max(target_array_layout.count, std::size_t{1});
 			auto member_view = GetMemberView();
 
@@ -370,9 +354,9 @@ namespace Potato::IR
 		assert(target != nullptr && source != nullptr && target != source);
 		auto operate_property = GetOperateProperty();
 		assert(operate_property.construct_move);
+		assert(target_array_layout.count == source_array_layout.count);
 		if(operate_property.construct_move)
 		{
-			assert(target != nullptr && source != nullptr && target != source);
 			assert(target_array_layout.count == source_array_layout.count);
 			auto count = std::max(target_array_layout.count, std::size_t{ 1 });
 			auto member_view = GetMemberView();

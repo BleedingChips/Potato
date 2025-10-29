@@ -86,7 +86,7 @@ int main()
 
 	auto so = StructLayoutObject::CopyConstruct(P, &i);
 
-	K* k = reinterpret_cast<K*>(so->GetBuffer());
+	K* k = reinterpret_cast<K*>(so->GetObject());
 
 	assert(k->I == i.I);
 	assert(k->k == i.k);
@@ -95,7 +95,7 @@ int main()
 
 	auto so2 = StructLayoutObject::CopyConstruct(*so);
 
-	K* k2 = reinterpret_cast<K*>(so->GetBuffer());
+	K* k2 = reinterpret_cast<K*>(so->GetObject());
 
 	assert(k2->I == i.I);
 	assert(k2->k == i.k);

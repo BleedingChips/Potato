@@ -61,7 +61,7 @@ export namespace Potato::IR
 			return nullptr;
 		}
 		
-		bool Deallocate();
+		void Deallocate();
 	};
 
 	struct MemoryResourceRecordIntrusiveInterface
@@ -207,89 +207,83 @@ export namespace Potato::IR
 		using Ptr = Potato::Pointer::IntrusivePtr<StructLayoutObject, Wrapper>;
 		using ConstPtr = Potato::Pointer::IntrusivePtr<StructLayoutObject const, Wrapper>;
 
-		static Ptr DefaultConstruct(StructLayout::Ptr struct_layout, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
-		static Ptr CopyConstruct(StructLayoutObject const& source, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+		static Ptr DefaultConstruct(StructLayout::Ptr struct_layout, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
 		{
-			return CopyConstruct(source.GetStructLayout(), static_cast<void const*>(source.GetBuffer()), resource);
+			return DefaultConstruct(std::move(struct_layout), 0, {}, resource);
 		}
-		static Ptr MoveConstruct(StructLayoutObject& source, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+		static Ptr DefaultConstruct(StructLayout::Ptr struct_layout, std::size_t array_count, MemLayout::LayoutPolicyRef policy = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+		static Ptr CopyConstruct(StructLayout::Ptr struct_layout, std::size_t array_count, void const* source, MemLayout::ArrayLayout source_array_layout, MemLayout::LayoutPolicyRef policy = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+		static Ptr CopyConstruct(StructLayout::Ptr struct_layout, void const* source, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
 		{
-			return MoveConstruct(source.GetStructLayout(), static_cast<void*>(source.GetBuffer()), resource);
+			return CopyConstruct(std::move(struct_layout), std::size_t{0}, source, MemLayout::ArrayLayout{ 0, 0 }, MemLayout::LayoutPolicyRef{}, resource);
 		}
-
-		static Ptr CopyConstruct(StructLayout::Ptr struct_layout, void const* source, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
-		static Ptr MoveConstruct(StructLayout::Ptr struct_layout, void* source, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+		static Ptr CopyConstruct(StructLayoutObject const& source, MemLayout::LayoutPolicyRef policy = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+		{
+			return CopyConstruct(source.GetStructLayout(), source.GetArrayCount(), source.GetObject(), source.GetArrayLayout(), policy, resource);
+		}
+		static Ptr MoveConstruct(StructLayout::Ptr struct_layout, std::size_t array_count, void* source, MemLayout::ArrayLayout source_array_layout, MemLayout::LayoutPolicyRef policy = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+		static Ptr MoveConstruct(StructLayout::Ptr struct_layout, void* source, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+		{
+			return MoveConstruct(std::move(struct_layout), std::size_t{ 0 }, source, MemLayout::ArrayLayout{ 0, 0 }, MemLayout::LayoutPolicyRef{}, resource);
+		}
+		static Ptr MoveConstruct(StructLayoutObject& source, MemLayout::LayoutPolicyRef policy = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource())
+		{
+			return MoveConstruct(source.GetStructLayout(), source.GetArrayCount(), source.GetObject(), source.GetArrayLayout(), policy, resource);
+		}
 
 		static Ptr CustomConstruction(StructLayout::Ptr struct_layout, std::span<StructLayout::CustomConstruct const> construct_parameter, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
 
 
 		StructLayout::Ptr GetStructLayout() const { return struct_layout; };
-		std::byte const* GetBuffer() const { return static_cast<std::byte const*>(buffer); }
-		std::byte* GetBuffer() { return static_cast<std::byte*>(buffer); }
+		std::byte const* GetObject(std::size_t array_index = 0) const { return array_layout.GetElement(buffer, array_index); }
+		std::byte* GetObject(std::size_t array_index = 0) { return array_layout.GetElement(buffer, array_index); }
+		
 		template<typename Type>
-		Type* As() {
+		Type* As(std::size_t array_index = 0) {
 			assert(struct_layout->IsStatic<Type>());
-			return static_cast<Type*>(buffer);
-		}
-		template<typename Type>
-		Type const* As() const {
-			assert(struct_layout->IsStatic<Type>());
-			return static_cast<Type const*>(buffer);
-		}
-
-		template<typename Type>
-		Type* TryGetDataWithStaticCast();
-
-		template<typename Type>
-		Type* TryGetMemberDataWithStaticCast(std::size_t member_index);
-
-		template<typename Type>
-		Type const* TryGetDataWithStaticCast() const {
-			return const_cast<StructLayoutObject*>(this)->TryGetDataWithStaticCast<Type>();
+			if (struct_layout->IsStatic<Type>())
+			{
+				return reinterpret_cast<Type*>(GetObject(array_index));
+			}
+			return nullptr;
 		}
 
 		template<typename Type>
-		Type const* TryGetMemberDataWithStaticCast(std::size_t member_index) const
-		{
-			return const_cast<StructLayoutObject*>(this)->TryGetMemberDataWithStaticCast<Type>(member_index);
+		Type const* As(std::size_t array_index = 0) const {
+			return const_cast<StructLayoutObject*>(this)->As<Type>(array_index);
 		}
+
+		template<typename Type>
+		Type* MemberAs(std::size_t member_index, std::size_t array_index = 0) {
+			auto mvs = struct_layout->GetMemberView();
+			assert(member_index < mvs.size());
+			return reinterpret_cast<Type*>(struct_layout->GetMemberView()[member_index].As<Type>(GetObject(array_index)));
+		}
+
+		template<typename Type>
+		Type const* MemberAs(std::size_t member_index, std::size_t array_index = 0) const {
+			return const_cast<StructLayoutObject*>(this)->MemberAs(member_index, array_index);
+		}
+
+		MemLayout::ArrayLayout GetArrayLayout() const { return array_layout; }
+		std::size_t GetArrayCount() const { return GetArrayLayout().count; }
 
 	protected:
 
-		StructLayoutObject(MemoryResourceRecord record, void* buffer, StructLayout::Ptr struct_layout)
-			: MemoryResourceRecordIntrusiveInterface(record), buffer(buffer), struct_layout(std::move(struct_layout)) {}
+		StructLayoutObject(MemoryResourceRecord record, void* buffer, StructLayout::Ptr struct_layout, MemLayout::ArrayLayout array_layout)
+			: MemoryResourceRecordIntrusiveInterface(record), buffer(buffer), struct_layout(std::move(struct_layout)), array_layout(array_layout){}
 
 		virtual ~StructLayoutObject();
 
 		void* buffer = nullptr;
 		StructLayout::Ptr struct_layout;
+		MemLayout::ArrayLayout array_layout;
 
 		friend struct Pointer::DefaultIntrusiveWrapper;
 
 		virtual void AddStructLayoutObjectRef() const { MemoryResourceRecordIntrusiveInterface::AddRef(); }
 		virtual void SubStructLayoutObjectRef() const { MemoryResourceRecordIntrusiveInterface::SubRef(); }
 	};
-
-	template<typename Type>
-	Type* StructLayoutObject::TryGetDataWithStaticCast()
-	{
-		if (struct_layout->IsStatic<Type>())
-		{
-			return reinterpret_cast<Type*>(GetBuffer());
-		}
-		return nullptr;
-	}
-
-	template<typename Type>
-	Type* StructLayoutObject::TryGetMemberDataWithStaticCast(std::size_t member_index)
-	{
-		auto member = struct_layout->FindMemberView(member_index);
-		if (member.has_value() && member->struct_layout->IsStatic<Type>())
-		{
-			return member->As<Type>(GetBuffer());
-		}
-		return nullptr;
-	}
 
 	template<typename AtomicType>
 	struct StaticAtomicStructLayout : public StructLayout
