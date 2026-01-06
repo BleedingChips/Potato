@@ -614,7 +614,7 @@ export namespace Potato::TMP
 			)
 		{
 			function_ptr.callable_object = [](void* pointer, ParameterT... parameter) -> ReturnT {
-				return (*static_cast<CallableObjectT*>(pointer))(std::forward<ParameterT>(parameter)...);
+				return (*static_cast<std::remove_reference_t<CallableObjectT>*>(pointer))(std::forward<ParameterT>(parameter)...);
 				};
 			callable_object = static_cast<void*>(&object);
 		}
@@ -637,6 +637,14 @@ export namespace Potato::TMP
 			{
 				return (*function_ptr.normal)(std::forward<OtherParameterT>(pars)...);
 			}
+		}
+		constexpr FunctionRef& operator=(FunctionRef const&) = default;
+		constexpr FunctionRef& operator=(FunctionRef&& other)
+		{
+			callable_object = other.callable_object;
+			function_ptr = other.function_ptr;
+			other.callable_object = nullptr;
+			other.function_ptr.normal = nullptr;
 		}
 	protected:
 		void* callable_object = nullptr;
