@@ -163,6 +163,9 @@ export namespace Potato::Pointer
 		}
 
 		decltype(auto) GetPointer() const requires(!ForbidPointerAccess<WrapperT>) { return ptr; }
+		operator PtrT* () requires(!ForbidPointerAccess<WrapperT>) { return ptr; };
+		operator PtrT const* () const requires(!ForbidPointerAccess<WrapperT>) { return ptr; };
+
 
 		PtrT*& GetPointerReference() requires(EnablePointerReferenceAccess<WrapperT>) { return ptr; }
 		PtrT* const& GetPointerReference() const requires(EnablePointerReferenceAccess<WrapperT>) { return ptr; }
