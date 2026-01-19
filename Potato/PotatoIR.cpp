@@ -95,14 +95,30 @@ namespace Potato::IR
 		virtual void AddStructLayoutRef() const override { MemoryResourceRecordIntrusiveInterface::AddRef(); }
 		virtual void SubStructLayoutRef() const override { MemoryResourceRecordIntrusiveInterface::SubRef(); }
 		Layout GetLayout() const override;
+		Layout GetLayoutAsMember() const override;
 		std::span<MemberView const> GetMemberView() const override;
 		OperateProperty GetOperateProperty() const override { return construct_property; }
 		virtual std::size_t GetHashCode() const override { return hash_code; }
 
 	protected:
 
-		DynamicStructLayout(OperateProperty construct_property, std::u8string_view name, Layout total_layout, std::span<MemberView> member_view, std::size_t hash_code, MemoryResourceRecord record)
-			: MemoryResourceRecordIntrusiveInterface(record), name(name), total_layout(total_layout), hash_code(hash_code), member_view(member_view), construct_property(construct_property)
+		DynamicStructLayout(
+			OperateProperty construct_property, 
+			std::u8string_view name, 
+			Layout total_layout, 
+			Layout layout_as_member,
+			std::span<MemberView> member_view, 
+			std::size_t hash_code, 
+			MemoryResourceRecord record
+		)
+			: 
+			MemoryResourceRecordIntrusiveInterface(record), 
+			name(name), 
+			total_layout(total_layout), 
+			layout_as_member(layout_as_member), 
+			hash_code(hash_code), 
+			member_view(member_view), 
+			construct_property(construct_property)
 		{
 
 		}
@@ -111,6 +127,7 @@ namespace Potato::IR
 
 		std::u8string_view name;
 		Layout total_layout;
+		Layout layout_as_member;
 		std::span<MemberView> member_view;
 		OperateProperty construct_property;
 		std::size_t hash_code;
@@ -130,6 +147,11 @@ namespace Potato::IR
 	Layout DynamicStructLayout::GetLayout() const
 	{
 		return total_layout;
+	}
+
+	Layout DynamicStructLayout::GetLayoutAsMember() const
+	{
+		return layout_as_member;
 	}
 
 	auto DynamicStructLayout::GetMemberView() const
@@ -155,7 +177,7 @@ namespace Potato::IR
 			++index;
 		}
 
-		auto cpp_policy = MemLayout::GetCPPLikePolicy();
+		auto cpp_policy = MemLayout::LayoutPolicyRef{};
 		auto cur_layout_cpp = Layout::Get<DynamicStructLayout>();
 		auto member_offset = *cpp_policy.Combine(cur_layout_cpp, Layout::Get<MemberView>(), members.size());
 		auto name_offset = *cpp_policy.Combine(cur_layout_cpp, Layout::Get<char>(), name_size);
@@ -175,7 +197,7 @@ namespace Potato::IR
 			{
 				auto& cur = members[i];
 				auto& tar = member_span[i];
-				auto new_layout = cur.overrided_memory_layout.has_value() ? * cur.overrided_memory_layout : cur.struct_layout->GetLayout();
+				auto new_layout = cur.struct_layout->GetLayoutAsMember();
 				auto offset = *layout_policy.Combine(total_layout, new_layout, cur.array_count);
 
 				std::memcpy(str_span.data(), cur.name.data(), cur.name.size() * sizeof(char8_t));
@@ -191,6 +213,7 @@ namespace Potato::IR
 				ope_property,
 				name,
 				*layout_policy.Complete(total_layout),
+				total_layout,
 				member_span,
 				hash_code,
 				re
@@ -298,7 +321,7 @@ namespace Potato::IR
 	{
 		assert(struct_layout);
 
-		auto policy = MemLayout::GetCPPLikePolicy();
+		auto policy = MemLayout::LayoutPolicyRef{};
 		auto cpp_layout = Layout::Get<StructLayoutObject>();
 		auto m_layout = struct_layout->GetLayout();
 		auto offset = *policy.Combine(cpp_layout, m_layout);

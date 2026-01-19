@@ -73,7 +73,6 @@ export namespace Potato::MemLayout
 	constexpr std::optional<MermberLayout> CPPCombineMemberFunc(Layout&, Layout, std::size_t array_count);
 	constexpr std::optional<MermberLayout> HLSLConstBufferCombineMemberFunc(Layout&, Layout, std::size_t array_count);
 	constexpr std::optional<Layout> CPPCompleteLayoutFunc(Layout);
-	constexpr std::optional<Layout> HLSLConstBufferCompleteLayoutFunc(Layout layout) { return CPPCompleteLayoutFunc(layout); }
 
 	struct LayoutPolicyRef
 	{
@@ -121,10 +120,6 @@ export namespace Potato::MemLayout
 		LayoutPolicyRef policy;
 	};
 
-	LayoutPolicyRef GetCPPLikePolicy() { return LayoutPolicyRef(CPPCombineMemberFunc, CPPCompleteLayoutFunc); }
-
-	LayoutPolicyRef GetHLSLConstBufferPolicy() { return LayoutPolicyRef(HLSLConstBufferCombineMemberFunc, HLSLConstBufferCompleteLayoutFunc); }
-
 	constexpr std::size_t AlignTo(std::size_t target_size, std::size_t aglin)
 	{
 		if (target_size % aglin == 0)
@@ -149,47 +144,6 @@ export namespace Potato::MemLayout
 		if (target_layout.align < member.align)
 			target_layout.align = member.align;
 		target_layout.size = AlignTo(target_layout.size, member.align);
-		offset.offset = target_layout.size;
-		target_layout.size += member.size;
-		return offset;
-	}
-
-	constexpr std::optional<MermberLayout> HLSLConstBufferCombineMemberFunc(Layout& target_layout, Layout member, std::size_t array_count)
-	{
-
-		constexpr std::size_t max_align = sizeof(float) * 4;
-
-		assert(member.align <= max_align);
-		if (member.align > max_align)
-			return std::nullopt;
-
-		target_layout.align = max_align;
-		MermberLayout offset;
-
-		if (array_count == 0)
-		{
-			offset.array_layout = { 0, member.size };
-		}
-		else {
-			member.align = max_align;
-			auto aligned_size = AlignTo(member.size, max_align);
-			offset.array_layout = { array_count, aligned_size };
-			auto each_element_count = (member.size / max_align) + 1;
-			member.size = (aligned_size * (array_count - 1)) + member.size;
-		}
-
-		if (member.align == max_align)
-		{
-			target_layout.size = AlignTo(target_layout.size, member.align);
-		}
-		else {
-			auto edge = (target_layout.size % max_align);
-			if (edge + member.size > max_align)
-			{
-				target_layout.size = AlignTo(target_layout.size, member.align);
-			}
-		}
-
 		offset.offset = target_layout.size;
 		target_layout.size += member.size;
 		return offset;

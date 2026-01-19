@@ -84,6 +84,13 @@ export namespace Potato::IR
 		Default
 	};
 
+	template<typename Type>
+	struct StructLayoutOverride
+	{
+		Layout GetLayout() const { return Layout::Get<Type>(); }
+		Layout GetLayoutAsMember() const { return Layout::Get<Type>(); }
+	};
+
 	struct StructLayout
 	{
 		struct MemberView;
@@ -124,7 +131,6 @@ export namespace Potato::IR
 			Ptr struct_layout;
 			std::u8string_view name;
 			std::size_t array_count = 0;
-			std::optional<Layout> overrided_memory_layout;
 		};
 
 		static StructLayout::Ptr CreateDynamic(std::u8string_view name, std::span<Member const> members, LayoutPolicyRef policy = {}, std::pmr::memory_resource* resource = std::pmr::get_default_resource());
@@ -152,7 +158,7 @@ export namespace Potato::IR
 
 		virtual bool CustomConstruction(void* target, std::span<CustomConstruct const> custom_construct) const;
 
-		template<typename Type>
+		template<typename Type, template<typename> class Override = StructLayoutOverride>
 		static Ptr GetStatic();
 
 		struct MemberView
@@ -180,6 +186,7 @@ export namespace Potato::IR
 		std::optional<MemberView> FindMemberView(std::u8string_view member_name) const;
 		std::optional<MemberView> FindMemberView(std::size_t index) const;
 		virtual Layout GetLayout() const = 0;
+		virtual Layout GetLayoutAsMember() const = 0;
 
 		virtual std::size_t GetHashCode() const = 0;
 		virtual ~StructLayout() = default;
@@ -285,16 +292,17 @@ export namespace Potato::IR
 		virtual void SubStructLayoutObjectRef() const { MemoryResourceRecordIntrusiveInterface::SubRef(); }
 	};
 
-	template<typename AtomicType>
+	template<typename AtomicType, template<typename> class Override>
 	struct StaticAtomicStructLayout : public StructLayout
 	{
 
 		static StructLayout::Ptr Create()
 		{
-			static StaticAtomicStructLayout<AtomicType> layout;
+			static StaticAtomicStructLayout<AtomicType, Override> layout;
 			return &layout;
 		}
-		virtual Layout GetLayout() const override { return Layout::Get<AtomicType>(); }
+		virtual Layout GetLayout() const override { return Override<AtomicType>{}.GetLayout(); }
+		virtual Layout GetLayoutAsMember() const override { return Override<AtomicType>{}.GetLayoutAsMember(); }
 		virtual void AddStructLayoutRef() const override { }
 		virtual void SubStructLayoutRef() const override {  }
 		virtual std::u8string_view GetName() const override
@@ -447,10 +455,10 @@ export namespace Potato::IR
 		virtual bool CustomConstruction(void* target, std::span<StructLayout::CustomConstruct const> custom_construct) const override { assert(false); return false; }
 	};
 
-	template<typename Type>
+	template<typename Type, template<typename> class Override>
 	StructLayout::Ptr StructLayout::GetStatic()
 	{
-		return StaticAtomicStructLayout<std::remove_cvref_t<Type>>::Create();
+		return StaticAtomicStructLayout<std::remove_cvref_t<Type>, Override>::Create();
 	}
 
 	
