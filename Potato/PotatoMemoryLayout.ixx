@@ -25,6 +25,7 @@ export namespace Potato::MemLayout
 	{
 		std::size_t count = 0;
 		std::size_t each_element_offset = 0;
+		std::size_t element_size = 0;
 
 		bool IsAnArray() const { return count > 0; }
 		std::optional<std::size_t> GetArrayCount() const { if (count > 0) return count; else return std::nullopt; }
@@ -58,14 +59,6 @@ export namespace Potato::MemLayout
 
 		std::byte const* GetMember(std::byte const* buffer, std::size_t array_index) const { return GetMember(const_cast<std::byte*>(buffer), array_index); };
 		std::byte const* GetMember(void const* buffer, std::size_t array_index) const { return GetMember(static_cast<std::byte const*>(buffer), array_index); };
-
-		std::span<std::byte> GetSpanByte(std::byte* buffer) const {
-			return array_layout.GetSpanByte(GetMember(buffer));
-		};
-
-		std::span<std::byte const> GetSpanByte(std::byte const* buffer) const {
-			return GetSpanByte(const_cast<std::byte*>(buffer));
-		};
 
 		bool operator==(MermberLayout const&) const = default;
 	};
@@ -135,6 +128,7 @@ export namespace Potato::MemLayout
 
 		offset.array_layout.count = array_count;
 		offset.array_layout.each_element_offset = member.size;
+		offset.array_layout.element_size = member.size;
 
 		if (array_count > 1)
 		{

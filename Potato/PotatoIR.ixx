@@ -242,8 +242,8 @@ export namespace Potato::IR
 
 
 		StructLayout::Ptr GetStructLayout() const { return struct_layout; };
-		std::byte const* GetObject(std::size_t array_index = 0) const { return array_layout.GetElement(buffer, array_index); }
-		std::byte* GetObject(std::size_t array_index = 0) { return array_layout.GetElement(buffer, array_index); }
+		std::byte const* GetObject(std::size_t array_index = 0) const { return array_layout.GetElement(buffer.data(), array_index); }
+		std::byte* GetObject(std::size_t array_index = 0) { return array_layout.GetElement(buffer.data(), array_index); }
 		
 		template<typename Type>
 		Type* As(std::size_t array_index = 0) {
@@ -274,15 +274,19 @@ export namespace Potato::IR
 
 		MemLayout::ArrayLayout GetArrayLayout() const { return array_layout; }
 		std::size_t GetArrayCount() const { return GetArrayLayout().count; }
+		std::span<std::byte const> GetBuffer() const { return buffer; }
+		std::span<std::byte> GetBuffer() { return buffer; }
 
 	protected:
 
-		StructLayoutObject(MemoryResourceRecord record, void* buffer, StructLayout::Ptr struct_layout, MemLayout::ArrayLayout array_layout)
+		static std::tuple<Layout, MemLayout::MermberLayout, std::size_t> CalculateMemberLayout(StructLayout const& struct_layout, std::size_t array_count, MemLayout::LayoutPolicyRef member_policy);
+
+		StructLayoutObject(MemoryResourceRecord record, std::span<std::byte> buffer, StructLayout::Ptr struct_layout, MemLayout::ArrayLayout array_layout)
 			: MemoryResourceRecordIntrusiveInterface(record), buffer(buffer), struct_layout(std::move(struct_layout)), array_layout(array_layout){}
 
 		virtual ~StructLayoutObject();
 
-		void* buffer = nullptr;
+		std::span<std::byte> buffer;
 		StructLayout::Ptr struct_layout;
 		MemLayout::ArrayLayout array_layout;
 

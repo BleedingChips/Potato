@@ -35,17 +35,17 @@ int main()
 	StructLayout::Member me[] = 
 	{
 		{
-			StaticAtomicStructLayout<std::size_t>::Create(),
+			StructLayout::GetStatic<std::size_t>(),
 			u8"k",
 			1
 		},
 		{
-			StaticAtomicStructLayout<float>::Create(),
+			StructLayout::GetStatic<float>(),
 			u8"I",
 			1
 		},
 		{
-			StaticAtomicStructLayout<std::size_t>::Create(),
+			StructLayout::GetStatic<std::size_t>(),
 			u8"o",
 			2
 		},

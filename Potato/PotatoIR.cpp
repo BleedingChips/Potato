@@ -225,9 +225,31 @@ namespace Potato::IR
 
 	StructLayoutObject::~StructLayoutObject()
 	{
-		assert(struct_layout && buffer != nullptr);
+		assert(struct_layout && buffer.size() > 0);
 		auto re = struct_layout->Destruction(GetObject(), array_layout);
 		assert(re);
+	}
+
+	std::tuple<Layout, MemLayout::MermberLayout, std::size_t> StructLayoutObject::CalculateMemberLayout(StructLayout const& struct_layout, std::size_t array_count, MemLayout::LayoutPolicyRef array_policy)
+	{
+		Layout layout_cpp = Layout::Get<StructLayoutObject>();
+		MemLayout::MermberLayout offset;
+		std::size_t size = 0;
+		if (array_count == 0)
+		{
+			offset = *LayoutPolicyRef{}.Combine(layout_cpp, struct_layout.GetLayout());
+			size = layout_cpp.size;
+		}
+		else {
+			Layout total_layout;
+			offset = *array_policy.Combine(total_layout, struct_layout.GetLayoutAsMember(), array_count);
+			total_layout = *array_policy.Complete(total_layout);
+			size = total_layout.size;
+			auto offset2 = *LayoutPolicyRef{}.Combine(layout_cpp, total_layout);
+			offset.offset += offset.offset;
+		}
+		auto total_layout = *LayoutPolicyRef{}.Complete(layout_cpp);
+		return { total_layout, offset, size};
 	}
 
 	auto StructLayoutObject::DefaultConstruct(StructLayout::Ptr struct_layout, std::size_t array_count, MemLayout::LayoutPolicyRef policy, std::pmr::memory_resource* resource)
@@ -236,10 +258,7 @@ namespace Potato::IR
 		assert(struct_layout);
 		assert(struct_layout->GetOperateProperty().construct_default);
 
-		Layout layout_cpp = Layout::Get<StructLayoutObject>();
-		auto m_layout = struct_layout->GetLayout();
-		auto offset = *policy.Combine(layout_cpp, m_layout, array_count);
-		auto o_layout = *policy.Complete(layout_cpp);
+		auto [o_layout, offset, size] = CalculateMemberLayout(*struct_layout, array_count, policy);
 		auto re = MemoryResourceRecord::Allocate(resource, o_layout);
 		if (re)
 		{
@@ -247,7 +266,8 @@ namespace Potato::IR
 			{
 				auto re2 = struct_layout->DefaultConstruction(offset.GetMember(re.GetByte()), offset.array_layout);
 				assert(re2);
-				return new (re.Get()) StructLayoutObject{ re, offset.GetMember(re.GetByte()), std::move(struct_layout), offset.array_layout };
+				std::span<std::byte> buffer{ offset.GetMember(re.GetByte()), size };
+				return new (re.Get()) StructLayoutObject{ re, buffer, std::move(struct_layout), offset.array_layout };
 			}
 			catch (...)
 			{
@@ -264,11 +284,7 @@ namespace Potato::IR
 		assert(struct_layout && struct_layout->GetOperateProperty().construct_copy && source != nullptr);
 		assert(array_count == source_array_layout.count);
 
-		auto cpp_layout = Layout::Get<StructLayoutObject>();
-		auto m_layout = struct_layout->GetLayout();
-		
-		auto offset = *policy.Combine(cpp_layout, m_layout, array_count);
-		auto o_layout = *policy.Complete(cpp_layout);
+		auto [o_layout, offset, size] = CalculateMemberLayout(*struct_layout, array_count, policy);
 		auto re = MemoryResourceRecord::Allocate(resource, o_layout);
 		if (re)
 		{
@@ -276,7 +292,8 @@ namespace Potato::IR
 			{
 				auto re2 = struct_layout->CopyConstruction(offset.GetMember(re.GetByte()), source, offset.array_layout, source_array_layout);
 				assert(re2);
-				return new (re.Get()) StructLayoutObject{ re, offset.GetMember(re.GetByte()), std::move(struct_layout), offset.array_layout};
+				std::span<std::byte> buffer{ offset.GetMember(re.GetByte()), size };
+				return new (re.Get()) StructLayoutObject{ re, buffer, std::move(struct_layout), offset.array_layout};
 			}
 			catch (...)
 			{
@@ -294,10 +311,7 @@ namespace Potato::IR
 		assert(struct_layout && struct_layout->GetOperateProperty().construct_move && source != nullptr);
 		assert(array_count == source_array_layout.count);
 
-		auto cpp_layout = Layout::Get<StructLayoutObject>();
-		auto m_layout = struct_layout->GetLayout();
-		auto offset = *policy.Combine(cpp_layout, m_layout);
-		auto o_layout = *policy.Complete(cpp_layout);
+		auto [o_layout, offset, size] = CalculateMemberLayout(*struct_layout, array_count, policy);
 		auto re = MemoryResourceRecord::Allocate(resource, o_layout);
 		if (re)
 		{
@@ -305,7 +319,8 @@ namespace Potato::IR
 			{
 				auto re2 = struct_layout->MoveConstruction(offset.GetMember(re.GetByte()), source, offset.array_layout, source_array_layout);
 				assert(re2);
-				return new (re.Get()) StructLayoutObject{ re, offset.GetMember(re.GetByte()), std::move(struct_layout), offset.array_layout};
+				std::span<std::byte> buffer{ offset.GetMember(re.GetByte()), size };
+				return new (re.Get()) StructLayoutObject{ re, buffer, std::move(struct_layout), offset.array_layout};
 			}
 			catch (...)
 			{
@@ -325,14 +340,15 @@ namespace Potato::IR
 		auto cpp_layout = Layout::Get<StructLayoutObject>();
 		auto m_layout = struct_layout->GetLayout();
 		auto offset = *policy.Combine(cpp_layout, m_layout);
+		std::size_t size = cpp_layout.size - offset.offset;
 		auto o_layout = *policy.Complete(cpp_layout);
 		auto member_view = struct_layout->GetMemberView();
 
 		auto re = MemoryResourceRecord::Allocate(resource, o_layout);
 		if (re)
 		{
-			auto buffer = offset.GetMember(re.GetByte());
-			if (struct_layout->CustomConstruction(buffer, construct_parameter))
+			auto buffer = std::span<std::byte>{offset.GetMember(re.GetByte()), size};
+			if (struct_layout->CustomConstruction(buffer.data(), construct_parameter))
 			{
 				return new (re.Get()) StructLayoutObject{ re, buffer, std::move(struct_layout), {0, o_layout.size} };
 			}
