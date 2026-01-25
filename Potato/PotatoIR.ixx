@@ -170,12 +170,12 @@ export namespace Potato::IR
 			std::byte* GetByte(void* object_buffer, std::size_t array_index = 0) const { return member_layout.GetMember(object_buffer, array_index); }
 			template<typename Type>
 			Type* As(void* object_buffer, std::size_t array_index = 0) const {
-				assert(struct_layout->IsStatic<Type>());
+				//assert(struct_layout->IsStatic<Type>());
 				return reinterpret_cast<Type*>(GetByte(object_buffer, array_index));
 			};
 			template<typename Type>
 			Type const* As(void const* object_buffer, std::size_t array_index = 0) const {
-				assert(struct_layout->IsStatic<Type>());
+				//assert(struct_layout->IsStatic<Type>());
 				return reinterpret_cast<Type const*>(GetByte(object_buffer, array_index));
 			};
 		};

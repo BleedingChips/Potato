@@ -246,7 +246,7 @@ namespace Potato::IR
 			total_layout = *array_policy.Complete(total_layout);
 			size = total_layout.size;
 			auto offset2 = *LayoutPolicyRef{}.Combine(layout_cpp, total_layout);
-			offset.offset += offset.offset;
+			offset.offset += offset2.offset;
 		}
 		auto total_layout = *LayoutPolicyRef{}.Complete(layout_cpp);
 		return { total_layout, offset, size};
