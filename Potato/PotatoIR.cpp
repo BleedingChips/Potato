@@ -237,8 +237,9 @@ namespace Potato::IR
 		std::size_t size = 0;
 		if (array_count == 0)
 		{
-			offset = *LayoutPolicyRef{}.Combine(layout_cpp, struct_layout.GetLayout());
-			size = layout_cpp.size;
+			auto mer_layout = struct_layout.GetLayout();
+			offset = *LayoutPolicyRef{}.Combine(layout_cpp, mer_layout);
+			size = mer_layout.size;
 		}
 		else {
 			Layout total_layout;

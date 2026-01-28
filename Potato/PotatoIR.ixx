@@ -143,7 +143,7 @@ export namespace Potato::IR
 		virtual bool Destruction(void* target, MemLayout::ArrayLayout target_array_layout = {}) const;
 		virtual bool CopyAssigned(void* target, void const* source, MemLayout::ArrayLayout target_array_layout, MemLayout::ArrayLayout source_array_layout) const;
 		virtual bool MoveAssigned(void* target, void* source, MemLayout::ArrayLayout target_array_layout, MemLayout::ArrayLayout source_array_layout) const;
-
+		virtual bool SupportNativeReference(std::type_index const& type_index) const { return false; }
 
 		struct CustomConstruct
 		{
@@ -170,12 +170,12 @@ export namespace Potato::IR
 			std::byte* GetByte(void* object_buffer, std::size_t array_index = 0) const { return member_layout.GetMember(object_buffer, array_index); }
 			template<typename Type>
 			Type* As(void* object_buffer, std::size_t array_index = 0) const {
-				//assert(struct_layout->IsStatic<Type>());
+				assert(struct_layout->SupportNativeReference(typeid(std::remove_reference_t<Type>)));
 				return reinterpret_cast<Type*>(GetByte(object_buffer, array_index));
 			};
 			template<typename Type>
 			Type const* As(void const* object_buffer, std::size_t array_index = 0) const {
-				//assert(struct_layout->IsStatic<Type>());
+				assert(struct_layout->SupportNativeReference(typeid(std::remove_reference_t<Type>)));
 				return reinterpret_cast<Type const*>(GetByte(object_buffer, array_index));
 			};
 		};
@@ -242,17 +242,14 @@ export namespace Potato::IR
 
 
 		StructLayout::Ptr GetStructLayout() const { return struct_layout; };
+		std::span<StructLayout::MemberView const> GetMember() const { return struct_layout->GetMemberView(); }
 		std::byte const* GetObject(std::size_t array_index = 0) const { return array_layout.GetElement(buffer.data(), array_index); }
 		std::byte* GetObject(std::size_t array_index = 0) { return array_layout.GetElement(buffer.data(), array_index); }
 		
 		template<typename Type>
 		Type* As(std::size_t array_index = 0) {
-			assert(struct_layout->IsStatic<Type>());
-			if (struct_layout->IsStatic<Type>())
-			{
-				return reinterpret_cast<Type*>(GetObject(array_index));
-			}
-			return nullptr;
+			assert(struct_layout->SupportNativeReference(typeid(std::remove_reference_t<Type>)));
+			return reinterpret_cast<Type*>(GetObject(array_index));
 		}
 
 		template<typename Type>
@@ -457,6 +454,9 @@ export namespace Potato::IR
 			return true;
 		}
 		virtual bool CustomConstruction(void* target, std::span<StructLayout::CustomConstruct const> custom_construct) const override { assert(false); return false; }
+		virtual bool SupportNativeReference(std::type_index const& type_index) const override { 
+			return type_index == typeid(AtomicType); 
+		}
 	};
 
 	template<typename Type, template<typename> class Override>

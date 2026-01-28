@@ -645,6 +645,7 @@ export namespace Potato::TMP
 			function_ptr = other.function_ptr;
 			other.callable_object = nullptr;
 			other.function_ptr.normal = nullptr;
+			return *this;
 		}
 	protected:
 		void* callable_object = nullptr;
