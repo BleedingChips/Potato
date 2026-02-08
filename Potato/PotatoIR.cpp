@@ -98,7 +98,7 @@ namespace Potato::IR
 		Layout GetLayoutAsMember() const override;
 		std::span<MemberView const> GetMemberView() const override;
 		OperateProperty GetOperateProperty() const override { return construct_property; }
-		virtual std::size_t GetHashCode() const override { return hash_code; }
+		virtual std::uint64_t GetHashCode() const override { return hash_code; }
 
 	protected:
 
@@ -108,7 +108,7 @@ namespace Potato::IR
 			Layout total_layout, 
 			Layout layout_as_member,
 			std::span<MemberView> member_view, 
-			std::size_t hash_code, 
+			std::uint64_t hash_code,
 			MemoryResourceRecord record
 		)
 			: 
@@ -130,7 +130,7 @@ namespace Potato::IR
 		Layout layout_as_member;
 		std::span<MemberView> member_view;
 		OperateProperty construct_property;
-		std::size_t hash_code;
+		std::uint64_t hash_code;
 
 		friend struct StructLayout;
 		friend struct StructLayoutObject;
@@ -160,9 +160,23 @@ namespace Potato::IR
 		return member_view;
 	}
 
+	std::uint64_t StructLayout::CalculateHashCode(std::u8string_view name, std::span<MemberView const> members)
+	{
+		std::uint64_t hash_code = 0;
+		std::size_t index = 1;
+
+		for (auto& ite : members)
+		{
+			auto cur_hash_code = ite.struct_layout->GetHashCode();
+			hash_code += (cur_hash_code - (cur_hash_code % index)) * ite.member_layout.array_layout.count + (cur_hash_code % index);
+			++index;
+		}
+
+		return hash_code;
+	}
+
 	StructLayout::Ptr StructLayout::CreateDynamic(std::u8string_view name, std::span<Member const> members, LayoutPolicyRef layout_policy, std::pmr::memory_resource* resource)
 	{
-		std::size_t hash_code = 0;
 		OperateProperty ope_property;
 
 		std::size_t name_size = name.size();
@@ -170,8 +184,6 @@ namespace Potato::IR
 
 		for (auto& ite : members)
 		{
-			auto cur_hash_code = ite.struct_layout->GetHashCode();
-			hash_code += (cur_hash_code - (cur_hash_code % index)) * ite.array_count + (cur_hash_code % index);
 			name_size += ite.name.size();
 			ope_property = ope_property && ite.struct_layout->GetOperateProperty();
 			++index;
@@ -209,6 +221,8 @@ namespace Potato::IR
 				};
 				str_span = str_span.subspan(cur.name.size());
 			}
+
+			std::uint64_t hash_code = StructLayout::CalculateHashCode(name, member_span);
 			return new (re.Get()) DynamicStructLayout{
 				ope_property,
 				name,

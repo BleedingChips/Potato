@@ -189,13 +189,11 @@ export namespace Potato::IR
 		virtual Layout GetLayout() const = 0;
 		virtual Layout GetLayoutAsMember() const = 0;
 
-		virtual std::size_t GetHashCode() const = 0;
+		virtual std::uint64_t GetHashCode() const = 0;
 		virtual ~StructLayout() = default;
-		template<typename Type>
-		bool IsStatic() const { return operator==(*GetStatic<Type>()); }
 		
 		bool operator== (StructLayout const& other) const;
-
+		static std::uint64_t CalculateHashCode(std::u8string_view name, std::span<MemberView const> member);
 	protected:
 
 		virtual bool IsEqual(StructLayout const* other) const { return false; }
@@ -442,7 +440,7 @@ export namespace Potato::IR
 			}
 		}
 
-		std::size_t GetHashCode() const override { return typeid(AtomicType).hash_code(); }
+		std::uint64_t GetHashCode() const override { return typeid(AtomicType).hash_code(); }
 
 		virtual bool Destruction(void* target, MemLayout::ArrayLayout target_array_layout) const override
 		{
@@ -472,6 +470,51 @@ export namespace Potato::IR
 		return StaticAtomicStructLayout<std::remove_cvref_t<Type>, Override>::Create();
 	}
 
+	template<std::size_t MemberCount>
+		requires(MemberCount >= 1)
+	struct StaticReferenceStructLayout : public StructLayout
+	{
+		template<typename ...OMemberT>
+		requires(
+			sizeof...(OMemberT) == MemberCount
+				&& (std::is_constructible_v<OMemberT, StructLayout::Member const&> && ... && true)
+				)
+		StaticReferenceStructLayout(std::u8string_view name, LayoutPolicyRef policy = {}, OMemberT&& ...omember)
+			: name(name)
+		{
+			std::array<StructLayout::Member const*, MemberCount> member_span = { &omember... };
+			for (std::size_t i = 0; i < MemberCount; ++i)
+			{
+				auto& ite_member = *member_span[i];
+				operate_property = operate_property && ite_member.struct_layout->GetOperateProperty();
+				auto offset = *policy.Combine(member_layout, ite_member.struct_layout->GetLayoutAsMember(), ite_member.array_count);
+				member_view[i] = {ite_member.struct_layout, ite_member.name, offset };
+			}
+			hash_code = StructLayout::CalculateHashCode(name, member_view);
+			total_layout = *policy.Complete(member_layout);
+		}
+		virtual OperateProperty GetOperateProperty() const override { return operate_property; }
+		virtual std::uint64_t GetHashCode() const override { return hash_code; }
+		virtual Layout GetLayout() const override { return total_layout; }
+		virtual Layout GetLayoutAsMember() const override { return member_layout; }
+		virtual std::span<MemberView const> GetMemberView() const override { return member_view; }
+		virtual std::u8string_view GetName() const override { return name; }
+	protected:
+		std::u8string_view name;
+		std::array<MemberView, MemberCount> member_view;
+		OperateProperty operate_property;
+		std::uint64_t hash_code = 0;
+		Potato::MemLayout::Layout member_layout;
+		Potato::MemLayout::Layout total_layout;
+		virtual void AddStructLayoutRef() const {}
+		virtual void SubStructLayoutRef() const {}
+	};
 	
+	template <class First, class... Rest>
+		requires(
+			std::is_constructible_v<First, StructLayout::Member const&>
+			 && (std::is_constructible_v<Rest, StructLayout::Member const&> && ... && true)
+		)
+		StaticReferenceStructLayout(std::u8string_view, LayoutPolicyRef, First, Rest...)->StaticReferenceStructLayout<1 + sizeof...(Rest)>;
 
 }

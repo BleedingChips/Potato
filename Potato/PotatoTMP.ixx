@@ -60,8 +60,16 @@ export namespace Potato::TMP
 		using Type = T;
 	};
 
-	//};
+	/* IsSame */
+	template<typename T, typename ...AT>
+	struct IsSame { static constexpr bool Value = true; };
 
+	template<typename T, typename OT, typename ...AT>
+	struct IsSame<T, OT, AT...> { 
+		static constexpr bool Value = std::is_same_v<T, OT>&& IsSame<T, AT...>::Value;
+	};
+
+	/* Instance */
 	template<template<typename ...> class Output, typename ...Input> struct Instant
 	{
 	private:
