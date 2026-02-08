@@ -141,6 +141,24 @@ namespace Potato::Document
 #endif
 	}
 
+	std::optional<std::size_t> BinaryStreamReader::ReadToBuffer(std::filesystem::path const& path, TMP::FunctionRef<std::span<std::byte>(std::size_t)> allocate_func)
+	{
+		if (allocate_func)
+		{
+			BinaryStreamReader reader{ path };
+			if (reader)
+			{
+				auto size = reader.GetStreamSize();
+				auto span = allocate_func(size);
+				if (span.size() >= size)
+				{
+					return reader.Read(span);
+				}
+			}
+		}
+		return std::nullopt;
+	}
+
 	BinaryStreamWriter::BinaryStreamWriter(BinaryStreamWriter&& reader)
 	{
 #ifdef _WIN32

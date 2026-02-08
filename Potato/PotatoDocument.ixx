@@ -84,6 +84,7 @@ export namespace Potato::Document
 		std::optional<std::ptrdiff_t> SetPointerOffsetFromEnd(std::ptrdiff_t offset = 0);
 		std::optional<std::ptrdiff_t> SetPointerOffsetFromCurrent(std::ptrdiff_t offset = 0);
 		~BinaryStreamReader();
+		static std::optional<std::size_t> ReadToBuffer(std::filesystem::path const& path, TMP::FunctionRef<std::span<std::byte>(std::size_t)> allocate_func);
 	protected:
 #ifdef _WIN32
 		HANDLE file = INVALID_HANDLE_VALUE;

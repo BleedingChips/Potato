@@ -143,7 +143,8 @@ export namespace Potato::IR
 		virtual bool Destruction(void* target, MemLayout::ArrayLayout target_array_layout = {}) const;
 		virtual bool CopyAssigned(void* target, void const* source, MemLayout::ArrayLayout target_array_layout, MemLayout::ArrayLayout source_array_layout) const;
 		virtual bool MoveAssigned(void* target, void* source, MemLayout::ArrayLayout target_array_layout, MemLayout::ArrayLayout source_array_layout) const;
-		virtual bool SupportNativeReference(std::type_index const& type_index) const { return false; }
+		virtual std::optional<std::size_t> LocateNativeType(std::span<std::type_index const>) const { return std::nullopt; }
+		std::optional<std::size_t> LocateNativeType(std::type_index type_index) const { return LocateNativeType({&type_index, 1}); }
 
 		struct CustomConstruct
 		{
@@ -170,12 +171,12 @@ export namespace Potato::IR
 			std::byte* GetByte(void* object_buffer, std::size_t array_index = 0) const { return member_layout.GetMember(object_buffer, array_index); }
 			template<typename Type>
 			Type* As(void* object_buffer, std::size_t array_index = 0) const {
-				assert(struct_layout->SupportNativeReference(typeid(std::remove_reference_t<Type>)));
+				assert(struct_layout->LocateNativeType(typeid(std::remove_reference_t<Type>)).has_value());
 				return reinterpret_cast<Type*>(GetByte(object_buffer, array_index));
 			};
 			template<typename Type>
 			Type const* As(void const* object_buffer, std::size_t array_index = 0) const {
-				assert(struct_layout->SupportNativeReference(typeid(std::remove_reference_t<Type>)));
+				assert(struct_layout->LocateNativeType(typeid(std::remove_reference_t<Type>)).has_value());
 				return reinterpret_cast<Type const*>(GetByte(object_buffer, array_index));
 			};
 		};
@@ -248,7 +249,7 @@ export namespace Potato::IR
 		
 		template<typename Type>
 		Type* As(std::size_t array_index = 0) {
-			assert(struct_layout->SupportNativeReference(typeid(std::remove_reference_t<Type>)));
+			assert(struct_layout->LocateNativeType(typeid(std::remove_reference_t<Type>)).has_value());
 			return reinterpret_cast<Type*>(GetObject(array_index));
 		}
 
@@ -454,8 +455,14 @@ export namespace Potato::IR
 			return true;
 		}
 		virtual bool CustomConstruction(void* target, std::span<StructLayout::CustomConstruct const> custom_construct) const override { assert(false); return false; }
-		virtual bool SupportNativeReference(std::type_index const& type_index) const override { 
-			return type_index == typeid(AtomicType); 
+		virtual std::optional<std::size_t> LocateNativeType(std::span<std::type_index const> type_index) const override {
+			std::type_index cur_locate = typeid(AtomicType);
+			auto finded = std::find(type_index.begin(), type_index.end(), cur_locate);
+			if (finded != type_index.end())
+			{
+				return std::distance(type_index.begin(), finded);
+			}
+			return std::nullopt;
 		}
 	};
 
