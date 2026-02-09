@@ -21,16 +21,31 @@ namespace Potato::Document
 	std::size_t BinaryStreamReader::Read(std::span<std::byte> output)
 	{
 #ifdef _WIN32
-		DWORD readed = 0;
-		if(ReadFile(
-			file, output.data(), output.size() * sizeof(std::byte), &readed, nullptr
-		))
+		std::size_t total_size = 0;
+		while (total_size < output.size() * sizeof(std::byte))
 		{
-			std::size_t total_count = readed;
-			return total_count;
+			DWORD readed = 0;
+			if (ReadFile(
+				file, output.data() + total_size, 
+				std::min(
+					output.size() * sizeof(std::byte) - total_size, 
+					std::size_t{ std::numeric_limits<DWORD>::max() }
+				),
+				&readed, nullptr
+			))
+			{
+				total_size += readed;
+				if (readed == 0)
+					return total_size;
+			}
+			else {
+				return total_size;
+			}
 		}
-#endif
+		return total_size;
+#else
 		return 0;
+#endif
 	}
 
 	BinaryStreamReader::operator bool() const
@@ -104,6 +119,8 @@ namespace Potato::Document
 			}
 		}
 		return std::nullopt;
+#else
+		return 0;
 #endif
 	}
 
@@ -221,17 +238,34 @@ namespace Potato::Document
 #endif
 	}
 
-	bool BinaryStreamWriter::Write(std::byte const* buffer, std::size_t size)
+	std::size_t BinaryStreamWriter::Write(std::byte const* buffer, std::size_t size)
 	{
 #ifdef _WIN32
-		DWORD writed;
-		return WriteFile(
-			file,
-			reinterpret_cast<LPCVOID>(buffer),
-			size * sizeof(std::byte),
-			&writed,
-			nullptr
-		);
+		std::size_t total_size = 0;
+		while (total_size < size)
+		{
+			DWORD writed = 0;
+			if (WriteFile(
+					file,
+					reinterpret_cast<LPCVOID>(buffer + total_size),
+					std::min(
+						size * sizeof(std::byte) - total_size,
+						std::size_t{ std::numeric_limits<DWORD>::max() }
+					),
+					&writed,
+					nullptr
+				)
+			)
+			{
+				total_size += writed;
+				if (writed == 0)
+					return total_size;
+			}
+			else {
+				return total_size;
+			}
+		}
+		return total_size;
 #endif
 	}
 

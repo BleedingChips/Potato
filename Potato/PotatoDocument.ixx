@@ -106,10 +106,10 @@ export namespace Potato::Document
 		BinaryStreamWriter(BinaryStreamWriter&& reader);
 		operator bool() const;
 		bool Open(std::filesystem::path const& path, OpenMode mode);
-		bool Write(std::byte const* data, std::size_t size);
-		bool Write(std::span<std::byte const> input) { return Write(input.data(), input.size()); }
+		std::size_t Write(std::byte const* data, std::size_t size);
+		std::size_t Write(std::span<std::byte const> input) { return Write(input.data(), input.size()); }
 		template<typename Type>
-		bool Write(std::span<Type const> input) { return this->Write(reinterpret_cast<std::byte const*>(input.data()),  sizeof(Type) * input.size()); }
+		std::size_t Write(std::span<Type const> input) { return this->Write(reinterpret_cast<std::byte const*>(input.data()),  sizeof(Type) * input.size()); }
 		void Close();
 		~BinaryStreamWriter();
 	protected:
