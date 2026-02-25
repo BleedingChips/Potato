@@ -60,6 +60,7 @@ export namespace Potato::Misc
 		constexpr IndexSpan& Normalize(Type Length) { EndPoint = StartPoint + Length; return *this; };
 		constexpr IndexSpan& WholeOffset(Type Length) { StartPoint += Length; EndPoint += Length; return *this;}
 		constexpr IndexSpan& WholeForward(Type Length) { StartPoint -= Length; EndPoint -= Length; return *this;}
+		constexpr operator bool() const { return StartPoint <= EndPoint; }
 
 	protected:
 		
