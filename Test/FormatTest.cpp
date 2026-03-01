@@ -56,11 +56,54 @@ void TestingStrFormat()
 	std::wcout << LR"(TestingStrFormat Pass !)" << std::endl;
 }
 */
+std::u8string_view format_string_bad1 = u8"sdasdasd}";
+
 
 int main()
 {
 	try {
-		//TestingStrFormat();
+		{
+			auto point1 = FormatterSyntax::FindSyntaxPoint(u8"sdasdasd}");
+			if (point1.has_value())
+			{
+				throw "case 1";
+			}
+		}
+		{
+			auto point = FormatterSyntax::FindSyntaxPoint(u8"{sdasdasd");
+			if (point.has_value())
+			{
+				throw "case 2";
+			}
+		}
+		{
+			auto point = FormatterSyntax::FindSyntaxPoint(u8"{{sdasdasd");
+			if (!point.has_value())
+			{
+				throw "case 3";
+			}
+		}
+		{
+			auto point = FormatterSyntax::FindSyntaxPoint(u8"}}sdasdasd");
+			if (!point.has_value())
+			{
+				throw "case 4";
+			}
+		}
+		{
+			auto point = FormatterSyntax::FindSyntaxPoint(u8"{1234}");
+			if (!point.has_value())
+			{
+				throw "case 5";
+			}
+			if (point->string != u8"1234")
+			{
+				throw "case 5";
+			}
+		}
+
+		StaticFormatPattern<u8"abc{{{123}}}abc{78} {{{56456}"> pattern;
+		volatile int i = 0;
 	}
 	catch (const char* Error)
 	{

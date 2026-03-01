@@ -561,13 +561,17 @@ export namespace Potato::TMP
 	struct TypeString
 	{
 		CharT string[N];
-		constexpr std::basic_string_view<CharT> GetStringView() const { return {string}; }
-		constexpr TypeString(const CharT(&str)[N]) : string{}
+		consteval std::basic_string_view<CharT> GetStringView() const { return {string}; }
+		consteval TypeString(const CharT(&str)[N]) : string{}
 		{
 			std::copy_n(str, N, string);
 		}
+		consteval TypeString(TypeString const& other)
+		{
+			std::copy_n(other.string, N, string);
+		}
 		template<typename CharT2, std::size_t N2>
-		constexpr bool operator==(TypeString<CharT2, N2> const& ref) const
+		consteval bool operator==(TypeString<CharT2, N2> const& ref) const
 		{
 			if constexpr (std::is_same_v<CharT, CharT> && N == N2)
 			{
@@ -576,8 +580,11 @@ export namespace Potato::TMP
 			else
 				return false;
 		}
+		consteval std::size_t Size() const { return N; }
 		using Type = CharT;
 		static constexpr std::size_t Len = N;
+	protected:
+		TypeString() = default;
 	};
 
 	template<std::size_t N>
