@@ -150,11 +150,39 @@ export namespace Potato::Format
 		Parameter
 	};
 
+	template<typename ValueT, typename CharT>
+	struct Formatter;
+
+	template<typename ValueT, typename CharT>
+	concept IsExistFormatter = requires
+	{
+		std::formatter<ValueT, CharT>{};
+	};
+
+	template<typename ValueT, typename CharT>
+		requires(IsExistFormatter<ValueT, CharT>)
+	struct Formatter<ValueT, CharT>
+	{
+
+	};
+
 	template<typename CharT, FormatterSyntaxType type, std::size_t index>
 	struct FormatterSyntaxPoint
 	{
 		std::basic_string_view<CharT> syntax;
-		constexpr std::size_t GetIndex() const { return index; }
+		template<typename IteratorT, typename ...AT>
+		bool Format(IteratorT ite, std::tuple<AT&&...>& at) const
+		{
+			if constexpr (type == FormatterSyntaxType::String)
+			{
+				std::copy_n(syntax.data(), syntax.size(), ite);
+			}
+			else {
+				std::u8string_view ppp = u8"<par>";
+				std::copy_n(ppp.data(), ppp.size(), ite);
+			}
+			return true;
+		}
 	};
 
 	struct FormatterSyntax
@@ -257,9 +285,24 @@ export namespace Potato::Format
 		}
 
 		template<typename CharT>
-		static constexpr std::optional<std::size_t> GetSyntaxPointCount(std::basic_string_view<CharT> format_pattern)
+		struct SyntaxPoint
 		{
-			std::size_t count = 0;
+			std::basic_string_view<CharT> syntax;
+			FormatterSyntaxType type = FormatterSyntaxType::String;
+			std::size_t parameter_index = 0;
+		};
+
+		struct PatternInfo
+		{
+			std::size_t section_count;
+			std::size_t max_parameter_index;
+		};
+
+		template<typename CharT>
+		static constexpr std::optional<PatternInfo> GetSyntaxPointCount(std::basic_string_view<CharT> format_pattern)
+		{
+			std::size_t section_count = 0;
+			std::size_t max_parameter_index = 0;
 			while (!format_pattern.empty())
 			{
 				auto point = FindSyntaxPoint(format_pattern);
@@ -268,32 +311,93 @@ export namespace Potato::Format
 					return std::nullopt;
 				}
 				format_pattern = point->next_string;
-				++count;
+				section_count += 1;
+				if (point->type == FormatterSyntaxType::Parameter)
+					max_parameter_index += 1;
 			}
-			return count;
+			return PatternInfo{ section_count, max_parameter_index };
 		}
 
-		template<typename CharT, typename ...Parameter>
-		consteval auto Translate(std::basic_string_view<CharT> str, std::tuple<Parameter...> const& par)
+		template<std::size_t index, std::size_t target>
+		struct FormatterExecutor
 		{
-			if (str.empty())
-				return par;
+			template<typename ...ParT, typename IteratorT, typename ...ValT>
+			void operator() (std::tuple<ParT...> const& pattern, IteratorT&& iterator, std::tuple<ValT&&...>& val)
+			{
+				std::get<index>(pattern).Format(std::forward<IteratorT>(iterator), val);
+				FormatterExecutor<index + 1, target>{}(pattern, std::forward<IteratorT>(iterator), val);
+			}
+		};
 
-			return std::tuple_cat(par, std::make_tuple(k));
-		}
+		template<std::size_t index>
+		struct FormatterExecutor<index, index>
+		{
+			template<typename ...ParT, typename IteratorT, typename ...ValT>
+			void operator() (std::tuple<ParT...> const& pattern, IteratorT&& iterator, std::tuple<ValT&&...>& val)
+			{
+			}
+		};
 	};
 
 	template<TMP::TypeString type_string>
 		requires(FormatterSyntax::GetSyntaxPointCount(type_string.GetStringView()).has_value())
 	struct StaticFormatPattern
 	{
-		static constexpr std::size_t pattern_count = *FormatterSyntax::GetSyntaxPointCount(type_string.GetStringView());
-		
-		static constexpr auto pattern = FormatterSyntax::Translate(type_string.GetStringView(), std::tuple<>{});
+		using Type = typename decltype(type_string)::Type;
+		static constexpr auto pattern_info = *FormatterSyntax::GetSyntaxPointCount(type_string.GetStringView());
+		static constexpr auto pattern = []<std::size_t ...i>(std::index_sequence<i...>) {
+			constexpr std::array<
+				FormatterSyntax::SyntaxPoint<Type>, pattern_info.section_count
+			> pattern = []() {
+				std::array<
+					FormatterSyntax::SyntaxPoint<Type>, pattern_info.section_count
+				> pattern;
+
+				std::size_t parameter_index = 0;
+				auto iterator = pattern.begin();
+
+				auto ite_format = type_string.GetStringView();
+				while (!ite_format.empty())
+				{
+					auto point = FormatterSyntax::FindSyntaxPoint(ite_format);
+					iterator->syntax = point->string;
+					iterator->type = point->type;
+					iterator->parameter_index = parameter_index;
+					if (point->type == FormatterSyntaxType::Parameter)
+					{
+						parameter_index += 1;
+					}
+					iterator += 1;
+					ite_format = point->next_string;
+				}
+
+				return pattern;
+				}();
+
+			return std::make_tuple(
+				FormatterSyntaxPoint<typename decltype(type_string)::Type, pattern[i].type, pattern[i].parameter_index>{
+					pattern[i].syntax
+				}...
+			);
+			
+		}(std::make_index_sequence<pattern_info.section_count>());
 		
 		consteval StaticFormatPattern(StaticFormatPattern const& other) = default;
 		consteval StaticFormatPattern() {}
-		consteval std::size_t GetPatternCount() const { return pattern_count; }
+
+		template<typename IteratorT, typename ...AT>
+			requires(sizeof...(AT) >= pattern_info.max_parameter_index)
+		void Format(IteratorT iterator, AT&& ...at) const
+		{
+			auto ref = std::forward_as_tuple(std::forward<AT>(at)...);
+			FormatterSyntax::FormatterExecutor<0, pattern_info.section_count>{}(
+				pattern,
+				std::forward<IteratorT>(iterator),
+				ref
+			);
+		}
+
+	protected:
 	};
 
 	/*

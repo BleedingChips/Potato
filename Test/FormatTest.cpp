@@ -103,6 +103,8 @@ int main()
 		}
 
 		StaticFormatPattern<u8"abc{{{123}}}abc{78} {{{56456}"> pattern;
+		std::u8string p;
+		pattern.Format(std::back_inserter(p), 1, 2, 3);
 		volatile int i = 0;
 	}
 	catch (const char* Error)
