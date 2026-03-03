@@ -58,6 +58,32 @@ void TestingStrFormat()
 */
 std::u8string_view format_string_bad1 = u8"sdasdasd}";
 
+struct K
+{
+
+};
+
+namespace Potato::Format
+{
+	template<typename CharT>
+	struct Formatter<K, CharT>
+	{
+		std::u8string_view texts;
+		constexpr Formatter(std::basic_string_view<CharT> syntax) {
+			texts = u8"sadasd";
+		};
+		template<typename Iterator>
+		Iterator Format(Iterator iterator, K const&) const
+		{
+			std::u8string_view cc = u8"<class K>";
+			return std::copy_n(
+				cc.data(),
+				cc.size(),
+				std::move(iterator)
+			);
+		}
+	};
+}
 
 int main()
 {
@@ -102,9 +128,11 @@ int main()
 			}
 		}
 
-		StaticFormatPattern<u8"abc{{{123}}}abc{78} {{{56456}"> pattern;
+		StaticFormatPattern<u8"abc {}"> pattern;
 		std::u8string p;
-		pattern.Format(std::back_inserter(p), 1, 2, 3);
+		K k;
+		pattern.Format(std::back_inserter(p), k);
+
 		volatile int i = 0;
 	}
 	catch (const char* Error)

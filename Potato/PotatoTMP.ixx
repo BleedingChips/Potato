@@ -561,8 +561,14 @@ export namespace Potato::TMP
 	struct TypeString
 	{
 		CharT string[N];
-		consteval std::basic_string_view<CharT> GetStringView() const { return {string}; }
-		consteval TypeString(const CharT(&str)[N]) : string{}
+		constexpr std::basic_string_view<CharT> GetStringView() const { return {string}; }
+		/*
+		explicit consteval TypeString(const CharT(&str)[N]) : string{}
+		{
+			std::copy_n(str, N, string);
+		}
+		*/
+		consteval TypeString(const CharT str[N]) : string{}
 		{
 			std::copy_n(str, N, string);
 		}
@@ -570,6 +576,7 @@ export namespace Potato::TMP
 		{
 			std::copy_n(other.string, N, string);
 		}
+
 		template<typename CharT2, std::size_t N2>
 		consteval bool operator==(TypeString<CharT2, N2> const& ref) const
 		{
@@ -580,11 +587,42 @@ export namespace Potato::TMP
 			else
 				return false;
 		}
-		consteval std::size_t Size() const { return N; }
+		constexpr std::size_t Size() const { return N; }
 		using Type = CharT;
 		static constexpr std::size_t Len = N;
 	protected:
 		TypeString() = default;
+	};
+
+	template<std::size_t RequireIndex>
+	struct ParameterPicker
+	{
+		template<typename CurrentType, typename ...Type>
+		decltype(auto) operator()(CurrentType&& current_type, Type&& ...type)
+		{
+			return ParameterPicker<RequireIndex - 1>{}(std::forward<Type>(type)...);
+		}
+	};
+
+	template<>
+	struct ParameterPicker<0>
+	{
+		template<typename CurrentType, typename ...Type>
+		decltype(auto) operator()(CurrentType&& current_type, Type&& ...type)
+		{
+			return std::forward<CurrentType>(current_type);
+		}
+	};
+
+	template<std::size_t RequireIndex>
+	struct ParameterReversePicker
+	{
+		template<typename ...Type>
+			requires(RequireIndex < sizeof...(Type))
+		decltype(auto) operator()(Type&& ...type)
+		{
+			return ParameterPicker<sizeof...(Type) - RequireIndex>{}(std::forward<Type>(type)...);
+		}
 	};
 
 	template<std::size_t N>
