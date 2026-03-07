@@ -562,6 +562,7 @@ export namespace Potato::TMP
 	{
 		CharT string[N];
 		constexpr std::basic_string_view<CharT> GetStringView() const { return {string}; }
+		constexpr std::span<CharT const, N> GetSpan() const { return std::span{ string }; }
 		/*
 		explicit consteval TypeString(const CharT(&str)[N]) : string{}
 		{
@@ -587,6 +588,7 @@ export namespace Potato::TMP
 			else
 				return false;
 		}
+
 		constexpr std::size_t Size() const { return N; }
 		using Type = CharT;
 		static constexpr std::size_t Len = N;
@@ -603,6 +605,21 @@ export namespace Potato::TMP
 			return ParameterPicker<RequireIndex - 1>{}(std::forward<Type>(type)...);
 		}
 	};
+
+	template<std::size_t N>
+	TypeString(const char32_t(&str)[N]) -> TypeString<char32_t, N>;
+
+	template<std::size_t N>
+	TypeString(const char16_t(&str)[N])-> TypeString<char16_t, N>;
+
+	template<std::size_t N>
+	TypeString(const char8_t(&str)[N])-> TypeString<char8_t, N>;
+
+	template<std::size_t N>
+	TypeString(const wchar_t(&str)[N])-> TypeString<wchar_t, N>;
+
+	template<std::size_t N>
+	TypeString(const char(&str)[N])-> TypeString<char, N>;
 
 	template<>
 	struct ParameterPicker<0>
@@ -624,21 +641,6 @@ export namespace Potato::TMP
 			return ParameterPicker<sizeof...(Type) - RequireIndex>{}(std::forward<Type>(type)...);
 		}
 	};
-
-	template<std::size_t N>
-	TypeString(const char32_t(&str)[N]) -> TypeString<char32_t, N>;
-
-	template<std::size_t N>
-	TypeString(const char16_t(&str)[N])-> TypeString<char16_t, N>;
-
-	template<std::size_t N>
-	TypeString(const char8_t(&str)[N])-> TypeString<char8_t, N>;
-
-	template<std::size_t N>
-	TypeString(const wchar_t(&str)[N])-> TypeString<wchar_t, N>;
-
-	template<std::size_t N>
-	TypeString(const char(&str)[N])-> TypeString<char, N>;
 
 	template<typename FuncT>
 	struct FunctionRef;

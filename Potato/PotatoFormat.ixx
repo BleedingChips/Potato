@@ -166,7 +166,9 @@ export namespace Potato::Format
 		std::formatter<ValueT, CharT> formatter;
 		constexpr Formatter(std::basic_string_view<CharT> syntax)
 			: formatter([=]() {
-				std::basic_format_parse_context<CharT> parse_context{ syntax, 0 };
+				std::basic_format_parse_context<CharT> parse_context{ 
+					"}", 0
+				};
 				std::formatter<ValueT, CharT> std_formatter;
 				std_formatter.parse(parse_context);
 				return std_formatter;
@@ -247,12 +249,50 @@ export namespace Potato::Format
 
 	struct FormatterSyntax
 	{
+		template<typename CharT>
+		struct ParameterIndexSyntax
+		{
+			std::basic_string_view<CharT> syntax;
+			std::optional<std::size_t> parameter_index;
+		};
+
+		template<typename CharT>
+		static constexpr std::optional<ParameterIndexSyntax<CharT>> GetParameterIndexSyntax(std::basic_string_view<CharT> parameter_syntax)
+		{
+			std::size_t state = 0;
+			std::optional<std::size_t> parameter_index;
+			std::size_t index = 0;
+			for (; index < parameter_syntax.size(); ++index)
+			{
+				auto cur = parameter_syntax[index];
+				if (cur == static_cast<CharT>(':'))
+					return ParameterIndexSyntax<CharT>{parameter_syntax.substr(index + 1), parameter_index};
+				else if (
+					(cur > static_cast<CharT>('0') && cur <= static_cast<CharT>('9'))
+					|| (parameter_index.has_value() && cur == static_cast<CharT>('0'))
+					)
+				{
+					if (!parameter_index.has_value())
+						parameter_index = static_cast<std::size_t>(cur - static_cast<CharT>('0'));
+					else
+					{
+						*parameter_index *= 10;
+						*parameter_index += static_cast<std::size_t>(cur - static_cast<CharT>('0'));
+					}
+				}
+				else {
+					return std::nullopt;
+				}
+			}
+			return ParameterIndexSyntax<CharT>{parameter_syntax.substr(index), parameter_index};
+		}
 
 		template<typename CharT>
 		struct TopSyntaxPoint
 		{
 			std::basic_string_view<CharT> string;
 			FormatterSyntaxType type;
+			std::optional<std::size_t> parameter_index;
 			std::basic_string_view<CharT> next_string;
 		};
 
@@ -285,7 +325,8 @@ export namespace Potato::Format
 			{
 				return TopSyntaxPoint<CharT>{
 					{formatter_pattern.begin(), first_brace + 1},
-					FormatterSyntaxType::String, 
+					FormatterSyntaxType::String,
+					0,
 					{first_brace + 2, formatter_pattern.end()}
 				};
 			}
@@ -297,6 +338,7 @@ export namespace Potato::Format
 					return TopSyntaxPoint<CharT>{
 						{formatter_pattern.begin(), first_brace},
 						FormatterSyntaxType::String,
+						0,
 						{first_brace, formatter_pattern.end()}
 					};
 				}
@@ -316,9 +358,17 @@ export namespace Potato::Format
 
 				if (*second_brace == static_cast<CharT>('}'))
 				{
+					std::basic_string_view<CharT> syntax{ first_brace + 1, second_brace };
+
+					auto parameter_index_info = GetParameterIndexSyntax(syntax);
+
+					if (!parameter_index_info.has_value())
+						return std::nullopt;
+
 					return TopSyntaxPoint<CharT>{
-						{first_brace + 1, second_brace},
+						parameter_index_info->syntax,
 						FormatterSyntaxType::Parameter,
+						parameter_index_info->parameter_index,
 						{second_brace + 1, formatter_pattern.end()}
 					};
 				}
@@ -352,6 +402,7 @@ export namespace Potato::Format
 		{
 			std::size_t section_count = 0;
 			std::size_t max_parameter_index = 0;
+			std::size_t is_automatic_mode = 0;
 			while (!format_pattern.empty())
 			{
 				auto point = FindSyntaxPoint(format_pattern);
@@ -362,7 +413,30 @@ export namespace Potato::Format
 				format_pattern = point->next_string;
 				section_count += 1;
 				if (point->type == FormatterSyntaxType::Parameter)
-					max_parameter_index += 1;
+				{
+					if (point->parameter_index.has_value())
+					{
+						if (is_automatic_mode == 0)
+						{
+							is_automatic_mode = 2;
+						}
+						else if (is_automatic_mode == 1)
+							return std::nullopt;
+
+						max_parameter_index = std::max(max_parameter_index, *point->parameter_index + 1);
+					}
+					else
+					{
+						if (is_automatic_mode == 0)
+						{
+							is_automatic_mode = 1;
+						}
+						else if (is_automatic_mode == 2)
+							return std::nullopt;
+
+						max_parameter_index += 1;
+					}
+				}
 			}
 			return PatternInfo{ section_count, max_parameter_index };
 		}
@@ -396,32 +470,54 @@ export namespace Potato::Format
 	};
 
 	template<TMP::TypeString type_string>
-		requires(FormatterSyntax::GetSyntaxPointCount(type_string.GetStringView()).has_value())
 	struct StaticFormatPattern
 	{
 		using Type = typename decltype(type_string)::Type;
-		static constexpr auto pattern_info = *FormatterSyntax::GetSyntaxPointCount(type_string.GetStringView());
+		static constexpr auto pattern_info = FormatterSyntax::GetSyntaxPointCount(type_string.GetStringView());
+		static_assert(pattern_info.has_value(), "check format pattern syntax");
 		static constexpr auto pattern = []<std::size_t ...i>(std::index_sequence<i...>) {
 			constexpr std::array<
-				FormatterSyntax::SyntaxPoint<Type>, pattern_info.section_count
+				FormatterSyntax::SyntaxPoint<Type>, pattern_info->section_count
 			> pattern = []() {
 				std::array<
-					FormatterSyntax::SyntaxPoint<Type>, pattern_info.section_count
+					FormatterSyntax::SyntaxPoint<Type>, pattern_info->section_count
 				> pattern;
-
-				std::size_t parameter_index = 0;
+				
+				std::size_t max_parameter_index = 0;
+				std::size_t is_automic = false;
 				auto iterator = pattern.begin();
 
 				auto ite_format = type_string.GetStringView();
 				while (!ite_format.empty())
 				{
 					auto point = FormatterSyntax::FindSyntaxPoint(ite_format);
-					iterator->syntax = point->string;
 					iterator->type = point->type;
-					iterator->parameter_index = parameter_index;
 					if (point->type == FormatterSyntaxType::Parameter)
 					{
-						parameter_index += 1;
+						iterator->syntax = point->string;
+						if (point->parameter_index.has_value())
+						{
+							if (is_automic == 0)
+							{
+								is_automic = 2;
+							}
+							else if (is_automic == 1)
+								throw "formatter index is automic mode";
+							iterator->parameter_index = *point->parameter_index;
+						}
+						else {
+							if (is_automic == 0)
+							{
+								is_automic = 1;
+							}
+							else if (is_automic == 2)
+								throw "formatter index is definded mode";
+							iterator->parameter_index = max_parameter_index++;
+						}
+					}
+					else {
+						iterator->syntax = point->string;
+						iterator->parameter_index = 0;
 					}
 					iterator += 1;
 					ite_format = point->next_string;
@@ -436,7 +532,7 @@ export namespace Potato::Format
 				}...
 			);
 			
-		}(std::make_index_sequence<pattern_info.section_count>());
+		}(std::make_index_sequence<pattern_info->section_count>());
 		
 		consteval StaticFormatPattern(StaticFormatPattern const& other) = default;
 		consteval StaticFormatPattern() {}
@@ -444,7 +540,7 @@ export namespace Potato::Format
 		template<std::output_iterator<Type> IteratorT, typename ...AT>
 		constexpr IteratorT Format(IteratorT iterator, AT&& ...at) const
 		{
-			static_assert(sizeof...(AT) >= pattern_info.max_parameter_index, "format require input count equal or bigger then {} pair");
+			static_assert(sizeof...(AT) >= pattern_info->max_parameter_index, "format require input count equal or bigger then {} pair");
 			
 			constexpr bool has_exist_formatter = (true && ... && HasExistFormatter<IteratorT, Type, AT>);
 			
@@ -454,9 +550,9 @@ export namespace Potato::Format
 				return std::make_tuple(
 					std::get<i>(pattern).GetFormatter<AT...>()...
 				);
-			}(std::make_index_sequence<pattern_info.section_count>());
+			}(std::make_index_sequence<pattern_info->section_count>());
 
-			return FormatterSyntax::FormatterExecutor<0, pattern_info.section_count>{}(
+			return FormatterSyntax::FormatterExecutor<0, pattern_info->section_count>{}(
 				formatter,
 				std::move(iterator),
 				std::forward<AT>(at)...
