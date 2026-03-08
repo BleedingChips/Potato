@@ -4,6 +4,7 @@ module;
 
 module PotatoReg;
 
+
 namespace Potato::Reg
 {
 	using namespace Exception;
@@ -2789,11 +2790,7 @@ namespace Potato::Reg
 		
 			: UnaccaptableRegexTokenIndex(Type, BadIndex)
 		{
-			Encode::StrEncoder<char8_t, wchar_t> encoder;
-			Encode::EncodeOption option;
-			option.predict = true;
-			TotalString.resize(encoder.Encode(Str, {}, option).target_space);
-			encoder.Encode(Str, std::span(TotalString));
+			Encode::UnicodeEncoder<char8_t, wchar_t>::EncodeTo(Str, std::back_inserter(TotalString));
 		}
 
 		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::wstring_view Str, Misc::IndexSpan<> BadIndex)

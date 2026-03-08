@@ -11,7 +11,7 @@ module PotatoLog;
 namespace Potato::Log
 {
 
-
+	/*
 	struct ConsleLogPrinter : public LogPrinter
 	{
 		void Print(Level level, std::string_view output) override
@@ -36,6 +36,7 @@ namespace Potato::Log
 	{
 		return &printer;
 	}
+	*/
 
 	/*
 	std::pmr::memory_resource* LogMemoryResource() { return std::pmr::get_default_resource(); }

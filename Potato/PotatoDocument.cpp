@@ -10,6 +10,7 @@ module;
 
 module PotatoDocument;
 
+/*
 namespace Potato::Document
 {
 	constexpr unsigned char utf8_bom[] = { 0xEF, 0xBB, 0xBF };
@@ -385,3 +386,4 @@ namespace Potato::Document
 		);
 	}
 }
+*/

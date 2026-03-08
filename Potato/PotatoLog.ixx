@@ -6,19 +6,23 @@ import PotatoPointer;
 
 export namespace Potato::Log
 {
-	enum class Level
+	enum class LogLevel
 	{
+		VeryVerbose,
+		Verbose,
 		Log,
+		Display, 
+		Warning,
+		Error
 	};
 
-	template<std::size_t N>
-	struct LogCategory : public TMP::TypeString<char8_t, N>
+	template<TMP::TypeString>
+	struct LogCategory
 	{
-		using TMP::TypeString<char8_t, N>::TypeString;
 	};
 
 	template<std::size_t N>
-	LogCategory(const char8_t(&str)[N]) -> LogCategory<N>;
+	LogCategory(const char8_t(&str)[N]) -> LogCategory<TMP::TypeString(str)>;
 
 	struct FormatedSystemTime
 	{
@@ -29,32 +33,40 @@ export namespace Potato::Log
 		{
 		}
 	};
+
+	struct LogLine
+	{
+		FormatedSystemTime current_time;
+		std::u8string_view category;
+		LogLevel level;
+		std::u8string_view log_message;
+	};
+
+	
 }
 
 export namespace std
 {
 	template<>
-	struct formatter<Potato::Log::Level, char>
+	struct formatter<Potato::Log::LogLevel, wchar_t>
 	{
 		constexpr auto parse(std::basic_format_parse_context<char>& parse_context)
 		{
-			return parse_context.begin();
+			if(*parse_context.begin() == L'}')
+				return parse_context.begin();
+			else
+				throw "LogLevel do not support any parameter";
 		}
 
 		template<typename FormatContext>
-		constexpr auto format(Potato::Log::Level level, FormatContext& format_context) const
+		constexpr auto format(Potato::Log::LogLevel level, FormatContext& format_context) const
 		{
 			switch (level)
 			{
 			case Potato::Log::Level::Log:
 			{
-				constexpr std::string_view str = "Log";
-				auto out_ite = format_context.out();
-				for (auto ite : str)
-				{
-					*(out_ite++) = ite;
-				}
-				return out_ite;
+				constexpr std::wstring_view str = L"Log";
+				return std::copy_n(str.data(), str.size(), format_context.out());
 			}
 			default:
 				return format_context.out();
@@ -62,23 +74,21 @@ export namespace std
 		}
 	};
 
-	template<std::size_t N>
-	struct formatter<Potato::Log::LogCategory<N>, char>
+	template<Potato::TMP::TypeString type_string>
+	struct formatter<Potato::Log::LogCategory<type_string>, char>
 	{
 		constexpr auto parse(std::basic_format_parse_context<char>& parse_context)
 		{
-			return parse_context.begin();
+			if (*parse_context.begin() == L'}')
+				return parse_context.begin();
+			else
+				throw "LogLevel do not support any parameter";
 		}
 		template<typename FormatContext>
 		constexpr auto format(Potato::Log::LogCategory<N> const& category, FormatContext& format_context) const
 		{
 			auto str = category.GetStringView();
-			auto out_ite = format_context.out();
-			for (auto ite : str)
-			{
-				*(out_ite++) = ite;
-			}
-			return out_ite;
+			return std::copy_n(str.data(), str.size(), format_context.out());
 		}
 	};
 

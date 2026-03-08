@@ -1,10 +1,11 @@
-import PotatoFormat;
+﻿import PotatoFormat;
 import PotatoEncode;
+import PotatoTMP;
 import std;
 
 using namespace Potato::Format;
 
-/*
+
 template<typename Target>
 void TestScan(std::u8string_view Pattern, std::u8string_view Str, Target Tar, const char* Error)
 {
@@ -24,14 +25,6 @@ void TestFormat(std::u8string_view Pattern, std::u8string_view TarStr, const cha
 	{
 		throw Error;
 	}
-}
-
-
-constexpr std::size_t Fund()
-{
-	FormatWritter<char8_t> Predict;
-	auto K = Format(Predict, u8"abcedc");
-	return Predict.GetWritedSize();
 }
 
 void TestingStrFormat()
@@ -56,8 +49,6 @@ void TestingStrFormat()
 
 	std::wcout << LR"(TestingStrFormat Pass !)" << std::endl;
 }
-*/
-std::u8string_view format_string_bad1 = u8"sdasdasd}";
 
 struct K
 {
@@ -90,76 +81,6 @@ struct Ref
 {
 	float k;
 };
-
-template<typename CharT, std::size_t N>
-struct TypeString
-{
-	CharT string[N];
-	constexpr std::basic_string_view<CharT> GetStringView() const { return { string }; }
-	constexpr std::span<CharT const, N> GetSpan() const { return std::span{string}; }
-	/*
-	explicit consteval TypeString(const CharT(&str)[N]) : string{}
-	{
-		std::copy_n(str, N, string);
-	}
-	*/
-	consteval TypeString(const CharT str[N]) : string{}
-	{
-		std::copy_n(str, N, string);
-	}
-	consteval TypeString(TypeString const& other)
-	{
-		std::copy_n(other.string, N, string);
-	}
-
-	template<typename CharT2, std::size_t N2>
-	consteval bool operator==(TypeString<CharT2, N2> const& ref) const
-	{
-		if constexpr (std::is_same_v<CharT, CharT> && N == N2)
-		{
-			return std::equal(string, string + N, ref.string, N);
-		}
-		else
-			return false;
-	}
-
-	constexpr std::size_t Size() const { return N; }
-	using Type = CharT;
-	static constexpr std::size_t Len = N;
-
-	template<typename TargetT>
-	constexpr std::size_t GetSize() const {
-		auto info = Potato::Encode::StrEncoder<CharT, TargetT>::Encode(GetSpan(), {}, { false, true });
-		return info.target_space;
-	}
-
-	template<typename TargetT>
-	consteval auto CastTo() const
-	{
-		constexpr auto index = GetSize<TargetT>();
-		TargetT Temp[index];
-		Potato::Encode::StrEncoder<CharT, TargetT>::Encode(GetSpan(), std::span{ Temp }, { false, true });
-		return TypeString(Temp);
-	}
-
-protected:
-	TypeString() = default;
-};
-
-template<std::size_t N>
-TypeString(const char32_t(&str)[N]) -> TypeString<char32_t, N>;
-
-template<std::size_t N>
-TypeString(const char16_t(&str)[N]) -> TypeString<char16_t, N>;
-
-template<std::size_t N>
-TypeString(const char8_t(&str)[N]) -> TypeString<char8_t, N>;
-
-template<std::size_t N>
-TypeString(const wchar_t(&str)[N]) -> TypeString<wchar_t, N>;
-
-template<std::size_t N>
-TypeString(const char(&str)[N]) -> TypeString<char, N>;
 
 
 namespace std
@@ -217,8 +138,16 @@ namespace std
 	};
 }
 
+template<typename CharT, std::size_t N>
+void Test(const CharT(&str)[N])
+{
+	auto info = Potato::Encode::UnicodeEncoder<char8_t, wchar_t>::Statistics(std::span(str, N));
+	volatile int i = 0;
+}
+
 int main()
 {
+
 	try {
 		{
 			auto point1 = FormatterSyntax::FindSyntaxPoint(u8"sdasdasd}");
@@ -292,23 +221,9 @@ int main()
 			volatile int i = 0;
 		}
 
-		constexpr auto info = Potato::Encode::StrEncoder<char8_t, wchar_t>{}.Encode(std::span(u8"abc"), {}, { false, true });
-		
-		constexpr auto str1 = TypeString(
-			u8"nihaoa"
-		);
-
 		//constexpr auto str3 = str1.CastTo<char16_t>();
 
 		volatile int o = 0;
-
-
-		/*
-		constexpr auto str2 = [](std::span<char8_t const> out) {
-				constexpr auto info = Potato::Encode::StrEncoder<char8_t, wchar_t>{}.Encode(out, {}, { false, true });
-				return 1;
-			}(std::span(str1.string));
-			*/
 
 		volatile int i = 0;
 		
@@ -318,5 +233,6 @@ int main()
 		std::cout << Error << std::endl;
 		return -1;
 	}
+
 	return 0;
 }

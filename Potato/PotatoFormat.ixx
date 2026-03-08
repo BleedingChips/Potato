@@ -88,7 +88,6 @@ export namespace Potato::Format
 		processor.Clear();
 		return ProcessorScan(processor, input, other_target...);
 	}
-
 }
 
 export namespace Potato::Format
@@ -99,11 +98,10 @@ export namespace Potato::Format
 		std::wstringstream wss;
 		bool Scan(std::basic_string_view<UnicodeType> par, NumberType& output)
 		{
-			Encode::StrEncoder<UnicodeType, wchar_t> encoder;
 			wchar_t buffer[2];
 			while (!par.empty())
 			{
-				auto info = encoder.Encode(std::span(par), { buffer, 2 });
+				auto info = Encode::UnicodeEncoder<UnicodeType, wchar_t>::EncodeTo(std::span(par), { buffer, 2 });
 				wss.write(buffer, info.target_space);
 				par = par.substr(info.source_space);
 			}
@@ -132,11 +130,7 @@ export namespace Potato::Format
 	{
 		bool Scan(std::basic_string_view<UnicodeT> Par, std::basic_string<TargetType, CharaTrai, Allocator>& Output)
 		{
-			std::size_t OldSize = Output.size();
-			Encode::EncodeInfo Str = Encode::StrEncoder<UnicodeT, TargetType>::RequireSpaceUnSafe(Par);
-			Output.resize(Output.size() + Str.target_space);
-			auto OutputSpan = std::span(Output).subspan(OldSize);
-			Encode::StrEncoder<UnicodeT, TargetType>::EncodeUnSafe(Par, OutputSpan);
+			Encode::UnicodeEncoder<UnicodeT, TargetType>::EncodeTo(Par, std::back_inserter(Output));
 			return true;
 		}
 	};
@@ -571,30 +565,21 @@ namespace std
 	template<class CharT>
 	concept PotatoEncodeableTarget = Potato::TMP::IsOneOfV<CharT, char, wchar_t>;
 
+
 	template<PotatoEncodeableChar CharT, PotatoEncodeableTarget TargetCharT>
 	struct formatter<std::basic_string_view<CharT>, TargetCharT>
 	{
 		constexpr auto parse(std::basic_format_parse_context<TargetCharT>& parse_context)
 		{
-			return parse_context.end();
+			if (parse_context.begin() == CharT{ '}' })
+				return parse_context.begin();
+			else
+				throw "basic string do not support any parameter";
 		}
 		template<typename FormatContext>
 		constexpr auto format(std::basic_string_view<CharT> view, FormatContext& format_context) const
 		{
-			TargetCharT tem_buffer[4];
-			Potato::Encode::StrEncoder<CharT, TargetCharT> encoder;
-			while (!view.empty())
-			{
-				auto info = encoder.Encode(view, std::span<TargetCharT, 4>{ tem_buffer, 4 });
-				std::copy_n(
-					tem_buffer,
-					info.target_space,
-					format_context.out()
-				);
-				view = view.substr(info.source_space);
-				if (info.source_space == 0)
-					break;
-			}
+			Potato::Encode::UnicodeEncoder<CharT, TargetCharT>::EncodeTo(view, format_context.out());
 			return format_context.out();
 		}
 	};

@@ -9,7 +9,7 @@ import std;
 export namespace Potato::Encode
 {
 
-	struct UnicodeCode
+	struct Unicode
 	{
 		using CodePointT = std::uint32_t;
 
@@ -18,37 +18,28 @@ export namespace Potato::Encode
 			using StorageT = std::uint8_t;
 			static constexpr StorageT placemenet_character = std::numeric_limits<StorageT>::max();
 
-			static constexpr std::size_t fast_detect_storage_size = 1;
 			static constexpr std::size_t detect_storage_size = 4;
 			static constexpr std::size_t max_storage_size = 4;
 
-			static consteval std::optional<std::size_t> DetectStorageSizeFast(StorageT char_1)
-			{
-				if ((char_1 & 0x80) == 0) return 1;
-				else if ((char_1 & 0xE0) == 0xC0) return 2;
-				else if ((char_1 & 0xF0) == 0xE0) return 3;
-				else if ((char_1 & 0xF8) == 0xF0) return 4;
-				return std::nullopt;
-			}
-			static consteval std::optional<std::size_t> DetectStorageSize(StorageT char_1, StorageT char_2 = placemenet_character, StorageT char_3 = placemenet_character, StorageT char_4 = placemenet_character)
+			static constexpr std::optional<std::size_t> DetectStorageSize(StorageT char_1, StorageT char_2 = placemenet_character, StorageT char_3 = placemenet_character, StorageT char_4 = placemenet_character)
 			{
 				if ((char_1 & 0x80) == 0)
 					return 1;
 				else if ((char_1 & 0xE0) == 0xC0)
 				{
-					if ((char_2 & 0x80) != 0x80)
+					if ((char_2 & 0x80) == 0x80)
 					{
 						return 2;
 					}
 				}
 				else if ((char_1 & 0xF0) == 0xE0)
 				{
-					if ((char_2 & 0x80) != 0x80 && (char_3 & 0x80) != 0x80)
+					if ((char_2 & 0x80) == 0x80 && (char_3 & 0x80) == 0x80)
 						return 3;
 				}
 				else if ((char_1 & 0xF8) == 0xF0)
 				{
-					if ((char_2 & 0x80) != 0x80 && (char_3 & 0x80) != 0x80 && (char_4 & 0x80) != 0x80)
+					if ((char_2 & 0x80) == 0x80 && (char_3 & 0x80) == 0x80 && (char_4 & 0x80) == 0x80)
 						return 4;
 				}
 				return std::nullopt;
@@ -96,36 +87,36 @@ export namespace Potato::Encode
 
 			static constexpr std::tuple<std::size_t, StorageT, StorageT, StorageT, StorageT> EncodeFromUnicodePoint(CodePointT point)
 			{
-				std::size_t count = DetectStorageSizeFromCodePoint(point);
-				switch (count)
+				auto storage_size = DetectStorageSizeFromCodePoint(point);
+				switch (storage_size)
 				{
 				case 1:
 					return std::make_tuple(
-						count, 
+						storage_size,
 						static_cast<StorageT>(point), 
-						StorageT{ 0 }, 
-						StorageT{ 0 }, 
-						StorageT{ 0 }
+						placemenet_character, 
+						placemenet_character,
+						placemenet_character
 					);
 				case 2:
 					return std::make_tuple(
-						count, 
+						storage_size,
 						0xC0 | static_cast<StorageT>((point & 0x07C0) >> 6),
 						0x80 | static_cast<StorageT>((point & 0x3F)),
-						StorageT{ 0 }, 
-						StorageT{ 0 }
+						placemenet_character,
+						placemenet_character
 					);
 				case 3:
 					return std::make_tuple(
-						count,
+						storage_size,
 						0xE0 | static_cast<StorageT>((point & 0xF000) >> 12),
 						0x80 | static_cast<StorageT>((point & 0xFC0) >> 6),
 						0x80 | static_cast<StorageT>((point & 0x3F)),
-						StorageT{ 0 }
+						placemenet_character
 					);
 				default:
 					return std::make_tuple(
-						count,
+						storage_size,
 						0xF0 | static_cast<StorageT>((point & 0x1C0000) >> 18),
 						0x80 | static_cast<StorageT>((point & 0x3F000) >> 12),
 						0x80 | static_cast<StorageT>((point & 0xFC0) >> 6),
@@ -140,24 +131,20 @@ export namespace Potato::Encode
 			using StorageT = std::uint16_t;
 			static constexpr StorageT placemenet_character = std::numeric_limits<StorageT>::max();
 
-			static constexpr std::size_t fast_detect_storage_size = 2;
 			static constexpr std::size_t detect_storage_size = 2;
 			static constexpr std::size_t max_storage_size = 2;
 
-			static constexpr std::optional<std::size_t> DetectStorageSizeFast(StorageT char_1, StorageT char_2 = placemenet_character)
+			static constexpr std::optional<std::size_t> DetectStorageSize(StorageT char_1, StorageT char_2 = placemenet_character)
 			{
-				if (char_1 >= 0xD800 && char_1 < 0xE00)
+				if (char_1 < 0x10000)
 				{
-					if (char_2 >= 0xDC00 && char_2 < 0xE000)
-					{
-						return 2;
-					}
 					return 1;
+				}else if (char_1 >= 0xD800 && char_1 < 0xE00 && char_2 >= 0xDC00 && char_2 < 0xE000)
+				{
+					return 2;
 				}
 				return std::nullopt;
 			}
-
-			static constexpr std::optional<std::size_t> DetectStorageSize(StorageT char_1, StorageT char_2 = placemenet_character) { return DetectStorageSizeFast(char_1, char_2); }
 
 			static constexpr CodePointT DecodeToUnicodePoint(StorageT char_1)
 			{
@@ -172,7 +159,7 @@ export namespace Potato::Encode
 
 			static constexpr std::size_t DetectStorageSizeFromCodePoint(CodePointT point)
 			{
-				if (point <= 0x010000)
+				if (point < 0x010000)
 					return 1;
 				else
 					return 2;
@@ -180,19 +167,19 @@ export namespace Potato::Encode
 
 			static constexpr std::tuple<std::size_t, StorageT, StorageT> EncodeFromUnicodePoint(CodePointT point)
 			{
-				std::size_t count = DetectStorageSizeFromCodePoint(point);
-				switch (count)
+				auto storage_size = DetectStorageSizeFromCodePoint(point);
+				switch (storage_size)
 				{
 				case 1:
 					return std::make_tuple(
-						count,
+						storage_size,
 						static_cast<StorageT>(point),
-						StorageT{ 0 }
+						placemenet_character
 					);
 				default:
 					point -= 0x10000;
 					return std::make_tuple(
-						count,
+						storage_size,
 						static_cast<StorageT>(0xd800 | (point >> 10)),
 						static_cast<StorageT>(0xdc00 | (point & 0x3FF))
 					);
@@ -206,18 +193,15 @@ export namespace Potato::Encode
 			using StorageT = std::uint32_t;
 			static constexpr StorageT placemenet_character = std::numeric_limits<StorageT>::max();
 
-			static constexpr std::size_t fast_detect_storage_size = 1;
 			static constexpr std::size_t detect_storage_size = 1;
 			static constexpr std::size_t max_storage_size = 1;
 
-			static constexpr std::optional<std::size_t> DetectStorageSizeFast(StorageT char_1)
+			static constexpr std::optional<std::size_t> DetectStorageSize(StorageT char_1)
 			{
 				if (char_1 < 0x10FFFF)
 					return 1;
 				return std::nullopt;
 			}
-
-			static constexpr std::optional<std::size_t> DetectStorageSize(StorageT char_1) { return DetectStorageSizeFast(char_1); }
 
 			static constexpr CodePointT DecodeToUnicodePoint(StorageT char_1)
 			{
@@ -231,7 +215,7 @@ export namespace Potato::Encode
 
 			static constexpr std::tuple<std::size_t, StorageT> EncodeFromUnicodePoint(CodePointT point)
 			{
-				return std::make_tuple(1, static_cast<StorageT>(point));
+				return std::make_tuple(DetectStorageSizeFromCodePoint(point), static_cast<StorageT>(point));
 			}
 		};
 	};
@@ -242,7 +226,7 @@ export namespace Potato::Encode
 		std::size_t source_space = 0;
 		std::size_t target_space = 0;
 		bool is_good_string = true;
-		operator bool() const { return is_good_string; }
+		explicit constexpr operator bool() const { return is_good_string; }
 	};
 
 	template<typename RawStorageT>
@@ -252,7 +236,14 @@ export namespace Potato::Encode
 	struct UnicodeWrapper<char>
 	{
 		using NativeStorageT = char;
-		using WrapperT = UnicodeCode::UTF8;
+		using WrapperT = Unicode::UTF8;
+	};
+
+	template<>
+	struct UnicodeWrapper<char8_t>
+	{
+		using NativeStorageT = char8_t;
+		using WrapperT = Unicode::UTF8;
 	};
 
 	template<>
@@ -261,10 +252,10 @@ export namespace Potato::Encode
 		using NativeStorageT = wchar_t;
 		using WrapperT = std::conditional_t<
 			sizeof(wchar_t) == sizeof(char16_t),
-			UnicodeCode::UTF16,
+			Unicode::UTF16,
 			std::conditional_t<
-				sizeof(wchar_t) == sizeof(char16_t),
-				UnicodeCode::UTF32,
+				sizeof(wchar_t) == sizeof(char32_t),
+				Unicode::UTF32,
 				void
 			>
 		>;
@@ -274,24 +265,38 @@ export namespace Potato::Encode
 	struct UnicodeWrapper<char16_t>
 	{
 		using NativeStorageT = char16_t;
-		using WrapperT = UnicodeCode::UTF16;
+		using WrapperT = Unicode::UTF16;
 	};
 
 	template<>
 	struct UnicodeWrapper<char32_t>
 	{
 		using NativeStorageT = char32_t;
-		using WrapperT = UnicodeCode::UTF32;
+		using WrapperT = Unicode::UTF32;
 	};
-
-	template<typename FromCharT, typename ToCharT = void>
-	struct UnicodeEncoder;
 
 	template<std::size_t count, typename WrapperT>
 	struct UnicodeEncoderHelper
 	{
 		template<typename NativeT>
-		static UnicodeCode::CodePointT DecodeToUnicodePoint(std::size_t storage_count, std::span<NativeT const> source)
+		static constexpr std::optional<std::size_t> DetectStorageSize(std::span<NativeT const> source)
+		{
+			return[]<std::size_t ...i>(std::index_sequence<i...>, std::span<NativeT const> source)
+			{
+				if (source.size() >= count)
+				{
+					return WrapperT::DetectStorageSize(
+						(( i < count) ? static_cast<WrapperT::StorageT>(source[i]) : WrapperT::placemenet_character)...
+					);
+				}
+				else {
+					return UnicodeEncoderHelper<count - 1, WrapperT>::DetectStorageSize(source);
+				}
+			}(std::make_index_sequence<WrapperT::detect_storage_size>(), source);
+		}
+
+		template<typename NativeT>
+		static constexpr Unicode::CodePointT DecodeToUnicodePoint(std::size_t storage_count, std::span<NativeT const> source)
 		{
 			if (count == storage_count)
 			{
@@ -299,11 +304,28 @@ export namespace Potato::Encode
 					return WrapperT::DecodeToUnicodePoint(
 						static_cast<WrapperT::StorageT>(source[i])...
 					);
-				}(std::make_index_sequence<count>());
+				}(std::make_index_sequence<count>(), source);
 			}
 			else {
 				return UnicodeEncoderHelper<count - 1, WrapperT>::DecodeToUnicodePoint(storage_count, source);
 			}
+		}
+
+		template<typename NativeT, typename ...AT>
+		static constexpr std::optional<std::size_t> EncodeFromUnicodePoint(std::tuple<AT...> result, std::span<NativeT> target)
+		{
+			return []<std::size_t ...i>(std::index_sequence<i...>, std::span<NativeT> target, std::tuple<AT...> result) -> std::optional<std::size_t> {
+				if (std::get<0>(result) == count)
+				{
+					if (target.size() >= std::get<0>(result))
+					{
+						[](auto ...) {}(target[i] = static_cast<NativeT>(std::get<i + 1>(result))...);
+						return std::get<0>(result);
+					}
+					return std::nullopt;
+				}
+				return UnicodeEncoderHelper<count - 1, WrapperT>::EncodeFromUnicodePoint(result, target);
+			}(std::make_index_sequence<count>(), target, result);
 		}
 	};
 
@@ -311,49 +333,52 @@ export namespace Potato::Encode
 	struct UnicodeEncoderHelper<1, WrapperT>
 	{
 		template<typename NativeT>
-		UnicodeCode::CodePointT DecodeToUnicodePoint(std::size_t storage_count, std::span<NativeT const> source)
+		static constexpr std::optional<std::size_t> DetectStorageSize(std::span<NativeT const> source)
+		{
+			return[]<std::size_t ...i>(std::index_sequence<i...>, std::span<NativeT const> source) -> std::optional<std::size_t>
+			{
+				if (source.size() >= 1)
+				{
+					return WrapperT::DetectStorageSize(
+						((i < 1) ? static_cast<WrapperT::StorageT>(source[i]) : WrapperT::placemenet_character)...
+						);
+				}
+				else {
+					return std::nullopt;
+				}
+			}(std::make_index_sequence<WrapperT::detect_storage_size>(), source);
+		}
+
+		template<typename NativeT>
+		static constexpr Unicode::CodePointT DecodeToUnicodePoint(std::size_t storage_count, std::span<NativeT const> source)
 		{
 			return WrapperT::DecodeToUnicodePoint(
 				static_cast<WrapperT::StorageT>(source[0])
 			);
 		}
+		template<typename NativeT, typename ...AT>
+		static constexpr std::optional<std::size_t> EncodeFromUnicodePoint(std::tuple<AT...> result, std::span<NativeT> target)
+		{
+			return []<std::size_t ...i>(std::index_sequence<i...>, std::span<NativeT> target, std::tuple<AT...> result) -> std::optional<std::size_t> {
+				if (std::get<0>(result) == 1 && target.size() >= std::get<0>(result))
+				{
+					target[0] = static_cast<NativeT>(std::get<1>(result));
+					return 1;
+				}
+				return std::nullopt;
+			}(std::make_index_sequence<WrapperT::max_storage_size>(), target, result);
+		}
 	};
 
-	template<>
-	struct UnicodeEncoder<wchar_t, void>
+	template<typename FromCharT, typename ToCharT>
+	struct UnicodeEncoder;
+
+	template<typename CharT>
+	struct UnicodeEncoder<CharT, Unicode::CodePointT>
 	{
-		using NativeStorageT = UnicodeWrapper<wchar_t>::NativeStorageT;
-		using WrapperT = UnicodeWrapper<wchar_t>::WrapperT;
+		using NativeStorageT = UnicodeWrapper<CharT>::NativeStorageT;
+		using WrapperT = UnicodeWrapper<CharT>::WrapperT;
 
-		static constexpr EncodeInfo StatisticsFast(std::span<NativeStorageT const> source, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
-		{
-			EncodeInfo info;
-			auto iterator_string = source;
-			while (!iterator_string.empty())
-			{
-				if (info.character_count >= max_unicode_point)
-					return info;
-
-				std::optional<std::size_t> storage_size = []<std::size_t ...i>(std::index_sequence<i...>, std::span<NativeStorageT const> source) {
-					return WrapperT::DetectStorageSizeFast(
-						(((i == 0) || source.size() > i) ? static_cast<WrapperT::StorageT>(source[i]) : WrapperT::placemenet_character)...
-					);
-				}(std::make_index_sequence<WrapperT::fast_detect_storage_size>(), iterator_string);
-
-				if (storage_size.has_value())
-				{
-					info.source_space += *storage_size;
-					info.character_count += 1;
-					info.target_space += 1;
-					iterator_string = iterator_string.subspan(*storage_size);
-				}
-				else {
-					info.is_good_string = false;
-					return info;
-				}
-			}
-			return info;
-		}
 		static constexpr EncodeInfo Statistics(std::span<NativeStorageT const> source, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
 		{
 			EncodeInfo info;
@@ -363,18 +388,44 @@ export namespace Potato::Encode
 				if (info.character_count >= max_unicode_point)
 					return info;
 
-				std::optional<std::size_t> storage_size = []<std::size_t ...i>(std::index_sequence<i...>, std::span<NativeStorageT const> source) {
-					return WrapperT::DetectStorageSize(
-						(((i == 0) || source.size() > i) ? static_cast<WrapperT::StorageT>(source[i]) : WrapperT::placemenet_character)...
-					);
-				}(std::make_index_sequence<WrapperT::detect_storage_size>(), iterator_string);
+				auto detect_size = UnicodeEncoderHelper<WrapperT::detect_storage_size, WrapperT>::DetectStorageSize(iterator_string);
 
-				if (storage_size.has_value())
+				if (detect_size.has_value())
 				{
-					info.source_space += *storage_size;
+					info.source_space += *detect_size;
 					info.character_count += 1;
 					info.target_space += 1;
-					iterator_string = iterator_string.subspan(*storage_size);
+					iterator_string = iterator_string.subspan(*detect_size);
+				}
+				else {
+					info.is_good_string = false;
+					return info;
+				}
+			}
+			return info;
+		}
+
+		static constexpr EncodeInfo EncodeTo(std::span<NativeStorageT const> source, std::span<Unicode::CodePointT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		{
+			EncodeInfo info;
+			auto iterator_string = source;
+			auto iterator_out = target;
+			while (!iterator_string.empty() && !iterator_out.empty())
+			{
+				if (info.character_count >= max_unicode_point)
+					return info;
+
+				auto detect_size = UnicodeEncoderHelper<WrapperT::detect_storage_size, WrapperT>::DetectStorageSize(iterator_string);
+
+				if (detect_size.has_value())
+				{
+					auto code_point = UnicodeEncoderHelper<WrapperT::max_storage_size, WrapperT>::DecodeToUnicodePoint(*detect_size, iterator_string);
+					iterator_out[0] = code_point;
+					info.character_count += 1;
+					info.source_space += *detect_size;
+					info.target_space += 1;
+					iterator_string = iterator_string.subspan(*detect_size);
+					iterator_out = iterator_out.subspan(1);
 				}
 				else {
 					info.is_good_string = false;
@@ -384,414 +435,211 @@ export namespace Potato::Encode
 			return info;
 		}
 		
-		static constexpr std::tuple<EncodeInfo, UnicodeCode::CodePointT> EncodeOnceFast(std::span<NativeStorageT const> source)
+		template<typename OutIterator>
+			requires std::output_iterator<OutIterator, Unicode::CodePointT>
+		static constexpr EncodeInfo EncodeTo(std::span<NativeStorageT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
 		{
-			auto info = StatisticsFast(source, 1);
-			if (info)
+			std::array<Unicode::CodePointT, 16> temporary_buffer;
+			EncodeInfo info;
+			auto iterator_string = source;
+			while (info.is_good_string && !iterator_string.empty() && max_unicode_point > 0)
 			{
-				return UnicodeEncoderHelper<WrapperT::max_storage_size, WrapperT>::DecodeToUnicodePoint(info.source_space, source);
+				auto curret_info = EncodeTo(iterator_string, std::span(temporary_buffer), max_unicode_point);
+				info.character_count += curret_info.character_count;
+				info.source_space += curret_info.source_space;
+				info.target_space += curret_info.target_space;
+				info.is_good_string = curret_info.is_good_string;
+				info.character_count += curret_info.character_count;
+				max_unicode_point -= curret_info.character_count;
+				iterator_string = iterator_string.subspan(curret_info.target_space);
+				for (std::size_t i = 0; i < curret_info.target_space; ++i)
+				{
+					(*iterator++) = temporary_buffer[i];
+				}
 			}
-			return {info, std::numeric_limits<UnicodeCode::CodePointT>::max()};
+			return info;
 		}
 	};
 
 	template<typename CharT>
-	struct CharEncoder
+	struct UnicodeEncoder<Unicode::CodePointT, CharT>
 	{
-		
+		using NativeStorageT = UnicodeWrapper<CharT>::NativeStorageT;
+		using WrapperT = UnicodeWrapper<CharT>::WrapperT;
 
-		static constexpr std::optional<std::size_t> StaticsString
-
-
-		static constexpr std::optional<std::size_t> GetCount(std::span<NativeStorageT const> string);
-
-
-		static constexpr EncodeInfo GetEncodeInfo(std::span<NativeStorageT const> string)
+		static constexpr EncodeInfo Statistics(std::span<Unicode::CodePointT const> source, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
 		{
-			
-		}
-	};
-
-
-
-	/*
-	template<typename Source>
-	struct CharEncoder
-	{
-		static constexpr std::optional<std::size_t> GetCharacterSize(std::span<Source const> source, bool untrusted = false);
-	};
-
-	template<>
-	struct CharEncoder<char8_t>
-	{
-
-		static constexpr std::optional<std::size_t> GetCharacterSize(std::span<char8_t const> source, bool untrusted = false)
-		{
-			if (!source.empty())
+			EncodeInfo info;
+			auto iterator_string = source;
+			while (!iterator_string.empty())
 			{
-				auto cur = source[0];
-				if (!untrusted)
+				if (info.character_count >= max_unicode_point)
+					return info;
+
+				auto size = WrapperT::DetectStorageSizeFromCodePoint(iterator_string[0]);
+
+				info.character_count += 1;
+				info.source_space += 1;
+				info.target_space += size;
+
+				iterator_string = iterator_string.subspan(1);
+			}
+			return info;
+		}
+
+		static constexpr EncodeInfo EncodeTo(std::span<Unicode::CodePointT const> source, std::span<CharT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		{
+			EncodeInfo info;
+			auto iterator_string = source;
+			auto iterator_out = target;
+			while (!iterator_string.empty() && !iterator_out.empty())
+			{
+				if (info.character_count >= max_unicode_point)
+					return info;
+
+				auto result = WrapperT::EncodeFromUnicodePoint(iterator_string[0]);
+				auto target_size = UnicodeEncoderHelper<WrapperT::max_storage_size, WrapperT>::EncodeFromUnicodePoint(result, iterator_out);
+				if (target_size.has_value())
 				{
-					if ((cur & 0x80) == 0) return 1;
-					else if ((cur & 0xE0) == 0xC0) return 2;
-					else if ((cur & 0xF0) == 0xE0) return 3;
-					else return 4;
+					info.character_count += 1;
+					info.source_space += 1;
+					info.target_space += *target_size;
+					iterator_string = iterator_string.subspan(1);
+					iterator_out = iterator_out.subspan(*target_size);
 				}
 				else {
-					std::size_t count = 0;
-					if ((cur & 0x80) == 0)
-						count = 1;
-					else if ((cur & 0xE0) == 0xC0)
-						count = 2;
-					else if ((cur & 0xF0) == 0xE0)
-						count = 3;
-					else if ((cur & 0xF8) == 0xF0)
-						count = 4;
-					if (count <= source.size() && count != 0)
-					{
-						bool Succeed = true;
-						for (std::size_t index = 1; index < count; ++index)
-						{
-							auto Ite = source[index];
-							if ((Ite & 0x80) != 0x80)
-							{
-								Succeed = false;
-								break;
-							}
-						}
-						if (Succeed)
-							return count;
-					}
-					return {};
+					info.is_good_string = false;
+					return info;
 				}
 			}
-			return 0;
+			return info;
 		}
-		static constexpr char32_t EncodeTo(std::size_t character_space, std::span<char8_t const> source)
+	
+		template<typename OutIterator>
+			requires std::output_iterator<OutIterator, CharT>
+		static constexpr EncodeInfo EncodeTo(std::span<NativeStorageT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
 		{
-			switch (character_space)
+			std::array<CharT, 16 * WrapperT::max_storage_size> temporary_buffer;
+			EncodeInfo info;
+			auto iterator_string = source;
+			while (info.is_good_string && !iterator_string.empty() && max_unicode_point > 0)
 			{
-			case 1:
-				return source[0];
-			case 2:
-				return (static_cast<char32_t>(source[0] & 0x1F) << 6) | static_cast<char32_t>(source[1] & 0x3F);
-			case 3:
-				return (static_cast<char32_t>(source[0] & 0x0F) << 12) | (static_cast<char32_t>(source[1] & 0x3F) << 6)
-					| static_cast<char32_t>(source[2] & 0x3F);
-			default:
-				return (static_cast<char32_t>(source[0] & 0x07) << 18) | (static_cast<char32_t>(source[1] & 0x3F) << 12)
-					| (static_cast<char32_t>(source[2] & 0x3F) << 6) | static_cast<char32_t>(source[3] & 0x3F);
-				break;
-			}
-		}
-
-		static constexpr std::size_t DecodeCharacterSize(char32_t source)
-		{
-			if (source <= 0x7F)
-				return 1;
-			else if (source <= 0x7FF)
-				return 2;
-			else if (source <= 0xFFFF)
-				return 3;
-			else
-				return 4;
-		}
-
-		static constexpr bool DecodeFrom(char32_t source, std::size_t character_size, std::span<char8_t> target)
-		{
-			if (character_size <= target.size())
-			{
-				switch (character_size)
+				auto curret_info = EncodeTo(iterator_string, std::span(temporary_buffer), max_unicode_point);
+				info.character_count += curret_info.character_count;
+				info.source_space += curret_info.source_space;
+				info.target_space += curret_info.target_space;
+				info.is_good_string = curret_info.is_good_string;
+				info.character_count += curret_info.character_count;
+				max_unicode_point -= curret_info.character_count;
+				iterator_string = iterator_string.subspan(curret_info.target_space);
+				for (std::size_t i = 0; i < curret_info.target_space; ++i)
 				{
-				case 1:
-					target[0] = static_cast<char8_t>(source);
-					break;
-				case 2:
-					target[0] = 0xC0 | static_cast<char8_t>((source & 0x07C0) >> 6);
-					target[1] = 0x80 | static_cast<char8_t>((source & 0x3F));
-					break;
-				case 3:
-					target[0] = 0xE0 | static_cast<char8_t>((source & 0xF000) >> 12);
-					target[1] = 0x80 | static_cast<char8_t>((source & 0xFC0) >> 6);
-					target[2] = 0x80 | static_cast<char8_t>((source & 0x3F));
-					break;
-				default:
-					target[0] = 0xF0 | static_cast<char>((source & 0x1C0000) >> 18);
-					target[1] = 0x80 | static_cast<char>((source & 0x3F000) >> 12);
-					target[2] = 0x80 | static_cast<char>((source & 0xFC0) >> 6);
-					target[3] = 0x80 | static_cast<char>((source & 0x3F));
-					break;
+					(*iterator++) = temporary_buffer[i];
 				}
-				return true;
 			}
-			return false;
+			return info;
 		}
 	};
 
-	template<>
-	struct CharEncoder<char16_t>
+	
+	template<typename FromCharT, typename ToCharT>
+	struct UnicodeEncoder
 	{
-		static constexpr std::optional<std::size_t> GetCharacterSize(std::span<char16_t const> source, bool untrusted = false)
+
+		static constexpr EncodeInfo Statistics(std::span<FromCharT const> source, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
 		{
-			if (!source.empty())
+			EncodeInfo info;
+			std::array<Unicode::CodePointT, 16> temporary_buffer;
+			auto iterator_string = source;
+			while (max_unicode_point != 0 && !iterator_string.empty() && info.is_good_string)
 			{
-				if (!untrusted)
+				auto decode_info = UnicodeEncoder<FromCharT, Unicode::CodePointT>::EncodeTo(iterator_string, std::span(temporary_buffer), max_unicode_point);
+				auto encode_info = UnicodeEncoder<Unicode::CodePointT, ToCharT>::Statistics(std::span(temporary_buffer).subspan(0, decode_info.target_space));
+				info.character_count += decode_info.character_count;
+				info.source_space += decode_info.source_space;
+				info.target_space += encode_info.target_space;
+				info.is_good_string = decode_info.is_good_string && encode_info.is_good_string;
+				max_unicode_point -= decode_info.character_count;
+				iterator_string = iterator_string.subspan(decode_info.source_space);
+			}
+			return info;
+		}
+
+		static constexpr EncodeInfo Statistics(std::basic_string_view<FromCharT> source, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		{
+			return Statistics(std::span(source.data(), source.size()), max_unicode_point);
+		}
+
+		static constexpr EncodeInfo EncodeTo(std::span<FromCharT const> source, std::span<ToCharT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		{
+			EncodeInfo info;
+			std::array<Unicode::CodePointT, 16> temporary_buffer;
+			auto iterator_string = source;
+			auto iterator_out = target;
+			while (info.is_good_string && max_unicode_point != 0 && !iterator_string.empty() && !iterator_out.empty())
+			{
+				auto decode_info = UnicodeEncoder<FromCharT, Unicode::CodePointT>::EncodeTo(iterator_string, std::span(temporary_buffer), max_unicode_point);
+				auto encode_info = UnicodeEncoder<Unicode::CodePointT, ToCharT>::EncodeTo(std::span(temporary_buffer).subspan(0, decode_info.target_space), iterator_out);
+
+				if (decode_info.character_count == encode_info.character_count)
 				{
-					if (source[0] >= 0xD800 && source[0] < 0xE000)
-						return 2;
-					else
-						return 1;
+					info.character_count += decode_info.character_count;
+					info.source_space += decode_info.source_space;
+					info.target_space += encode_info.target_space;
+					info.is_good_string = decode_info.is_good_string && encode_info.is_good_string;
+					max_unicode_point -= decode_info.character_count;
+					iterator_string = iterator_string.subspan(decode_info.source_space);
+					iterator_out = iterator_out.subspan(encode_info.target_space);
 				}
 				else {
-					if (source[0] >= 0xD800 && source[0] < 0xE00)
-					{
-						if (source.size() >= 2 && source[1] >= 0xDC00 && source[1] < 0xE000)
-						{
-							return 2;
-						}
-					}
-					else {
-						return 1;
-					}
+					auto redecode_info = UnicodeEncoder<FromCharT, Unicode::CodePointT>::Statistics(iterator_string, encode_info.character_count);
+					info.character_count += redecode_info.character_count;
+					info.source_space += redecode_info.source_space;
+					info.target_space += encode_info.target_space;
+					info.is_good_string = redecode_info.is_good_string && redecode_info.is_good_string;
+					max_unicode_point -= redecode_info.character_count;
+					iterator_string = iterator_string.subspan(redecode_info.source_space);
+					iterator_out = iterator_out.subspan(encode_info.target_space);
+					return info;
 				}
 			}
-			return std::nullopt;
+			return info;
 		}
-		static constexpr char32_t EncodeTo(std::size_t character_space, std::span<char16_t const> source)
+		static constexpr EncodeInfo EncodeTo(std::basic_string_view<FromCharT> source, std::span<ToCharT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
 		{
-			switch (character_space)
-			{
-			case 1:
-				return source[0];
-			default:
-				return (static_cast<char32_t>(source[0] & 0x3FF) << 10) + static_cast<char32_t>(source[1] & 0x3FF) + 0x10000;
-			}
-		}
-		
-		static constexpr std::size_t DecodeCharacterSize(char32_t source)
-		{
-			if (source <= 0x010000)
-				return 1;
-			else
-				return 2;
+			return EncodeTo(std::span(source.data(), source.size()), target, max_unicode_point);
 		}
 
-		static constexpr bool DecodeFrom(char32_t source, std::size_t character_size, std::span<char16_t> target)
+		template<typename OutIterator>
+			requires std::output_iterator<OutIterator, ToCharT>
+		static constexpr EncodeInfo EncodeTo(std::span<FromCharT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
 		{
-			if (character_size <= target.size())
+			std::array<ToCharT, 16 * UnicodeWrapper<ToCharT>::WrapperT::max_storage_size> temporary_buffer;
+			EncodeInfo info;
+			auto iterator_string = source;
+			while (info.is_good_string && max_unicode_point > 0 && !iterator_string.empty())
 			{
-				switch (character_size)
+				auto curret_info = EncodeTo(iterator_string, std::span(temporary_buffer), max_unicode_point);
+				info.character_count += curret_info.character_count;
+				info.source_space += curret_info.source_space;
+				info.target_space += curret_info.target_space;
+				info.is_good_string = curret_info.is_good_string;
+				info.character_count += curret_info.character_count;
+				max_unicode_point -= curret_info.character_count;
+				iterator_string = iterator_string.subspan(curret_info.source_space);
+				for (std::size_t i = 0; i < curret_info.target_space; ++i)
 				{
-				case 1:
-					target[0] = static_cast<char16_t>(source);
-					break;
-				default:
-					source -= 0x10000;
-					target[0] = static_cast<char16_t>(0xd800 | (source >> 10));
-					target[1] = static_cast<char16_t>(0xdc00 | (source & 0x3FF));
-					break;
+					(*iterator++) = temporary_buffer[i];
 				}
-				return true;
 			}
-			return false;
+			return info;
+		}
+
+		template<typename OutIterator>
+			requires std::output_iterator<OutIterator, ToCharT>
+		static constexpr EncodeInfo EncodeTo(std::basic_string_view<FromCharT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		{
+			return EncodeTo(std::span(source.data(), source.size()), std::move(iterator), max_unicode_point);
 		}
 	};
-
-	template<>
-	struct CharEncoder<char32_t>
-	{
-		static constexpr std::optional<std::size_t> GetCharacterSize(std::span<char32_t const> source, bool untrusted = false)
-		{
-			if (!source.empty())
-			{
-				if (!untrusted)
-				{
-					return 1;
-				}
-				else {
-					if (source[0] <= 0x10FFFF)
-					{
-						return 1;
-					}
-				}
-			}
-			return std::nullopt;
-		}
-		static constexpr char32_t EncodeTo(std::size_t character_space, std::span<char32_t const> source)
-		{
-			return source[0];
-		}
-
-		static constexpr std::size_t DecodeCharacterSize(char32_t source)
-		{
-			return 1;
-		}
-
-		static constexpr bool DecodeFrom(char32_t source, std::size_t character_size, std::span<char32_t> target)
-		{
-			if (character_size <= target.size())
-			{
-				target[0] = source;
-				return true;
-			}
-			return false;
-		}
-	};
-
-	template<>
-	struct CharEncoder<wchar_t> : 
-		CharEncoder<
-			std::conditional_t<
-				sizeof(wchar_t) == sizeof(char16_t), char16_t, char32_t
-			>
-		>
-	{
-		static_assert(sizeof(wchar_t) == sizeof(char16_t) || sizeof(wchar_t) == sizeof(char32_t));
-
-		using WrapperType = std::conditional_t<
-			sizeof(wchar_t) == sizeof(char16_t), char16_t, char32_t
-		>;
-
-		static constexpr std::optional<std::size_t> GetCharacterSize(std::span<wchar_t const> source, bool untrusted = false)
-		{
-			return CharEncoder<WrapperType>::GetCharacterSize({reinterpret_cast<WrapperType const*>(source.data()), source.size()});
-		}
-		static constexpr char32_t EncodeTo(std::size_t character_space, std::span<wchar_t const> source)
-		{
-			return CharEncoder<WrapperType>::EncodeTo(character_space, { reinterpret_cast<WrapperType const*>(source.data()), source.size() });
-		}
-
-		static constexpr std::size_t DecodeCharacterSize(char32_t source)
-		{
-			return CharEncoder<WrapperType>::DecodeCharacterSize(source);
-		}
-
-		static constexpr bool DecodeFrom(char32_t source, std::size_t character_size, std::span<wchar_t> target)
-		{
-			return CharEncoder<WrapperType>::DecodeFrom(source, character_size, { reinterpret_cast<WrapperType*>(target.data()), target.size() });
-		}
-	};
-
-	template<>
-	struct CharEncoder<char> : CharEncoder<char8_t>
-	{
-		static constexpr std::optional<std::size_t> GetCharacterSize(std::span<char const> source, bool untrusted = false)
-		{
-			return CharEncoder<char8_t>::GetCharacterSize({ reinterpret_cast<char8_t const*>(source.data()), source.size() });
-		}
-		static constexpr char32_t EncodeTo(std::size_t character_space, std::span<char const> source)
-		{
-			return CharEncoder<char8_t>::EncodeTo(character_space, { reinterpret_cast<char8_t const*>(source.data()), source.size() });
-		}
-
-		static constexpr std::size_t DecodeCharacterSize(char32_t source)
-		{
-			return CharEncoder<char8_t>::DecodeCharacterSize(source);
-		}
-
-		static constexpr bool DecodeFrom(char32_t source, std::size_t character_size, std::span<char> target)
-		{
-			return CharEncoder<char8_t>::DecodeFrom(source, character_size, { reinterpret_cast<char8_t*>(target.data()), target.size() });
-		}
-	};
-
-	template<typename Source, typename Target>
-	struct StrEncoder
-	{
-		template<std::size_t S1>
-		static constexpr EncodeInfo Encode(std::span<Source const, S1> source, std::span<Target> target, EncodeOption option = {})
-		{
-			if constexpr (sizeof(Source) != sizeof(Target))
-			{
-				typedef CharEncoder<Source> encoder_source;
-				typedef CharEncoder<Target> encoder_target;
-				EncodeInfo info;
-				while (
-					option.max_character != 0
-					&& (option.predict || info.target_space < target.size())
-					&& info.source_space < source.size()
-					)
-				{
-					auto ite_span = source.subspan(info.source_space);
-					auto count = encoder_source::GetCharacterSize(ite_span, option.untrusted);
-					if (count.has_value())
-					{
-						char32_t temp = encoder_source::EncodeTo(*count, ite_span);
-						auto target_count = encoder_target::DecodeCharacterSize(temp);
-
-						if (!option.predict)
-						{
-							if (!encoder_target::DecodeFrom(temp, target_count, target.subspan(info.target_space)))
-							{
-								break;
-							}
-						}
-						info.target_space += target_count;
-						info.source_space += *count;
-						++info.character_count;
-						--option.max_character;
-					}
-					else {
-						info.good = false;
-						break;
-					}
-				}
-				return info;
-			}
-			else {
-				EncodeInfo info;
-				typedef CharEncoder<Source> encoder;
-				while (
-					option.max_character != 0
-					&& (option.predict || info.target_space < target.size())
-					&& info.source_space < source.size()
-					)
-				{
-					auto count = encoder::GetCharacterSize(source.subspan(info.source_space), option.untrusted);
-					if (count.has_value())
-					{
-						if (option.predict || info.target_space + *count <= target.size())
-						{
-							info.character_count += 1;
-							info.source_space += *count;
-							info.target_space += *count;
-							--option.max_character;
-						}
-						else {
-							break;
-						}
-					}
-					else {
-						info.good = false;
-						break;
-					}
-				}
-				if (!option.predict && info.target_space <= target.size())
-				{
-					std::copy_n(source.data(), info.target_space, reinterpret_cast<Source*>(target.data()));
-				}
-				return info;
-			}
-		}
-
-		static constexpr EncodeInfo Encode(std::basic_string_view<Source> source, std::span<Target> target, EncodeOption option = {})
-		{
-			return Encode(std::span<Source const>(source.data(), source.size()), target, option);
-		}
-		template<std::size_t S1>
-		static constexpr EncodeInfo Encode(std::span<Source, S1> source, std::span<Target> target, EncodeOption option = {})
-		{
-			return Encode(std::span<Source const, S1>(source), target, option);
-		}
-	};
-
-	template<typename TargetT, typename CharT, std::size_t index>
-	constexpr auto EncodeTypeString(TMP::TypeString<CharT, index> const& str)
-	{
-		constexpr auto encode_info = StrEncoder<CharT, TargetT>::Encode(str.GetSpan(), {}, {false, true});
-		TargetT Temp[encode_info.target_space];
-		StrEncoder<CharT, TargetT>{}.Encode(str.GetSpan(), std::span(Temp), {false, false});
-		return TMP::TypeString(Temp);
-	}
-	*/
 }

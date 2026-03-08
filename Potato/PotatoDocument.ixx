@@ -16,7 +16,7 @@ import PotatoEncode;
 
 export namespace Potato::Document
 {
-
+	/*
 	using EncodeInfo = Encode::EncodeInfo;
 
 
@@ -145,7 +145,7 @@ export namespace Potato::Document
 			{
 				max_character -= info->character_count;
 				out_iterator = std::copy_n(tem_buffer.begin(), info->target_space, out_iterator);
-				if (!info->good)
+				if (!info->is_good_string)
 				{
 					return out_iterator;
 				}
@@ -166,4 +166,5 @@ export namespace Potato::Document
 		std::pmr::vector<std::byte> cache_buffer;
 		BomT bom = BomT::NoBom;
 	};
+	*/
 }

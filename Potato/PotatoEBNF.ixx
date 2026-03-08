@@ -318,9 +318,7 @@ export namespace Potato::EBNF
 				if (LastRequireSize != RequireSize)
 				{
 					auto InputSpan = Str.substr(RequireSize);
-					Encode::EncodeOption option;
-					option.max_character = 1;
-					auto EncodeInfo = Encode::StrEncoder<CharT, char32_t>{}.Encode(InputSpan, OutputBuffer, option);
+					auto EncodeInfo = Encode::UnicodeEncoder<CharT, char32_t>::EncodeTo(InputSpan, OutputBuffer, 1);
 					TokenIndex = Misc::IndexSpan<>{ RequireSize, RequireSize + EncodeInfo.source_space };
 					LastRequireSize = RequireSize;
 				}
@@ -384,7 +382,9 @@ export namespace Potato::EBNF::Exception
 		std::wstring Regex;
 
 		template<typename CharT>
-		UnacceptableRegex(std::basic_string_view<CharT> InputRegex) : Regex(*Encode::StrEncoder<CharT, wchar_t>::EncodeToString(InputRegex)) {}
+		UnacceptableRegex(std::basic_string_view<CharT> InputRegex) {
+			Encode::UnicodeEncoder<CharT, wchar_t>::EncodeTo(InputRegex, std::back_inserter(Regex));
+		}
 		UnacceptableRegex(UnacceptableRegex const&) = default;
 		virtual char const* what() const override;
 	};
@@ -461,9 +461,7 @@ export namespace Potato::EBNF
 				if (RequireSize < EbnfStr.size())
 				{
 					auto InputSpan = EbnfStr.substr(RequireSize);
-					Encode::EncodeOption option;
-					option.max_character = 1;
-					auto EncodeInfo = Encode::StrEncoder<CharT, char32_t>{}.Encode(InputSpan, OutputBuffer, option);
+					auto EncodeInfo = Encode::UnicodeEncoder<CharT, char32_t>::EncodeTo(InputSpan, OutputBuffer, 1);
 					auto TokenIndex = Misc::IndexSpan<>{ RequireSize, RequireSize + EncodeInfo.source_space };
 
 					if (!Builder.Consume(InputValue, TokenIndex.End()))
@@ -557,10 +555,7 @@ export namespace Potato::EBNF
 
 			for (auto& Ite : Mapping)
 			{
-				Encode::EncodeOption option;
-				option.predict = true;
-
-				RquireSize += Encode::StrEncoder<CharT, wchar_t>{}.Encode(Ite.first, {}, option).target_space;
+				RquireSize += Encode::UnicodeEncoder<CharT, wchar_t>::Statistics(Ite.first).target_space;
 			}
 
 			TotalString.resize(RquireSize);
@@ -568,7 +563,7 @@ export namespace Potato::EBNF
 			std::size_t Writed = 0;
 			for (auto& Ite : Mapping)
 			{
-				auto W = Encode::StrEncoder<CharT, wchar_t>{}.Encode(Ite.first, std::span(TotalString).subspan(Writed)).target_space;
+				auto W = Encode::UnicodeEncoder<CharT, wchar_t>::EncodeTo(Ite.first, std::span(TotalString).subspan(Writed)).target_space;
 				SymbolMap[Ite.second].StrIndex = { Writed, Writed + W};
 				Writed = Writed + W;
 			}
@@ -687,8 +682,9 @@ export namespace Potato::EBNF
 		}
 		catch (BuildInUnacceptableEbnf Bnf)
 		{
-			auto Str = *Encode::StrEncoder<CharT, wchar_t>::EncodeToString(Bnf.TokenIndex.Slice(EbnfStr));
-			throw Exception::UnacceptableEbnf{Bnf.Type, std::move(Str)};
+			std::wstring str;
+			Encode::UnicodeEncoder<CharT, wchar_t>::EncodeTo(Bnf.TokenIndex.Slice(EbnfStr), std::back_inserter(str));
+			throw Exception::UnacceptableEbnf{Bnf.Type, std::move(str)};
 		}
 		
 	}

@@ -1,6 +1,7 @@
 export module PotatoTMP;
 
 import std;
+import PotatoEncode;
 
 namespace Implement
 {
@@ -560,8 +561,8 @@ export namespace Potato::TMP
 	template<typename CharT, std::size_t N>
 	struct TypeString
 	{
-		CharT string[N];
-		constexpr std::basic_string_view<CharT> GetStringView() const { return {string}; }
+		std::array<CharT, N> string;
+		constexpr std::basic_string_view<CharT> GetStringView() const { return {string.data(), string.size()}; }
 		constexpr std::span<CharT const, N> GetSpan() const { return std::span{ string }; }
 		/*
 		explicit consteval TypeString(const CharT(&str)[N]) : string{}
@@ -569,13 +570,19 @@ export namespace Potato::TMP
 			std::copy_n(str, N, string);
 		}
 		*/
-		consteval TypeString(const CharT str[N]) : string{}
+		consteval TypeString(const CharT str[N])
 		{
-			std::copy_n(str, N, string);
+			std::copy_n(str, N, string.begin());
 		}
+
+		consteval TypeString(std::span<CharT const, N> str)
+		{
+			std::copy_n(str.data(), N, string.begin());
+		}
+
 		consteval TypeString(TypeString const& other)
 		{
-			std::copy_n(other.string, N, string);
+			std::copy_n(other.string.data(), N, string.begin());
 		}
 
 		template<typename CharT2, std::size_t N2>
@@ -583,7 +590,7 @@ export namespace Potato::TMP
 		{
 			if constexpr (std::is_same_v<CharT, CharT> && N == N2)
 			{
-				return std::equal(string, string + N, ref.string, N);
+				return std::equal(string.begin(), string.end(), ref.string.begin(), ref.string.end());
 			}
 			else
 				return false;
@@ -594,16 +601,6 @@ export namespace Potato::TMP
 		static constexpr std::size_t Len = N;
 	protected:
 		TypeString() = default;
-	};
-
-	template<std::size_t RequireIndex>
-	struct ParameterPicker
-	{
-		template<typename CurrentType, typename ...Type>
-		decltype(auto) operator()(CurrentType&& current_type, Type&& ...type)
-		{
-			return ParameterPicker<RequireIndex - 1>{}(std::forward<Type>(type)...);
-		}
 	};
 
 	template<std::size_t N>
@@ -621,9 +618,52 @@ export namespace Potato::TMP
 	template<std::size_t N>
 	TypeString(const char(&str)[N])-> TypeString<char, N>;
 
+	template<TypeString type_string>
+	struct TypeStringEncoder
+	{
+		template<typename EncodeT>
+		static consteval auto EncodeTo()
+		{
+			constexpr Encode::EncodeInfo statistics_info = Encode::UnicodeEncoder<typename decltype(type_string)::Type, EncodeT>::Statistics(type_string.GetSpan());
+			std::array<EncodeT, statistics_info.target_space> temp_string;
+			Encode::UnicodeEncoder<typename decltype(type_string)::Type, EncodeT>::EncodeTo(type_string.GetSpan(), std::span(temp_string));
+			TypeString<EncodeT, statistics_info.target_space> result(temp_string);
+			return result;
+		}
+	};
+
+
+	template<std::size_t RequireIndex>
+	struct ParameterPicker
+	{
+		template<typename T, typename ...AT>
+		struct Tuple
+		{
+			using Type = typename ParameterPicker<RequireIndex - 1>::template Tuple<AT...>::Type;
+		};
+
+		template<typename T, typename ...AT>
+		using TupleT = typename Tuple<T, AT...>::Type;
+
+		template<typename CurrentType, typename ...Type>
+		decltype(auto) operator()(CurrentType&& current_type, Type&& ...type)
+		{
+			return ParameterPicker<RequireIndex - 1>{}(std::forward<Type>(type)...);
+		}
+	};
+
 	template<>
 	struct ParameterPicker<0>
 	{
+		template<typename T, typename ...AT>
+		struct Tuple
+		{
+			using Type = T;
+		};
+
+		template<typename T, typename ...AT>
+		using TupleT = T;
+
 		template<typename CurrentType, typename ...Type>
 		decltype(auto) operator()(CurrentType&& current_type, Type&& ...type)
 		{

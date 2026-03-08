@@ -10,6 +10,7 @@ import PotatoEncode;
 import PotatoMisc;
 import PotatoSLRX;
 
+
 export namespace Potato::Reg
 {
 	using Interval = Misc::IntervalT<char32_t>;
@@ -544,9 +545,6 @@ export namespace Potato::Reg
 		char32_t tem_input = 0;
 		std::span<char32_t> output_span{ &tem_input, 1 };
 
-		using EncoderT = Potato::Encode::StrEncoder<CharT, char32_t>;
-		EncoderT encoder;
-
 		auto ite_str = std::span(str);
 
 		bool need_end_of_file = true;
@@ -555,7 +553,7 @@ export namespace Potato::Reg
 
 		while (!ite_str.empty())
 		{
-			auto info = encoder.Encode(ite_str, output_span);
+			auto info = Encode::UnicodeEncoder<CharT, char32_t>::EncodeTo(ite_str, output_span);
 			auto re = processor.Consume(tem_input, token_index);
 			ite_str = ite_str.subspan(info.source_space);
 			token_index += info.source_space;
@@ -701,21 +699,16 @@ export namespace Potato::Reg
 
 		BuilderT Lex(Mask, IsRaw);
 
-		using EncodeT = Encode::StrEncoder<CharT, char32_t>;
-		//using EncodeT = Encode::CharEncoder<CharT, char32_t>;
-
 		auto IteSpan = std::span(Str);
 
 		char32_t TemBuffer = 0;
 
 		std::span<char32_t> OutputSpan = { &TemBuffer, 1 };
 
-		EncodeT encoder;
-
 		while (!IteSpan.empty())
 		{
 			auto StartIndex = Str.size() - IteSpan.size();
-			auto EncodeRe = encoder.Encode(IteSpan, OutputSpan);
+			auto EncodeRe = Encode::UnicodeEncoder<CharT, char32_t>::EncodeTo(IteSpan, OutputSpan);
 			if (!Lex.Consume(TemBuffer, { StartIndex, StartIndex + EncodeRe.source_space }))
 				throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {StartIndex, Str.size()} };
 			IteSpan = IteSpan.subspan(EncodeRe.source_space);
