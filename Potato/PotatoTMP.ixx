@@ -622,6 +622,7 @@ export namespace Potato::TMP
 	struct TypeStringEncoder
 	{
 		template<typename EncodeT>
+			requires(!std::is_same_v<decltype(type_string)::Type, EncodeT>)
 		static consteval auto EncodeTo()
 		{
 			constexpr Encode::EncodeInfo statistics_info = Encode::UnicodeEncoder<typename decltype(type_string)::Type, EncodeT>::Statistics(type_string.GetSpan());
@@ -629,6 +630,13 @@ export namespace Potato::TMP
 			Encode::UnicodeEncoder<typename decltype(type_string)::Type, EncodeT>::EncodeTo(type_string.GetSpan(), std::span(temp_string));
 			TypeString<EncodeT, statistics_info.target_space> result(temp_string);
 			return result;
+		}
+
+		template<typename EncodeT>
+			requires(std::is_same_v<decltype(type_string)::Type, EncodeT>)
+		static consteval auto EncodeTo()
+		{
+			return type_string;
 		}
 	};
 

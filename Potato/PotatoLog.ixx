@@ -16,9 +16,14 @@ export namespace Potato::Log
 		Error
 	};
 
-	template<TMP::TypeString>
+	template<TMP::TypeString type_string>
 	struct LogCategory
 	{
+
+		using K = TMP::TypeStringEncoder<type_string>;
+
+
+		static constexpr auto name = K::EncodeTo();
 	};
 
 	struct FormatedSystemTime
@@ -43,7 +48,7 @@ export namespace Potato::Log
 	struct LogFormatter
 	{
 		static constexpr auto pattern = []() { 
-			return Potato::TMP::TypeStringEncoder<decltype(type_string)::Type> ::EncodeTo<wchar_t>()
+			return Potato::TMP::TypeStringEncoder<decltype(type_string)::Type> ::EncodeTo();
 			}();
 	};
 }
@@ -66,9 +71,34 @@ export namespace std
 		{
 			switch (level)
 			{
-			case Potato::Log::Level::Log:
+			case Potato::Log::LogLevel::VeryVerbose:
+			{
+				constexpr std::wstring_view str = L"VeryVerbose";
+				return std::copy_n(str.data(), str.size(), format_context.out());
+			}
+			case Potato::Log::LogLevel::Verbose:
+			{
+				constexpr std::wstring_view str = L"Verbose";
+				return std::copy_n(str.data(), str.size(), format_context.out());
+			}
+			case Potato::Log::LogLevel::Log:
 			{
 				constexpr std::wstring_view str = L"Log";
+				return std::copy_n(str.data(), str.size(), format_context.out());
+			}
+			case Potato::Log::LogLevel::Display:
+			{
+				constexpr std::wstring_view str = L"Display";
+				return std::copy_n(str.data(), str.size(), format_context.out());
+			}
+			case Potato::Log::LogLevel::Warning:
+			{
+				constexpr std::wstring_view str = L"Warning";
+				return std::copy_n(str.data(), str.size(), format_context.out());
+			}
+			case Potato::Log::LogLevel::Error:
+			{
+				constexpr std::wstring_view str = L"Error";
 				return std::copy_n(str.data(), str.size(), format_context.out());
 			}
 			default:
@@ -78,9 +108,9 @@ export namespace std
 	};
 
 	template<Potato::TMP::TypeString type_string>
-	struct formatter<Potato::Log::LogCategory<type_string>, char>
+	struct formatter<Potato::Log::LogCategory<type_string>, wchar_t>
 	{
-		constexpr auto parse(std::basic_format_parse_context<char>& parse_context)
+		constexpr auto parse(std::basic_format_parse_context<wchar_t>& parse_context)
 		{
 			if (*parse_context.begin() == L'}')
 				return parse_context.begin();
@@ -88,9 +118,9 @@ export namespace std
 				throw "LogLevel do not support any parameter";
 		}
 		template<typename FormatContext>
-		constexpr auto format(Potato::Log::LogCategory<N> const& category, FormatContext& format_context) const
+		constexpr auto format(Potato::Log::LogCategory<type_string> category, FormatContext& format_context) const
 		{
-			auto str = category.GetStringView();
+			auto str = category.name.GetStringView();
 			return std::copy_n(str.data(), str.size(), format_context.out());
 		}
 	};
@@ -151,7 +181,7 @@ export namespace Potato::Log
 	template<LogCategory category>
 	struct LogCategoryProperty
 	{
-		static bool IsLogEnable(Level level) { return true; }
+		static bool IsLogEnable(LogLevel level) { return true; }
 	};
 
 	template<LogCategory category, LogLevel level>
@@ -184,17 +214,21 @@ export namespace Potato::Log
 	{
 		if (LogCategoryProperty<category>::IsLogEnable(level))
 		{
+			LogLine line;
 			auto printer = GetLogPrinter();
 			if (printer)
 			{
-				std::wstring str;
+				std::wstring message;
 				LogCategoryFormatter<category, level>{}(
-					std::back_inserter(str),
+					std::back_inserter(message),
 					formatter.patten.GetStringView(),
 					std::forward<Parameters>(parameters)...
 					);
 
-				//printer->
+				line.category = category.name.GetStringView();
+				line.level = level;
+				line.log_message = message;
+				printer->Print(line);
 			}
 		}
 	}

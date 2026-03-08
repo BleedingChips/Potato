@@ -10,24 +10,26 @@ module PotatoLog;
 
 namespace Potato::Log
 {
-
-	/*
 	struct ConsleLogPrinter : public LogPrinter
 	{
-		void Print(Level level, std::string_view output) override
+		void Print(LogLine const& log_line) override
 		{
 #ifdef _WIN32
-			std::array<wchar_t, 2048> temp_buffer;
-			Potato::Encode::StrEncoder<char, wchar_t> encoder;
-			auto info = encoder.Encode(output, std::span(temp_buffer));
-			temp_buffer[std::min(info.target_space, temp_buffer.size() - 1)] = L'\0';
-			std::wcout << temp_buffer.data();
+			std::wcout << log_line.message << std::endl;
 #else
 			std::cout << print << std::endl;
 #endif
 		}
 		virtual void AddLogPrinterRef() const {}
 		virtual void SubLogPrinterRef() const {}
+		ConsleLogPrinter()
+		{
+			std::ios::sync_with_stdio(false);
+			constexpr char locale_name[] = "UTF-8";
+			std::locale::global(std::locale(locale_name));
+			std::cin.imbue(std::locale());
+			std::cout.imbue(std::locale());
+		}
 	}printer;
 
 
@@ -36,7 +38,6 @@ namespace Potato::Log
 	{
 		return &printer;
 	}
-	*/
 
 	/*
 	std::pmr::memory_resource* LogMemoryResource() { return std::pmr::get_default_resource(); }

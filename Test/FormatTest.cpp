@@ -138,13 +138,6 @@ namespace std
 	};
 }
 
-template<typename CharT, std::size_t N>
-void Test(const CharT(&str)[N])
-{
-	auto info = Potato::Encode::UnicodeEncoder<char8_t, wchar_t>::Statistics(std::span(str, N));
-	volatile int i = 0;
-}
-
 int main()
 {
 
