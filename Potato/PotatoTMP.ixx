@@ -632,7 +632,6 @@ export namespace Potato::TMP
 		}
 	};
 
-
 	template<std::size_t RequireIndex>
 	struct ParameterPicker
 	{

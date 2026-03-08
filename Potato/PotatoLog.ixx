@@ -21,9 +21,6 @@ export namespace Potato::Log
 	{
 	};
 
-	template<std::size_t N>
-	LogCategory(const char8_t(&str)[N]) -> LogCategory<TMP::TypeString(str)>;
-
 	struct FormatedSystemTime
 	{
 		std::chrono::system_clock::time_point current_time;
@@ -37,12 +34,18 @@ export namespace Potato::Log
 	struct LogLine
 	{
 		FormatedSystemTime current_time;
-		std::u8string_view category;
+		std::wstring_view category;
 		LogLevel level;
-		std::u8string_view log_message;
+		std::wstring_view log_message;
 	};
 
-	
+	template<Potato::TMP::TypeString type_string>
+	struct LogFormatter
+	{
+		static constexpr auto pattern = []() { 
+			return Potato::TMP::TypeStringEncoder<decltype(type_string)::Type> ::EncodeTo<wchar_t>()
+			}();
+	};
 }
 
 export namespace std
@@ -134,9 +137,7 @@ export namespace Potato::Log
 			void AddRef(LogPrinter const* ptr) { ptr->AddLogPrinterRef(); }
 			void SubRef(LogPrinter const* ptr) { ptr->SubLogPrinterRef(); }
 		};
-		virtual std::pmr::memory_resource* GetMemoryResource(Level level) { return std::pmr::get_default_resource(); };
-		virtual void Print(Level level, std::string_view output) = 0;
-		virtual void Done(std::pmr::memory_resource* resource) {}
+		virtual void Print(LogLine const& log_lone) = 0;
 		using Ptr = Pointer::IntrusivePtr<LogPrinter, Wrapper>;
 	protected:
 		virtual void AddLogPrinterRef() const = 0;
@@ -153,18 +154,18 @@ export namespace Potato::Log
 		static bool IsLogEnable(Level level) { return true; }
 	};
 
-	template<LogCategory category>
+	template<LogCategory category, LogLevel level>
 	struct LogCategoryFormatter
 	{
 		template<typename OutputIterator, typename ...Parameters>
-		OutputIterator operator()(OutputIterator iterator, Level level, std::basic_format_string<char, std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
+		OutputIterator operator()(OutputIterator iterator, std::basic_format_string<wchar_t, std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
 		{
 
 			FormatedSystemTime time;
 
 			iterator = std::format_to(
 				std::move(iterator),
-				"[{}]{}<{}>",
+				L"[{}]{}<{}>",
 				time, category, level
 			);
 
@@ -174,28 +175,26 @@ export namespace Potato::Log
 				std::forward<Parameters>(parameters)...
 			);
 
-			*iterator++ = '\n';
-
 			return iterator;
 		}
 	};
 
-	template<LogCategory category, typename ...Parameters>
-	constexpr void Log(Level level, std::basic_format_string<char, std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
+	template<LogCategory category, LogLevel level, LogFormatter formatter, typename ...Parameters>
+	constexpr void Log(Parameters&& ...parameters)
 	{
 		if (LogCategoryProperty<category>::IsLogEnable(level))
 		{
 			auto printer = GetLogPrinter();
 			if (printer)
 			{
-				auto resource = printer->GetMemoryResource(level);
-				{
-					std::pmr::string cache_log{ resource };
-					cache_log.reserve(1024);
-					LogCategoryFormatter<category>{}(std::back_insert_iterator{ cache_log }, level, pattern, std::forward<Parameters>(parameters)...);
-					printer->Print(level, cache_log);
-				}
-				printer->Done(resource);
+				std::wstring str;
+				LogCategoryFormatter<category, level>{}(
+					std::back_inserter(str),
+					formatter.patten.GetStringView(),
+					std::forward<Parameters>(parameters)...
+					);
+
+				//printer->
 			}
 		}
 	}
