@@ -3,6 +3,7 @@ import std;
 import PotatoTMP;
 import PotatoEncode;
 import PotatoPointer;
+import PotatoFormat;
 
 export namespace Potato::Log
 {
@@ -14,16 +15,6 @@ export namespace Potato::Log
 		Display, 
 		Warning,
 		Error
-	};
-
-	template<TMP::TypeString type_string>
-	struct LogCategory
-	{
-
-		using K = TMP::TypeStringEncoder<type_string>;
-
-
-		static constexpr auto name = K::EncodeTo();
 	};
 
 	struct FormatedSystemTime
@@ -51,6 +42,46 @@ export namespace Potato::Log
 			return Potato::TMP::TypeStringEncoder<decltype(type_string)::Type> ::EncodeTo();
 			}();
 	};
+
+	template<typename CharT>
+	struct LogStringWrapper
+	{
+		std::basic_string_view<CharT> string;
+	};
+
+	template<typename CharT>
+	struct LogStringWrapperDetect
+	{
+		static constexpr bool require_wrapper = false;
+	};
+
+	template<typename CharT>
+	struct LogStringWrapperDetect<std::basic_string_view<CharT>>
+	{
+		static constexpr bool require_wrapper = true;
+		using Type = LogStringWrapper<CharT>;
+	};
+
+	template<typename CharT, std::size_t N>
+	struct LogStringWrapperDetect<CharT[N]>
+	{
+		static constexpr bool require_wrapper = true;
+		using Type = LogStringWrapper<CharT>;
+	};
+
+	template<typename Input>
+	decltype(auto) AddLogStringWrapper(Input&& input)
+	{
+		using Type = LogStringWrapperDetect<std::remove_cvref_t<Input>>;
+
+		if constexpr (Type::require_wrapper)
+		{
+			return typename Type::Type{ input };
+		}
+		else {
+			return std::forward<Input>(input);
+		}
+	}
 }
 
 export namespace std
@@ -58,9 +89,9 @@ export namespace std
 	template<>
 	struct formatter<Potato::Log::LogLevel, wchar_t>
 	{
-		constexpr auto parse(std::basic_format_parse_context<char>& parse_context)
+		constexpr auto parse(std::basic_format_parse_context<wchar_t>& parse_context)
 		{
-			if(*parse_context.begin() == L'}')
+			if(*parse_context.begin() == '}')
 				return parse_context.begin();
 			else
 				throw "LogLevel do not support any parameter";
@@ -107,30 +138,15 @@ export namespace std
 		}
 	};
 
-	template<Potato::TMP::TypeString type_string>
-	struct formatter<Potato::Log::LogCategory<type_string>, wchar_t>
+	template<>
+	struct formatter<Potato::Log::FormatedSystemTime, wchar_t>
 	{
 		constexpr auto parse(std::basic_format_parse_context<wchar_t>& parse_context)
 		{
-			if (*parse_context.begin() == L'}')
+			if (*parse_context.begin() == static_cast<wchar_t>('}'))
 				return parse_context.begin();
 			else
-				throw "LogLevel do not support any parameter";
-		}
-		template<typename FormatContext>
-		constexpr auto format(Potato::Log::LogCategory<type_string> category, FormatContext& format_context) const
-		{
-			auto str = category.name.GetStringView();
-			return std::copy_n(str.data(), str.size(), format_context.out());
-		}
-	};
-
-	template<>
-	struct formatter<Potato::Log::FormatedSystemTime, char>
-	{
-		constexpr auto parse(std::basic_format_parse_context<char>& parse_context)
-		{
-			return parse_context.begin();
+				throw "std::formatter<LogLevel> do not support any parameter";
 		}
 
 		template<typename FormatContext>
@@ -147,10 +163,31 @@ export namespace std
 
 			return std::format_to(
 				format_context.out(),
-				"{:%m.%d-%H:%M:%S}.{:0>3}",
+				L"{:%m.%d-%H:%M:%S}.{:0>3}",
 				zoned_time,
 				mil_second.count()
 			);
+		}
+	};
+
+	template<typename CharT, typename TargetCharT>
+	struct formatter<Potato::Log::LogStringWrapper<CharT>, TargetCharT>
+	{
+		constexpr auto parse(std::basic_format_parse_context<TargetCharT>& parse_context)
+		{
+			if (*parse_context.begin() == static_cast<TargetCharT>('}'))
+				return parse_context.begin();
+			else
+				throw "std::formatter<Potato::Log::LogStringWrapper> do not support any parameter";
+		}
+		template<typename FormatContext>
+		constexpr auto format(Potato::Log::LogStringWrapper<CharT> string_wrapper, FormatContext& format_context) const
+		{
+			auto [info, iterator] = Potato::Encode::UnicodeEncoder<CharT, TargetCharT>::EncodeTo(
+				string_wrapper.string,
+				format_context.out()
+			);
+			return iterator;
 		}
 	};
 }
@@ -178,54 +215,55 @@ export namespace Potato::Log
 
 	struct DefaultLogFormatter;
 
-	template<LogCategory category>
+	template<TMP::TypeString category>
 	struct LogCategoryProperty
 	{
 		static bool IsLogEnable(LogLevel level) { return true; }
 	};
 
-	template<LogCategory category, LogLevel level>
+	template<TMP::TypeString category, LogLevel level>
 	struct LogCategoryFormatter
 	{
 		template<typename OutputIterator, typename ...Parameters>
 		OutputIterator operator()(OutputIterator iterator, std::basic_format_string<wchar_t, std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
 		{
-
 			FormatedSystemTime time;
-
 			iterator = std::format_to(
 				std::move(iterator),
 				L"[{}]{}<{}>",
 				time, category, level
 			);
-
-			iterator = std::format_to(
+			return std::format_to(
 				std::move(iterator),
 				pattern,
 				std::forward<Parameters>(parameters)...
 			);
-
-			return iterator;
 		}
 	};
 
-	template<LogCategory category, LogLevel level, LogFormatter formatter, typename ...Parameters>
+	template<TMP::TypeString category, LogLevel level, TMP::TypeString formatter, typename ...Parameters>
 	constexpr void Log(Parameters&& ...parameters)
 	{
+		static constexpr auto formatterw = TMP::TypeStringEncoder<formatter, wchar_t>::EncodeTo();
+		static constexpr auto name = TMP::TypeStringEncoder<category, wchar_t>::EncodeTo();
+
 		if (LogCategoryProperty<category>::IsLogEnable(level))
 		{
 			LogLine line;
 			auto printer = GetLogPrinter();
 			if (printer)
 			{
-				std::wstring message;
+				std::array<std::byte, sizeof(wchar_t) * 256> log_output;
+				std::pmr::monotonic_buffer_resource buffer_resource{ log_output.data(), log_output.size()};
+				std::pmr::wstring message(&buffer_resource);
+				
 				LogCategoryFormatter<category, level>{}(
 					std::back_inserter(message),
-					formatter.patten.GetStringView(),
-					std::forward<Parameters>(parameters)...
+					formatterw.GetStringView(),
+					AddLogStringWrapper(std::forward<Parameters>(parameters))...
 					);
 
-				line.category = category.name.GetStringView();
+				line.category = name.GetStringView();
 				line.level = level;
 				line.log_message = message;
 				printer->Print(line);

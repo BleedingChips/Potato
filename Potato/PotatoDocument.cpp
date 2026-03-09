@@ -10,7 +10,7 @@ module;
 
 module PotatoDocument;
 
-/*
+
 namespace Potato::Document
 {
 	constexpr unsigned char utf8_bom[] = { 0xEF, 0xBB, 0xBF };
@@ -323,12 +323,13 @@ namespace Potato::Document
 			case BomT::NoBom:
 			case BomT::UTF8:
 			{
-				Encode::StrEncoder<char8_t, char8_t> encoder;
-				Encode::EncodeOption option;
-				option.max_character = max_character;
-				option.predict = false;
-				option.untrusted = true;
-				auto info = encoder.Encode(std::u8string_view{ reinterpret_cast<char8_t const*>(stream.data()), stream.size() / sizeof(char8_t) }, output, option);
+				auto info = Encode::UnicodeEncoder<char8_t, char8_t>::EncodeTo(
+					std::u8string_view{ 
+						reinterpret_cast<char8_t const*>(stream.data()), 
+						stream.size() / sizeof(char8_t) 
+					}, 
+					output, max_character
+				);
 				stream = stream.subspan(info.source_space);
 				return info;
 			}
@@ -386,4 +387,3 @@ namespace Potato::Document
 		);
 	}
 }
-*/

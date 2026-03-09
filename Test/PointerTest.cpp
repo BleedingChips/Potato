@@ -15,7 +15,7 @@ struct Type1
 	mutable Potato::Misc::AtomicRefCount Ref;
 	void AddRef() const
 	{
-		return Ref.AddRef();
+		Ref.AddRef();
 	}
 	void SubRef() const{
 		if (Ref.SubRef())

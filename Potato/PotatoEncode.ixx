@@ -437,7 +437,7 @@ export namespace Potato::Encode
 		
 		template<typename OutIterator>
 			requires std::output_iterator<OutIterator, Unicode::CodePointT>
-		static constexpr EncodeInfo EncodeTo(std::span<NativeStorageT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<NativeStorageT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
 		{
 			std::array<Unicode::CodePointT, 16> temporary_buffer;
 			EncodeInfo info;
@@ -457,7 +457,7 @@ export namespace Potato::Encode
 					(*iterator++) = temporary_buffer[i];
 				}
 			}
-			return info;
+			return { info, iterator };
 		}
 	};
 
@@ -517,7 +517,7 @@ export namespace Potato::Encode
 	
 		template<typename OutIterator>
 			requires std::output_iterator<OutIterator, CharT>
-		static constexpr EncodeInfo EncodeTo(std::span<NativeStorageT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<NativeStorageT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
 		{
 			std::array<CharT, 16 * WrapperT::max_storage_size> temporary_buffer;
 			EncodeInfo info;
@@ -537,7 +537,7 @@ export namespace Potato::Encode
 					(*iterator++) = temporary_buffer[i];
 				}
 			}
-			return info;
+			return { info, iterator };
 		}
 	};
 
@@ -545,7 +545,6 @@ export namespace Potato::Encode
 	template<typename FromCharT, typename ToCharT>
 	struct UnicodeEncoder
 	{
-
 		static constexpr EncodeInfo Statistics(std::span<FromCharT const> source, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
 		{
 			EncodeInfo info;
@@ -612,7 +611,7 @@ export namespace Potato::Encode
 
 		template<typename OutIterator>
 			requires std::output_iterator<OutIterator, ToCharT>
-		static constexpr EncodeInfo EncodeTo(std::span<FromCharT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<FromCharT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
 		{
 			std::array<ToCharT, 16 * UnicodeWrapper<ToCharT>::WrapperT::max_storage_size> temporary_buffer;
 			EncodeInfo info;
@@ -632,12 +631,126 @@ export namespace Potato::Encode
 					(*iterator++) = temporary_buffer[i];
 				}
 			}
-			return info;
+			return { info, iterator };
 		}
 
 		template<typename OutIterator>
 			requires std::output_iterator<OutIterator, ToCharT>
-		static constexpr EncodeInfo EncodeTo(std::basic_string_view<FromCharT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr auto EncodeTo(std::basic_string_view<FromCharT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		{
+			return EncodeTo(std::span(source.data(), source.size()), std::move(iterator), max_unicode_point);
+		}
+	};
+
+	template<typename FromCharT>
+		requires(!std::is_same_v<FromCharT, Unicode::CodePointT>)
+	struct UnicodeEncoder<FromCharT, FromCharT>
+	{
+		static constexpr EncodeInfo Statistics(std::span<FromCharT const> source, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		{
+			EncodeInfo info = UnicodeEncoder<FromCharT, Unicode::CodePointT>::Statistics(std::span(source), max_unicode_point);
+			info.target_space = info.source_space;
+			return info;
+		}
+
+		static constexpr EncodeInfo Statistics(std::basic_string_view<FromCharT> source, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		{
+			return Statistics(std::span(source.data(), source.size()), max_unicode_point);
+		}
+
+		static constexpr EncodeInfo EncodeTo(std::span<FromCharT const> source, std::span<FromCharT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		{
+			auto min_size = std::min(source.size(), target.size());
+			EncodeInfo info = Statistics(source.subspan(0, min_size), max_unicode_point);
+			std::copy_n(source.data(), info.source_space, target.begin());
+			if (info.source_space == source.size())
+			{
+				info.is_good_string = true;
+			}
+			else if (info.is_good_string) {
+				EncodeInfo info2 = Statistics(source.subspan(info.source_space), 1);
+				info.is_good_string = info2.is_good_string;
+			}
+			return info;
+		}
+		static constexpr EncodeInfo EncodeTo(std::basic_string_view<FromCharT> source, std::span<FromCharT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		{
+			return EncodeTo(std::span(source.data(), source.size()), target, max_unicode_point);
+		}
+
+		template<typename OutIterator>
+			requires std::output_iterator<OutIterator, FromCharT>
+		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<FromCharT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		{
+			EncodeInfo info = Statistics(source, max_unicode_point);
+			return { info, std::copy_n(source.data(), info.target_space, iterator) };
+		}
+
+		template<typename OutIterator>
+			requires std::output_iterator<OutIterator, FromCharT>
+		static constexpr auto EncodeTo(std::basic_string_view<FromCharT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		{
+			return EncodeTo(std::span(source.data(), source.size()), std::move(iterator), max_unicode_point);
+		}
+	};
+
+	template<typename FromCharT, typename ToCharT>
+		requires(
+			!std::is_same_v<FromCharT, ToCharT> 
+			&& std::is_same_v<typename UnicodeWrapper<FromCharT>::WrapperT, typename UnicodeWrapper<ToCharT>::WrapperT>
+				)
+	struct UnicodeEncoder<FromCharT, ToCharT>
+	{
+		static constexpr EncodeInfo Statistics(std::span<FromCharT const> source, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		{
+			EncodeInfo info = UnicodeEncoder<FromCharT, Unicode::CodePointT>::Statistics(std::span(source), max_unicode_point);
+			info.target_space = info.source_space;
+			return info;
+		}
+
+		static constexpr EncodeInfo Statistics(std::basic_string_view<FromCharT> source, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		{
+			return Statistics(std::span(source.data(), source.size()), max_unicode_point);
+		}
+
+		static constexpr EncodeInfo EncodeTo(std::span<FromCharT const> source, std::span<ToCharT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		{
+			auto min_size = std::min(source.size(), target.size());
+			EncodeInfo info = Statistics(source.subspan(0, min_size), max_unicode_point);
+			for (std::size_t i = 0; i < info.target_space; ++i)
+			{
+				target[i] = static_cast<ToCharT>(source[i] - static_cast<FromCharT>(0));
+			}
+			if (info.source_space == source.size())
+			{
+				info.is_good_string = true;
+			}
+			else if(info.is_good_string){
+				EncodeInfo info2 = Statistics(source.subspan(info.source_space), 1);
+				info.is_good_string = info2.is_good_string;
+			}
+			return info;
+		}
+		static constexpr EncodeInfo EncodeTo(std::basic_string_view<FromCharT> source, std::span<ToCharT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		{
+			return EncodeTo(std::span(source.data(), source.size()), target, max_unicode_point);
+		}
+
+		template<typename OutIterator>
+			requires std::output_iterator<OutIterator, ToCharT>
+		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<FromCharT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		{
+			EncodeInfo info = Statistics(source, max_unicode_point);
+			for (std::size_t i = 0; i < info.target_space; ++i)
+			{
+				(*iterator++) = static_cast<ToCharT>(source[i] - static_cast<FromCharT>(0));
+			}
+			return { info, iterator };
+		}
+
+		template<typename OutIterator>
+			requires std::output_iterator<OutIterator, ToCharT>
+		static constexpr auto EncodeTo(std::basic_string_view<FromCharT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
 		{
 			return EncodeTo(std::span(source.data(), source.size()), std::move(iterator), max_unicode_point);
 		}

@@ -1,4 +1,4 @@
-
+﻿
 #include <Windows.h>
 #include <clocale>
 import PotatoLog;
@@ -10,11 +10,9 @@ using namespace Potato::Log;
 
 int main()
 {
-	SetConsoleCP(CP_UTF8);
-	SetConsoleOutputCP(CP_UTF8);
-	std::setlocale(LC_ALL, ".UTF8");
-	std::ios::sync_with_stdio(false);
-	bool l = SetConsoleCP(CP_UTF8);
+
+	
+
 	//constexpr char locale_name[] = "en_US.UTF-8";
 	//std::locale::global(std::locale(locale_name));
 	//std::cin.imbue(std::locale());
@@ -24,13 +22,18 @@ int main()
 	std::string_view output2 = "中国人不骗中国人";
 	//std::print(std::cout, "{}", std::string_view{reinterpret_cast<char const*>(output.data()), output.size()});
 
+	std::u8string_view out3 = {reinterpret_cast<char8_t const*>(output2.data()), output2.size()};
+
 	//std::cout << std::string_view{ reinterpret_cast<char const*>(output2.data()), output2.size() } << std::endl;
 
 
 	//auto L = std::format("{} {} {}", Potato::Log::Level::Log, 122345, "输出测试");
 
 	//std::wcout << L << std::endl;
-	Potato::Log::Log<u8"Fuck", LogLevel::Log, u8"{} {}">(1, std::this_thread::get_id());
+	std::u8string_view ptr = u8"中国人好";
+
+	Potato::Log::Log<u8"Fuck", LogLevel::Log, u8"你好中国人 {} {} {}">(1, std::this_thread::get_id(), ptr);
+	Potato::Log::Log<u8"Fuck", LogLevel::Log, u8"你好中国人233 {} {} {}">(1, std::this_thread::get_id(), u8"sdasdasd");
 
 	volatile int i = 0;
 }

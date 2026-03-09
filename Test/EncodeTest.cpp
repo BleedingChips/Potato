@@ -9,14 +9,10 @@ struct StrEncodeTesting
 {
 	bool operator()(std::basic_string_view<ST> Source, std::basic_string_view<TT> Target)
 	{
-		EncodeOption option;
-		option.predict = true;
-		StrEncoder<ST, TT> encoder;
-		auto info = encoder.Encode(Source, {}, option);
+		auto info = Potato::Encode::UnicodeEncoder<ST, TT>::Statistics(Source);
 		std::basic_string<TT> R1;
 		R1.resize(info.target_space);
-		option.predict = false;
-		encoder.Encode(Source, std::span(R1));
+		Potato::Encode::UnicodeEncoder<ST, TT>::EncodeTo(Source, std::span(R1));
 		return R1 == Target;
 	}
 };

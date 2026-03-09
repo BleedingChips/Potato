@@ -618,25 +618,22 @@ export namespace Potato::TMP
 	template<std::size_t N>
 	TypeString(const char(&str)[N])-> TypeString<char, N>;
 
-	template<TypeString type_string>
+	template<TypeString type_string, typename EncodeT>
 	struct TypeStringEncoder
 	{
-		template<typename EncodeT>
-			requires(!std::is_same_v<decltype(type_string)::Type, EncodeT>)
 		static consteval auto EncodeTo()
 		{
-			constexpr Encode::EncodeInfo statistics_info = Encode::UnicodeEncoder<typename decltype(type_string)::Type, EncodeT>::Statistics(type_string.GetSpan());
-			std::array<EncodeT, statistics_info.target_space> temp_string;
-			Encode::UnicodeEncoder<typename decltype(type_string)::Type, EncodeT>::EncodeTo(type_string.GetSpan(), std::span(temp_string));
-			TypeString<EncodeT, statistics_info.target_space> result(temp_string);
-			return result;
-		}
-
-		template<typename EncodeT>
-			requires(std::is_same_v<decltype(type_string)::Type, EncodeT>)
-		static consteval auto EncodeTo()
-		{
-			return type_string;
+			if constexpr (!std::is_same_v<decltype(type_string)::Type, EncodeT>)
+			{
+				constexpr Encode::EncodeInfo statistics_info = Encode::UnicodeEncoder<typename decltype(type_string)::Type, EncodeT>::Statistics(type_string.GetSpan());
+				std::array<EncodeT, statistics_info.target_space> temp_string;
+				Encode::UnicodeEncoder<typename decltype(type_string)::Type, EncodeT>::EncodeTo(type_string.GetSpan(), std::span(temp_string));
+				TypeString<EncodeT, statistics_info.target_space> result(temp_string);
+				return result;
+			}
+			else {
+				return type_string;
+			}
 		}
 	};
 
@@ -756,5 +753,29 @@ export namespace Potato::TMP
 			FunctionT normal;
 			CallableObjectFunctionT callable_object;
 		}function_ptr;
+	};
+}
+
+namespace std
+{
+	template<typename CharT, std::size_t N, typename TargetCharT>
+	struct formatter<Potato::TMP::TypeString<CharT, N>, TargetCharT>
+	{
+		constexpr auto parse(std::basic_format_parse_context<TargetCharT>& parse_context)
+		{
+			if (*parse_context.begin() == static_cast<TargetCharT>('}'))
+				return parse_context.begin();
+			else
+				throw "std::formatter<Potato::TMP::TypeString> do not support any parameter";
+		}
+		template<typename FormatContext>
+		constexpr auto format(Potato::TMP::TypeString<CharT, N> const& type_string, FormatContext& format_context) const
+		{
+			auto [info, iterator] = Potato::Encode::UnicodeEncoder<CharT, TargetCharT>::EncodeTo(
+				type_string.GetStringView(),
+				format_context.out()
+			);
+			return iterator;
+		}
 	};
 }

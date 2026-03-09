@@ -13,12 +13,10 @@ import PotatoMisc;
 import PotatoEncode;
 
 
-
 export namespace Potato::Document
 {
-	/*
-	using EncodeInfo = Encode::EncodeInfo;
 
+	using EncodeInfo = Encode::EncodeInfo;
 
 	enum class BomT
 	{
@@ -166,5 +164,5 @@ export namespace Potato::Document
 		std::pmr::vector<std::byte> cache_buffer;
 		BomT bom = BomT::NoBom;
 	};
-	*/
+
 }

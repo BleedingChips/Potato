@@ -4,7 +4,7 @@ module;
 #undef min
 #undef max
 #endif
-
+#include <locale>
 
 module PotatoLog;
 
@@ -12,23 +12,22 @@ namespace Potato::Log
 {
 	struct ConsleLogPrinter : public LogPrinter
 	{
+		std::mutex log_mutex;
 		void Print(LogLine const& log_line) override
 		{
-#ifdef _WIN32
-			std::wcout << log_line.message << std::endl;
-#else
-			std::cout << print << std::endl;
-#endif
+			std::lock_guard lg(log_mutex);
+			std::wcout << log_line.log_message << L"\n" << std::ends;
 		}
 		virtual void AddLogPrinterRef() const {}
 		virtual void SubLogPrinterRef() const {}
 		ConsleLogPrinter()
 		{
+			std::setlocale(LC_ALL, ".UTF8");
 			std::ios::sync_with_stdio(false);
-			constexpr char locale_name[] = "UTF-8";
-			std::locale::global(std::locale(locale_name));
-			std::cin.imbue(std::locale());
-			std::cout.imbue(std::locale());
+		}
+		~ConsleLogPrinter()
+		{
+			std::wcout.flush();
 		}
 	}printer;
 
