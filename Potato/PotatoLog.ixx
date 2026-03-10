@@ -43,10 +43,16 @@ export namespace Potato::Log
 			}();
 	};
 
-	template<typename CharT>
+	template<typename CharT, typename CharTraits = std::char_traits<CharT>>
+	struct LogStringViewWrapper
+	{
+		std::basic_string_view<CharT, CharTraits> string;
+	};
+
+	template<typename CharT, typename CharTraits = std::char_traits<CharT>, typename Allocator = std::allocator<CharT>>
 	struct LogStringWrapper
 	{
-		std::basic_string_view<CharT> string;
+		std::basic_string<CharT, CharTraits, Allocator>& string;
 	};
 
 	template<typename CharT>
@@ -55,18 +61,25 @@ export namespace Potato::Log
 		static constexpr bool require_wrapper = false;
 	};
 
-	template<typename CharT>
-	struct LogStringWrapperDetect<std::basic_string_view<CharT>>
+	template<typename CharT, typename CharTraits>
+	struct LogStringWrapperDetect<std::basic_string_view<CharT, CharTraits>>
 	{
 		static constexpr bool require_wrapper = true;
-		using Type = LogStringWrapper<CharT>;
+		using Type = LogStringViewWrapper<CharT, CharTraits>;
 	};
 
 	template<typename CharT, std::size_t N>
 	struct LogStringWrapperDetect<CharT[N]>
 	{
 		static constexpr bool require_wrapper = true;
-		using Type = LogStringWrapper<CharT>;
+		using Type = LogStringViewWrapper<CharT>;
+	};
+
+	template<typename CharT, typename CharTraits, typename Allocator>
+	struct LogStringWrapperDetect<std::basic_string<CharT, CharTraits, Allocator>>
+	{
+		static constexpr bool require_wrapper = true;
+		using Type = LogStringWrapper<CharT, CharTraits, Allocator>;
 	};
 
 	template<typename Input>
@@ -182,6 +195,27 @@ export namespace std
 		}
 		template<typename FormatContext>
 		constexpr auto format(Potato::Log::LogStringWrapper<CharT> string_wrapper, FormatContext& format_context) const
+		{
+			auto [info, iterator] = Potato::Encode::UnicodeEncoder<CharT, TargetCharT>::EncodeTo(
+				string_wrapper.string,
+				format_context.out()
+			);
+			return iterator;
+		}
+	};
+
+	template<typename CharT, typename TargetCharT>
+	struct formatter<Potato::Log::LogStringViewWrapper<CharT>, TargetCharT>
+	{
+		constexpr auto parse(std::basic_format_parse_context<TargetCharT>& parse_context)
+		{
+			if (*parse_context.begin() == static_cast<TargetCharT>('}'))
+				return parse_context.begin();
+			else
+				throw "std::formatter<Potato::Log::LogStringViewWrapper> do not support any parameter";
+		}
+		template<typename FormatContext>
+		constexpr auto format(Potato::Log::LogStringViewWrapper<CharT> string_wrapper, FormatContext& format_context) const
 		{
 			auto [info, iterator] = Potato::Encode::UnicodeEncoder<CharT, TargetCharT>::EncodeTo(
 				string_wrapper.string,

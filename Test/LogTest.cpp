@@ -34,6 +34,7 @@ int main()
 
 	Potato::Log::Log<u8"Fuck", LogLevel::Log, u8"你好中国人 {} {} {}">(1, std::this_thread::get_id(), ptr);
 	Potato::Log::Log<u8"Fuck", LogLevel::Log, u8"你好中国人233 {} {} {}">(1, std::this_thread::get_id(), u8"sdasdasd");
+	Potato::Log::Log<u8"Fuck", LogLevel::Log, u8"你好中国人233 {} {} {}">(1, std::this_thread::get_id(), std::basic_string<char8_t>{u8"sdasdasd"});
 
 	volatile int i = 0;
 }
