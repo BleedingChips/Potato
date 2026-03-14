@@ -239,6 +239,7 @@ export namespace Potato::Log
 			void SubRef(LogPrinter const* ptr) { ptr->SubLogPrinterRef(); }
 		};
 		virtual void Print(LogLine const& log_lone) = 0;
+		virtual std::wstring_view EndLineString() const { return {}; };
 		using Ptr = Pointer::IntrusivePtr<LogPrinter, Wrapper>;
 	protected:
 		virtual void AddLogPrinterRef() const = 0;
@@ -296,6 +297,14 @@ export namespace Potato::Log
 					formatterw.GetStringView(),
 					AddLogStringWrapper(std::forward<Parameters>(parameters))...
 					);
+
+				auto end_line = printer->EndLineString();
+
+				std::copy_n(
+					end_line.data(),
+					end_line.size(),
+					std::back_inserter(message)
+				);
 
 				line.category = name.GetStringView();
 				line.level = level;

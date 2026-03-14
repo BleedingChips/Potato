@@ -12,14 +12,13 @@ namespace Potato::Log
 {
 	struct ConsleLogPrinter : public LogPrinter
 	{
-		std::mutex log_mutex;
 		void Print(LogLine const& log_line) override
 		{
-			std::lock_guard lg(log_mutex);
-			std::wcout << log_line.log_message << L"\n" << std::ends;
+			std::wcout << log_line.log_message;
 		}
 		virtual void AddLogPrinterRef() const {}
 		virtual void SubLogPrinterRef() const {}
+		std::wstring_view EndLineString() const { return L"\n"; };
 		ConsleLogPrinter()
 		{
 			std::setlocale(LC_ALL, ".UTF8");

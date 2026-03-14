@@ -554,4 +554,79 @@ export namespace Potato::Format
 		}
 	};
 
+
+	template<typename ValueT, typename CharT>
+	struct Deformatter
+	{
+		template<typename InIterator>
+			requires(std::input_iterator<InIterator>)
+		InIterator Deformat(InIterator begin, InIterator end, ValueT& output) = delete;
+	};
+
+	struct DeformatSyntax
+	{
+
+		struct DeformatSyntaxInfo
+		{
+			std::size_t syntax_count = 0;
+			std::size_t parameter_count = 0;
+		};
+
+		template<typename CharT, typename Traits>
+		static constexpr std::size_t FindSyntaxPoint(std::basic_string_view<CharT, Traits> string, std::size_t offset = 0)
+		{
+			while (offset < string.size())
+			{
+				auto iterator = string.find(static_cast<CharT>('{'), offset);
+				if (iterator >= string.size())
+					return string.size();
+				if (iterator != 0 && string[iterator - 1] == static_cast<CharT>('\\'))
+					offset = iterator + 1;
+				else
+					return iterator;
+			}
+			return string.size();
+		}
+
+		template<typename CharT, typename Traits>
+		static constexpr std::optional<DeformatSyntaxInfo> GetSyntaxPointCount(std::basic_string_view<CharT, Traits> string, std::size_t offset = 0)
+		{
+			DeformatSyntaxInfo info;
+
+			while (offset < string.size())
+			{
+				auto cur_sub = string.substr(offset);
+				auto index = FindSyntaxPoint(string, offset);
+				auto k = string.substr(index);
+				if (index != string.size())
+					info.parameter_count += 1;
+				info.syntax_count += 1;
+				offset = index + 2;
+			}
+			return info;
+		}
+	};
+
+	struct DeformatInfo
+	{
+
+	};
+
+	template<TMP::TypeString type_string>
+	struct DeformatPattern
+	{
+		static constexpr decltype(auto) GetPattern()
+		{
+			
+		}
+		static constexpr auto pattern = []() {}();
+	};
+
+	template<TMP::TypeString type_string, typename CharT, typename CharTraits, typename ...AT>
+	DeformatInfo Deformat(std::basic_string_view<CharT, CharTraits> str, AT&& ...at)
+	{
+		return {};
+	}
+
+
 }

@@ -198,6 +198,15 @@ int main()
 			volatile int i = 0;
 		}
 
+
+		{
+			std::u8string_view str = u8".?\\1";
+			auto k = DeformatSyntax::GetSyntaxPointCount(std::u8string_view{ u8".?\\1{}{}{}123445" });
+			//auto re = str.substr(*k);
+
+			volatile int i = 0;
+		}
+
 		//constexpr auto str3 = str1.CastTo<char16_t>();
 
 		volatile int o = 0;
