@@ -98,11 +98,11 @@ export namespace Potato::Format
 		std::wstringstream wss;
 		bool Scan(std::basic_string_view<UnicodeType> par, NumberType& output)
 		{
-			wchar_t buffer[2];
+			std::array<wchar_t, 16> buffer;
 			while (!par.empty())
 			{
-				auto info = Encode::UnicodeEncoder<UnicodeType, wchar_t>::EncodeTo(std::span(par), { buffer, 2 });
-				wss.write(buffer, info.target_space);
+				auto info = Encode::UnicodeEncoder<UnicodeType, wchar_t>::EncodeTo(std::span(par), std::span(buffer));
+				wss.write(buffer.data(), info.target_space);
 				par = par.substr(info.source_space);
 			}
 			wss >> output;
@@ -125,8 +125,9 @@ export namespace Potato::Format
 	template<typename UnicodeT>
 	struct Scanner<int64_t, UnicodeT> : BuildInNumberScanner<int64_t, UnicodeT> {};
 
+	/*
 	template<typename TargetType, typename CharaTrai, typename Allocator, typename UnicodeT>
-	struct Scanner<std::basic_string<TargetType, CharaTrai, Allocator>, UnicodeT> : BuildInNumberScanner<int64_t, UnicodeT>
+	struct Scanner<std::basic_string<TargetType, CharaTrai, Allocator>, UnicodeT> //: BuildInNumberScanner<int64_t, UnicodeT>
 	{
 		bool Scan(std::basic_string_view<UnicodeT> Par, std::basic_string<TargetType, CharaTrai, Allocator>& Output)
 		{
@@ -134,6 +135,7 @@ export namespace Potato::Format
 			return true;
 		}
 	};
+	*/
 }
 
 export namespace Potato::Format
@@ -213,7 +215,7 @@ export namespace Potato::Format
 		template<typename IteratorT, typename ...AT>
 		IteratorT Format(IteratorT iterator, AT&&... parameter) const
 		{
-			return formatter.Format(std::move(iterator), TMP::ParameterPicker<index>{}(std::forward<AT>(parameter)...));
+			return formatter.Format(std::move(iterator), TMP::ParameterPicker<index>::Pick(std::forward<AT>(parameter)...));
 		}
 	};
 
@@ -226,7 +228,7 @@ export namespace Potato::Format
 		consteval auto GetFormatter() const
 		{
 			return FormatterWrapper<
-				std::remove_cvref_t<decltype(TMP::ParameterPicker<index>{}(std::declval<AT>()...))>,
+				std::remove_cvref_t<decltype(TMP::ParameterPicker<index>::Pick(std::declval<AT>()...))>,
 				CharT,
 				index
 			>{syntax};
@@ -558,13 +560,25 @@ export namespace Potato::Format
 	template<typename ValueT, typename CharT>
 	struct Deformatter
 	{
-		template<typename InIterator>
-			requires(std::input_iterator<InIterator>)
-		InIterator Deformat(InIterator begin, InIterator end, ValueT& output) = delete;
+		std::optional<std::size_t> Deformat(std::basic_string_view<CharT> string, ValueT& output) = delete;
+	};
+
+	struct DeformatInfo
+	{
+		std::size_t consumed_string = 0;
+		std::size_t parameter_count = 0;
+		std::size_t section_count = 0;
+		bool deformat_complate = true;
+		constexpr operator bool() const { return deformat_complate; }
 	};
 
 	struct DeformatSyntax
 	{
+		enum class DeformatSyntaxType
+		{
+			RegexString,
+			Parameter
+		};
 
 		struct DeformatSyntaxInfo
 		{
@@ -573,60 +587,306 @@ export namespace Potato::Format
 		};
 
 		template<typename CharT, typename Traits>
-		static constexpr std::size_t FindSyntaxPoint(std::basic_string_view<CharT, Traits> string, std::size_t offset = 0)
+		static constexpr std::tuple<std::size_t, DeformatSyntaxType> FindSyntaxPoint(std::basic_string_view<CharT, Traits> string, std::size_t offset = 0)
 		{
 			while (offset < string.size())
 			{
 				auto iterator = string.find(static_cast<CharT>('{'), offset);
 				if (iterator >= string.size())
-					return string.size();
+					return { string.size(), DeformatSyntaxType::RegexString };
 				if (iterator != 0 && string[iterator - 1] == static_cast<CharT>('\\'))
+				{
 					offset = iterator + 1;
+					continue;
+				}
+				else if (iterator == offset && string[iterator + 1] == static_cast<CharT>('}'))
+					return { iterator + 2, DeformatSyntaxType::Parameter };
 				else
-					return iterator;
+					return { iterator, DeformatSyntaxType::RegexString };
 			}
-			return string.size();
+			return { string.size(), DeformatSyntaxType::RegexString };
 		}
 
 		template<typename CharT, typename Traits>
-		static constexpr std::optional<DeformatSyntaxInfo> GetSyntaxPointCount(std::basic_string_view<CharT, Traits> string, std::size_t offset = 0)
+		static constexpr DeformatSyntaxInfo GetSyntaxPointCount(std::basic_string_view<CharT, Traits> string, std::size_t offset = 0)
 		{
 			DeformatSyntaxInfo info;
 
 			while (offset < string.size())
 			{
-				auto cur_sub = string.substr(offset);
-				auto index = FindSyntaxPoint(string, offset);
-				auto k = string.substr(index);
-				if (index != string.size())
+				auto [index, type] = FindSyntaxPoint(string, offset);
+				if(type == DeformatSyntaxType::Parameter)
 					info.parameter_count += 1;
 				info.syntax_count += 1;
-				offset = index + 2;
+				offset = index;
 			}
 			return info;
 		}
-	};
 
-	struct DeformatInfo
-	{
+		template<TMP::TypeString type_string, DeformatSyntaxType type, std::size_t index>
+		struct PatternSection
+		{
+			static Reg::Dfa const& GetReg()
+			{
+				try {
+					static const Reg::Dfa reg(Reg::Dfa::FormatE::HeadMatch, type_string.GetStringView(), false, 0);
+					return reg;
+				}catch (const char* e)
+				{
+					throw "check deformat pattern syntax";
+				}
+			}
+			constexpr PatternSection() = default;
+			constexpr PatternSection(PatternSection const&) = default;
+			template<typename CharT, typename ...AT>
+			std::optional<std::size_t> Deformat(std::basic_string_view<CharT> string, AT&& ...output) const
+			{
+				Reg::DfaProcessor process;
+				process.SetObserverTable(GetReg());
+				Reg::ProcessorAcceptRef capture = Reg::Process(process, string);
+				if (capture)
+				{
+					return capture.MainCapture.End();
+				}
+				return std::nullopt;
+			}
+			static constexpr DeformatSyntaxType GetSyntaxType() { return type; }
+		};
 
+		template<TMP::TypeString type_string, std::size_t index>
+		struct PatternSection<type_string, DeformatSyntaxType::Parameter, index>
+		{
+			constexpr PatternSection() = default;
+			constexpr PatternSection(PatternSection const&) = default;
+			template<typename CharT, typename ...AT>
+			std::optional<std::size_t> Deformat(std::basic_string_view<CharT> string, AT&& ...output) const
+			{
+				Deformatter<
+					typename TMP::ParameterPicker<index>::template Tuple<std::remove_cvref_t<AT>...>::Type,
+					CharT
+				> deformatter;
+				return deformatter.Deformat(string, TMP::ParameterPicker<index>::Pick(std::forward<AT>(output)...));
+			}
+			static constexpr DeformatSyntaxType GetSyntaxType() { return DeformatSyntaxType::Parameter; }
+		};
+
+		template<std::size_t index>
+		struct ExecuteDeformat
+		{
+			template<typename CharT, typename ...Tuple, typename ...AT>
+			static constexpr DeformatInfo Execute(std::basic_string_view<CharT> string, std::tuple<Tuple...> const& pattern, AT&& ...at)
+			{
+				DeformatInfo info = ExecuteDeformat<index - 1>::Execute(string, pattern, std::forward<AT>(at)...);
+				if (!info.deformat_complate)
+					return info;
+				auto sub_string = string.substr(info.consumed_string);
+				auto result = std::get<index>(pattern).Deformat(sub_string, std::forward<AT>(at)...);
+				if (result.has_value())
+				{
+					info.consumed_string += *result;
+					info.section_count += 1;
+					if (std::get<index>(pattern).GetSyntaxType() == DeformatSyntaxType::Parameter)
+						info.parameter_count += 1;
+				}
+				else {
+					info.deformat_complate = false;
+				}
+				return info;
+			}
+		};
+
+		template<>
+		struct ExecuteDeformat<0>
+		{
+			template<typename CharT, typename ...Tuple, typename ...AT>
+			static constexpr DeformatInfo Execute(std::basic_string_view<CharT> string, std::tuple<Tuple...> const& pattern, AT&& ...at)
+			{
+				DeformatInfo info;
+				auto result = std::get<0>(pattern).Deformat(string, std::forward<AT>(at)...);
+				if (result.has_value())
+				{
+					info.consumed_string += *result;
+					info.section_count += 1;
+					if (std::get<0>(pattern).GetSyntaxType() == DeformatSyntaxType::Parameter)
+						info.parameter_count += 1;
+				}
+				else {
+					info.deformat_complate = false;
+				}
+				return info;
+			}
+		};
 	};
 
 	template<TMP::TypeString type_string>
 	struct DeformatPattern
 	{
-		static constexpr decltype(auto) GetPattern()
+		using CharT = decltype(type_string)::Type;
+		static constexpr DeformatSyntax::DeformatSyntaxInfo syntax_info = DeformatSyntax::GetSyntaxPointCount(type_string.GetStringView());
+		static constexpr auto pattern =
+		[]()
 		{
-			
-		}
-		static constexpr auto pattern = []() {}();
+			struct DeformatPatternPair
+			{
+				std::basic_string_view<CharT> sub_string;
+				std::size_t offset = 0;
+				std::size_t count = 0;
+				std::size_t parameter_index = 0;
+				DeformatSyntax::DeformatSyntaxType type;
+			};
+
+			static constexpr auto pattern = []<std::size_t ...i>(std::index_sequence<i...>) {
+
+				constexpr auto pattern_pairs = []() {
+					constexpr auto string = type_string.GetStringView();
+					std::array<DeformatPatternPair, syntax_info.syntax_count> pair;
+					std::size_t offset = 0;
+					std::size_t parameter_index = 0;
+					for (std::size_t ii = 0; ii < pair.size(); ++ii)
+					{
+						auto [index, type] = DeformatSyntax::FindSyntaxPoint(string, offset);
+						pair[ii] = DeformatPatternPair{ string.substr(offset, index - offset), offset, index - offset, parameter_index, type };
+						offset = index;
+						if(type == DeformatSyntax::DeformatSyntaxType::Parameter)
+							parameter_index += 1;
+					}
+					return pair;
+				}();
+				return std::make_tuple(
+					(
+						DeformatSyntax::PatternSection<
+							type_string.SubStr<pattern_pairs[i].offset, pattern_pairs[i].count>(), 
+							pattern_pairs[i].type, 
+							pattern_pairs[i].parameter_index
+						>{}
+					)...
+				);
+			}(std::make_index_sequence<syntax_info.syntax_count>());
+
+			return pattern;
+		}();
 	};
 
 	template<TMP::TypeString type_string, typename CharT, typename CharTraits, typename ...AT>
 	DeformatInfo Deformat(std::basic_string_view<CharT, CharTraits> str, AT&& ...at)
 	{
-		return {};
+		static constexpr DeformatPattern<type_string> pattern;
+		return DeformatSyntax::ExecuteDeformat<pattern.syntax_info.syntax_count - 1>::Execute(str, pattern.pattern, std::forward<AT>(at)...);
 	}
 
+	struct BuildInDeformatter
+	{
+		template<typename CharT>
+		static constexpr std::size_t RemoveSpace(std::basic_string_view<CharT> str, std::size_t offset = 0)
+		{
+			for (std::size_t i = offset; i < str.size(); ++i)
+			{
+				if (str[i] != static_cast<CharT>(' '))
+					return i;
+			}
+			return str.size();
+		}
 
+		template<typename CharT>
+		static constexpr std::tuple<bool, std::size_t> GetPlusOrMinus(std::basic_string_view<CharT> str, std::size_t offset = 0)
+		{
+			if (offset < str.size())
+			{
+				if (str[offset] == static_cast<CharT>('-'))
+				{
+					return { false, offset + 1 };
+				}
+				else if (str[offset] == static_cast<CharT>('+'))
+					return { true, offset + 1 };
+				else
+					return { true, offset };
+			}
+			return {true, str.size()};
+		}
+
+		template<typename CharT>
+		static constexpr std::size_t GetNumbers(std::basic_string_view<CharT> str, std::size_t offset = 0)
+		{
+			while (offset < str.size())
+			{
+				auto character = str[offset];
+				if (character >= static_cast<CharT>('0') && character <= static_cast<CharT>('9'))
+				{
+					++offset;
+				}
+				else {
+					return offset;
+				}
+			}
+			return str.size();
+		}
+	};
+
+	template<typename ValueT, typename CharT>
+		requires(TMP::IsOneOfV<ValueT, float, double>)
+	struct Deformatter<ValueT, CharT>
+	{
+		std::optional<std::size_t> Deformat(std::basic_string_view<CharT> string, ValueT& output)
+		{
+			auto offset = BuildInDeformatter::RemoveSpace(string);
+			auto [is_positive, new_offset] = BuildInDeformatter::GetPlusOrMinus(string, offset);
+			new_offset = BuildInDeformatter::GetNumbers(string, new_offset);
+			if (offset == new_offset)
+			{
+				return std::nullopt;
+			}
+			if (new_offset < string.size() && string[new_offset] == static_cast<CharT>('.'))
+			{
+				auto new_new_offset = BuildInDeformatter::GetNumbers(string, new_offset + 1);
+				if (new_offset != new_new_offset)
+				{
+					new_offset = new_new_offset;
+				}
+				else {
+					return std::nullopt;
+				}
+			}
+			auto str = string.substr(offset, new_offset - offset);
+			std::array<std::byte, 32 * sizeof(char)> buffer;
+			std::pmr::monotonic_buffer_resource resource(buffer.data(), buffer.size());
+			std::pmr::string temp_str(&resource);
+			Encode::UnicodeEncoder<CharT, char>::EncodeTo(str, std::back_inserter(temp_str));
+			auto re = std::from_chars(temp_str.data(), temp_str.data() + temp_str.size(), output);
+			if (re.ec == std::errc{})
+				return new_offset;
+			return std::nullopt;
+		}
+	};
+
+	template<typename ValueT, typename CharT>
+		requires(TMP::IsOneOfV<ValueT, std::uint8_t, std::uint16_t, std::uint32_t, std::uint64_t, std::int8_t, std::int16_t, std::int32_t, std::int64_t>)
+	struct Deformatter<ValueT, CharT>
+	{
+		std::optional<std::size_t> Deformat(std::basic_string_view<CharT> string, ValueT& output)
+		{
+			auto offset = BuildInDeformatter::RemoveSpace(string);
+			auto [is_positive, new_offset] = BuildInDeformatter::GetPlusOrMinus(string, offset);
+			if constexpr (TMP::IsOneOfV<ValueT, std::uint8_t, std::uint16_t, std::uint32_t, std::uint64_t>)
+			{
+				if (!is_positive)
+				{
+					return std::nullopt;
+				}
+			}
+			new_offset = BuildInDeformatter::GetNumbers(string, new_offset);
+			if (offset == new_offset)
+			{
+				return std::nullopt;
+			}
+			auto str = string.substr(offset, new_offset - offset);
+			std::array<std::byte, 32 * sizeof(char)> buffer;
+			std::pmr::monotonic_buffer_resource resource(buffer.data(), buffer.size());
+			std::pmr::string temp_str(&resource);
+			Encode::UnicodeEncoder<CharT, char>::EncodeTo(str, std::back_inserter(temp_str));
+			auto re = std::from_chars(temp_str.data(), temp_str.data() + temp_str.size(), output);
+			if (re.ec == std::errc{})
+				return new_offset;
+			return std::nullopt;
+		}
+	};
 }

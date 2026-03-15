@@ -562,7 +562,7 @@ export namespace Potato::TMP
 	struct TypeString
 	{
 		std::array<CharT, N> string;
-		constexpr std::basic_string_view<CharT> GetStringView() const { return {string.data(), string.size()}; }
+		constexpr std::basic_string_view<CharT> GetStringView() const { return {string.data()}; }
 		constexpr std::span<CharT const, N> GetSpan() const { return std::span{ string }; }
 		/*
 		explicit consteval TypeString(const CharT(&str)[N]) : string{}
@@ -594,6 +594,13 @@ export namespace Potato::TMP
 			}
 			else
 				return false;
+		}
+
+		template<std::size_t offset, std::size_t count>
+			requires(offset + count <= N)
+		consteval auto SubStr() const
+		{
+			return TypeString<CharT, count>{ std::span<CharT const, count>(string.data() + offset, count) };
 		}
 
 		constexpr std::size_t Size() const { return N; }
@@ -650,9 +657,9 @@ export namespace Potato::TMP
 		using TupleT = typename Tuple<T, AT...>::Type;
 
 		template<typename CurrentType, typename ...Type>
-		decltype(auto) operator()(CurrentType&& current_type, Type&& ...type)
+		static constexpr decltype(auto) Pick(CurrentType&& current_type, Type&& ...type)
 		{
-			return ParameterPicker<RequireIndex - 1>{}(std::forward<Type>(type)...);
+			return ParameterPicker<RequireIndex - 1>::Pick(std::forward<Type>(type)...);
 		}
 	};
 
@@ -669,7 +676,7 @@ export namespace Potato::TMP
 		using TupleT = T;
 
 		template<typename CurrentType, typename ...Type>
-		decltype(auto) operator()(CurrentType&& current_type, Type&& ...type)
+		static constexpr decltype(auto) Pick(CurrentType&& current_type, Type&& ...type)
 		{
 			return std::forward<CurrentType>(current_type);
 		}

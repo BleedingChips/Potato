@@ -207,6 +207,16 @@ int main()
 			volatile int i = 0;
 		}
 
+		{
+			DeformatPattern<u8".*Loc:[{}.+Mode:[{}"> pattern;
+
+			std::int32_t index = 0;
+			float tar = 0;
+			auto info = Deformat<u8".*Loc:\\[{}\\.\\] Rot:\\[{}">(std::u8string_view{ u8"sdajlsdkasjdfaLoc:[ 1234.] Rot:[-124.00434]" }, index, tar);
+
+			volatile int i = 0;
+		}
+
 		//constexpr auto str3 = str1.CastTo<char16_t>();
 
 		volatile int o = 0;
