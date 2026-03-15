@@ -198,26 +198,19 @@ int main()
 			volatile int i = 0;
 		}
 
-
 		{
-			std::u8string_view str = u8".?\\1";
-			auto k = DeformatSyntax::GetSyntaxPointCount(std::u8string_view{ u8".?\\1{}{}{}123445" });
-			//auto re = str.substr(*k);
-
-			volatile int i = 0;
-		}
-
-		{
-			DeformatPattern<u8".*Loc:[{}.+Mode:[{}"> pattern;
 
 			std::int32_t index = 0;
 			float tar = 0;
 			auto info = Deformat<u8".*Loc:\\[{}\\.\\] Rot:\\[{}">(std::u8string_view{ u8"sdajlsdkasjdfaLoc:[ 1234.] Rot:[-124.00434]" }, index, tar);
 
+			if (index != 1234 && !(tar < -1234.0f && tar > -1235.0f))
+			{
+				throw "case 6";
+			}
+
 			volatile int i = 0;
 		}
-
-		//constexpr auto str3 = str1.CastTo<char16_t>();
 
 		volatile int o = 0;
 

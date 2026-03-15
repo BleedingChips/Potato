@@ -596,13 +596,6 @@ export namespace Potato::TMP
 				return false;
 		}
 
-		template<std::size_t offset, std::size_t count>
-			requires(offset + count <= N)
-		consteval auto SubStr() const
-		{
-			return TypeString<CharT, count>{ std::span<CharT const, count>(string.data() + offset, count) };
-		}
-
 		constexpr std::size_t Size() const { return N; }
 		using Type = CharT;
 		static constexpr std::size_t Len = N;

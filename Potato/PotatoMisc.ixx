@@ -14,7 +14,7 @@ export namespace Potato::Misc
 	template<typename Type = std::size_t>
 	struct IndexSpan
 	{
-		constexpr IndexSpan(Type Start, Type End) : StartPoint(Start), EndPoint(End) { assert(End >= Start); }
+		constexpr IndexSpan(Type Start, Type End) : StartPoint(Start), EndPoint(End) { }
 		constexpr IndexSpan() : StartPoint(0), EndPoint(0) {   }
 		constexpr IndexSpan(IndexSpan const&) = default;
 		constexpr IndexSpan& operator=(IndexSpan const&) = default;
@@ -61,8 +61,6 @@ export namespace Potato::Misc
 		constexpr IndexSpan& WholeOffset(Type Length) { StartPoint += Length; EndPoint += Length; return *this;}
 		constexpr IndexSpan& WholeForward(Type Length) { StartPoint -= Length; EndPoint -= Length; return *this;}
 		constexpr operator bool() const { return StartPoint <= EndPoint; }
-
-	protected:
 		
 		Type StartPoint;
 		Type EndPoint;
