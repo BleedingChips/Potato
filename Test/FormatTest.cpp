@@ -202,19 +202,21 @@ int main()
 
 			std::int32_t index = 0;
 			float tar = 0;
-			auto info = Deformat<u8".*Loc:\\[{}\\.\\] Rot:\\[{}">(std::u8string_view{ u8"sdajlsdkasjdfaLoc:[ 1234.] Rot:[-124.00434]" }, index, tar);
+			std::u8string_view str;
+			std::u8string str2;
+			std::wstring str3;
+			auto iterator_cc = std::back_inserter(str2);
+			auto info = Deformat<u8".*?Loc:\\[{}\\.\\] Rot:\\[{}.*?\\{{\\}}\\{{\\}}\\{{\\}}">(std::u8string_view{ u8"sdajlsdkasjdfaLoc:[ 1234.] Rot:[-124.00434]sdasdasd{abcde}{123456}{123abcdef}" }, index, tar, str, iterator_cc, str3);
 
-			if (index != 1234 && !(tar < -1234.0f && tar > -1235.0f))
+			if (index != 1234 || !(tar < -1234.0f && tar > -1235.0f) || str != u8"abcde" || str2 != u8"123456")
 			{
 				throw "case 6";
 			}
 
+			
+
 			volatile int i = 0;
 		}
-
-		volatile int o = 0;
-
-		volatile int i = 0;
 		
 	}
 	catch (const char* Error)

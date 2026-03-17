@@ -657,12 +657,13 @@ export namespace Potato::Format
 		struct PatternSection
 		{
 			Deformatter<ValueT, CharT> deformatter;
-			static Reg::Dfa const& GetReg() requires(string_index.Size() > 0)
+			static decltype(auto) GetReg() requires(string_index.Size() > 0)
 			{
-				auto str = string_index.Slice(type_string.GetStringView());
 				try {
-					static const Reg::Dfa reg(Reg::Dfa::FormatE::HeadMatch, string_index.Slice(type_string.GetStringView()), false, 0);
-					return reg;
+					static const auto dfa_binary = Reg::CreateDfaBinaryTable(
+						Reg::Dfa::FormatE::HeadMatch, string_index.Slice(type_string.GetStringView()), false, 0
+					);
+					return dfa_binary;
 				}
 				catch (...)
 				{
@@ -677,7 +678,9 @@ export namespace Potato::Format
 				if constexpr(string_index.Size() > 0)
 				{
 					Reg::DfaProcessor process;
-					process.SetObserverTable(GetReg());
+					auto& reg_reference = GetReg();
+					Reg::DfaBinaryTableWrapper Wrapper{ reg_reference };
+					process.SetObserverTable(Wrapper);
 					Reg::ProcessorAcceptRef capture = Reg::Process(process, string);
 					if (capture)
 					{
@@ -849,7 +852,7 @@ export namespace Potato::Format
 		requires(TMP::IsOneOfV<ValueT, float, double>)
 	struct Deformatter<ValueT, CharT>
 	{
-		static constexpr std::optional<std::size_t> Parse(std::basic_string_view<CharT> context)
+		constexpr std::optional<std::size_t> Parse(std::basic_string_view<CharT> context)
 		{
 			return 0;
 		}
@@ -890,7 +893,7 @@ export namespace Potato::Format
 		requires(TMP::IsOneOfV<ValueT, std::uint8_t, std::uint16_t, std::uint32_t, std::uint64_t, std::int8_t, std::int16_t, std::int32_t, std::int64_t>)
 	struct Deformatter<ValueT, CharT>
 	{
-		static constexpr std::optional<std::size_t> Parse(std::basic_string_view<CharT> context)
+		constexpr std::optional<std::size_t> Parse(std::basic_string_view<CharT> context)
 		{
 			return 0;
 		}
@@ -919,6 +922,126 @@ export namespace Potato::Format
 			auto re = std::from_chars(temp_str.data(), temp_str.data() + temp_str.size(), output);
 			if (re.ec == std::errc{})
 				return new_offset;
+			return std::nullopt;
+		}
+	};
+
+	template<typename Traits, typename CharT>
+	struct Deformatter<std::basic_string_view<CharT, Traits>, CharT>
+	{
+		std::basic_string_view<CharT, Traits> end_string;
+		constexpr std::optional<std::size_t> Parse(std::basic_string_view<CharT> context)
+		{
+			std::size_t start = 0;
+			if (context.size() > 0 && context[start] == static_cast<CharT>('\\'))
+			{
+				start += 1;
+			}
+			std::size_t offset = (start == 0 ? 0 : 2);
+			while (offset < context.size())
+			{
+				auto finded = context.find(static_cast<CharT>('}'), offset);
+				if (finded != 0 && finded < context.size())
+				{
+					if (context[finded - 1] == static_cast<CharT>('\\'))
+					{
+						offset = finded + 1;
+						continue;
+					}
+				}
+				end_string = context.substr(start, finded - start);
+				return finded;
+			}
+			return context.size();
+		}
+
+		std::optional<std::size_t> Deformat(std::basic_string_view<CharT> string, std::basic_string_view<CharT, Traits>& output) const
+		{
+			if (end_string.size() > 0)
+			{
+				for (std::size_t index = 0; index < string.size(); ++index)
+				{
+					std::size_t sub_index = index;
+					std::size_t end_string_index = 0;
+					bool force_compares = false;
+					while (sub_index < string.size() && end_string_index < end_string.size())
+					{
+						if (!force_compares && end_string[end_string_index] == static_cast<CharT>('\\'))
+						{
+							force_compares = true;
+							++end_string_index;
+							continue;
+						}
+						force_compares = false;
+						if (end_string[end_string_index] == string[sub_index])
+						{
+							sub_index += 1;
+							end_string_index += 1;
+						}
+						else {
+							break;
+						}
+					}
+					if (end_string_index == end_string.size())
+					{
+						output = string.substr(0, index);
+						return index + 1;
+					}
+				}
+			}
+			output = string;
+			return string.size();
+		}
+	};
+
+	template<typename IteratorT, typename CharT>
+		requires(std::output_iterator<IteratorT, CharT>)
+	struct Deformatter<IteratorT, CharT> : public Deformatter<std::basic_string_view<CharT>, CharT>
+	{
+		constexpr std::optional<std::size_t> Parse(std::basic_string_view<CharT> context)
+		{
+			return Deformatter<std::basic_string_view<CharT>, CharT>::Parse(context);
+		}
+
+		std::optional<std::size_t> Deformat(std::basic_string_view<CharT> string, IteratorT&& output) const
+		{
+			auto out = std::move(output);
+			return Deformat(string, static_cast<IteratorT&>(out));
+		}
+
+		std::optional<std::size_t> Deformat(std::basic_string_view<CharT> string, IteratorT& output) const
+		{
+			std::basic_string_view<CharT> out;
+			auto result = Deformatter<std::basic_string_view<CharT>, CharT>::Deformat(string, out);
+			if (result.has_value())
+			{
+				output = std::copy_n(
+					out.begin(),
+					out.size(),
+					output
+				);
+				return result;
+			}
+			return std::nullopt;
+		}
+	};
+
+	template<typename OCharT, typename TraitT, typename AllocatorT, typename CharT>
+	struct Deformatter<std::basic_string<OCharT, TraitT, AllocatorT>, CharT> : public Deformatter<std::basic_string_view<CharT>, CharT>
+	{
+		constexpr std::optional<std::size_t> Parse(std::basic_string_view<CharT> context)
+		{
+			return Deformatter<std::basic_string_view<CharT>, CharT>::Parse(context);
+		}
+
+		std::optional<std::size_t> Deformat(std::basic_string_view<CharT> string, std::basic_string<OCharT, TraitT, AllocatorT>& output) const
+		{
+			std::basic_string_view<CharT> out;
+			auto result = Deformatter<std::basic_string_view<CharT>, CharT>::Deformat(string, out);
+			if (result)
+			{
+				Encode::UnicodeEncoder<CharT, OCharT>::EncodeTo(out, std::back_inserter(output));
+			}
 			return std::nullopt;
 		}
 	};
