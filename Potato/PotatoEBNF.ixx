@@ -505,7 +505,7 @@ export namespace Potato::EBNF
 					std::size_t UserMask = 0;
 					if (Ite.UserMask.has_value())
 					{
-						Format::DirectScan(Ite.UserMask->Slice(EbnfStr), UserMask);
+						Format::DirectDeformat(Ite.UserMask->Slice(EbnfStr), UserMask);
 					}
 					Gen.AppendReg(RegStr, false, RegMap.size());
 					RegMap.push_back({ IIte->second, UserMask });
@@ -582,7 +582,7 @@ export namespace Potato::EBNF
 
 			if (Builder.MaxForwardDetect.has_value())
 			{
-				Format::DirectScan(Builder.MaxForwardDetect->Value.Slice(EbnfStr), MaxForwardDetect);
+				Format::DirectDeformat(Builder.MaxForwardDetect->Value.Slice(EbnfStr), MaxForwardDetect);
 			}
 
 			std::vector<SLRX::ProductionBuilder> PBuilder;
@@ -608,7 +608,7 @@ export namespace Potato::EBNF
 					{
 						std::size_t Mask = 0;
 						auto Str = Ite2.Value.Slice(EbnfStr);
-						Format::DirectScan(Ite2.Value.Slice(EbnfStr), Mask);
+						Format::DirectDeformat(Ite2.Value.Slice(EbnfStr), Mask);
 						Element.push_back(SLRX::ProductionBuilderElement{Mask});
 						break;
 					}
@@ -651,7 +651,7 @@ export namespace Potato::EBNF
 				if (Ite.UserMask.Size() != 0)
 				{
 					auto Str = Ite.UserMask.Slice(EbnfStr);
-					Format::DirectScan(Str, ProdutionMask);
+					Format::DirectDeformat(Str, ProdutionMask);
 				}
 				else if(Ite.StartSymbol.ElementType == EbnfBuilder::ElementTypeE::Temporary)
 				{
