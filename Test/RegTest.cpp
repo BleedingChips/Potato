@@ -1,5 +1,6 @@
 ﻿import std;
 import PotatoReg;
+import PotatoLog;
 using namespace Potato::Reg;
 
 
@@ -153,8 +154,92 @@ void TestingReg()
 //void Test(Dfa::FormatE Format, std::vector<std::u32string_view> Reg, std::u32string_view SourceStr, std::size_t TargetMask, std::u32string_view MainCapture, std::vector<std::u32string_view> RequireCapture, const char* Error);
 
 
+std::size_t FuncTell(std::u32string_view str)
+{
+	for (std::size_t index = 0; index < str.size(); ++index)
+	{
+		if (str[index] >=U'0' && str[index] <= U'9')
+		{
+			continue;
+		}
+		else if (str[index] >= U'a' && str[index] <= U'z')
+		{
+			continue;
+		}
+		else if (str[index] >= U'A' && str[index] <= U'Z')
+		{
+			continue;
+		}
+		else
+			return index;
+	}
+	return str.size();
+}
+
+
 int main()
 {
+	Potato::Reg::Dfa dfa(Dfa::FormatE::HeadMatch, u8"[0-9a-zA-Z][0-9a-zA-Z]*");
+	auto k = Potato::Reg::CreateDfaBinaryTable(dfa);
+	Potato::Reg::DfaBinaryTableWrapper wrapper{std::span(k)};
+	std::u32string_view str = U"123534756823465789426589762345789623478563425a ";
+	Potato::Reg::DfaProcessor processer;
+	
+	
+
+	std::size_t total_index = 0;
+
+	{
+		total_index = 0;
+		processer.SetObserverTable(dfa);
+		auto cur7 = std::chrono::system_clock::now();
+		for (std::size_t i = 0; i < 10000; ++i)
+		{
+			processer.Clear();
+			auto match = Potato::Reg::Process(processer, str);
+			total_index += match.GetMainCapture().End();
+		}
+		auto cur8 = std::chrono::system_clock::now();
+		Potato::Log::Log<u8"Test", Potato::Log::LogLevel::Log, L" Test: {} - {}">(total_index, cur8 - cur7);
+	}
+	
+	std::this_thread::sleep_for(std::chrono::seconds{1});
+	
+	{
+		total_index = 0;
+		processer.SetObserverTable(wrapper);
+		auto cur1 = std::chrono::system_clock::now();
+		for (std::size_t i = 0; i < 10000; ++i)
+		{
+			processer.Clear();
+			auto match = Potato::Reg::Process(processer, str);
+			total_index += match.GetMainCapture().End();
+		}
+		auto cur2 = std::chrono::system_clock::now();
+		Potato::Log::Log<u8"Test", Potato::Log::LogLevel::Log, L" Test: {} - {}">(total_index, cur2 - cur1);
+	}
+	
+	std::this_thread::sleep_for(std::chrono::seconds{ 1 });
+
+	{
+		total_index = 0;
+
+		auto cur3 = std::chrono::system_clock::now();
+		for (std::size_t i = 0; i < 10000; ++i)
+		{
+			total_index += FuncTell(str);
+		}
+		auto cur4 = std::chrono::system_clock::now();
+
+		Potato::Log::Log<u8"Test", Potato::Log::LogLevel::Log, L" Test: {} - {}">(total_index, cur4 - cur3);
+	}
+	
+
+	volatile int i = 0;
+
+
+
+
 /*
 	MulityRegCreater Cre;
 	Cre.AppendReg(u8".*?a", false, 0);

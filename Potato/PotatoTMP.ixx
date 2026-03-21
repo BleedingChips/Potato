@@ -754,6 +754,30 @@ export namespace Potato::TMP
 			CallableObjectFunctionT callable_object;
 		}function_ptr;
 	};
+
+	template<typename ValueT, typename OValueT>
+	concept IsAdditionEnable = requires(ValueT v1, OValueT v2) { v1 + v2; };
+
+	template<typename ValueT, typename OValueT>
+	concept IsSelfAdditionEnable = requires(ValueT v1, OValueT v2) { v1 += v2; };
+
+	template<typename ValueT, typename OValueT>
+	concept IsSubtractionEnable = requires(ValueT v1, OValueT v2) { v1 - v2; };
+
+	template<typename ValueT, typename OValueT>
+	concept IsSelfSubtractionEnable = requires(ValueT v1, OValueT v2) { v1 -= v2; };
+
+	template<typename ValueT, typename OValueT>
+	concept IsMultiplicationEnable = requires(ValueT v1, OValueT v2) { v1 * v2; };
+
+	template<typename ValueT, typename OValueT>
+	concept IsSelfMultiplicationEnable = requires(ValueT v1, OValueT v2) { v1 *= v2; };
+
+	template<typename ValueT, typename OValueT>
+	concept IsDivisionEnable = requires(ValueT v1, OValueT v2) { v1 / v2; };
+
+	template<typename ValueT, typename OValueT>
+	concept IsSelfDivisionEnable = requires(ValueT v1, OValueT v2) { v1 /= v2; };
 }
 
 namespace std
