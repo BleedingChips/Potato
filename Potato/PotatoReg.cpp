@@ -3,7 +3,7 @@ module;
 #include <cassert>
 
 module PotatoReg;
-
+import PotatoTMP;
 
 namespace Potato::Reg
 {
@@ -2796,6 +2796,17 @@ namespace Potato::Reg
 		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::wstring_view Str, Misc::IndexSpan<> BadIndex)
 			: UnaccaptableRegexTokenIndex(Type, BadIndex), TotalString(Str)
 		{
+		}
+
+		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u16string_view Str, Misc::IndexSpan<> BadIndex)
+			: UnaccaptableRegexTokenIndex(Type, BadIndex)
+		{
+			Encode::UnicodeEncoder<char16_t, wchar_t>::EncodeTo(Str, std::back_inserter(TotalString));
+		}
+		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u32string_view Str, Misc::IndexSpan<> BadIndex)
+			: UnaccaptableRegexTokenIndex(Type, BadIndex)
+		{
+			Encode::UnicodeEncoder<char32_t, wchar_t>::EncodeTo(Str, std::back_inserter(TotalString));
 		}
 
 		char const* UnaccaptableRegex::what() const

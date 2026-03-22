@@ -637,6 +637,19 @@ export namespace Potato::TMP
 		}
 	};
 
+	template<TypeString type_string, std::size_t start, std::size_t count = std::numeric_limits<std::size_t>::max()>
+	struct TypeStringSlicer
+	{
+		static constexpr std::size_t size = std::min(type_string.Size() - start, count);
+		static constexpr auto array_string = []() {
+			std::array<decltype(type_string)::Type, size + 1> datas;
+			std::copy_n(type_string.string.begin() + start, size, datas.begin());
+			datas[size] = 0;
+			return datas;
+			}();
+		static constexpr TypeString<typename decltype(type_string)::Type, size + 1> string = std::span(array_string);
+	};
+
 	template<std::size_t RequireIndex>
 	struct ParameterPicker
 	{

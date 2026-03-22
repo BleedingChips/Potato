@@ -1,4 +1,6 @@
-﻿import std;
+﻿#include <ctre.hpp>
+
+import std;
 import PotatoReg;
 import PotatoLog;
 using namespace Potato::Reg;
@@ -154,19 +156,19 @@ void TestingReg()
 //void Test(Dfa::FormatE Format, std::vector<std::u32string_view> Reg, std::u32string_view SourceStr, std::size_t TargetMask, std::u32string_view MainCapture, std::vector<std::u32string_view> RequireCapture, const char* Error);
 
 
-std::size_t FuncTell(std::u32string_view str)
+std::size_t FuncTell(std::u8string_view str)
 {
 	for (std::size_t index = 0; index < str.size(); ++index)
 	{
-		if (str[index] >=U'0' && str[index] <= U'9')
+		if (str[index] >=u8'0' && str[index] <= u8'9')
 		{
 			continue;
 		}
-		else if (str[index] >= U'a' && str[index] <= U'z')
+		else if (str[index] >= u8'a' && str[index] <= u8'z')
 		{
 			continue;
 		}
-		else if (str[index] >= U'A' && str[index] <= U'Z')
+		else if (str[index] >= u8'A' && str[index] <= u8'Z')
 		{
 			continue;
 		}
@@ -182,7 +184,7 @@ int main()
 	Potato::Reg::Dfa dfa(Dfa::FormatE::HeadMatch, u8"[0-9a-zA-Z][0-9a-zA-Z]*");
 	auto k = Potato::Reg::CreateDfaBinaryTable(dfa);
 	Potato::Reg::DfaBinaryTableWrapper wrapper{std::span(k)};
-	std::u32string_view str = U"123534756823465789426589762345789623478563425a ";
+	std::u8string_view str = u8"12353475682346578942658976234dfsdfasdfsdfs5789fsdafasdfasdfasdf6234sdasdasfsdf78563425a ";
 	Potato::Reg::DfaProcessor processer;
 	
 	
@@ -233,7 +235,24 @@ int main()
 
 		Potato::Log::Log<u8"Test", Potato::Log::LogLevel::Log, L" Test: {} - {}">(total_index, cur4 - cur3);
 	}
+
+	std::this_thread::sleep_for(std::chrono::seconds{ 1 });
 	
+	{
+		total_index = 0;
+
+		auto cur3 = std::chrono::system_clock::now();
+		for (std::size_t i = 0; i < 10000; ++i)
+		{
+			auto strcc = *ctre::search<u8"[0-9a-zA-Z][0-9a-zA-Z]*">(str).to_optional_view();
+			total_index += strcc.size();
+		}
+		auto cur4 = std::chrono::system_clock::now();
+
+		Potato::Log::Log<u8"Test", Potato::Log::LogLevel::Log, L" Test: {} - {}">(total_index, cur4 - cur3);
+	}
+
+	std::this_thread::sleep_for(std::chrono::seconds{1});
 
 	volatile int i = 0;
 

@@ -8,6 +8,7 @@ target("Potato")
 target_end()
 
 if os.scriptdir() == os.projectdir() then
+    add_requires("ctre")
     set_project("Potato")
 
     for _, file in ipairs(os.files("Test/*.cpp")) do
@@ -16,6 +17,7 @@ if os.scriptdir() == os.projectdir() then
             set_kind("binary")
             add_files(file)
             add_deps("Potato")
+            add_packages("ctre")
         target_end()
     end
 end

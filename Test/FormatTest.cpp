@@ -1,6 +1,9 @@
-﻿import PotatoFormat;
+﻿#include <ctre.hpp>
+#include <ctre-unicode.hpp>
+import PotatoFormat;
 import PotatoEncode;
 import PotatoTMP;
+import PotatoReg;
 import std;
 
 using namespace Potato::Format;

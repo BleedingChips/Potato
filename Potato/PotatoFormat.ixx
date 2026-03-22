@@ -109,44 +109,66 @@ export namespace Potato::Format
 			}
 		};
 
-		template<TMP::TypeString type_string, Misc::IndexSpan<> string_index,  typename ValueT, typename CharT, std::size_t index>
+		template<TMP::TypeString type_string>
+		struct PatternSectionWrapper
+		{
+
+			static Reg::Dfa const& GetDFA()
+			{
+				static const auto dfa = Reg::Dfa(
+					Reg::Dfa::FormatE::HeadMatch,
+					type_string.GetStringView()
+				);
+				return dfa;
+			}
+			
+			template<typename CharT>
+			static std::optional<std::size_t> Execute(std::basic_string_view<CharT> string)
+			{
+				Reg::DfaProcessor processer;
+				processer.SetObserverTable(GetDFA());
+				auto accept = Reg::Process(processer, string);
+				if (accept)
+				{
+					return accept.GetMainCapture().Size();
+				}
+				return std::nullopt;
+			}
+		};
+
+		template<TMP::TypeString type_string>
+			requires(type_string.Size() == 0 || type_string.string[0] == 0)
+		struct PatternSectionWrapper<type_string>
+		{
+			template<typename CharT>
+			static std::optional<std::size_t> Execute(std::basic_string_view<CharT> string)
+			{
+				return 0;
+			}
+		};
+
+		template<TMP::TypeString type_string, typename ValueT, typename CharT, std::size_t index>
 		struct PatternSection
 		{
 			Deformatter<ValueT, CharT> deformatter;
-			static decltype(auto) GetReg() requires(string_index.Size() > 0)
-			{
-				try {
-					static const auto dfa_binary = Reg::CreateDfaBinaryTable(
-						Reg::Dfa::FormatE::HeadMatch, string_index.Slice(type_string.GetStringView()), false, 0
-					);
-					return dfa_binary;
-				}
-				catch (...)
-				{
-					throw "check deformat pattern syntax";
-				}
-			}
+			using Type = PatternSectionWrapper<type_string>;
+
 
 			template<typename CharT, typename ...AT>
 			std::optional<std::size_t> Deformat(std::basic_string_view<CharT> string, AT&& ...output) const
 			{
 				std::size_t offset = 0;
-				if constexpr(string_index.Size() > 0)
+				auto match = Type::Execute(string);
+
+				if (match.has_value())
 				{
-					Reg::DfaProcessor process;
-					auto& reg_reference = GetReg();
-					Reg::DfaBinaryTableWrapper Wrapper{ reg_reference };
-					process.SetObserverTable(Wrapper);
-					Reg::ProcessorAcceptRef capture = Reg::Process(process, string);
-					if (capture)
-					{
-						offset = capture.MainCapture.End();
-						string = string.substr(offset);
-					}
-					else {
-						return std::nullopt;
-					}
+					offset = *match;
+					string = string.substr(offset);
 				}
+				else {
+					return std::nullopt;
+				}
+				
 				auto info = deformatter.Deformat(string, TMP::ParameterPicker<index>::Pick(std::forward<AT>(output)...));
 				if (info.has_value())
 				{
@@ -237,8 +259,10 @@ export namespace Potato::Format
 			return std::make_tuple(
 				(
 					DeformatSyntax::PatternSection<
-						type_string,
-						std::get<0>(pattern_pairs)[i].string_index,
+						TMP::TypeStringSlicer<type_string, 
+							std::get<0>(pattern_pairs)[i].string_index.Begin(), 
+							std::get<0>(pattern_pairs)[i].string_index.Size()
+						>::string,
 						TMP::ParameterPicker<i>::template TupleT<AT..., void>,
 						CharT,
 						std::get<0>(pattern_pairs)[i].parameter_index
