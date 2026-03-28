@@ -650,52 +650,41 @@ export namespace Potato::TMP
 		static constexpr TypeString<typename decltype(type_string)::Type, size + 1> string = std::span(array_string);
 	};
 
-	template<std::size_t RequireIndex>
-	struct ParameterPicker
+	template<std::size_t index>
+	struct Picker
 	{
 		template<typename T, typename ...AT>
-		struct Tuple
+		struct PickType
 		{
-			using Type = typename ParameterPicker<RequireIndex - 1>::template Tuple<AT...>::Type;
+			using Type = Picker<index - 1>::template PickType<AT...>::Type;
 		};
 
 		template<typename T, typename ...AT>
-		using TupleT = typename Tuple<T, AT...>::Type;
+		using PickTypeT = PickType<T, AT...>::Type;
 
 		template<typename CurrentType, typename ...Type>
-		static constexpr decltype(auto) Pick(CurrentType&& current_type, Type&& ...type)
+		static constexpr decltype(auto) PickValue(CurrentType&& current_type, Type&& ...type)
 		{
-			return ParameterPicker<RequireIndex - 1>::Pick(std::forward<Type>(type)...);
+			return Picker<index - 1>::PickValue(std::forward<Type>(type)...);
 		}
 	};
 
 	template<>
-	struct ParameterPicker<0>
+	struct Picker<0>
 	{
 		template<typename T, typename ...AT>
-		struct Tuple
+		struct PickType
 		{
 			using Type = T;
 		};
 
 		template<typename T, typename ...AT>
-		using TupleT = T;
+		using PickTypeT = PickType<T, AT...>::Type;
 
 		template<typename CurrentType, typename ...Type>
-		static constexpr decltype(auto) Pick(CurrentType&& current_type, Type&& ...type)
+		static constexpr decltype(auto) PickValue(CurrentType&& current_type, Type&& ...type)
 		{
-			return std::forward<CurrentType>(current_type);
-		}
-	};
-
-	template<std::size_t RequireIndex>
-	struct ParameterReversePicker
-	{
-		template<typename ...Type>
-			requires(RequireIndex < sizeof...(Type))
-		decltype(auto) operator()(Type&& ...type)
-		{
-			return ParameterPicker<sizeof...(Type) - RequireIndex>{}(std::forward<Type>(type)...);
+			return current_type;
 		}
 	};
 

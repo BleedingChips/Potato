@@ -169,7 +169,7 @@ export namespace Potato::Format
 					return std::nullopt;
 				}
 				
-				auto info = deformatter.Deformat(string, TMP::ParameterPicker<index>::Pick(std::forward<AT>(output)...));
+				auto info = deformatter.Deformat(string, TMP::Picker<index>::PickValue(std::forward<AT>(output)...));
 				if (info.has_value())
 				{
 					return *info + offset;
@@ -263,7 +263,7 @@ export namespace Potato::Format
 							std::get<0>(pattern_pairs)[i].string_index.Begin(), 
 							std::get<0>(pattern_pairs)[i].string_index.Size()
 						>::string,
-						TMP::ParameterPicker<i>::template TupleT<AT..., void>,
+						TMP::Picker<i>::template PickTypeT<AT..., void>,
 						CharT,
 						std::get<0>(pattern_pairs)[i].parameter_index
 					>{std::get<i>(std::get<1>(pattern_pairs))}

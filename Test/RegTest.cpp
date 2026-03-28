@@ -1,8 +1,11 @@
-﻿#include <ctre.hpp>
+﻿
+#include <ctre-unicode.hpp>
 
 import std;
 import PotatoReg;
 import PotatoLog;
+import PotatoEncode;
+using namespace Potato;
 using namespace Potato::Reg;
 
 
@@ -181,6 +184,38 @@ std::size_t FuncTell(std::u8string_view str)
 
 int main()
 {
+	auto p = CTRegString<u8"sdasdasd[a-z]">::unicode_code_point;
+
+	volatile int i = 0;
+
+
+	constexpr auto ser = ctre::match<L"a.*?">(u8"abc");
+	//auto re = ctre::match<L"a.*?a">(std::u8string_view{ u8"absnabsasa" });
+	//auto strxxdf = re.to_optional_view();
+	volatile int ikk = 0;
+	/*
+	Reg::CTRegString<
+		Reg::CTRegToken<1>{Encode::Unicode::CodePointT{ U'a' }},
+		Reg::CTRegToken<2>{
+		std::array<Encode::Unicode::CodePointT, 2>{
+			Misc::IndexSpan<Encode::Unicode::CodePointT>{
+				Encode::Unicode::CodePointT{ U'a' }, Encode::Unicode::CodePointT{ U'a' } + 1
+			},
+			Misc::IndexSpan<Encode::Unicode::CodePointT>{
+				Encode::Unicode::CodePointT{ U'c' }, Encode::Unicode::CodePointT{ U'c' } + 1
+			},
+		}
+		}
+	> pattern;
+
+	std::u8string_view p = u8"a";
+
+	auto k3445 = pattern.Match(p);
+	*/
+
+
+	return 0;
+
 	Potato::Reg::Dfa dfa(Dfa::FormatE::HeadMatch, u8"[0-9a-zA-Z][0-9a-zA-Z]*");
 	auto k = Potato::Reg::CreateDfaBinaryTable(dfa);
 	Potato::Reg::DfaBinaryTableWrapper wrapper{std::span(k)};
@@ -254,7 +289,7 @@ int main()
 
 	std::this_thread::sleep_for(std::chrono::seconds{1});
 
-	volatile int i = 0;
+	volatile int i23454 = 0;
 
 
 

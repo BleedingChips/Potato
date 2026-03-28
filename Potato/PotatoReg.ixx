@@ -735,4 +735,165 @@ export namespace Potato::Reg
 		throw Exception::UnaccaptableRegex{ EIndex.Type, Str, EIndex.BadIndex };
 	}
 
+	using UnicodePointT = Encode::Unicode::CodePointT;
+	using CharSpan = Misc::IndexSpan<UnicodePointT>;
+
+
+	template<CharSpan ...token>
+	struct CTRegToken
+	{
+		static constexpr bool Match(UnicodePointT code_point)
+		{
+			return []<std::size_t ...i>(std::index_sequence<i...>) -> bool {
+				return (TMP::Picker<i>::template PickTypeT<token...>::Match(code_point) && ... && true);
+			} (std::make_index_sequence<sizeof...(token)>());
+		}
+	};
+
+	struct CTRegSyntax
+	{
+		struct TokenInfo
+		{
+			std::size_t code_point_count;
+			std::size_t token_count;
+		};
+
+		static constexpr std::optional<std::size_t> GetTokenInfo(std::span<UnicodePointT>)
+		{
+
+		}
+
+
+		static constexpr std::optional<std::size_t> GetTokenCount(std::span<UnicodePointT const> code_point)
+		{
+			std::size_t state = 0;
+			std::size_t count = 0;
+			bool escape = false;
+			for (auto ite : code_point)
+			{
+				if (escape)
+				{
+					escape = false;
+					continue;
+				}
+				if (ite == )
+			}
+		}
+
+		/*
+		template<typename TypeTuple, UnicodePointT ...code_point>
+		struct StrWrapper;
+
+		template<typename TypeTuple, UnicodePointT cur, UnicodePointT ...code_point>
+		struct StrWrapper<TypeTuple, static_cast<UnicodePointT>('\\'), cur, code_point...>
+		{
+			using Type = StrWrapper <
+				TypeTuple::template AppendT < CharSpan{ code_point } > ,
+				code_point...
+			> ::Type;
+		};
+
+		template<typename TypeTuple, UnicodePointT cur, UnicodePointT ...code_point>
+			requires(cur != static_cast<UnicodePointT>('\\'))
+		struct StrWrapper<TypeTuple, cur, code_point...>
+		{
+			using Type = StrWrapper <
+				TypeTuple::template AppendT < CharSpan{ cur } > ,
+				code_point...
+			> ::Type;
+		};
+		*/
+	};
+
+	
+
+	template<TMP::TypeString type_string>
+	struct CTRegString
+	{
+		using CharT = decltype(type_string)::Type;
+		
+		static constexpr auto unicode_code_point = []() {
+			static constexpr std::size_t code_point_array_count = Encode::UnicodeEncoder<CharT, UnicodePointT>::Statistics(type_string.GetStringView()).target_space;
+			return code_point_array_count;
+			std::array<UnicodePointT, code_point_array_count> code_point_array;
+			Encode::UnicodeEncoder<CharT, UnicodePointT>::EncodeTo(type_string.GetStringView(), std::span(code_point_array));
+			//return code_point_array;
+			} ();
+
+	};
+
+	/*
+	struct CTRegSyntax
+	{
+
+	};
+
+
+
+	template<TMP::TypeString>
+	struct CTRegString
+	{
+		using Type = 
+	};
+
+
+
+
+
+	template<std::size_t count>
+		requires(count >= 1)
+	struct CTRegToken
+	{
+		std::array<Misc::IndexSpan<Encode::Unicode::CodePointT>, count> code;
+		constexpr CTRegToken(std::array<Misc::IndexSpan<Encode::Unicode::CodePointT>, count> code) : code(code) {}
+		constexpr CTRegToken(Misc::IndexSpan<Encode::Unicode::CodePointT> code)
+			requires(count == 1) : code(code) {}
+		constexpr CTRegToken(Encode::Unicode::CodePointT in_code)
+			requires(count == 1) : code(Misc::IndexSpan<Encode::Unicode::CodePointT>{in_code, in_code + 1}) {}
+
+		constexpr bool IsInclude(Encode::Unicode::CodePointT code_point) const
+		{
+			for (auto ite : code)
+			{
+				if (ite.IsInclude(code_point))
+					return true;
+			}
+			return false;
+		}
+	};
+
+	template<typename ...Token>
+		requires(sizeof...(Token) >= 1)
+	struct CTRegString
+	{
+		template<typename CharT>
+		static constexpr std::optional<std::size_t> Match(std::basic_string_view<CharT> string)
+		{
+			
+
+			return []<std::size_t ...i>(std::basic_string_view<CharT> string, std::index_sequence<i...>) -> std::optional<std::size_t> {
+				std::array<Encode::Unicode::CodePointT, sizeof...(Token)> tokens;
+				Encode::EncodeInfo infos = Encode::UnicodeEncoder<CharT, Encode::Unicode::CodePointT>::EncodeTo(
+					string,
+					std::span(tokens)
+				);
+
+				if (infos.target_space < tokens.size())
+				{
+					return std::nullopt;
+				}
+
+				if ((TMP::ParameterPicker<i>::template TupleT<Token...>::IsInclude(
+					tokens[i]
+				) && ... && true))
+				{
+					return infos.source_space;
+				}
+
+				return std::nullopt;
+
+			}(string, std::make_index_sequence<sizeof...(token)>());
+		}
+	};
+	*/
 }

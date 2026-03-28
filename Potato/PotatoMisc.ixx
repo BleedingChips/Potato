@@ -14,16 +14,36 @@ export namespace Potato::Misc
 	template<typename Type = std::size_t>
 	struct IndexSpan
 	{
+
+		struct Iterator
+		{
+			Type operator*() const { return value; }
+			Type& operator->() { return value; }
+			Type const& operator->() const { return value; }
+			bool operator==(Iterator other) const { return value == other.value; }
+			Iterator& operator++() { value += 1; return *this; }
+			Iterator operator++(int) { auto now = *this; value += 1; return now; }
+			Iterator(Iterator const&) = default;
+			Iterator& operator=(Iterator const&) = default;
+		protected:
+			Iterator(Type value) : value(value) {};
+			Type value;
+		};
+
+
 		constexpr IndexSpan(Type Start, Type End) : StartPoint(Start), EndPoint(End) { }
+		constexpr IndexSpan(Type Start) requires(std::is_convertible_v<decltype(std::declval<Type>() + 1), Type>)
+			: StartPoint(Start), EndPoint(End + 1) {}
 		constexpr IndexSpan() : StartPoint(0), EndPoint(0) {   }
 		constexpr IndexSpan(IndexSpan const&) = default;
 		constexpr IndexSpan& operator=(IndexSpan const&) = default;
+		constexpr bool operator==(IndexSpan const&) const = default;
 
 		constexpr Type Begin() const { return StartPoint; }
 		constexpr Type End() const { return EndPoint; }
-		constexpr Type begin() const { return Begin(); }
-		constexpr Type end() const { return End(); }
-		constexpr Type Size() const { return End() - Begin(); }
+		constexpr Iterator begin() const { return Iterator{StartPoint}; }
+		constexpr Iterator end() const { return Iterator{EndPoint}; }
+		constexpr auto Size() const { return End() - Begin(); }
 		constexpr IndexSpan Expand(IndexSpan const& IS) const {
 			return IndexSpan{
 				Begin() < IS.Begin() ? Begin() : IS.Begin(),
