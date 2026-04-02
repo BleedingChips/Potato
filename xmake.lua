@@ -1,14 +1,15 @@
 add_rules("mode.debug", "mode.release")
 set_languages("cxxlatest")
+add_requires("ctre")
 
 target("Potato")
     set_kind("static")
     add_files("Potato/*.cpp")
     add_files("Potato/*.ixx", {public = true})
+    add_packages("ctre")
 target_end()
 
 if os.scriptdir() == os.projectdir() then
-    add_requires("ctre")
     set_project("Potato")
 
     for _, file in ipairs(os.files("Test/*.cpp")) do

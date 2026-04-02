@@ -109,7 +109,7 @@ int main()
 			std::u8string str2;
 			std::wstring str3;
 			auto iterator_cc = std::back_inserter(str2);
-			auto info = Deformat<u8".*?Loc:\\[{}\\.\\] Rot:\\[{}.*?\\{{\\}}\\{{\\}}\\{{\\}}">(std::u8string_view{ u8"sdajlsdkasjdfaLoc:[ 1234.] Rot:[-124.00434]sdasdasd{abcde}{123456}{123abcdef}" }, index, tar, str, iterator_cc, str3);
+			auto info = Deformat<u8".*?Loc:\\[{:}\\.\\] Rot:\\[{:}.*?\\{{:\\}}\\{{:\\}}\\{{:\\}}">(std::u8string_view{ u8"sdajlsdkasjdfaLoc:[ 1234.] Rot:[-124.00434]sdasdasd{abcde}{123456}{123abcdef}" }, index, tar, str, iterator_cc, str3);
 
 			if (index != 1234  || !(tar < -123.5f && tar > -125.0f) || str != u8"abcde" || str2 != u8"123456")
 			{

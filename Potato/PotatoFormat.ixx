@@ -1,5 +1,7 @@
 module;
 
+#include <ctre.hpp>
+#include <ctre-unicode.hpp>
 #include <stdint.h>
 
 export module PotatoFormat;
@@ -67,9 +69,13 @@ export namespace Potato::Format
 					offset = iterator + 1;
 					continue;
 				}
-				else
+				else if (iterator + 1 < string.size() && string[iterator + 1] == static_cast<CharT>(':'))
 				{
-					return { iterator, iterator + 1 };
+					return { iterator, iterator + 2 };
+				}
+				else {
+					offset = iterator + 1;
+					continue;
 				}
 			}
 			return { string.size(), string.size() };
@@ -112,32 +118,24 @@ export namespace Potato::Format
 		template<TMP::TypeString type_string>
 		struct PatternSectionWrapper
 		{
-
-			static Reg::Dfa const& GetDFA()
-			{
-				static const auto dfa = Reg::Dfa(
-					Reg::Dfa::FormatE::HeadMatch,
-					type_string.GetStringView()
-				);
-				return dfa;
-			}
 			
 			template<typename CharT>
 			static std::optional<std::size_t> Execute(std::basic_string_view<CharT> string)
 			{
-				Reg::DfaProcessor processer;
-				processer.SetObserverTable(GetDFA());
-				auto accept = Reg::Process(processer, string);
-				if (accept)
+				auto result = ctre::starts_with<type_string.GetNonEOFArray()>(string);
+				auto str = result.to_optional_view();
+				if (str)
 				{
-					return accept.GetMainCapture().Size();
+					return str->size();
 				}
-				return std::nullopt;
+				else {
+					return std::nullopt;
+				}
 			}
 		};
 
 		template<TMP::TypeString type_string>
-			requires(type_string.Size() == 0 || type_string.string[0] == 0)
+			requires(type_string.Size() <= 1)
 		struct PatternSectionWrapper<type_string>
 		{
 			template<typename CharT>

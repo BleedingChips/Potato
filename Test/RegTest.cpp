@@ -1,6 +1,5 @@
-﻿
+﻿#include <ctre.hpp>
 #include <ctre-unicode.hpp>
-
 import std;
 import PotatoReg;
 import PotatoLog;
@@ -181,18 +180,8 @@ std::size_t FuncTell(std::u8string_view str)
 	return str.size();
 }
 
-
 int main()
 {
-	auto p = CTRegString<u8"sdasdasd[a-z]">::unicode_code_point;
-
-	volatile int i = 0;
-
-
-	constexpr auto ser = ctre::match<L"a.*?">(u8"abc");
-	//auto re = ctre::match<L"a.*?a">(std::u8string_view{ u8"absnabsasa" });
-	//auto strxxdf = re.to_optional_view();
-	volatile int ikk = 0;
 	/*
 	Reg::CTRegString<
 		Reg::CTRegToken<1>{Encode::Unicode::CodePointT{ U'a' }},
@@ -212,9 +201,6 @@ int main()
 
 	auto k3445 = pattern.Match(p);
 	*/
-
-
-	return 0;
 
 	Potato::Reg::Dfa dfa(Dfa::FormatE::HeadMatch, u8"[0-9a-zA-Z][0-9a-zA-Z]*");
 	auto k = Potato::Reg::CreateDfaBinaryTable(dfa);
@@ -279,8 +265,8 @@ int main()
 		auto cur3 = std::chrono::system_clock::now();
 		for (std::size_t i = 0; i < 10000; ++i)
 		{
-			auto strcc = *ctre::search<u8"[0-9a-zA-Z][0-9a-zA-Z]*">(str).to_optional_view();
-			total_index += strcc.size();
+			auto strcc = ctre::starts_with<u8"[0-9a-zA-Z][0-9a-zA-Z]*">(str);
+			total_index += 10;
 		}
 		auto cur4 = std::chrono::system_clock::now();
 

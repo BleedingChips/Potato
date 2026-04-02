@@ -596,6 +596,17 @@ export namespace Potato::TMP
 				return false;
 		}
 
+		constexpr std::array<CharT, N - 1> GetNonEOFArray() const requires(N >= 1)
+		{
+			std::array<CharT, N - 1> result;
+			std::copy_n(
+				string.data(),
+				N - 1,
+				result.begin()
+			);
+			return result;
+		}
+
 		constexpr std::size_t Size() const { return N; }
 		using Type = CharT;
 		static constexpr std::size_t Len = N;
@@ -684,7 +695,7 @@ export namespace Potato::TMP
 		template<typename CurrentType, typename ...Type>
 		static constexpr decltype(auto) PickValue(CurrentType&& current_type, Type&& ...type)
 		{
-			return current_type;
+			return std::forward<CurrentType>(current_type);
 		}
 	};
 
