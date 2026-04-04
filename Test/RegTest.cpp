@@ -1,5 +1,4 @@
-﻿#include <ctre.hpp>
-#include <ctre-unicode.hpp>
+﻿
 import std;
 import PotatoReg;
 import PotatoLog;

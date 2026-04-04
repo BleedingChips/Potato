@@ -12,6 +12,7 @@ export namespace Potato::Encode
 	struct Unicode
 	{
 		using CodePointT = std::uint32_t;
+		static constexpr CodePointT max_code_point = 0x110000;
 
 		struct UTF8
 		{
@@ -474,6 +475,9 @@ export namespace Potato::Encode
 			while (!iterator_string.empty())
 			{
 				if (info.character_count >= max_unicode_point)
+					return info;
+
+				if (iterator_string[0] >= Unicode::max_code_point)
 					return info;
 
 				auto size = WrapperT::DetectStorageSizeFromCodePoint(iterator_string[0]);

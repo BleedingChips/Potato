@@ -562,7 +562,7 @@ export namespace Potato::TMP
 	struct TypeString
 	{
 		std::array<CharT, N> string;
-		constexpr std::basic_string_view<CharT> GetStringView() const { return {string.data()}; }
+		constexpr std::basic_string_view<CharT> GetStringView() const { return {string.data(), N}; }
 		constexpr std::span<CharT const, N> GetSpan() const { return std::span{ string }; }
 		/*
 		explicit consteval TypeString(const CharT(&str)[N]) : string{}
@@ -570,7 +570,7 @@ export namespace Potato::TMP
 			std::copy_n(str, N, string);
 		}
 		*/
-		consteval TypeString(const CharT str[N])
+		consteval TypeString(const CharT str[N + 1])
 		{
 			std::copy_n(str, N, string.begin());
 		}
@@ -596,17 +596,6 @@ export namespace Potato::TMP
 				return false;
 		}
 
-		constexpr std::array<CharT, N - 1> GetNonEOFArray() const requires(N >= 1)
-		{
-			std::array<CharT, N - 1> result;
-			std::copy_n(
-				string.data(),
-				N - 1,
-				result.begin()
-			);
-			return result;
-		}
-
 		constexpr std::size_t Size() const { return N; }
 		using Type = CharT;
 		static constexpr std::size_t Len = N;
@@ -615,19 +604,19 @@ export namespace Potato::TMP
 	};
 
 	template<std::size_t N>
-	TypeString(const char32_t(&str)[N]) -> TypeString<char32_t, N>;
+	TypeString(const char32_t(&str)[N]) -> TypeString<char32_t, N - 1>;
 
 	template<std::size_t N>
-	TypeString(const char16_t(&str)[N])-> TypeString<char16_t, N>;
+	TypeString(const char16_t(&str)[N])-> TypeString<char16_t, N - 1>;
 
 	template<std::size_t N>
-	TypeString(const char8_t(&str)[N])-> TypeString<char8_t, N>;
+	TypeString(const char8_t(&str)[N])-> TypeString<char8_t, N - 1>;
 
 	template<std::size_t N>
-	TypeString(const wchar_t(&str)[N])-> TypeString<wchar_t, N>;
+	TypeString(const wchar_t(&str)[N])-> TypeString<wchar_t, N - 1>;
 
 	template<std::size_t N>
-	TypeString(const char(&str)[N])-> TypeString<char, N>;
+	TypeString(const char(&str)[N])-> TypeString<char, N - 1>;
 
 	template<TypeString type_string, typename EncodeT>
 	struct TypeStringEncoder
@@ -653,12 +642,11 @@ export namespace Potato::TMP
 	{
 		static constexpr std::size_t size = std::min(type_string.Size() - start, count);
 		static constexpr auto array_string = []() {
-			std::array<decltype(type_string)::Type, size + 1> datas;
+			std::array<decltype(type_string)::Type, size> datas;
 			std::copy_n(type_string.string.begin() + start, size, datas.begin());
-			datas[size] = 0;
 			return datas;
 			}();
-		static constexpr TypeString<typename decltype(type_string)::Type, size + 1> string = std::span(array_string);
+		static constexpr TypeString<typename decltype(type_string)::Type, size> string = std::span(array_string);
 	};
 
 	template<std::size_t index>

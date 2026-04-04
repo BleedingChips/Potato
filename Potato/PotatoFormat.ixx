@@ -1,7 +1,5 @@
 module;
 
-#include <ctre.hpp>
-#include <ctre-unicode.hpp>
 #include <stdint.h>
 
 export module PotatoFormat;
@@ -73,6 +71,10 @@ export namespace Potato::Format
 				{
 					return { iterator, iterator + 2 };
 				}
+				else if (iterator + 1 < string.size() && string[iterator + 1] == static_cast<CharT>('}'))
+				{
+					return { iterator, iterator + 1 };
+				}
 				else {
 					offset = iterator + 1;
 					continue;
@@ -122,7 +124,7 @@ export namespace Potato::Format
 			template<typename CharT>
 			static std::optional<std::size_t> Execute(std::basic_string_view<CharT> string)
 			{
-				auto result = ctre::starts_with<type_string.GetNonEOFArray()>(string);
+				auto result = ctre::starts_with<type_string.string>(string);
 				auto str = result.to_optional_view();
 				if (str)
 				{
@@ -547,6 +549,7 @@ export namespace Potato::Format
 			if (result)
 			{
 				Encode::UnicodeEncoder<CharT, OCharT>::EncodeTo(out, std::back_inserter(output));
+				return *result;
 			}
 			return std::nullopt;
 		}

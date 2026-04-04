@@ -5,8 +5,9 @@ add_requires("ctre")
 target("Potato")
     set_kind("static")
     add_files("Potato/*.cpp")
+    add_packages("ctre", {public = true})
+    add_headerfiles("Potato/HeaderUnits/*.hpp")
     add_files("Potato/*.ixx", {public = true})
-    add_packages("ctre")
 target_end()
 
 if os.scriptdir() == os.projectdir() then
@@ -18,7 +19,6 @@ if os.scriptdir() == os.projectdir() then
             set_kind("binary")
             add_files(file)
             add_deps("Potato")
-            add_packages("ctre")
         target_end()
     end
 end

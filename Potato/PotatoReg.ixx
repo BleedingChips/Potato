@@ -2,6 +2,7 @@ module;
 
 #include <stdint.h>
 
+
 export module PotatoReg;
 
 import std;
@@ -10,6 +11,7 @@ import PotatoEncode;
 import PotatoMisc;
 import PotatoSLRX;
 import PotatoTMP;
+export import "HeaderUnits/CTREHeaderUnits.hpp";
 
 
 export namespace Potato::Reg
@@ -734,4 +736,5 @@ export namespace Potato::Reg
 	{
 		throw Exception::UnaccaptableRegex{ EIndex.Type, Str, EIndex.BadIndex };
 	}
+
 }
