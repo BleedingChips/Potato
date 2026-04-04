@@ -1,1 +1,1 @@
-xmake project -k vsxmake -m "debug;release"
+xmake project -k vsxmake -m "debug;release;releasedbg;profile"
