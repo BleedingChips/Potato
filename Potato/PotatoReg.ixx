@@ -11,15 +11,16 @@ import PotatoEncode;
 import PotatoMisc;
 import PotatoSLRX;
 import PotatoTMP;
-export import "HeaderUnits/CTREHeaderUnits.hpp";
 
 
 export namespace Potato::Reg
 {
-	using Interval = Misc::IntervalT<char32_t>;
+	using CodePointT = Encode::Unicode::CodePointT;
+	
+	using Interval = Misc::IntervalT<CodePointT>;
 
-	inline constexpr char32_t MaxChar() { return 0x110000; };
-	inline constexpr char32_t EndOfFile() { return 0; }
+	inline constexpr CodePointT MaxChar() { return Encode::Unicode::max_code_point; };
+	inline constexpr CodePointT EndOfFile() { return 0; }
 
 	struct DfaBinaryTableWrapper;
 	struct Dfa;
@@ -296,9 +297,9 @@ export namespace Potato::Reg
 	
 	protected:
 
-		virtual bool Consume(DfaProcessor& Context, char32_t InputValue, std::size_t TokenIndex) const;
-		virtual bool HasAccept(DfaProcessor const& Context) const;
-		virtual ProcessorAcceptRef GetAccept(DfaProcessor const& Context) const;
+		bool Consume(DfaProcessor& Context, CodePointT InputValue, std::size_t TokenIndex) const;
+		bool HasAccept(DfaProcessor const& Context) const;
+		ProcessorAcceptRef GetAccept(DfaProcessor const& Context) const;
 		
 		enum class ActionE
 		{
@@ -465,9 +466,9 @@ export namespace Potato::Reg
 
 	private:
 
-		virtual bool Consume(DfaProcessor& Context, char32_t InputValue, std::size_t TokenIndex) const;
-		virtual bool HasAccept(DfaProcessor const& Context) const;
-		virtual ProcessorAcceptRef GetAccept(DfaProcessor const& Context) const;
+		bool Consume(DfaProcessor& Context, CodePointT InputValue, std::size_t TokenIndex) const;
+		bool HasAccept(DfaProcessor const& Context) const;
+		ProcessorAcceptRef GetAccept(DfaProcessor const& Context) const;
 
 		std::span<StandardT const> Wrapper;
 
@@ -516,7 +517,7 @@ export namespace Potato::Reg
 		DfaProcessor(std::pmr::memory_resource* resource = std::pmr::get_default_resource())
 			: TempResult(resource), CacheIndex(resource) {}
 
-		bool Consume(char32_t Token, std::size_t TokenIndex);
+		bool Consume(CodePointT Token, std::size_t TokenIndex);
 		bool EndOfFile(std::size_t TokenIndex) { return Consume(Reg::EndOfFile(), TokenIndex); }
 		void Clear();
 		bool HasAccept() const;
@@ -545,8 +546,8 @@ export namespace Potato::Reg
 	template<typename CharT, typename CharTraidT>
 	ProcessorAcceptRef Process(DfaProcessor& processor, std::basic_string_view<CharT, CharTraidT> str)
 	{
-		char32_t tem_input = 0;
-		std::span<char32_t> output_span{ &tem_input, 1 };
+		std::array<CodePointT, Encode::Unicode::temporary_cache_buffer_size> temp_buffer;
+		std::array<std::size_t, Encode::Unicode::temporary_cache_buffer_size> source_index;
 
 		auto ite_str = std::span(str);
 
@@ -554,17 +555,26 @@ export namespace Potato::Reg
 
 		std::size_t token_index = 0;
 
-		while (!ite_str.empty())
+		while (!ite_str.empty() && need_end_of_file)
 		{
-			auto info = Encode::UnicodeEncoder<CharT, char32_t>::EncodeTo(ite_str, output_span);
-			auto re = processor.Consume(tem_input, token_index);
+			auto info = Encode::UnicodeEncoder<CharT, CodePointT>::EncodeTo(ite_str, temp_buffer, std::numeric_limits<std::size_t>::max(), source_index);
+			for(std::size_t index = 0; index < info.target_space; ++index)
+			{
+				std::size_t current_token_index = token_index;
+				if (index != 0)
+				{
+					current_token_index += source_index[index - 1];
+				}
+				auto re = processor.Consume(temp_buffer[index], current_token_index);
+				
+				if (!re)
+				{
+					need_end_of_file = false;
+					break;
+				}
+			}
 			ite_str = ite_str.subspan(info.source_space);
 			token_index += info.source_space;
-			if (!re)
-			{
-				need_end_of_file = false;
-				break;
-			}
 		}
 
 		if (need_end_of_file)

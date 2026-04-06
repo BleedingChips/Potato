@@ -120,19 +120,27 @@ export namespace Potato::Format
 		template<TMP::TypeString type_string>
 		struct PatternSectionWrapper
 		{
-			
+			static auto& Wrapper()
+			{
+				static const auto buffer = Reg::CreateDfaBinaryTable(
+					Reg::Dfa::FormatE::HeadMatch,
+					type_string.GetStringView()
+				);
+				return buffer;
+			}
 			template<typename CharT>
 			static std::optional<std::size_t> Execute(std::basic_string_view<CharT> string)
 			{
-				auto result = ctre::starts_with<type_string.string>(string);
-				auto str = result.to_optional_view();
-				if (str)
+				Reg::DfaProcessor processor;
+				Reg::DfaBinaryTableWrapper wrapper{ Wrapper()};
+				processor.SetObserverTable(wrapper);
+
+				auto match = Reg::Process(processor, string);
+				if (match)
 				{
-					return str->size();
+					return match.GetMainCapture().End();
 				}
-				else {
-					return std::nullopt;
-				}
+				return std::nullopt;
 			}
 		};
 

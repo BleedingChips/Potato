@@ -13,6 +13,7 @@ export namespace Potato::Encode
 	{
 		using CodePointT = std::uint32_t;
 		static constexpr CodePointT max_code_point = 0x110000;
+		static constexpr std::size_t temporary_cache_buffer_size = 16;
 
 		struct UTF8
 		{
@@ -406,7 +407,7 @@ export namespace Potato::Encode
 			return info;
 		}
 
-		static constexpr EncodeInfo EncodeTo(std::span<NativeStorageT const> source, std::span<Unicode::CodePointT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr EncodeInfo EncodeTo(std::span<NativeStorageT const> source, std::span<Unicode::CodePointT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max(), std::span<std::size_t> source_index = {})
 		{
 			EncodeInfo info;
 			auto iterator_string = source;
@@ -424,9 +425,14 @@ export namespace Potato::Encode
 					iterator_out[0] = code_point;
 					info.character_count += 1;
 					info.source_space += *detect_size;
+					auto old_target_space = info.target_space;
 					info.target_space += 1;
 					iterator_string = iterator_string.subspan(*detect_size);
 					iterator_out = iterator_out.subspan(1);
+					if (old_target_space < source_index.size())
+					{
+						source_index[old_target_space] = info.source_space;
+					}
 				}
 				else {
 					info.is_good_string = false;
@@ -440,7 +446,7 @@ export namespace Potato::Encode
 			requires std::output_iterator<OutIterator, Unicode::CodePointT>
 		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<NativeStorageT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
 		{
-			std::array<Unicode::CodePointT, 16> temporary_buffer;
+			std::array<Unicode::CodePointT, Unicode::temporary_cache_buffer_size> temporary_buffer;
 			EncodeInfo info;
 			auto iterator_string = source;
 			while (info.is_good_string && !iterator_string.empty() && max_unicode_point > 0)
@@ -523,7 +529,7 @@ export namespace Potato::Encode
 			requires std::output_iterator<OutIterator, CharT>
 		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<NativeStorageT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
 		{
-			std::array<CharT, 16 * WrapperT::max_storage_size> temporary_buffer;
+			std::array<CharT, Unicode::temporary_cache_buffer_size * WrapperT::max_storage_size> temporary_buffer;
 			EncodeInfo info;
 			auto iterator_string = source;
 			while (info.is_good_string && !iterator_string.empty() && max_unicode_point > 0)
@@ -552,7 +558,7 @@ export namespace Potato::Encode
 		static constexpr EncodeInfo Statistics(std::span<FromCharT const> source, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
 		{
 			EncodeInfo info;
-			std::array<Unicode::CodePointT, 16> temporary_buffer;
+			std::array<Unicode::CodePointT, Unicode::temporary_cache_buffer_size> temporary_buffer;
 			auto iterator_string = source;
 			while (max_unicode_point != 0 && !iterator_string.empty() && info.is_good_string)
 			{
@@ -576,7 +582,7 @@ export namespace Potato::Encode
 		static constexpr EncodeInfo EncodeTo(std::span<FromCharT const> source, std::span<ToCharT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
 		{
 			EncodeInfo info;
-			std::array<Unicode::CodePointT, 16> temporary_buffer;
+			std::array<Unicode::CodePointT, Unicode::temporary_cache_buffer_size> temporary_buffer;
 			auto iterator_string = source;
 			auto iterator_out = target;
 			while (info.is_good_string && max_unicode_point != 0 && !iterator_string.empty() && !iterator_out.empty())
@@ -617,7 +623,7 @@ export namespace Potato::Encode
 			requires std::output_iterator<OutIterator, ToCharT>
 		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<FromCharT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
 		{
-			std::array<ToCharT, 16 * UnicodeWrapper<ToCharT>::WrapperT::max_storage_size> temporary_buffer;
+			std::array<ToCharT, Unicode::temporary_cache_buffer_size * UnicodeWrapper<ToCharT>::WrapperT::max_storage_size> temporary_buffer;
 			EncodeInfo info;
 			auto iterator_string = source;
 			while (info.is_good_string && max_unicode_point > 0 && !iterator_string.empty())

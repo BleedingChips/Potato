@@ -1,4 +1,5 @@
-﻿
+﻿#include <ctre-unicode.hpp>
+
 import std;
 import PotatoReg;
 import PotatoLog;
@@ -181,33 +182,24 @@ std::size_t FuncTell(std::u8string_view str)
 
 int main()
 {
-	/*
-	Reg::CTRegString<
-		Reg::CTRegToken<1>{Encode::Unicode::CodePointT{ U'a' }},
-		Reg::CTRegToken<2>{
-		std::array<Encode::Unicode::CodePointT, 2>{
-			Misc::IndexSpan<Encode::Unicode::CodePointT>{
-				Encode::Unicode::CodePointT{ U'a' }, Encode::Unicode::CodePointT{ U'a' } + 1
-			},
-			Misc::IndexSpan<Encode::Unicode::CodePointT>{
-				Encode::Unicode::CodePointT{ U'c' }, Encode::Unicode::CodePointT{ U'c' } + 1
-			},
-		}
-		}
-	> pattern;
 
-	std::u8string_view p = u8"a";
-
-	auto k3445 = pattern.Match(p);
-	*/
+	{
+		Potato::Reg::Dfa dfa(Dfa::FormatE::HeadMatch, u8"a([0-9]*)a");
+		auto k = Potato::Reg::CreateDfaBinaryTable(dfa);
+		Potato::Reg::DfaBinaryTableWrapper wrapper{ std::span(k) };
+		std::u8string_view str = u8"12353475682346578942658976234dfsdfasdfsdfs5789fsdafasdfasdfasdf6234sdasdasfsdf78563425a ";
+		Potato::Reg::DfaProcessor processer;
+		processer.SetObserverTable(wrapper);
+		auto capture = Potato::Reg::Process(processer, u8"a1234a");
+		auto kcx = capture.GetCapture(0).Slice(u8"a1234a");
+		volatile int i = 0;
+	}
 
 	Potato::Reg::Dfa dfa(Dfa::FormatE::HeadMatch, u8"[0-9a-zA-Z][0-9a-zA-Z]*");
 	auto k = Potato::Reg::CreateDfaBinaryTable(dfa);
 	Potato::Reg::DfaBinaryTableWrapper wrapper{std::span(k)};
 	std::u8string_view str = u8"12353475682346578942658976234dfsdfasdfsdfs5789fsdafasdfasdfasdf6234sdasdasfsdf78563425a ";
 	Potato::Reg::DfaProcessor processer;
-	
-	
 
 	std::size_t total_index = 0;
 
@@ -265,7 +257,7 @@ int main()
 		for (std::size_t i = 0; i < 10000; ++i)
 		{
 			auto strcc = ctre::starts_with<u8"[0-9a-zA-Z][0-9a-zA-Z]*">(str);
-			total_index += 10;
+			total_index += strcc.to_optional_view()->size();
 		}
 		auto cur4 = std::chrono::system_clock::now();
 

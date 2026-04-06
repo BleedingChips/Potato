@@ -2175,7 +2175,7 @@ namespace Potato::Reg
 		}
 	}
 
-	auto DfaProcessor::Consume(char32_t Token, std::size_t TokenIndex) -> bool
+	auto DfaProcessor::Consume(CodePointT Token, std::size_t TokenIndex) -> bool
 	{
 		assert(!std::holds_alternative<std::monostate>(TableWrapper));
 		if (std::holds_alternative<std::reference_wrapper<Dfa const>>(TableWrapper))
@@ -2210,7 +2210,7 @@ namespace Potato::Reg
 		}
 	}
 
-	bool Dfa::Consume(DfaProcessor& Context, char32_t Token, std::size_t TokenIndex) const
+	bool Dfa::Consume(DfaProcessor& Context, CodePointT Token, std::size_t TokenIndex) const
 	{
 		auto& NodeRef = Nodes[Context.CurNodeIndex];
 		for (auto& Ite : NodeRef.Edges)
@@ -2586,7 +2586,7 @@ namespace Potato::Reg
 		Writer.PopMark(OldMark);
 	}
 
-	bool DfaBinaryTableWrapper::Consume(DfaProcessor& Context, char32_t Token, std::size_t TokenIndex) const
+	bool DfaBinaryTableWrapper::Consume(DfaProcessor& Context, CodePointT Token, std::size_t TokenIndex) const
 	{
 		auto Reader = Misc::StructedSerilizerReader(Wrapper);
 		Reader.SetPointer(Context.CurNodeIndex);
@@ -2596,7 +2596,7 @@ namespace Potato::Reg
 		{
 			auto Pro = Reader.ReadObject<DfaBinaryTableWrapper::CharSetPropertyT>();
 			auto IntervalSpan = Reader.ReadObjectArray<Interval::ElementT>(Pro->CharCount);
-			if (Misc::IntervalWrapperT<char32_t>::IsInclude(IntervalSpan, Token))
+			if (Misc::IntervalWrapperT<CodePointT>::IsInclude(IntervalSpan, Token))
 			{
 				Reader.SetPointer(Context.CurNodeIndex + Pro->EdgeOffset);
 				auto Edge = Reader.ReadObject<DfaBinaryTableWrapper::EdgeT>();

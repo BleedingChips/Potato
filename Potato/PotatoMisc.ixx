@@ -65,6 +65,12 @@ export namespace Potato::Misc
 			return Str.substr(Begin(), Size());
 		};
 
+		template<typename CharT, std::size_t N>
+		constexpr auto Slice(CharT const (&str)[N]) const
+		{
+			return Slice(std::basic_string_view{str});
+		};
+
 		constexpr IndexSpan SubIndex(Type Offset, Type Size = std::numeric_limits<Type>::max()) const {
 			auto CurSize = this->Size();
 			assert(Offset <= CurSize);
