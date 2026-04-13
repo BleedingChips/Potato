@@ -126,6 +126,61 @@ export namespace Potato::Document
 		OutIterator Read(OutIterator out_iterator, std::size_t max_character_count = std::numeric_limits<std::size_t>::max());
 		BomT GetBom() const { return bom; }
 		operator bool() const { return !stream.empty(); }
+		template<typename CharT>
+		std::optional<std::basic_string_view<CharT>> TryCastTo()
+		{
+			if constexpr (
+				std::is_same_v<CharT, char8_t>
+				|| std::is_same_v<CharT, char>
+				)
+			{
+				if (
+					GetBom() == BomT::NoBom
+					|| GetBom() == BomT::UTF8
+					)
+				{
+					return std::basic_string_view<CharT>(
+						reinterpret_cast<CharT const*>(stream.data()), 
+						stream.size() / sizeof(CharT)
+					);
+				}
+			}
+			else if constexpr (
+				std::is_same_v<CharT, char16_t>
+				|| (sizeof(wchar_t) == sizeof(char16_t) && std::is_same_v<CharT, wchar_t>)
+				)
+			{
+				if (
+					GetBom() == BomT::UTF16LE && std::endian::native == std::endian::little
+					|| GetBom() == BomT::UTF16BE && std::endian::native == std::endian::big
+					)
+				{
+					return std::basic_string_view<CharT>(
+						reinterpret_cast<CharT const*>(stream.data()),
+						stream.size() / sizeof(CharT)
+					);
+				}
+			}
+			else if constexpr (
+				std::is_same_v<CharT, char32_t>
+				|| (sizeof(wchar_t) == sizeof(char32_t) && std::is_same_v<CharT, wchar_t>)
+				)
+			{
+				if (
+					GetBom() == BomT::UTF32LE && std::endian::native == std::endian::little
+					|| GetBom() == BomT::UTF32BE && std::endian::native == std::endian::big
+					)
+				{
+					return std::basic_string_view<CharT>(
+						reinterpret_cast<CharT const*>(stream.data()),
+						stream.size() / sizeof(CharT)
+					);
+				}
+			}
+			return std::nullopt;
+		}
+
+
 	protected:
 
 		std::span<std::byte const> stream;
