@@ -337,6 +337,61 @@ export namespace Potato::EBNF
 			}
 		}
 	}
+
+	struct LexicalSymbol
+	{
+		SLRX::Symbol symbol;
+		std::wstring_view name;
+		Misc::IndexSpan<> token_index;
+		std::size_t user_mask;
+		bool IsIgnoredSymbol() const { return symbol.symbol == 0; }
+	};
+
+
+	struct LexicalProcessor
+	{
+		void SetObserverTable(Ebnf const& ebnf)
+		{
+			table_wrapper = &ebnf;
+			lexical_processor.SetObserverTable(ebnf.GetLexical());
+		}
+		void SetObserverTable(EbnfBinaryTableWrapper ebnf_table)
+		{
+			table_wrapper = ebnf_table;
+			lexical_processor.SetObserverTable(ebnf_table.GetLexicalTable());
+		}
+
+		struct Result
+		{
+			std::size_t input_consumed = 0;
+			std::size_t max_consumed = 0;
+			LexicalSymbol symbol;
+			bool accept = true;
+			operator bool() const { return accept; }
+			LexicalSymbol GetLexicalSymbol() const { return symbol; }
+			bool IsIgnoredSymbol() const { return GetLexicalSymbol().IsIgnoredSymbol(); }
+		};
+
+		Result Comsumed(
+			std::span<Encode::Unicode::CodePointT> input_code,
+			std::span<std::size_t> token_index,
+			std::size_t token_offset = 0
+		);
+
+		Result EndOfFile() const;
+
+	protected:
+
+		LexicalSymbol Tranlate(std::size_t Mask, Misc::IndexSpan<> TokenIndex) const;
+
+		std::variant<
+			std::monostate,
+			Pointer::ObserverPtr<Ebnf const>,
+			EbnfBinaryTableWrapper
+		> table_wrapper;
+
+		Reg::DfaProcessor lexical_processor;
+	};
 }
 
 export namespace Potato::EBNF::Exception

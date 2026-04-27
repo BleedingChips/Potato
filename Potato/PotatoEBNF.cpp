@@ -1046,6 +1046,74 @@ namespace Potato::EBNF
 			return std::move(NewStatement);
 		}
 	}
+
+	auto LexicalProcessor::Comsumed(
+		std::span<Encode::Unicode::CodePointT> input_code,
+		std::span<std::size_t> token_index,
+		std::size_t token_offset
+	) ->Result
+	{
+		lexical_processor.Clear();
+		for (std::size_t i = token_offset; i < input_code.size(); ++i)
+		{
+			auto re = lexical_processor.Consume(input_code[i],
+				!token_index.empty() ? token_index[i] : i
+			);
+			if (!re)
+			{
+				auto accept = lexical_processor.GetAccept();
+				if (accept)
+				{
+					auto main_capture = accept.GetMainCapture();
+					auto capture = main_capture;
+					if (accept.GetCaptureSize() >= 1)
+						capture = accept[0];
+
+					auto sym = Tranlate(*accept.Mask, capture);
+					return {
+						accept.GetMainCapture().End() - 1,
+						i,
+						sym,
+						true
+					};
+				}
+				else {
+					return {
+						token_offset,
+						i,
+						{},
+						false
+					};
+				}
+			}
+		}
+		return {};
+	}
+
+	LexicalSymbol LexicalProcessor::Tranlate(std::size_t accept_mask, Misc::IndexSpan<> symbol_token_index) const
+	{
+		assert(!std::holds_alternative<std::monostate>(table_wrapper));
+
+		if (std::holds_alternative<Pointer::ObserverPtr<Ebnf const>>(table_wrapper))
+		{
+			auto Inf = std::get<Pointer::ObserverPtr<Ebnf const>>(table_wrapper)->GetRgeInfo(accept_mask);
+			return {
+				SLRX::Symbol::AsTerminal(Inf.MapSymbolValue),
+				std::get<Pointer::ObserverPtr<Ebnf const>>(table_wrapper)->GetRegName(Inf.MapSymbolValue),
+				symbol_token_index,
+				Inf.UserMask.has_value() ? *Inf.UserMask : 0
+			};
+		}
+		else {
+			auto Inf = std::get<EbnfBinaryTableWrapper>(table_wrapper).GetRgeInfo(accept_mask);
+			return {
+				SLRX::Symbol::AsTerminal(Inf.MapSymbolValue), 
+				std::get<EbnfBinaryTableWrapper>(table_wrapper).GetRegName(Inf.MapSymbolValue),
+				symbol_token_index,
+				Inf.UserMask.has_value() ? *Inf.UserMask : 0,
+			};
+		}
+	}
 }
 
 namespace Potato::EBNF::Exception
@@ -1107,5 +1175,4 @@ namespace Potato::EBNF::Exception
 		, Steps1(Translate(IS.Steps1, TMapping, NTMapping)), Steps2(Translate(IS.Steps2, TMapping, NTMapping))
 	{
 	}
-
 }

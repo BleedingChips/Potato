@@ -233,6 +233,12 @@ export namespace Potato::Reg
 		operator bool() const { return Mask.has_value(); }
 	};
 
+	struct ProcessorFragmentAcceptRef
+	{
+		bool require_expand_input = false;
+		ProcessorAcceptRef accept;
+	};
+
 	struct TokenIndexRecorder
 	{
 		std::optional<std::size_t> StartupTokenIndex;
@@ -525,6 +531,13 @@ export namespace Potato::Reg
 		void SetObserverTable(Dfa const& Table) { TableWrapper = std::reference_wrapper<Dfa const>{Table}; Clear(); }
 		void SetObserverTable(DfaBinaryTableWrapper Table) { TableWrapper = Table; Clear(); }
 
+		ProcessorAcceptRef Process(std::span<CodePointT const> input, std::span<std::size_t const> output = {})
+		{
+			return FragmentProcess(input, output, true).accept;
+		}
+
+		ProcessorFragmentAcceptRef FragmentProcess(std::span<CodePointT const> input, std::span<std::size_t const> token_index = {}, bool is_last = false);
+
 	protected:
 		
 		std::variant<
@@ -541,7 +554,6 @@ export namespace Potato::Reg
 		friend struct Dfa;
 		friend struct DfaBinaryTableWrapper;
 	};
-	
 
 	template<typename CharT, typename CharTraidT>
 	ProcessorAcceptRef Process(DfaProcessor& processor, std::basic_string_view<CharT, CharTraidT> str)

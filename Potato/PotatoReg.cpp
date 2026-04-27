@@ -2153,7 +2153,22 @@ namespace Potato::Reg
 
 	}
 
-
+	ProcessorFragmentAcceptRef DfaProcessor::FragmentProcess(std::span<CodePointT const> input, std::span<std::size_t const> token_index, bool is_last)
+	{
+		for (std::size_t i = 0; i < input.size(); ++i)
+		{
+			auto result = Consume(input[i], !token_index.empty() ? token_index[i] : i + 1);
+			if (!result)
+			{
+				return { false, GetAccept() };
+			}
+		}
+		if (!is_last)
+		{
+			return {true, GetAccept()};
+		}
+		return {false, GetAccept()};
+	}
 
 	void DfaProcessor::Clear()
 	{
