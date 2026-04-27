@@ -11,6 +11,7 @@ import PotatoFormat;
 import PotatoSLRX;
 import PotatoMisc;
 import PotatoPointer;
+import PotatoTMP;
 
 export namespace Potato::EBNF
 {
@@ -159,12 +160,6 @@ export namespace Potato::EBNF
 		std::vector<ReduceProduction::Element> ProductionElements;
 	};
 
-	struct EbnfOperator
-	{
-		virtual std::any HandleSymbol(SymbolInfo Symbol, std::size_t UserMask) { return {}; };
-		virtual std::any HandleReduce(SymbolInfo Symbol, ReduceProduction Production) { return {}; };
-	};
-
 	struct EbnfProcessor;
 	struct EbnfBinaryTableWrapper;
 
@@ -270,8 +265,11 @@ export namespace Potato::EBNF
 		template<typename RequrieT>
 		RequrieT GetData() { return SyntaxProcessor.GetData<RequrieT>(); }
 
-		void SetObserverTable(Ebnf const& Table, Pointer::ObserverPtr<EbnfOperator> Ope, std::size_t StartupTokenIndex = 0);
-		void SetObserverTable(EbnfBinaryTableWrapper Table, Pointer::ObserverPtr<EbnfOperator> Ope, std::size_t StartupTokenIndex = 0);
+		using HandleSymbolFuncT = TMP::FunctionRef<std::any(SymbolInfo Symbol, std::size_t UserMask)>;
+		using HandleReduceFuncT = TMP::FunctionRef<std::any(SymbolInfo Symbol, ReduceProduction Production)>;
+
+		void SetObserverTable(Ebnf const& Table, HandleSymbolFuncT HandleSymbol = {}, HandleReduceFuncT HandleReduce = {}, std::size_t StartupTokenIndex = 0);
+		void SetObserverTable(EbnfBinaryTableWrapper Table, HandleSymbolFuncT HandleSymbol = {}, HandleReduceFuncT HandleReduce = {}, std::size_t StartupTokenIndex = 0);
 
 		EbnfProcessor(std::pmr::memory_resource* resource = std::pmr::get_default_resource())
 			: LexicalProcessor(resource), SyntaxProcessor(resource), TempElement(resource) {}
@@ -290,8 +288,9 @@ export namespace Potato::EBNF
 			Pointer::ObserverPtr<Ebnf const>,
 			EbnfBinaryTableWrapper
 		> TableWrapper;
-
-		Pointer::ObserverPtr<EbnfOperator> Operator;
+		
+		HandleSymbolFuncT HandleSymbolFunc;
+		HandleReduceFuncT HandleReduceFunc;
 
 		Reg::DfaProcessor LexicalProcessor;
 		SLRX::LRXProcessor SyntaxProcessor;
@@ -466,7 +465,8 @@ export namespace Potato::EBNF
 
 					if (!Builder.Consume(InputValue, TokenIndex.End()))
 					{
-						throw Exception::UnacceptableRegex(TokenIndex.Slice(EbnfStr));
+						auto error_string = TokenIndex.Slice(EbnfStr);
+						throw Exception::UnacceptableRegex(error_string);
 					}
 				}else if (RequireSize == EbnfStr.size())
 				{
@@ -682,7 +682,7 @@ export namespace Potato::EBNF
 		}
 		catch (BuildInUnacceptableEbnf Bnf)
 		{
-			std::wstring str;
+			std::pmr::wstring str;
 			Encode::UnicodeEncoder<CharT, wchar_t>::EncodeTo(Bnf.TokenIndex.Slice(EbnfStr), std::back_inserter(str));
 			throw Exception::UnacceptableEbnf{Bnf.Type, std::move(str)};
 		}

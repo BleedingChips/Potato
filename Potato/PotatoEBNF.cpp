@@ -803,9 +803,10 @@ namespace Potato::EBNF
 		}
 	}
 
-	void EbnfProcessor::SetObserverTable(Ebnf const& Table, Pointer::ObserverPtr<EbnfOperator> Ope, std::size_t StartupTokenIndex)
+	void EbnfProcessor::SetObserverTable(Ebnf const& Table, HandleSymbolFuncT HandleSymbol, HandleReduceFuncT HandleReduce, std::size_t StartupTokenIndex)
 	{
-		Operator = std::move(Ope);
+		HandleSymbolFunc = HandleSymbol;
+		HandleReduceFunc = HandleReduce;
 		TableWrapper = &Table;
 		LexicalProcessor.SetObserverTable(Table.Lexical);
 		SyntaxProcessor.SetObserverTable(Table.Syntax, this);
@@ -813,9 +814,10 @@ namespace Potato::EBNF
 		RequireTokenIndex = StartupTokenIndex;
 	}
 
-	void EbnfProcessor::SetObserverTable(EbnfBinaryTableWrapper Table, Pointer::ObserverPtr<EbnfOperator> Ope, std::size_t StartupTokenIndex)
+	void EbnfProcessor::SetObserverTable(EbnfBinaryTableWrapper Table, HandleSymbolFuncT HandleSymbol, HandleReduceFuncT HandleReduce, std::size_t StartupTokenIndex)
 	{
-		Operator = std::move(Ope);
+		HandleSymbolFunc = HandleSymbol;
+		HandleReduceFunc = HandleReduce;
 		TableWrapper = Table;
 		LexicalProcessor.SetObserverTable(Table.GetLexicalTable());
 		SyntaxProcessor.SetObserverTable(Table.GetSyntaxTable(), this);
@@ -833,7 +835,6 @@ namespace Potato::EBNF
 	bool EbnfProcessor::Consume(char32_t Value, std::size_t NextTokenIndex)
 	{
 		assert(!std::holds_alternative<std::monostate>(TableWrapper));
-		assert(Operator);
 		if (LexicalProcessor.Consume(Value, GetRequireTokenIndex()))
 		{
 			RequireTokenIndex = NextTokenIndex;
@@ -865,7 +866,6 @@ namespace Potato::EBNF
 	bool EbnfProcessor::EndOfFile()
 	{
 		assert(!std::holds_alternative<std::monostate>(TableWrapper));
-		assert(Operator);
 		if (LastSymbolTokenIndex != RequireTokenIndex)
 		{
 			LexicalProcessor.EndOfFile(RequireTokenIndex);
@@ -920,7 +920,11 @@ namespace Potato::EBNF
 			return true;
 		}
 		else {
-			auto AppendData = Operator->HandleSymbol(Sym, UserMask);
+			std::any AppendData;
+			if (HandleSymbolFunc)
+			{
+				AppendData = HandleSymbolFunc(Sym, UserMask);
+			}
 			auto Re = SyntaxProcessor.Consume(Sym.Symbol, Sym.TokenIndex, std::move(AppendData));
 			return Re;
 		}
@@ -971,9 +975,13 @@ namespace Potato::EBNF
 			ReduceProduction Pro;
 			Pro.UserMask = Desc.UserMask;
 			Pro.Elements = std::span(TempElement);
-			auto Re = Operator->HandleReduce(Sym, Pro);
+			std::any re;
+			if (HandleReduceFunc)
+			{
+				re = HandleReduceFunc(Sym, Pro);
+			}
 			TempElement.clear();
-			return Re;
+			return re;
 		}
 		else {
 			BuilInStatement NewStatement;
