@@ -134,8 +134,7 @@ export namespace Potato::Format
 				Reg::DfaProcessor processor;
 				Reg::DfaBinaryTableWrapper wrapper{ Wrapper()};
 				processor.SetObserverTable(wrapper);
-
-				auto match = Reg::Process(processor, string);
+				auto match = processor.Process(string);
 				if (match)
 				{
 					return match.GetMainCapture().End();

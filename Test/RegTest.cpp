@@ -190,7 +190,7 @@ int main()
 		std::u8string_view str = u8"12353475682346578942658976234dfsdfasdfsdfs5789fsdafasdfasdfasdf6234sdasdasfsdf78563425a ";
 		Potato::Reg::DfaProcessor processer;
 		processer.SetObserverTable(wrapper);
-		auto capture = Potato::Reg::Process(processer, u8"a1234a");
+		auto capture = processer.Process(u8"a1234a");
 		auto kcx = capture.GetCapture(0).Slice(u8"a1234a");
 		volatile int i = 0;
 	}
@@ -210,7 +210,7 @@ int main()
 		for (std::size_t i = 0; i < 10000; ++i)
 		{
 			processer.Clear();
-			auto match = Potato::Reg::Process(processer, str);
+			auto match = processer.Process(str);
 			total_index += match.GetMainCapture().End();
 		}
 		auto cur8 = std::chrono::system_clock::now();
@@ -226,7 +226,7 @@ int main()
 		for (std::size_t i = 0; i < 10000; ++i)
 		{
 			processer.Clear();
-			auto match = Potato::Reg::Process(processer, str);
+			auto match = processer.Process(str);
 			total_index += match.GetMainCapture().End();
 		}
 		auto cur2 = std::chrono::system_clock::now();

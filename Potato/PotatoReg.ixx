@@ -523,23 +523,25 @@ export namespace Potato::Reg
 		DfaProcessor(std::pmr::memory_resource* resource = std::pmr::get_default_resource())
 			: TempResult(resource), CacheIndex(resource) {}
 
-		bool Consume(CodePointT Token, std::size_t TokenIndex);
 		bool EndOfFile(std::size_t TokenIndex) { return Consume(Reg::EndOfFile(), TokenIndex); }
 		void Clear();
 		bool HasAccept() const;
 		ProcessorAcceptRef GetAccept() const;
 		void SetObserverTable(Dfa const& Table) { TableWrapper = std::reference_wrapper<Dfa const>{Table}; Clear(); }
 		void SetObserverTable(DfaBinaryTableWrapper Table) { TableWrapper = Table; Clear(); }
+		bool Consume(CodePointT Token, std::size_t TokenIndex);
+		bool FragmentProcess(std::span<CodePointT const> input, std::span<std::size_t const> token_index = {});
 
-		ProcessorAcceptRef Process(std::span<CodePointT const> input, std::span<std::size_t const> output = {})
+		template<typename CharT, typename CharTraits>
+		ProcessorAcceptRef Process(std::basic_string_view<CharT, CharTraits> str);
+		template<typename CharT>
+		ProcessorAcceptRef Process(CharT const* str)
 		{
-			return FragmentProcess(input, output, true).accept;
+			return Process(std::basic_string_view<CharT>(str));
 		}
 
-		ProcessorFragmentAcceptRef FragmentProcess(std::span<CodePointT const> input, std::span<std::size_t const> token_index = {}, bool is_last = false);
-
 	protected:
-		
+
 		std::variant<
 			std::monostate,
 			std::reference_wrapper<Dfa const>,
@@ -555,6 +557,33 @@ export namespace Potato::Reg
 		friend struct DfaBinaryTableWrapper;
 	};
 
+	template<typename CharT, typename CharTraits>
+	ProcessorAcceptRef DfaProcessor::Process(std::basic_string_view<CharT, CharTraits> str)
+	{
+		std::array<CodePointT, Encode::Unicode::temporary_cache_buffer_size * 2> temp_buffer;
+		std::array<std::size_t, Encode::Unicode::temporary_cache_buffer_size * 2> source_index;
+		
+		auto ite_str = std::span(str);
+		std::size_t token_index = 0;
+
+		while (!ite_str.empty())
+		{
+			auto info = Encode::UnicodeEncoder<CharT, CodePointT>::EncodeTo(ite_str, temp_buffer, std::numeric_limits<std::size_t>::max(), source_index, token_index);
+			auto result = FragmentProcess(
+				std::span(temp_buffer).subspan(0, info.target_space),
+				std::span(source_index).subspan(0, info.target_space)
+				);
+
+			if (!result)
+				return GetAccept();
+			ite_str = ite_str.subspan(info.source_space);
+			token_index += info.source_space;
+		}
+		EndOfFile(token_index);
+		return GetAccept();
+	}
+
+	/*
 	template<typename CharT, typename CharTraidT>
 	ProcessorAcceptRef Process(DfaProcessor& processor, std::basic_string_view<CharT, CharTraidT> str)
 	{
@@ -614,6 +643,7 @@ export namespace Potato::Reg
 	{
 		Process(Table, std::basic_string_view<CharT>(Str), std::forward<Func>(Fun));
 	}
+	*/
 
 	struct MulityRegCreater
 	{

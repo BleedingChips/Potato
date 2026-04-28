@@ -407,7 +407,7 @@ export namespace Potato::Encode
 			return info;
 		}
 
-		static constexpr EncodeInfo EncodeTo(std::span<NativeStorageT const> source, std::span<Unicode::CodePointT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max(), std::span<std::size_t> source_index = {})
+		static constexpr EncodeInfo EncodeTo(std::span<NativeStorageT const> source, std::span<Unicode::CodePointT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max(), std::span<std::size_t> source_index = {}, std::size_t source_index_offset = 0)
 		{
 			EncodeInfo info;
 			auto iterator_string = source;
@@ -431,7 +431,7 @@ export namespace Potato::Encode
 					iterator_out = iterator_out.subspan(1);
 					if (old_target_space < source_index.size())
 					{
-						source_index[old_target_space] = info.source_space;
+						source_index[old_target_space] = info.source_space + source_index_offset;
 					}
 				}
 				else {
