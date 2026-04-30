@@ -2212,7 +2212,7 @@ namespace Potato::Reg
 	{
 		for (std::size_t index = 0; index < input.size(); ++index)
 		{
-			if (!Consume(input[index], token_index[index]))
+			if (!Consume(input[index], !token_index.empty() ? token_index[index] : index))
 			{
 				return false;
 			}

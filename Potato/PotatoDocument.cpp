@@ -49,6 +49,21 @@ namespace Potato::Document
 #endif
 	}
 
+	auto BinaryStreamReader::StreamRead(std::span<std::byte> out_byte) ->Result
+	{
+		if (*this)
+		{
+			auto info = Read(out_byte);
+			if()
+		}
+		return {
+			Streamer::StreamState::NoExist,
+			0
+		};
+		
+
+	}
+
 	BinaryStreamReader::operator bool() const
 	{
 #ifdef _WIN32

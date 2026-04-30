@@ -560,8 +560,8 @@ export namespace Potato::Reg
 	template<typename CharT, typename CharTraits>
 	ProcessorAcceptRef DfaProcessor::Process(std::basic_string_view<CharT, CharTraits> str)
 	{
-		std::array<CodePointT, Encode::Unicode::temporary_cache_buffer_size * 2> temp_buffer;
-		std::array<std::size_t, Encode::Unicode::temporary_cache_buffer_size * 2> source_index;
+		std::array<CodePointT, Encode::Unicode::temporary_cache_buffer_size> temp_buffer;
+		std::array<std::size_t, Encode::Unicode::temporary_cache_buffer_size> source_index;
 		
 		auto ite_str = std::span(str);
 		std::size_t token_index = 0;

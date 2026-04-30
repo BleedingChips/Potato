@@ -11,6 +11,7 @@ import std;
 import PotatoTMP;
 import PotatoMisc;
 import PotatoEncode;
+import PotatoStreamer;
 
 
 export namespace Potato::Document
@@ -68,13 +69,14 @@ export namespace Potato::Document
 	};
 
 
-	struct BinaryStreamReader
+	struct BinaryStreamReader : public Streamer::BinaryRandomStreamer
 	{
 		BinaryStreamReader(std::filesystem::path const& path) { Open(path); }
 		BinaryStreamReader() = default;
 		BinaryStreamReader(BinaryStreamReader&& reader);
 		operator bool() const;
 		std::size_t Read(std::span<std::byte> output);
+		virtual Result StreamRead(std::span<std::byte> out_byte) override;
 		std::size_t GetStreamSize() const;
 		bool Open(std::filesystem::path const& path);
 		void Close();

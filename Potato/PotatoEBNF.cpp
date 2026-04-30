@@ -670,7 +670,8 @@ namespace Potato::EBNF
 			auto NameIndex = Span[Index].StrIndex;
 			Reader.SetPointer(Head->TotalNameOffset);
 			auto Str = Reader.ReadObjectArray<wchar_t>(Head->TotalNameCount);
-			return std::wstring_view{NameIndex.Slice(Str)};
+			auto string_span = NameIndex.Slice(Str);
+			return std::wstring_view{ string_span .data(), string_span .size()};
 		}
 		else {
 			return {};
@@ -697,7 +698,7 @@ namespace Potato::EBNF
 		auto OldMark = Write.PushMark();
 		HeadT Head;
 		auto StartOffset = Write.WriteObject(Head);
-		Head.TotalNameOffset = static_cast<StandardT>(Write.WriteObjectArray(std::span(Table.TotalString)));
+		Head.TotalNameOffset = static_cast<StandardT>(Write.WriteObjectArray(std::span(Table.TotalString.data(), Table.TotalString.size())));
 		Head.TotalNameCount = static_cast<StandardT>(Table.TotalString.size());
 
 		Head.SymbolMapOffset = static_cast<StandardT>(Write.NewObjectArray<SymbolMapT>(Table.SymbolMap.size()));
@@ -764,7 +765,7 @@ namespace Potato::EBNF
 		EbnfBinaryTableWrapper::Serilize(Pre, Table);
 		std::vector<EbnfBinaryTableWrapper::StandardT> Buffer;
 		Buffer.resize(Pre.GetWritedSize());
-		Misc::StructedSerilizerWritter<EbnfBinaryTableWrapper::StandardT> Write(std::span{Buffer});
+		Misc::StructedSerilizerWritter<EbnfBinaryTableWrapper::StandardT> Write(std::span{Buffer.data(), Buffer.size()});
 		EbnfBinaryTableWrapper::Serilize(Write, Table);
 		return Buffer;
 	}
@@ -772,23 +773,30 @@ namespace Potato::EBNF
 
 	std::tuple<SymbolInfo, std::size_t> EbnfProcessor::Tranlate(std::size_t Mask, Misc::IndexSpan<> TokenIndex) const
 	{
-		assert(!std::holds_alternative<std::monostate>(TableWrapper));
-
-		if (std::holds_alternative<Pointer::ObserverPtr<Ebnf const>>(TableWrapper))
-		{
-			auto Inf = std::get<Pointer::ObserverPtr<Ebnf const>>(TableWrapper)->GetRgeInfo(Mask);
-			return {
-				{SLRX::Symbol::AsTerminal(Inf.MapSymbolValue), std::get<Pointer::ObserverPtr<Ebnf const>>(TableWrapper)->GetRegName(Inf.MapSymbolValue), TokenIndex},
-				Inf.UserMask.has_value() ? *Inf.UserMask : 0,
-			};
-		}
-		else {
-			auto Inf = std::get<EbnfBinaryTableWrapper>(TableWrapper).GetRgeInfo(Mask);
-			return {
-				{SLRX::Symbol::AsTerminal(Inf.MapSymbolValue), std::get<EbnfBinaryTableWrapper>(TableWrapper).GetRegName(Inf.MapSymbolValue), TokenIndex},
-				Inf.UserMask.has_value() ? *Inf.UserMask : 0,
-			};
-		}
+		return std::visit([=, this](auto&& wrapper)->std::tuple<SymbolInfo, std::size_t> {
+			if constexpr (std::is_same_v<Pointer::ObserverPtr<Ebnf const>, std::remove_cvref_t<decltype(wrapper)>>)
+			{
+				auto Inf = wrapper->GetRgeInfo(Mask);
+				return {
+					{SLRX::Symbol::AsTerminal(Inf.MapSymbolValue), wrapper->GetRegName(Inf.MapSymbolValue), TokenIndex},
+					Inf.UserMask.has_value() ? *Inf.UserMask : 0,
+				};
+			}
+			else if constexpr (std::is_same_v<EbnfBinaryTableWrapper, std::remove_cvref_t<decltype(wrapper)>>)
+			{
+				auto Inf = wrapper.GetRgeInfo(Mask);
+				return {
+					{SLRX::Symbol::AsTerminal(Inf.MapSymbolValue), wrapper.GetRegName(Inf.MapSymbolValue), TokenIndex},
+					Inf.UserMask.has_value() ? *Inf.UserMask : 0,
+				};
+			}
+			else {
+				assert(false);
+				return {};
+			}
+			}, 
+			TableWrapper
+		);
 	}
 
 	SymbolInfo EbnfProcessor::Tranlate(SLRX::Symbol Symbol, Misc::IndexSpan<> TokenIndex) const
@@ -974,7 +982,7 @@ namespace Potato::EBNF
 		{
 			ReduceProduction Pro;
 			Pro.UserMask = Desc.UserMask;
-			Pro.Elements = std::span(TempElement);
+			Pro.Elements = std::span(TempElement.data(), TempElement.size());
 			std::any re;
 			if (HandleReduceFunc)
 			{
@@ -1047,6 +1055,61 @@ namespace Potato::EBNF
 		}
 	}
 
+	LexicalProcessor::ProcessResult LexicalProcessor::FragmentProcess(
+		std::span<Encode::Unicode::CodePointT const> input_code,
+		bool is_single_span
+	)
+	{
+		lexical_processor.Clear();
+		bool need_expand = false;
+		if (!input_code.empty())
+		{
+			if (lexical_processor.FragmentProcess(input_code, {}))
+			{
+				if (is_single_span)
+					lexical_processor.EndOfFile(input_code.size());
+				else
+					need_expand = true;
+			}
+		}
+		if (need_expand)
+		{
+			return {
+				input_code.size(),
+				{},
+				need_expand,
+				true
+			};
+		}
+		else {
+			auto accept = lexical_processor.GetAccept();
+			if (accept)
+			{
+				auto main_capture = accept.GetMainCapture();
+				auto capture = main_capture;
+				if (accept.GetCaptureSize() >= 1)
+					capture = accept[0];
+
+				auto sym = Tranlate(*accept.Mask, capture);
+				return {
+					main_capture.End(),
+					sym,
+					false,
+					true
+				};
+			}
+			else {
+				return {
+					input_code.size(),
+					{},
+					false,
+					false
+				};
+			}
+		}
+	}
+
+	/*
 	auto LexicalProcessor::Comsumed(
 		std::span<Encode::Unicode::CodePointT> input_code,
 		std::span<std::size_t> token_index,
@@ -1089,6 +1152,7 @@ namespace Potato::EBNF
 		}
 		return {};
 	}
+	*/
 
 	LexicalSymbol LexicalProcessor::Tranlate(std::size_t accept_mask, Misc::IndexSpan<> symbol_token_index) const
 	{

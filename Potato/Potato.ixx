@@ -9,6 +9,7 @@ export import PotatoIR;
 export import PotatoInterval;
 export import PotatoSLRX;
 export import PotatoEncode;
+export import PotatoStreamer;
 export import PotatoFormat;
 export import PotatoEBNF;
 export import PotatoReg;

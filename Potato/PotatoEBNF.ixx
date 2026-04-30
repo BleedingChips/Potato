@@ -361,24 +361,20 @@ export namespace Potato::EBNF
 			lexical_processor.SetObserverTable(ebnf_table.GetLexicalTable());
 		}
 
-		struct Result
+		struct ProcessResult
 		{
 			std::size_t input_consumed = 0;
-			std::size_t max_consumed = 0;
-			LexicalSymbol symbol;
+			LexicalSymbol lecical_symbol;
+			bool need_expand_buffer = false;
 			bool accept = true;
-			operator bool() const { return accept; }
-			LexicalSymbol GetLexicalSymbol() const { return symbol; }
-			bool IsIgnoredSymbol() const { return GetLexicalSymbol().IsIgnoredSymbol(); }
 		};
 
-		Result Comsumed(
-			std::span<Encode::Unicode::CodePointT> input_code,
-			std::span<std::size_t> token_index,
-			std::size_t token_offset = 0
+		ProcessResult FragmentProcess(
+			std::span<Encode::Unicode::CodePointT const> input_code,
+			bool is_single_span
 		);
 
-		Result EndOfFile() const;
+		void Clear() { lexical_processor.Clear(); }
 
 	protected:
 
