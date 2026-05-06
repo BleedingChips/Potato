@@ -228,7 +228,17 @@ export namespace Potato::Encode
 		std::size_t source_space = 0;
 		std::size_t target_space = 0;
 		bool is_good_string = true;
+		bool reach_cutoff_character = false;
 		explicit constexpr operator bool() const { return is_good_string; }
+		constexpr EncodeInfo& operator+=(EncodeInfo const& info)
+		{
+			character_count += info.character_count;
+			source_space += info.source_space;
+			target_space += info.target_space;
+			is_good_string &= info.is_good_string;
+			reach_cutoff_character |= info.reach_cutoff_character;
+			return *this;
+		}
 	};
 
 	template<typename RawStorageT>
@@ -375,19 +385,26 @@ export namespace Potato::Encode
 	template<typename FromCharT, typename ToCharT>
 	struct UnicodeEncoder;
 
+	struct EncodeCutOffSetting
+	{
+		std::size_t max_character_count = std::numeric_limits<std::size_t>::max();
+		Unicode::CodePointT cutoff_character = Unicode::max_code_point;
+	};
+
 	template<typename CharT>
 	struct UnicodeEncoder<CharT, Unicode::CodePointT>
 	{
 		using NativeStorageT = UnicodeWrapper<CharT>::NativeStorageT;
 		using WrapperT = UnicodeWrapper<CharT>::WrapperT;
 
-		static constexpr EncodeInfo Statistics(std::span<NativeStorageT const> source, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr EncodeInfo Statistics(std::span<NativeStorageT const> source, EncodeCutOffSetting cutoff = {})
 		{
 			EncodeInfo info;
 			auto iterator_string = source;
+			
 			while (!iterator_string.empty())
 			{
-				if (info.character_count >= max_unicode_point)
+				if (info.character_count >= cutoff.max_character_count)
 					return info;
 
 				auto detect_size = UnicodeEncoderHelper<WrapperT::detect_storage_size, WrapperT>::DetectStorageSize(iterator_string);
@@ -397,7 +414,17 @@ export namespace Potato::Encode
 					info.source_space += *detect_size;
 					info.character_count += 1;
 					info.target_space += 1;
-					iterator_string = iterator_string.subspan(*detect_size);
+					auto cur_string = iterator_string;
+					iterator_string = cur_string.subspan(*detect_size);
+					if (cutoff.cutoff_character < Unicode::max_code_point)
+					{
+						auto cur = UnicodeEncoderHelper<WrapperT::detect_storage_size, WrapperT>::DecodeToUnicodePoint(*detect_size, cur_string);
+						if (cur == cutoff.cutoff_character)
+						{
+							info.reach_cutoff_character = true;
+							return info;
+						}
+					}
 				}
 				else {
 					info.is_good_string = false;
@@ -407,14 +434,14 @@ export namespace Potato::Encode
 			return info;
 		}
 
-		static constexpr EncodeInfo EncodeTo(std::span<NativeStorageT const> source, std::span<Unicode::CodePointT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max(), std::span<std::size_t> source_index = {}, std::size_t source_index_offset = 0)
+		static constexpr EncodeInfo EncodeTo(std::span<NativeStorageT const> source, std::span<Unicode::CodePointT> target, EncodeCutOffSetting cutoff = {}, std::span<std::size_t> source_index = {}, std::size_t source_index_offset = 0)
 		{
 			EncodeInfo info;
 			auto iterator_string = source;
 			auto iterator_out = target;
 			while (!iterator_string.empty() && !iterator_out.empty())
 			{
-				if (info.character_count >= max_unicode_point)
+				if (info.character_count >= cutoff.max_character_count)
 					return info;
 
 				auto detect_size = UnicodeEncoderHelper<WrapperT::detect_storage_size, WrapperT>::DetectStorageSize(iterator_string);
@@ -433,6 +460,11 @@ export namespace Potato::Encode
 					{
 						source_index[old_target_space] = info.source_space + source_index_offset;
 					}
+					if (code_point == cutoff.cutoff_character)
+					{
+						info.reach_cutoff_character = true;
+						return info;
+					}
 				}
 				else {
 					info.is_good_string = false;
@@ -444,20 +476,20 @@ export namespace Potato::Encode
 		
 		template<typename OutIterator>
 			requires std::output_iterator<OutIterator, Unicode::CodePointT>
-		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<NativeStorageT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<NativeStorageT const> source, OutIterator iterator, EncodeCutOffSetting cutoff = {})
 		{
 			std::array<Unicode::CodePointT, Unicode::temporary_cache_buffer_size> temporary_buffer;
 			EncodeInfo info;
 			auto iterator_string = source;
-			while (info.is_good_string && !iterator_string.empty() && max_unicode_point > 0)
+			while (info.is_good_string && !info.reach_cutoff_character && !iterator_string.empty() && info.character_count < cutoff.max_character_count)
 			{
-				auto curret_info = EncodeTo(iterator_string, std::span(temporary_buffer), max_unicode_point);
+				auto curret_info = EncodeTo(iterator_string, std::span(temporary_buffer), cutoff);
 				info.character_count += curret_info.character_count;
 				info.source_space += curret_info.source_space;
 				info.target_space += curret_info.target_space;
 				info.is_good_string = curret_info.is_good_string;
+				info.reach_cutoff_character = curret_info.reach_cutoff_character;
 				info.character_count += curret_info.character_count;
-				max_unicode_point -= curret_info.character_count;
 				iterator_string = iterator_string.subspan(curret_info.target_space);
 				for (std::size_t i = 0; i < curret_info.target_space; ++i)
 				{
@@ -474,17 +506,23 @@ export namespace Potato::Encode
 		using NativeStorageT = UnicodeWrapper<CharT>::NativeStorageT;
 		using WrapperT = UnicodeWrapper<CharT>::WrapperT;
 
-		static constexpr EncodeInfo Statistics(std::span<Unicode::CodePointT const> source, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr EncodeInfo Statistics(std::span<Unicode::CodePointT const> source, EncodeCutOffSetting cutoff = {})
 		{
 			EncodeInfo info;
 			auto iterator_string = source;
 			while (!iterator_string.empty())
 			{
-				if (info.character_count >= max_unicode_point)
+				if (info.character_count >= cutoff.max_character_count)
 					return info;
 
 				if (iterator_string[0] >= Unicode::max_code_point)
 					return info;
+
+				if (iterator_string[0] == cutoff.cutoff_character)
+				{
+					info.reach_cutoff_character = true;
+					return info;
+				}
 
 				auto size = WrapperT::DetectStorageSizeFromCodePoint(iterator_string[0]);
 
@@ -497,15 +535,21 @@ export namespace Potato::Encode
 			return info;
 		}
 
-		static constexpr EncodeInfo EncodeTo(std::span<Unicode::CodePointT const> source, std::span<CharT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr EncodeInfo EncodeTo(std::span<Unicode::CodePointT const> source, std::span<CharT> target, EncodeCutOffSetting cutoff = {})
 		{
 			EncodeInfo info;
 			auto iterator_string = source;
 			auto iterator_out = target;
 			while (!iterator_string.empty() && !iterator_out.empty())
 			{
-				if (info.character_count >= max_unicode_point)
+				if (info.character_count >= cutoff.max_character_count)
 					return info;
+
+				if (iterator_string[0] == cutoff.cutoff_character)
+				{
+					info.reach_cutoff_character = true;
+					return info;
+				}
 
 				auto result = WrapperT::EncodeFromUnicodePoint(iterator_string[0]);
 				auto target_size = UnicodeEncoderHelper<WrapperT::max_storage_size, WrapperT>::EncodeFromUnicodePoint(result, iterator_out);
@@ -527,20 +571,20 @@ export namespace Potato::Encode
 	
 		template<typename OutIterator>
 			requires std::output_iterator<OutIterator, CharT>
-		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<NativeStorageT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<NativeStorageT const> source, OutIterator iterator, EncodeCutOffSetting cutoff = {})
 		{
 			std::array<CharT, Unicode::temporary_cache_buffer_size * WrapperT::max_storage_size> temporary_buffer;
 			EncodeInfo info;
 			auto iterator_string = source;
-			while (info.is_good_string && !iterator_string.empty() && max_unicode_point > 0)
+			while (info.is_good_string && !info.reach_cutoff_character && !iterator_string.empty() && info.character_count < cutoff.max_character_count)
 			{
-				auto curret_info = EncodeTo(iterator_string, std::span(temporary_buffer), max_unicode_point);
+				auto curret_info = EncodeTo(iterator_string, std::span(temporary_buffer), cutoff);
 				info.character_count += curret_info.character_count;
 				info.source_space += curret_info.source_space;
 				info.target_space += curret_info.target_space;
 				info.is_good_string = curret_info.is_good_string;
+				info.reach_cutoff_character = curret_info.reach_cutoff_character;
 				info.character_count += curret_info.character_count;
-				max_unicode_point -= curret_info.character_count;
 				iterator_string = iterator_string.subspan(curret_info.target_space);
 				for (std::size_t i = 0; i < curret_info.target_space; ++i)
 				{
@@ -555,39 +599,38 @@ export namespace Potato::Encode
 	template<typename FromCharT, typename ToCharT>
 	struct UnicodeEncoder
 	{
-		static constexpr EncodeInfo Statistics(std::span<FromCharT const> source, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr EncodeInfo Statistics(std::span<FromCharT const> source, EncodeCutOffSetting cutoff = {})
 		{
 			EncodeInfo info;
 			std::array<Unicode::CodePointT, Unicode::temporary_cache_buffer_size> temporary_buffer;
 			auto iterator_string = source;
-			while (max_unicode_point != 0 && !iterator_string.empty() && info.is_good_string)
+			while (!iterator_string.empty() && info.is_good_string && !info.reach_cutoff_character && info.character_count < cutoff.max_character_count)
 			{
-				auto decode_info = UnicodeEncoder<FromCharT, Unicode::CodePointT>::EncodeTo(iterator_string, std::span(temporary_buffer), max_unicode_point);
+				auto decode_info = UnicodeEncoder<FromCharT, Unicode::CodePointT>::EncodeTo(iterator_string, std::span(temporary_buffer), cutoff);
 				auto encode_info = UnicodeEncoder<Unicode::CodePointT, ToCharT>::Statistics(std::span(temporary_buffer).subspan(0, decode_info.target_space));
 				info.character_count += decode_info.character_count;
 				info.source_space += decode_info.source_space;
 				info.target_space += encode_info.target_space;
 				info.is_good_string = decode_info.is_good_string && encode_info.is_good_string;
-				max_unicode_point -= decode_info.character_count;
 				iterator_string = iterator_string.subspan(decode_info.source_space);
 			}
 			return info;
 		}
 
-		static constexpr EncodeInfo Statistics(std::basic_string_view<FromCharT> source, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr EncodeInfo Statistics(std::basic_string_view<FromCharT> source, EncodeCutOffSetting cutoff = {})
 		{
-			return Statistics(std::span(source.data(), source.size()), max_unicode_point);
+			return Statistics(std::span(source.data(), source.size()), cutoff);
 		}
 
-		static constexpr EncodeInfo EncodeTo(std::span<FromCharT const> source, std::span<ToCharT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr EncodeInfo EncodeTo(std::span<FromCharT const> source, std::span<ToCharT> target, EncodeCutOffSetting cutoff = {})
 		{
 			EncodeInfo info;
 			std::array<Unicode::CodePointT, Unicode::temporary_cache_buffer_size> temporary_buffer;
 			auto iterator_string = source;
 			auto iterator_out = target;
-			while (info.is_good_string && max_unicode_point != 0 && !iterator_string.empty() && !iterator_out.empty())
+			while (info.is_good_string && !iterator_string.empty() && !iterator_out.empty() && !info.reach_cutoff_character && info.character_count < cutoff.max_character_count)
 			{
-				auto decode_info = UnicodeEncoder<FromCharT, Unicode::CodePointT>::EncodeTo(iterator_string, std::span(temporary_buffer), max_unicode_point);
+				auto decode_info = UnicodeEncoder<FromCharT, Unicode::CodePointT>::EncodeTo(iterator_string, std::span(temporary_buffer), cutoff);
 				auto encode_info = UnicodeEncoder<Unicode::CodePointT, ToCharT>::EncodeTo(std::span(temporary_buffer).subspan(0, decode_info.target_space), iterator_out);
 
 				if (decode_info.character_count == encode_info.character_count)
@@ -596,17 +639,18 @@ export namespace Potato::Encode
 					info.source_space += decode_info.source_space;
 					info.target_space += encode_info.target_space;
 					info.is_good_string = decode_info.is_good_string && encode_info.is_good_string;
-					max_unicode_point -= decode_info.character_count;
+					info.reach_cutoff_character = decode_info.reach_cutoff_character;
 					iterator_string = iterator_string.subspan(decode_info.source_space);
 					iterator_out = iterator_out.subspan(encode_info.target_space);
 				}
 				else {
-					auto redecode_info = UnicodeEncoder<FromCharT, Unicode::CodePointT>::Statistics(iterator_string, encode_info.character_count);
+					EncodeCutOffSetting cutoff_current;
+					cutoff_current.max_character_count = encode_info.character_count;
+					auto redecode_info = UnicodeEncoder<FromCharT, Unicode::CodePointT>::Statistics(iterator_string, cutoff_current);
 					info.character_count += redecode_info.character_count;
 					info.source_space += redecode_info.source_space;
 					info.target_space += encode_info.target_space;
 					info.is_good_string = redecode_info.is_good_string && redecode_info.is_good_string;
-					max_unicode_point -= redecode_info.character_count;
 					iterator_string = iterator_string.subspan(redecode_info.source_space);
 					iterator_out = iterator_out.subspan(encode_info.target_space);
 					return info;
@@ -614,27 +658,27 @@ export namespace Potato::Encode
 			}
 			return info;
 		}
-		static constexpr EncodeInfo EncodeTo(std::basic_string_view<FromCharT> source, std::span<ToCharT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr EncodeInfo EncodeTo(std::basic_string_view<FromCharT> source, std::span<ToCharT> target, EncodeCutOffSetting cutoff = {})
 		{
-			return EncodeTo(std::span(source.data(), source.size()), target, max_unicode_point);
+			return EncodeTo(std::span(source.data(), source.size()), target, cutoff);
 		}
 
 		template<typename OutIterator>
 			requires std::output_iterator<OutIterator, ToCharT>
-		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<FromCharT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<FromCharT const> source, OutIterator iterator, EncodeCutOffSetting cutoff = {})
 		{
 			std::array<ToCharT, Unicode::temporary_cache_buffer_size * UnicodeWrapper<ToCharT>::WrapperT::max_storage_size> temporary_buffer;
 			EncodeInfo info;
 			auto iterator_string = source;
-			while (info.is_good_string && max_unicode_point > 0 && !iterator_string.empty())
+			while (info.is_good_string && !iterator_string.empty() && !info.reach_cutoff_character && info.character_count < cutoff.max_character_count)
 			{
-				auto curret_info = EncodeTo(iterator_string, std::span(temporary_buffer), max_unicode_point);
+				auto curret_info = EncodeTo(iterator_string, std::span(temporary_buffer), cutoff);
 				info.character_count += curret_info.character_count;
 				info.source_space += curret_info.source_space;
 				info.target_space += curret_info.target_space;
 				info.is_good_string = curret_info.is_good_string;
+				info.reach_cutoff_character = curret_info.reach_cutoff_character;
 				info.character_count += curret_info.character_count;
-				max_unicode_point -= curret_info.character_count;
 				iterator_string = iterator_string.subspan(curret_info.source_space);
 				for (std::size_t i = 0; i < curret_info.target_space; ++i)
 				{
@@ -646,9 +690,9 @@ export namespace Potato::Encode
 
 		template<typename OutIterator>
 			requires std::output_iterator<OutIterator, ToCharT>
-		static constexpr auto EncodeTo(std::basic_string_view<FromCharT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr auto EncodeTo(std::basic_string_view<FromCharT const> source, OutIterator iterator, EncodeCutOffSetting cutoff = {})
 		{
-			return EncodeTo(std::span(source.data(), source.size()), std::move(iterator), max_unicode_point);
+			return EncodeTo(std::span(source.data(), source.size()), std::move(iterator), cutoff);
 		}
 	};
 
@@ -656,51 +700,53 @@ export namespace Potato::Encode
 		requires(!std::is_same_v<FromCharT, Unicode::CodePointT>)
 	struct UnicodeEncoder<FromCharT, FromCharT>
 	{
-		static constexpr EncodeInfo Statistics(std::span<FromCharT const> source, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr EncodeInfo Statistics(std::span<FromCharT const> source, EncodeCutOffSetting cutoff = {})
 		{
-			EncodeInfo info = UnicodeEncoder<FromCharT, Unicode::CodePointT>::Statistics(std::span(source), max_unicode_point);
+			EncodeInfo info = UnicodeEncoder<FromCharT, Unicode::CodePointT>::Statistics(std::span(source), cutoff);
 			info.target_space = info.source_space;
 			return info;
 		}
 
-		static constexpr EncodeInfo Statistics(std::basic_string_view<FromCharT> source, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr EncodeInfo Statistics(std::basic_string_view<FromCharT> source, EncodeCutOffSetting cutoff = {})
 		{
-			return Statistics(std::span(source.data(), source.size()), max_unicode_point);
+			return Statistics(std::span(source.data(), source.size()), cutoff);
 		}
 
-		static constexpr EncodeInfo EncodeTo(std::span<FromCharT const> source, std::span<FromCharT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr EncodeInfo EncodeTo(std::span<FromCharT const> source, std::span<FromCharT> target, EncodeCutOffSetting cutoff = {})
 		{
 			auto min_size = std::min(source.size(), target.size());
-			EncodeInfo info = Statistics(source.subspan(0, min_size), max_unicode_point);
+			EncodeInfo info = Statistics(source.subspan(0, min_size), cutoff);
 			std::copy_n(source.data(), info.source_space, target.begin());
 			if (info.source_space == source.size())
 			{
 				info.is_good_string = true;
 			}
 			else if (info.is_good_string) {
-				EncodeInfo info2 = Statistics(source.subspan(info.source_space), 1);
+				EncodeCutOffSetting cutoff_setting;
+				cutoff_setting.max_character_count = 1;
+				EncodeInfo info2 = Statistics(source.subspan(info.source_space), cutoff_setting);
 				info.is_good_string = info2.is_good_string;
 			}
 			return info;
 		}
-		static constexpr EncodeInfo EncodeTo(std::basic_string_view<FromCharT> source, std::span<FromCharT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr EncodeInfo EncodeTo(std::basic_string_view<FromCharT> source, std::span<FromCharT> target, EncodeCutOffSetting cutoff = {})
 		{
-			return EncodeTo(std::span(source.data(), source.size()), target, max_unicode_point);
+			return EncodeTo(std::span(source.data(), source.size()), target, cutoff);
 		}
 
 		template<typename OutIterator>
 			requires std::output_iterator<OutIterator, FromCharT>
-		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<FromCharT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<FromCharT const> source, OutIterator iterator, EncodeCutOffSetting cutoff = {})
 		{
-			EncodeInfo info = Statistics(source, max_unicode_point);
+			EncodeInfo info = Statistics(source, cutoff);
 			return { info, std::copy_n(source.data(), info.target_space, iterator) };
 		}
 
 		template<typename OutIterator>
 			requires std::output_iterator<OutIterator, FromCharT>
-		static constexpr auto EncodeTo(std::basic_string_view<FromCharT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr auto EncodeTo(std::basic_string_view<FromCharT const> source, OutIterator iterator, EncodeCutOffSetting cutoff = {})
 		{
-			return EncodeTo(std::span(source.data(), source.size()), std::move(iterator), max_unicode_point);
+			return EncodeTo(std::span(source.data(), source.size()), std::move(iterator), cutoff);
 		}
 	};
 
@@ -711,22 +757,22 @@ export namespace Potato::Encode
 				)
 	struct UnicodeEncoder<FromCharT, ToCharT>
 	{
-		static constexpr EncodeInfo Statistics(std::span<FromCharT const> source, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr EncodeInfo Statistics(std::span<FromCharT const> source, EncodeCutOffSetting cutoff = {})
 		{
-			EncodeInfo info = UnicodeEncoder<FromCharT, Unicode::CodePointT>::Statistics(std::span(source), max_unicode_point);
+			EncodeInfo info = UnicodeEncoder<FromCharT, Unicode::CodePointT>::Statistics(std::span(source), cutoff);
 			info.target_space = info.source_space;
 			return info;
 		}
 
-		static constexpr EncodeInfo Statistics(std::basic_string_view<FromCharT> source, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr EncodeInfo Statistics(std::basic_string_view<FromCharT> source, EncodeCutOffSetting cutoff = {})
 		{
-			return Statistics(std::span(source.data(), source.size()), max_unicode_point);
+			return Statistics(std::span(source.data(), source.size()), cutoff);
 		}
 
-		static constexpr EncodeInfo EncodeTo(std::span<FromCharT const> source, std::span<ToCharT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr EncodeInfo EncodeTo(std::span<FromCharT const> source, std::span<ToCharT> target, EncodeCutOffSetting cutoff = {})
 		{
 			auto min_size = std::min(source.size(), target.size());
-			EncodeInfo info = Statistics(source.subspan(0, min_size), max_unicode_point);
+			EncodeInfo info = Statistics(source.subspan(0, min_size), cutoff);
 			for (std::size_t i = 0; i < info.target_space; ++i)
 			{
 				target[i] = static_cast<ToCharT>(source[i] - static_cast<FromCharT>(0));
@@ -741,16 +787,16 @@ export namespace Potato::Encode
 			}
 			return info;
 		}
-		static constexpr EncodeInfo EncodeTo(std::basic_string_view<FromCharT> source, std::span<ToCharT> target, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr EncodeInfo EncodeTo(std::basic_string_view<FromCharT> source, std::span<ToCharT> target, EncodeCutOffSetting cutoff = {})
 		{
-			return EncodeTo(std::span(source.data(), source.size()), target, max_unicode_point);
+			return EncodeTo(std::span(source.data(), source.size()), target, cutoff);
 		}
 
 		template<typename OutIterator>
 			requires std::output_iterator<OutIterator, ToCharT>
-		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<FromCharT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<FromCharT const> source, OutIterator iterator, EncodeCutOffSetting cutoff = {})
 		{
-			EncodeInfo info = Statistics(source, max_unicode_point);
+			EncodeInfo info = Statistics(source, cutoff);
 			for (std::size_t i = 0; i < info.target_space; ++i)
 			{
 				(*iterator++) = static_cast<ToCharT>(source[i] - static_cast<FromCharT>(0));
@@ -760,9 +806,9 @@ export namespace Potato::Encode
 
 		template<typename OutIterator>
 			requires std::output_iterator<OutIterator, ToCharT>
-		static constexpr auto EncodeTo(std::basic_string_view<FromCharT const> source, OutIterator iterator, std::size_t max_unicode_point = std::numeric_limits<std::size_t>::max())
+		static constexpr auto EncodeTo(std::basic_string_view<FromCharT const> source, OutIterator iterator, EncodeCutOffSetting cutoff = {})
 		{
-			return EncodeTo(std::span(source.data(), source.size()), std::move(iterator), max_unicode_point);
+			return EncodeTo(std::span(source.data(), source.size()), std::move(iterator), cutoff);
 		}
 	};
 }

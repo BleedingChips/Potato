@@ -15,17 +15,17 @@ namespace Potato::EBNF
 
 	using SLRX::Symbol;
 
-	std::wstring_view OrStatementRegName() {
-		return L"$Or";
+	std::u8string_view OrStatementRegName() {
+		return u8"$Or";
 	}
-	static std::wstring_view RoundBracketStatementRegName() {
-		return L"$RoundBracket";
+	static std::u8string_view RoundBracketStatementRegName() {
+		return u8"$RoundBracket";
 	}
-	static std::wstring_view SquareBracketStatementRegName() {
-		return L"$SquareBracket";
+	static std::u8string_view SquareBracketStatementRegName() {
+		return u8"$SquareBracket";
 	}
-	static std::wstring_view CurlyBracketStatementRegName() {
-		return L"$CurlyBracket";
+	static std::u8string_view CurlyBracketStatementRegName() {
+		return u8"$CurlyBracket";
 	}
 
 	enum class T
@@ -72,7 +72,7 @@ namespace Potato::EBNF
 	constexpr Symbol operator*(NT sym) { return Symbol::AsNoTerminal(static_cast<std::size_t>(sym)); };
 
 	Reg::DfaBinaryTableWrapper GetRegTable() {
-		static auto List = []() {
+		static std::vector<Reg::DfaBinaryTableWrapper::StandardT> List = []() {
 
 			Reg::Nfa StartupTable{ std::basic_string_view{UR"(%%%%)"}, false, static_cast<std::size_t>(T::Barrier) };
 
@@ -102,7 +102,7 @@ namespace Potato::EBNF
 			return Reg::CreateDfaBinaryTable(FinalTable);
 		}();
 
-		return Reg::DfaBinaryTableWrapper{List};
+		return Reg::DfaBinaryTableWrapper{ std::span(List.data(), List.size()) };
 	}
 
 	SLRX::LRXBinaryTableWrapper EbnfStep1SLRX() {
@@ -636,10 +636,256 @@ namespace Potato::EBNF
 		return true;
 	}
 
-	std::wstring_view Ebnf::GetRegName(std::size_t Index) const
+	Ebnf::Ebnf(std::u8string_view EbnfStr, Ebnf::Config config)
+	{
+		try {
+			EbnfBuilder Builder{ 0 };
+			std::size_t Index = 0;
+			char32_t InputValue = 0;
+			std::span<char32_t> OutputBuffer{ &InputValue, 1 };
+			while (true)
+			{
+				auto RequireSize = Builder.GetRequireTokenIndex();
+
+				if (RequireSize < EbnfStr.size())
+				{
+					auto InputSpan = EbnfStr.substr(RequireSize);
+					Encode::EncodeCutOffSetting cutoff;
+					cutoff.max_character_count = 1;
+					auto EncodeInfo = Encode::UnicodeEncoder<char8_t, char32_t>::EncodeTo(InputSpan, OutputBuffer, cutoff);
+					auto TokenIndex = Misc::IndexSpan<>{ RequireSize, RequireSize + EncodeInfo.source_space };
+
+					if (!Builder.Consume(InputValue, TokenIndex.End()))
+					{
+						auto error_string = TokenIndex.Slice(EbnfStr);
+						throw Exception::UnacceptableRegex(error_string);
+					}
+				}
+				else if (RequireSize == EbnfStr.size())
+				{
+					if (!Builder.EndOfFile())
+						throw Exception::UnacceptableRegex(std::wstring_view{ L"EndOfFile" });
+				}
+				else {
+					break;
+				}
+			}
+
+			Reg::MulityRegCreater Gen;
+			std::map<std::basic_string_view<char8_t>, std::size_t> Mapping;
+			Mapping.insert({ {}, Mapping.size() });
+
+			for (std::size_t I = Builder.RegMappings.size(); I > 0; --I)
+			{
+				auto& Ite = Builder.RegMappings[I - 1];
+				switch (Ite.RegNameType)
+				{
+				case EbnfBuilder::RegTypeE::Reg:
+				{
+					auto [IIte, B] = Mapping.insert({ Ite.RegName.Slice(EbnfStr), Mapping.size() });
+					if (B)
+					{
+						auto RegStr = Ite.Reg.SubIndex(1, Ite.Reg.Size() - 2).Slice(EbnfStr);
+						Gen.AppendReg(RegStr, true, RegMap.size());
+						RegMap.push_back({ IIte->second, {} });
+					}
+					break;
+				}
+				case EbnfBuilder::RegTypeE::Terminal:
+				{
+					auto [IIte, B] = Mapping.insert({ Ite.RegName.Slice(EbnfStr), Mapping.size() });
+					auto RegStr = Ite.Reg.SubIndex(1, Ite.Reg.Size() - 2).Slice(EbnfStr);
+					std::size_t UserMask = 0;
+					if (Ite.UserMask.has_value())
+					{
+						Format::DirectDeformat(Ite.UserMask->Slice(EbnfStr), UserMask);
+					}
+					Gen.AppendReg(RegStr, false, RegMap.size());
+					RegMap.push_back({ IIte->second, UserMask });
+					break;
+				}
+				case EbnfBuilder::RegTypeE::Empty:
+				{
+					auto RegStr = Ite.Reg.SubIndex(1, Ite.Reg.Size() - 2).Slice(EbnfStr);
+					Gen.AppendReg(RegStr, false, RegMap.size());
+					RegMap.push_back({ 0, 0 });
+					break;
+				}
+				}
+			}
+
+			auto InsertElement = [&](EbnfBuilder::ElementT Ele) {
+				if (Ele.ElementType == EbnfBuilder::ElementTypeE::Terminal || Ele.ElementType == EbnfBuilder::ElementTypeE::NoTerminal)
+				{
+					Mapping.insert(
+						{ Ele.Value.Slice(EbnfStr), Mapping.size() }
+					);
+				}
+				};
+
+			assert(Builder.StartSymbol.has_value());
+
+			InsertElement(*Builder.StartSymbol);
+
+			for (auto& Ite : Builder.Builder)
+			{
+				InsertElement(Ite.StartSymbol);
+				for (auto& Ite2 : Ite.Productions)
+				{
+					InsertElement(Ite2);
+				}
+			}
+
+			for (auto& Ite : Builder.OpePriority)
+			{
+				for (auto& Ite2 : Ite.Ope)
+				{
+					InsertElement(Ite2);
+				}
+			}
+
+			std::size_t RquireSize = 0;
+
+			for (auto& Ite : Mapping)
+			{
+				RquireSize += Encode::UnicodeEncoder<char8_t, wchar_t>::Statistics(Ite.first).target_space;
+			}
+
+			TotalString.resize(RquireSize);
+			SymbolMap.resize(Mapping.size());
+			std::size_t Writed = 0;
+			for (auto& Ite : Mapping)
+			{
+				auto W = Encode::UnicodeEncoder<char8_t, char8_t>::EncodeTo(Ite.first, std::span(TotalString).subspan(Writed)).target_space;
+				SymbolMap[Ite.second].StrIndex = { Writed, Writed + W };
+				Writed = Writed + W;
+			}
+
+			Lexical = *Gen.CreateDfa(Reg::Dfa::FormatE::GreedyHeadMatch);
+
+			SLRX::Symbol StartSymbol;
+
+			auto Find = Mapping.find(
+				Builder.StartSymbol->Value.Slice(EbnfStr)
+			);
+
+			StartSymbol = SLRX::Symbol::AsNoTerminal(Find->second);
+
+			std::size_t MaxForwardDetect = 3;
+
+			if (Builder.MaxForwardDetect.has_value())
+			{
+				Format::DirectDeformat(Builder.MaxForwardDetect->Value.Slice(EbnfStr), MaxForwardDetect);
+			}
+
+			std::vector<SLRX::ProductionBuilder> PBuilder;
+
+			for (auto& Ite : Builder.Builder)
+			{
+				SLRX::Symbol StartSymbol;
+				std::vector<SLRX::ProductionBuilderElement> Element;
+				std::size_t ProdutionMask = 0;
+				if (Ite.StartSymbol.ElementType == EbnfBuilder::ElementTypeE::Temporary)
+				{
+					StartSymbol = SLRX::Symbol::AsNoTerminal(Ite.StartSymbol.Value.Begin() + Mapping.size());
+				}
+				else {
+					StartSymbol = SLRX::Symbol::AsNoTerminal(Mapping.find(Ite.StartSymbol.Value.Slice(EbnfStr))->second);
+				}
+				Element.reserve(Ite.Productions.size());
+				for (auto& Ite2 : Ite.Productions)
+				{
+					switch (Ite2.ElementType)
+					{
+					case EbnfBuilder::ElementTypeE::Mask:
+					{
+						std::size_t Mask = 0;
+						auto Str = Ite2.Value.Slice(EbnfStr);
+						Format::DirectDeformat(Ite2.Value.Slice(EbnfStr), Mask);
+						Element.push_back(SLRX::ProductionBuilderElement{ Mask });
+						break;
+					}
+					case EbnfBuilder::ElementTypeE::Terminal:
+					{
+						auto Str = Ite2.Value.Slice(EbnfStr);
+						auto RSymbol = SLRX::Symbol::AsTerminal(
+							Mapping.find(Str)->second
+						);
+						Element.push_back(SLRX::ProductionBuilderElement{ RSymbol });
+						break;
+					}
+					case EbnfBuilder::ElementTypeE::NoTerminal:
+					{
+						auto Str = Ite2.Value.Slice(EbnfStr);
+						auto RSymbol = SLRX::Symbol::AsNoTerminal(
+							Mapping.find(Str)->second
+						);
+						Element.push_back(SLRX::ProductionBuilderElement{ RSymbol });
+						break;
+					}
+					case EbnfBuilder::ElementTypeE::Self:
+					{
+						Element.push_back(SLRX::ProductionBuilderElement{ SLRX::ItSelf{} });
+						break;
+					}
+					case EbnfBuilder::ElementTypeE::Temporary:
+					{
+						auto RSymbol = SLRX::Symbol::AsNoTerminal(
+							Ite2.Value.Begin() + Mapping.size()
+						);
+						Element.push_back(SLRX::ProductionBuilderElement{ RSymbol });
+						break;
+					}
+					default:
+						assert(false);
+						break;
+					}
+				}
+				if (Ite.UserMask.Size() != 0)
+				{
+					auto Str = Ite.UserMask.Slice(EbnfStr);
+					Format::DirectDeformat(Str, ProdutionMask);
+				}
+				else if (Ite.StartSymbol.ElementType == EbnfBuilder::ElementTypeE::Temporary)
+				{
+					ProdutionMask = Ite.UserMask.Begin();
+				}
+				PBuilder.push_back({ StartSymbol, std::move(Element), ProdutionMask });
+			}
+
+			std::vector<SLRX::OpePriority> OpePriority;
+
+			for (auto& Ite : Builder.OpePriority)
+			{
+				std::vector<SLRX::Symbol> Symbols;
+				Symbols.reserve(Ite.Ope.size());
+				for (auto& Ite2 : Ite.Ope)
+				{
+					auto Str = Ite2.Value.Slice(EbnfStr);
+					Symbols.push_back(
+						SLRX::Symbol::AsTerminal(
+							Mapping.find(Str)->second
+						)
+					);
+				}
+				OpePriority.push_back({ std::move(Symbols), Ite.Associativity });
+			}
+
+			Syntax = SLRX::LRX::Create(StartSymbol, std::move(PBuilder), std::move(OpePriority), MaxForwardDetect);
+		}
+		catch (BuildInUnacceptableEbnf Bnf)
+		{
+			std::pmr::wstring str;
+			Encode::UnicodeEncoder<char8_t, wchar_t>::EncodeTo(Bnf.TokenIndex.Slice(EbnfStr), std::back_inserter(str));
+			throw Exception::UnacceptableEbnf{ Bnf.Type, std::move(str) };
+		}
+
+	}
+
+	std::u8string_view Ebnf::GetRegName(std::size_t Index) const
 	{
 		if(Index < SymbolMap.size())
-			return SymbolMap[Index].StrIndex.Slice(std::wstring_view{ TotalString });
+			return SymbolMap[Index].StrIndex.Slice(std::u8string_view{ TotalString });
 		return {};
 	};
 
@@ -659,7 +905,7 @@ namespace Potato::EBNF
 		return Info;
 	}
 
-	std::wstring_view EbnfBinaryTableWrapper::GetRegName(std::size_t Index) const 
+	std::u8string_view EbnfBinaryTableWrapper::GetRegName(std::size_t Index) const 
 	{
 		auto Head = GetHead();
 		if (Index < Head->SymbolMapCount)
@@ -669,9 +915,9 @@ namespace Potato::EBNF
 			auto Span = Reader.ReadObjectArray<SymbolMapT>(Head->SymbolMapCount);
 			auto NameIndex = Span[Index].StrIndex;
 			Reader.SetPointer(Head->TotalNameOffset);
-			auto Str = Reader.ReadObjectArray<wchar_t>(Head->TotalNameCount);
+			auto Str = Reader.ReadObjectArray<char8_t>(Head->TotalNameCount);
 			auto string_span = NameIndex.Slice(Str);
-			return std::wstring_view{ string_span .data(), string_span .size()};
+			return std::u8string_view{ string_span .data(), string_span .size()};
 		}
 		else {
 			return {};

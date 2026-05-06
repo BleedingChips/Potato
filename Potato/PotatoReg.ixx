@@ -568,7 +568,7 @@ export namespace Potato::Reg
 
 		while (!ite_str.empty())
 		{
-			auto info = Encode::UnicodeEncoder<CharT, CodePointT>::EncodeTo(ite_str, temp_buffer, std::numeric_limits<std::size_t>::max(), source_index, token_index);
+			auto info = Encode::UnicodeEncoder<CharT, CodePointT>::EncodeTo(ite_str, temp_buffer, {}, source_index, token_index);
 			auto result = FragmentProcess(
 				std::span(temp_buffer).subspan(0, info.target_space),
 				std::span(source_index).subspan(0, info.target_space)

@@ -111,15 +111,15 @@ export namespace Potato::EBNF
 		friend struct Ebnf;
 	};
 
-	std::wstring_view OrStatementRegName();
-	std::wstring_view RoundBracketStatementRegName();
-	std::wstring_view SquareBracketStatementRegName();
-	std::wstring_view CurlyBracketStatementRegName();
+	std::u8string_view OrStatementRegName();
+	std::u8string_view RoundBracketStatementRegName();
+	std::u8string_view SquareBracketStatementRegName();
+	std::u8string_view CurlyBracketStatementRegName();
 
 	struct SymbolInfo
 	{
 		SLRX::Symbol Symbol;
-		std::wstring_view SymbolName;
+		std::u8string_view SymbolName;
 		Misc::IndexSpan<> TokenIndex;
 	};
 
@@ -165,12 +165,22 @@ export namespace Potato::EBNF
 
 	struct Ebnf
 	{
+		/*
 		template<typename CharT, typename CharTraisT>
 		Ebnf(std::basic_string_view<CharT, CharTraisT> EbnfStr);
+		*/
 
 		Ebnf(Ebnf&&) = default;
 
 		Ebnf() = default;
+
+		struct Config
+		{
+			std::pmr::memory_resource* temporary_resource = std::pmr::get_default_resource();
+			std::pmr::memory_resource* resource = std::pmr::get_default_resource();
+		};
+
+		Ebnf(std::u8string_view ebnf_str, Config config = {});
 
 		Reg::Dfa const& GetLexical() const { return Lexical; }
 		SLRX::LRX const& GetSyntax() const { return Syntax; }
@@ -182,11 +192,11 @@ export namespace Potato::EBNF
 		};
 
 		RegInfoT GetRgeInfo(std::size_t Index) const { return RegMap[Index]; }
-		std::wstring_view GetRegName(std::size_t Index) const;
+		std::u8string_view GetRegName(std::size_t Index) const;
 
 	protected:
 
-		std::wstring TotalString;
+		std::u8string TotalString;
 
 		struct SymbolMapT
 		{
@@ -238,7 +248,7 @@ export namespace Potato::EBNF
 		EbnfBinaryTableWrapper(std::span<StandardT const> Buffer) : Buffer(Buffer) {}
 
 		Ebnf::RegInfoT GetRgeInfo(std::size_t Index) const;
-		std::wstring_view GetRegName(std::size_t Index) const;
+		std::u8string_view GetRegName(std::size_t Index) const;
 		Reg::DfaBinaryTableWrapper GetLexicalTable() const;
 		SLRX::LRXBinaryTableWrapper GetSyntaxTable() const;
 
@@ -317,7 +327,9 @@ export namespace Potato::EBNF
 				if (LastRequireSize != RequireSize)
 				{
 					auto InputSpan = Str.substr(RequireSize);
-					auto EncodeInfo = Encode::UnicodeEncoder<CharT, char32_t>::EncodeTo(InputSpan, OutputBuffer, 1);
+					Encode::EncodeCutOffSetting cutoff;
+					cutoff.max_character_count = 1;
+					auto EncodeInfo = Encode::UnicodeEncoder<CharT, char32_t>::EncodeTo(InputSpan, OutputBuffer, cutoff);
 					TokenIndex = Misc::IndexSpan<>{ RequireSize, RequireSize + EncodeInfo.source_space };
 					LastRequireSize = RequireSize;
 				}
@@ -341,7 +353,7 @@ export namespace Potato::EBNF
 	struct LexicalSymbol
 	{
 		SLRX::Symbol symbol;
-		std::wstring_view name;
+		std::u8string_view name;
 		Misc::IndexSpan<> token_index;
 		std::size_t user_mask;
 		bool IsIgnoredSymbol() const { return symbol.symbol == 0; }
@@ -494,249 +506,4 @@ export namespace Potato::EBNF
 		TypeE Type;
 		Misc::IndexSpan<> TokenIndex;
 	};
-
-
-	template<typename CharT, typename CharTraisT>
-	Ebnf::Ebnf(std::basic_string_view<CharT, CharTraisT> EbnfStr)
-	{
-		try {
-			EbnfBuilder Builder{ 0 };
-			std::size_t Index = 0;
-			char32_t InputValue = 0;
-			std::span<char32_t> OutputBuffer{&InputValue, 1};
-			while (true)
-			{
-				auto RequireSize = Builder.GetRequireTokenIndex();
-
-				if (RequireSize < EbnfStr.size())
-				{
-					auto InputSpan = EbnfStr.substr(RequireSize);
-					auto EncodeInfo = Encode::UnicodeEncoder<CharT, char32_t>::EncodeTo(InputSpan, OutputBuffer, 1);
-					auto TokenIndex = Misc::IndexSpan<>{ RequireSize, RequireSize + EncodeInfo.source_space };
-
-					if (!Builder.Consume(InputValue, TokenIndex.End()))
-					{
-						auto error_string = TokenIndex.Slice(EbnfStr);
-						throw Exception::UnacceptableRegex(error_string);
-					}
-				}else if (RequireSize == EbnfStr.size())
-				{
-					if(!Builder.EndOfFile())
-						throw Exception::UnacceptableRegex(std::wstring_view{L"EndOfFile"});
-				}
-				else {
-					break;
-				}
-			}
-			
-			Reg::MulityRegCreater Gen;
-			std::map<std::basic_string_view<CharT, CharTraisT>, std::size_t> Mapping;
-			Mapping.insert({{}, Mapping.size()});
-
-			for (std::size_t I = Builder.RegMappings.size(); I > 0; --I)
-			{
-				auto& Ite = Builder.RegMappings[I - 1];
-				switch (Ite.RegNameType)
-				{
-				case EbnfBuilder::RegTypeE::Reg:
-				{
-					auto [IIte, B] = Mapping.insert({ Ite.RegName.Slice(EbnfStr), Mapping.size()});
-					if (B)
-					{
-						auto RegStr = Ite.Reg.SubIndex(1, Ite.Reg.Size() - 2).Slice(EbnfStr);
-						Gen.AppendReg(RegStr, true, RegMap.size());
-						RegMap.push_back({ IIte->second, {} });
-					}
-					break;
-				}
-				case EbnfBuilder::RegTypeE::Terminal:
-				{
-					auto [IIte, B] = Mapping.insert({ Ite.RegName.Slice(EbnfStr), Mapping.size() });
-					auto RegStr = Ite.Reg.SubIndex(1, Ite.Reg.Size() - 2).Slice(EbnfStr);
-					std::size_t UserMask = 0;
-					if (Ite.UserMask.has_value())
-					{
-						Format::DirectDeformat(Ite.UserMask->Slice(EbnfStr), UserMask);
-					}
-					Gen.AppendReg(RegStr, false, RegMap.size());
-					RegMap.push_back({ IIte->second, UserMask });
-					break;
-				}
-				case EbnfBuilder::RegTypeE::Empty:
-				{
-					auto RegStr = Ite.Reg.SubIndex(1, Ite.Reg.Size() - 2).Slice(EbnfStr);
-					Gen.AppendReg(RegStr, false, RegMap.size());
-					RegMap.push_back({ 0, 0 });
-					break;
-				}
-				}
-			}
-
-			auto InsertElement = [&](EbnfBuilder::ElementT Ele){
-				if (Ele.ElementType == EbnfBuilder::ElementTypeE::Terminal || Ele.ElementType == EbnfBuilder::ElementTypeE::NoTerminal)
-				{
-					Mapping.insert(
-						{Ele.Value.Slice(EbnfStr), Mapping.size()}
-					);
-				}
-			};
-
-			assert(Builder.StartSymbol.has_value());
-
-			InsertElement(*Builder.StartSymbol);
-
-			for (auto& Ite : Builder.Builder)
-			{
-				InsertElement(Ite.StartSymbol);
-				for (auto& Ite2 : Ite.Productions)
-				{
-					InsertElement(Ite2);
-				}
-			}
-
-			for (auto& Ite : Builder.OpePriority)
-			{
-				for (auto& Ite2 : Ite.Ope)
-				{
-					InsertElement(Ite2);
-				}
-			}
-
-			std::size_t RquireSize = 0;
-
-			for (auto& Ite : Mapping)
-			{
-				RquireSize += Encode::UnicodeEncoder<CharT, wchar_t>::Statistics(Ite.first).target_space;
-			}
-
-			TotalString.resize(RquireSize);
-			SymbolMap.resize(Mapping.size());
-			std::size_t Writed = 0;
-			for (auto& Ite : Mapping)
-			{
-				auto W = Encode::UnicodeEncoder<CharT, wchar_t>::EncodeTo(Ite.first, std::span(TotalString).subspan(Writed)).target_space;
-				SymbolMap[Ite.second].StrIndex = { Writed, Writed + W};
-				Writed = Writed + W;
-			}
-
-			Lexical = *Gen.CreateDfa(Reg::Dfa::FormatE::GreedyHeadMatch);
-
-			SLRX::Symbol StartSymbol;
-			
-			auto Find = Mapping.find(
-				Builder.StartSymbol->Value.Slice(EbnfStr)
-			);
-
-			StartSymbol = SLRX::Symbol::AsNoTerminal(Find->second);
-
-			std::size_t MaxForwardDetect = 3;
-
-			if (Builder.MaxForwardDetect.has_value())
-			{
-				Format::DirectDeformat(Builder.MaxForwardDetect->Value.Slice(EbnfStr), MaxForwardDetect);
-			}
-
-			std::vector<SLRX::ProductionBuilder> PBuilder;
-
-			for (auto& Ite : Builder.Builder)
-			{
-				SLRX::Symbol StartSymbol;
-				std::vector<SLRX::ProductionBuilderElement> Element;
-				std::size_t ProdutionMask = 0;
-				if (Ite.StartSymbol.ElementType == EbnfBuilder::ElementTypeE::Temporary)
-				{
-					StartSymbol = SLRX::Symbol::AsNoTerminal(Ite.StartSymbol.Value.Begin() + Mapping.size());
-				}
-				else {
-					StartSymbol = SLRX::Symbol::AsNoTerminal(Mapping.find(Ite.StartSymbol.Value.Slice(EbnfStr))->second);
-				}
-				Element.reserve(Ite.Productions.size());
-				for (auto& Ite2 : Ite.Productions)
-				{
-					switch (Ite2.ElementType)
-					{
-					case EbnfBuilder::ElementTypeE::Mask:
-					{
-						std::size_t Mask = 0;
-						auto Str = Ite2.Value.Slice(EbnfStr);
-						Format::DirectDeformat(Ite2.Value.Slice(EbnfStr), Mask);
-						Element.push_back(SLRX::ProductionBuilderElement{Mask});
-						break;
-					}
-					case EbnfBuilder::ElementTypeE::Terminal:
-					{
-						auto Str = Ite2.Value.Slice(EbnfStr);
-						auto RSymbol = SLRX::Symbol::AsTerminal(
-							Mapping.find(Str)->second
-						);
-						Element.push_back(SLRX::ProductionBuilderElement{ RSymbol });
-						break;
-					}
-					case EbnfBuilder::ElementTypeE::NoTerminal:
-					{
-						auto Str = Ite2.Value.Slice(EbnfStr);
-						auto RSymbol = SLRX::Symbol::AsNoTerminal(
-							Mapping.find(Str)->second
-						);
-						Element.push_back(SLRX::ProductionBuilderElement{ RSymbol });
-						break;
-					}
-					case EbnfBuilder::ElementTypeE::Self:
-					{
-						Element.push_back(SLRX::ProductionBuilderElement{ SLRX::ItSelf{} });
-						break;
-					}
-					case EbnfBuilder::ElementTypeE::Temporary:
-					{
-						auto RSymbol = SLRX::Symbol::AsNoTerminal(
-							Ite2.Value.Begin() + Mapping.size()
-						);
-						Element.push_back(SLRX::ProductionBuilderElement{ RSymbol });
-						break;
-					}
-					default:
-						assert(false);
-						break;
-					}
-				}
-				if (Ite.UserMask.Size() != 0)
-				{
-					auto Str = Ite.UserMask.Slice(EbnfStr);
-					Format::DirectDeformat(Str, ProdutionMask);
-				}
-				else if(Ite.StartSymbol.ElementType == EbnfBuilder::ElementTypeE::Temporary)
-				{
-					ProdutionMask = Ite.UserMask.Begin();
-				}
-				PBuilder.push_back({StartSymbol, std::move(Element), ProdutionMask });
-			}
-
-			std::vector<SLRX::OpePriority> OpePriority;
-
-			for (auto& Ite : Builder.OpePriority)
-			{
-				std::vector<SLRX::Symbol> Symbols;
-				Symbols.reserve(Ite.Ope.size());
-				for (auto& Ite2 : Ite.Ope)
-				{
-					auto Str = Ite2.Value.Slice(EbnfStr);
-					Symbols.push_back(
-						SLRX::Symbol::AsTerminal(
-							Mapping.find(Str)->second
-						)
-					);
-				}
-				OpePriority.push_back({std::move(Symbols), Ite.Associativity });
-			}
-
-			Syntax = SLRX::LRX::Create(StartSymbol, std::move(PBuilder), std::move(OpePriority), MaxForwardDetect);
-		}
-		catch (BuildInUnacceptableEbnf Bnf)
-		{
-			std::pmr::wstring str;
-			Encode::UnicodeEncoder<CharT, wchar_t>::EncodeTo(Bnf.TokenIndex.Slice(EbnfStr), std::back_inserter(str));
-			throw Exception::UnacceptableEbnf{Bnf.Type, std::move(str)};
-		}
-		
-	}
 }

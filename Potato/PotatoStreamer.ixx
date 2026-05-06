@@ -1,7 +1,7 @@
-export module PotatoStreamer;
+﻿export module PotatoStreamer;
 import std;
 import PotatoTMP;
-import PotatoMemLayout;
+import PotatoMisc;
 
 
 export namespace Potato::Streamer
@@ -10,29 +10,25 @@ export namespace Potato::Streamer
 	{
 		OK,
 		NoExist,
-		Depletion
+		Depletion,
 	};
 
-
-	struct BinaryStreamer
+	struct StreamReader
 	{
-		struct Result
-		{
-			StreamState state = StreamState::OK;
-			std::size_t readed_size = 0;
-		};
-
-		virtual Result StreamRead(std::span<std::byte> out_byte) = 0;
+		virtual std::size_t StreamRead(std::span<std::byte> out_byte) = 0;
+		virtual StreamState GetStreamState() const = 0;
 	};
 
-	enum StreamerSeekType
+	enum SeekAnchor
 	{
 		Start,
+		Current,
 		End
 	};
 
-	struct BinaryRandomStreamer : public BinaryStreamer
+	struct StreamRandomReader : public StreamReader
 	{
-		virtual bool StreamSeek(StreamerSeekType type, std::ptrdiff_t offset) = 0;
+		virtual std::optional<std::ptrdiff_t> StreamSeek(std::ptrdiff_t offset, SeekAnchor anchor = SeekAnchor::Current) = 0;
 	};
+
 }
