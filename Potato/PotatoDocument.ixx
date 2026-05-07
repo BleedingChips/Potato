@@ -192,7 +192,7 @@ export namespace Potato::Document
 		Misc::IndexSpan<> buffer_index;
 		Misc::IndexSpan<> hanlded_buffer_index;
 		BomT bom = BomT::NoBom;
-		void FillBuffer();
+		bool FillBuffer();
 		std::optional<BomT> UpdateBom();
 	};
 

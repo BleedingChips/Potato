@@ -36,12 +36,12 @@ export namespace Potato::Encode
 				}
 				else if ((char_1 & 0xF0) == 0xE0)
 				{
-					if ((char_2 & 0x80) == 0x80 && (char_3 & 0x80) == 0x80)
+					if ((char_2 & 0xC0) == 0x80 && (char_3 & 0xC0) == 0x80)
 						return 3;
 				}
 				else if ((char_1 & 0xF8) == 0xF0)
 				{
-					if ((char_2 & 0x80) == 0x80 && (char_3 & 0x80) == 0x80 && (char_4 & 0x80) == 0x80)
+					if ((char_2 & 0xC0) == 0x80 && (char_3 & 0xC0) == 0x80 && (char_4 & 0xC0) == 0x80)
 						return 4;
 				}
 				return std::nullopt;
@@ -612,6 +612,7 @@ export namespace Potato::Encode
 				info.source_space += decode_info.source_space;
 				info.target_space += encode_info.target_space;
 				info.is_good_string = decode_info.is_good_string && encode_info.is_good_string;
+				info.reach_cutoff_character = info.reach_cutoff_character || encode_info.reach_cutoff_character;
 				iterator_string = iterator_string.subspan(decode_info.source_space);
 			}
 			return info;
@@ -650,7 +651,7 @@ export namespace Potato::Encode
 					info.character_count += redecode_info.character_count;
 					info.source_space += redecode_info.source_space;
 					info.target_space += encode_info.target_space;
-					info.is_good_string = redecode_info.is_good_string && redecode_info.is_good_string;
+					info.is_good_string = redecode_info.is_good_string && encode_info.is_good_string;
 					iterator_string = iterator_string.subspan(redecode_info.source_space);
 					iterator_out = iterator_out.subspan(encode_info.target_space);
 					return info;
@@ -714,18 +715,17 @@ export namespace Potato::Encode
 
 		static constexpr EncodeInfo EncodeTo(std::span<FromCharT const> source, std::span<FromCharT> target, EncodeCutOffSetting cutoff = {})
 		{
-			auto min_size = std::min(source.size(), target.size());
-			EncodeInfo info = Statistics(source.subspan(0, min_size), cutoff);
-			std::copy_n(source.data(), info.source_space, target.begin());
-			if (info.source_space == source.size())
+			cutoff.max_character_count = std::min(cutoff.max_character_count, target.size());
+			EncodeInfo info = Statistics(source, cutoff);
+			auto min_size = std::min(info.source_space, target.size());
+			std::copy_n(
+				source.data(), min_size, target.begin()
+			);
+			if (target.size() < info.source_space || !info.is_good_string && target.size() == info.source_space)
 			{
-				info.is_good_string = true;
-			}
-			else if (info.is_good_string) {
-				EncodeCutOffSetting cutoff_setting;
-				cutoff_setting.max_character_count = 1;
-				EncodeInfo info2 = Statistics(source.subspan(info.source_space), cutoff_setting);
-				info.is_good_string = info2.is_good_string;
+				EncodeInfo next_info = Statistics(target.subspan(0, min_size));
+				next_info.is_good_string = true;
+				return next_info;
 			}
 			return info;
 		}
@@ -759,31 +759,28 @@ export namespace Potato::Encode
 	{
 		static constexpr EncodeInfo Statistics(std::span<FromCharT const> source, EncodeCutOffSetting cutoff = {})
 		{
-			EncodeInfo info = UnicodeEncoder<FromCharT, Unicode::CodePointT>::Statistics(std::span(source), cutoff);
-			info.target_space = info.source_space;
-			return info;
+			return UnicodeEncoder<FromCharT, FromCharT>::Statistics(source, cutoff);
 		}
 
 		static constexpr EncodeInfo Statistics(std::basic_string_view<FromCharT> source, EncodeCutOffSetting cutoff = {})
 		{
-			return Statistics(std::span(source.data(), source.size()), cutoff);
+			return UnicodeEncoder<FromCharT, FromCharT>::Statistics(source, cutoff);
 		}
 
 		static constexpr EncodeInfo EncodeTo(std::span<FromCharT const> source, std::span<ToCharT> target, EncodeCutOffSetting cutoff = {})
 		{
-			auto min_size = std::min(source.size(), target.size());
-			EncodeInfo info = Statistics(source.subspan(0, min_size), cutoff);
-			for (std::size_t i = 0; i < info.target_space; ++i)
+			cutoff.max_character_count = std::min(cutoff.max_character_count, target.size());
+			EncodeInfo info = Statistics(source, cutoff);
+			auto min_size = std::min(info.source_space, target.size());
+			for (std::size_t i = 0; i < min_size; ++i)
 			{
 				target[i] = static_cast<ToCharT>(source[i] - static_cast<FromCharT>(0));
 			}
-			if (info.source_space == source.size())
+			if (target.size() < info.source_space)
 			{
-				info.is_good_string = true;
-			}
-			else if(info.is_good_string){
-				EncodeInfo info2 = Statistics(source.subspan(info.source_space), 1);
-				info.is_good_string = info2.is_good_string;
+				EncodeInfo next_info = UnicodeEncoder<ToCharT, ToCharT>::Statistics(target.subspan(0, min_size));
+				next_info.is_good_string = true;
+				return next_info;
 			}
 			return info;
 		}

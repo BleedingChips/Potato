@@ -330,7 +330,7 @@ namespace Potato::Document
 		return bom;
 	}
 
-	void PlainTextReader::FillBuffer()
+	bool PlainTextReader::FillBuffer()
 	{
 		if (buffer_index.Size() == 0)
 		{
@@ -352,7 +352,9 @@ namespace Potato::Document
 				std::span(cache_buffer.data(), cache_buffer.size()).subspan(buffer_index.End())
 			);
 			buffer_index = { buffer_index.Begin(), buffer_index.End() + readed };
+			return true;
 		}
+		return false;
 	}
 
 	std::optional<Encode::EncodeInfo> PlainTextReader::ReadPlainText(std::span<Encode::Unicode::CodePointT> output, CutoffSetting cutoff)
@@ -411,12 +413,21 @@ namespace Potato::Document
 		case BomT::NoBom:
 		case BomT::UTF8:
 		{
+			bool next_frame_need_fill_buffer = false;
 			EncodeInfo info;
-			while (!output.empty() && info.is_good_string && !info.reach_cutoff_character && info.character_count < cutoff.max_character_count)
+			while (!output.empty() && !info.reach_cutoff_character && info.character_count < cutoff.max_character_count)
 			{
-				if (buffer_index.Size() < Encode::Unicode::UTF8::max_storage_size)
+				if (next_frame_need_fill_buffer || buffer_index.Size() < Encode::Unicode::UTF8::max_storage_size)
 				{
-					FillBuffer();
+					bool filled = FillBuffer();
+					if (filled)
+					{
+						next_frame_need_fill_buffer = false;
+						if (!info.is_good_string)
+						{
+							info.is_good_string = true;
+						}
+					}
 					if (buffer_index.Size() == 0)
 					{
 						if (info.character_count == 0)
@@ -441,8 +452,17 @@ namespace Potato::Document
 				info.source_space += cur_info.source_space;
 				buffer_index = buffer_index.SubIndex(cur_info.source_space * sizeof(char8_t));
 				output = output.subspan(cur_info.target_space);
-				if (!cur_info)
-					return info;
+				
+				if (!cur_info || cur_info.target_space == 0)
+				{
+					if (!next_frame_need_fill_buffer)
+					{
+						next_frame_need_fill_buffer = true;
+					}
+					else {
+						return info;
+					}
+				}
 			}
 			return info;
 		}
