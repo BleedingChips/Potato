@@ -29,7 +29,7 @@ export namespace Potato::Encode
 					return 1;
 				else if ((char_1 & 0xE0) == 0xC0)
 				{
-					if ((char_2 & 0x80) == 0x80)
+					if ((char_2 & 0xC0) == 0x80)
 					{
 						return 2;
 					}
