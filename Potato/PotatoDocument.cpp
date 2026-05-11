@@ -352,7 +352,7 @@ namespace Potato::Document
 				std::span(cache_buffer.data(), cache_buffer.size()).subspan(buffer_index.End())
 			);
 			buffer_index = { buffer_index.Begin(), buffer_index.End() + readed };
-			return true;
+			return readed != 0;
 		}
 		return false;
 	}
@@ -427,6 +427,10 @@ namespace Potato::Document
 						{
 							info.is_good_string = true;
 						}
+					}
+					else if (next_frame_need_fill_buffer)
+					{
+						return info;
 					}
 					if (buffer_index.Size() == 0)
 					{
