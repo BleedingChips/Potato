@@ -365,12 +365,25 @@ namespace Potato::Document
 		case BomT::NoBom:
 		case BomT::UTF8:
 		{
+			bool next_frame_need_fill_buffer = false;
 			EncodeInfo info;
-			while (!output.empty() && info.is_good_string && !info.reach_cutoff_character && info.character_count < cutoff.max_character_count)
+			while (!output.empty() && !info.reach_cutoff_character && info.character_count < cutoff.max_character_count)
 			{
-				if (buffer_index.Size() < Encode::Unicode::UTF8::max_storage_size)
+				if (next_frame_need_fill_buffer || buffer_index.Size() < Encode::Unicode::UTF8::max_storage_size)
 				{
-					FillBuffer();
+					bool filled = FillBuffer();
+					if (filled)
+					{
+						next_frame_need_fill_buffer = false;
+						if (!info.is_good_string)
+						{
+							info.is_good_string = true;
+						}
+					}
+					else if (next_frame_need_fill_buffer)
+					{
+						return info;
+					}
 					if (buffer_index.Size() == 0)
 					{
 						if (info.character_count == 0)
@@ -384,7 +397,7 @@ namespace Potato::Document
 				}
 				auto buffer_span = buffer_index.Slice(std::span(cache_buffer.data(), cache_buffer.size()));
 				auto cur_info = Encode::UnicodeEncoder<char8_t, Encode::Unicode::CodePointT>::EncodeTo(
-					std::span(reinterpret_cast<char8_t const*>(buffer_span.data()), buffer_span.size()),
+					std::span(reinterpret_cast<char8_t const*>(buffer_span.data()), buffer_span.size() / sizeof(char8_t)),
 					output,
 					cutoff
 				);
@@ -395,8 +408,17 @@ namespace Potato::Document
 				info.source_space += cur_info.source_space;
 				buffer_index = buffer_index.SubIndex(cur_info.source_space * sizeof(char8_t));
 				output = output.subspan(cur_info.target_space);
-				if(!cur_info)
-					return info;
+
+				if (!cur_info || cur_info.target_space == 0)
+				{
+					if (!next_frame_need_fill_buffer)
+					{
+						next_frame_need_fill_buffer = true;
+					}
+					else {
+						return info;
+					}
+				}
 			}
 			return info;
 		}
@@ -405,6 +427,8 @@ namespace Potato::Document
 		}
 		return std::nullopt;
 	}
+
+
 
 	std::optional<Encode::EncodeInfo> PlainTextReader::ReadPlainText(std::span<char8_t> output, CutoffSetting cutoff)
 	{
@@ -445,7 +469,7 @@ namespace Potato::Document
 				}
 				auto buffer_span = buffer_index.Slice(std::span(cache_buffer.data(), cache_buffer.size()));
 				auto cur_info = Encode::UnicodeEncoder<char8_t, char8_t>::EncodeTo(
-					std::span(reinterpret_cast<char8_t const*>(buffer_span.data()), buffer_span.size()),
+					std::span(reinterpret_cast<char8_t const*>(buffer_span.data()), buffer_span.size() / sizeof(char8_t)),
 					output,
 					cutoff
 				);
