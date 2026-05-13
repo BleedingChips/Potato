@@ -149,26 +149,6 @@ namespace Potato::Document
 		return std::nullopt;
 	}
 
-	/*
-	std::optional<std::size_t> DocumentReader::ReadToBuffer(std::filesystem::path const& path, TMP::FunctionRef<std::span<std::byte>(std::size_t)> allocate_func)
-	{
-		if (allocate_func)
-		{
-			DocumentReader reader{ path };
-			if (reader)
-			{
-				auto size = reader.GetStreamSize();
-				auto span = allocate_func(size);
-				if (span.size() >= size)
-				{
-					return reader.Read(span);
-				}
-			}
-		}
-		return std::nullopt;
-	}
-	*/
-
 	DocumentWriter::DocumentWriter(DocumentWriter&& reader)
 	{
 #ifdef _WIN32
@@ -338,12 +318,12 @@ namespace Potato::Document
 		}
 		if (buffer_index.Begin() > 0)
 		{
-			cache_buffer.erase(
-				cache_buffer.begin(),
-				cache_buffer.begin() + buffer_index.Begin()
+			std::copy(
+				cache_buffer.begin() + buffer_index.Begin(),
+				cache_buffer.begin() + buffer_index.End(),
+				cache_buffer.begin()
 			);
 			buffer_index = { 0, buffer_index.Size()};
-			cache_buffer.resize(cache_buffer_size);
 		}
 
 		if (buffer_index.End() < cache_buffer.size())
@@ -411,7 +391,7 @@ namespace Potato::Document
 
 				if (!cur_info || cur_info.target_space == 0)
 				{
-					if (!next_frame_need_fill_buffer)
+					if (!next_frame_need_fill_buffer && buffer_index.Size() < Encode::Unicode::UTF8::max_storage_size)
 					{
 						next_frame_need_fill_buffer = true;
 					}
@@ -483,7 +463,7 @@ namespace Potato::Document
 				
 				if (!cur_info || cur_info.target_space == 0)
 				{
-					if (!next_frame_need_fill_buffer)
+					if (!next_frame_need_fill_buffer && buffer_index.Size() < Encode::Unicode::UTF8::max_storage_size)
 					{
 						next_frame_need_fill_buffer = true;
 					}

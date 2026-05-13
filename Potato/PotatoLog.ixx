@@ -265,7 +265,7 @@ export namespace Potato::Log
 			FormatedSystemTime time;
 			iterator = std::format_to(
 				std::move(iterator),
-				L"[{}]{}<{}>",
+				L"[{}]{}<{}>:",
 				time, category, level
 			);
 			return std::format_to(
