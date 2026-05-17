@@ -156,6 +156,42 @@ namespace Potato::Reg
 
 	}
 
+
+	auto Nfa::BuilderT::Create(std::span<Encode::Unicode::CodePointT const> input_code, bool is_raw, std::size_t mask)
+		-> std::vector<NodeT>
+	{
+		using namespace Exception;
+
+		BuilderT lex(mask, is_raw);
+
+		std::size_t index = 0;
+
+		bool bad_string = false;
+		for (auto code : input_code)
+		{
+			if (!lex.Consume(code, { index, index + 1 }))
+			{
+				bad_string = true;
+				break;
+			}
+			++index;
+		}
+
+		if (bad_string || !lex.EndOfFile())
+		{
+			std::u8string bad_reg;
+			auto [EncodeRe, out_iterator] = Encode::UnicodeEncoder<Encode::Unicode::CodePointT, char8_t>::EncodeTo(
+				input_code, 
+				std::back_insert_iterator(bad_reg)
+			);
+			throw UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, std::move(bad_reg), {index, index + 1 > input_code.size() ? input_code.size() : index + 1}};
+		}
+
+		return lex.Nodes;
+	}
+
+
+
 	Nfa::BuilderT::BuilderT(std::size_t Mask, bool IsRaw) :
 		CurrentState(IsRaw ? StateT::Raw : StateT::Normal), Mask(Mask)
 	{
@@ -169,116 +205,116 @@ namespace Potato::Reg
 		return Processor.Consume(SymbolValue, TokenIndex, HandleSymbol({SymbolValue,TokenIndex}, std::move(CharsValue)));
 	}
 
-	bool Nfa::BuilderT::Consume(char32_t InputSymbol, Misc::IndexSpan<> TokenIndex)
+	bool Nfa::BuilderT::Consume(Encode::Unicode::CodePointT input_code, Misc::IndexSpan<> token_index)
 	{
-		if (InputSymbol < MaxChar())
+		if (input_code < MaxChar())
 		{
 			switch (CurrentState)
 			{
 			case StateT::Normal:
 			{
-				switch (InputSymbol)
+				switch (input_code)
 				{
 				case U'-':
-					return InsertSymbol(*T::Min, InputSymbol, TokenIndex);
+					return InsertSymbol(*T::Min, input_code, token_index);
 				case U'[':
-					return InsertSymbol(*T::BracketsLeft, InputSymbol, TokenIndex);
+					return InsertSymbol(*T::BracketsLeft, input_code, token_index);
 				case U']':
-					return InsertSymbol(*T::BracketsRight, InputSymbol, TokenIndex);
+					return InsertSymbol(*T::BracketsRight, input_code, token_index);
 				case U'{':
-					return InsertSymbol(*T::CurlyBracketsLeft, InputSymbol, TokenIndex);
+					return InsertSymbol(*T::CurlyBracketsLeft, input_code, token_index);
 				case U'}':
-					return InsertSymbol(*T::CurlyBracketsRight, InputSymbol, TokenIndex);
+					return InsertSymbol(*T::CurlyBracketsRight, input_code, token_index);
 				case U',':
-					return InsertSymbol(*T::Comma, InputSymbol, TokenIndex);
+					return InsertSymbol(*T::Comma, input_code, token_index);
 				case U'(':
-					return InsertSymbol(*T::ParenthesesLeft, InputSymbol, TokenIndex);
+					return InsertSymbol(*T::ParenthesesLeft, input_code, token_index);
 				case U')':
-					return InsertSymbol(*T::ParenthesesRight, InputSymbol, TokenIndex);
+					return InsertSymbol(*T::ParenthesesRight, input_code, token_index);
 				case U'*':
-					return InsertSymbol(*T::Mulity, InputSymbol, TokenIndex);
+					return InsertSymbol(*T::Mulity, input_code, token_index);
 				case U'?':
-					return InsertSymbol(*T::Question, InputSymbol, TokenIndex);
+					return InsertSymbol(*T::Question, input_code, token_index);
 				case U'.':
-					return InsertSymbol(*T::CharSet, MaxInterval(), TokenIndex);
+					return InsertSymbol(*T::CharSet, MaxInterval(), token_index);
 				case U'|':
-					return InsertSymbol(*T::Or, InputSymbol, TokenIndex);
+					return InsertSymbol(*T::Or, input_code, token_index);
 				case U'+':
-					return InsertSymbol(*T::Add, InputSymbol, TokenIndex);
+					return InsertSymbol(*T::Add, input_code, token_index);
 				case U'^':
-					return InsertSymbol(*T::Not, InputSymbol, TokenIndex);
+					return InsertSymbol(*T::Not, input_code, token_index);
 				case U':':
-					return InsertSymbol(*T::Colon, InputSymbol, TokenIndex);
+					return InsertSymbol(*T::Colon, input_code, token_index);
 				case U'\\':
 					CurrentState = StateT::Transfer;
-					RecordSymbol = InputSymbol;
+					RecordSymbol = input_code;
 					return true;
 				default:
-					if (InputSymbol >= U'0' && InputSymbol <= U'9')
-						return InsertSymbol(*T::Num, InputSymbol, TokenIndex);
+					if (input_code >= U'0' && input_code <= U'9')
+						return InsertSymbol(*T::Num, input_code, token_index);
 					else
-						return InsertSymbol(*T::SingleChar, InputSymbol, TokenIndex);
+						return InsertSymbol(*T::SingleChar, input_code, token_index);
 					break;
 				}
 				break;
 			}
 			case StateT::Transfer:
 			{
-				switch (InputSymbol)
+				switch (input_code)
 				{
 				case U'd':
 					CurrentState = StateT::Normal;
-					return InsertSymbol(*T::CharSet, {{U'0', U'9' + 1}}, TokenIndex);
+					return InsertSymbol(*T::CharSet, {{U'0', U'9' + 1}}, token_index);
 				case U'D':
 				{
 					CurrentState = StateT::Normal;
 					Interval Tem{ {{1, U'0'}, {U'9' + 1, MaxChar()} } };
-					return InsertSymbol(*T::CharSet, std::move(Tem), TokenIndex);
+					return InsertSymbol(*T::CharSet, std::move(Tem), token_index);
 				}
 				case U'f':
 					CurrentState = StateT::Normal;
-					return InsertSymbol(*T::SingleChar, U'\f', TokenIndex);
+					return InsertSymbol(*T::SingleChar, U'\f', token_index);
 				case U'n':
 					CurrentState = StateT::Normal;
-					return InsertSymbol(*T::SingleChar, U'\n', TokenIndex);
+					return InsertSymbol(*T::SingleChar, U'\n', token_index);
 				case U'r':
 					CurrentState = StateT::Normal;
-					return InsertSymbol(*T::SingleChar, U'\r', TokenIndex);
+					return InsertSymbol(*T::SingleChar, U'\r', token_index);
 				case U't':
 					CurrentState = StateT::Normal;
-					return InsertSymbol(*T::SingleChar, U'\t', TokenIndex);
+					return InsertSymbol(*T::SingleChar, U'\t', token_index);
 				case U'v':
 					CurrentState = StateT::Normal;
-					return InsertSymbol(*T::SingleChar, U'\v', TokenIndex);
+					return InsertSymbol(*T::SingleChar, U'\v', token_index);
 				case U's':
 				{
 					CurrentState = StateT::Normal;
 					Interval tem({{ 1, 33 },{127, 128} });
-					return InsertSymbol(*T::CharSet, std::move(tem), TokenIndex);
+					return InsertSymbol(*T::CharSet, std::move(tem), token_index);
 				}
 				case U'S':
 				{
 					CurrentState = StateT::Normal;
 					Interval tem({{33, 127}, {128, MaxChar()} });
-					return InsertSymbol(*T::CharSet, std::move(tem), TokenIndex);
+					return InsertSymbol(*T::CharSet, std::move(tem), token_index);
 				}
 				case U'w':
 				{
 					CurrentState = StateT::Normal;
 					Interval tem({{ U'A', U'Z' + 1 },{ U'_'}, { U'a', U'z' + 1 }});
-					return InsertSymbol(*T::CharSet, std::move(tem), TokenIndex);
+					return InsertSymbol(*T::CharSet, std::move(tem), token_index);
 				}
 				case U'W':
 				{
 					CurrentState = StateT::Normal;
 					Interval tem({{ U'A', U'Z' + 1 },{ U'_'}, { U'a', U'z' + 1 } });
-					return InsertSymbol(*T::CharSet, MaxInterval() - tem, TokenIndex);
+					return InsertSymbol(*T::CharSet, MaxInterval() - tem, token_index);
 				}
 				case U'z':
 				{
 					CurrentState = StateT::Normal;
 					Interval tem({{ 256, MaxChar() }});
-					return InsertSymbol(*T::CharSet, std::move(tem), TokenIndex);
+					return InsertSymbol(*T::CharSet, std::move(tem), token_index);
 				}
 				case U'u':
 				{
@@ -298,27 +334,27 @@ namespace Potato::Reg
 				}
 				default:
 					CurrentState = StateT::Normal;
-					return InsertSymbol(*T::SingleChar, InputSymbol, TokenIndex);
+					return InsertSymbol(*T::SingleChar, input_code, token_index);
 				}
 				break;
 			}
 			case StateT::Number:
 			{
 				Number += 1;
-				if (InputSymbol >= U'0' && InputSymbol <= U'9')
+				if (input_code >= U'0' && input_code <= U'9')
 				{
 					NumberChar *= 16;
-					NumberChar += InputSymbol - U'0';
+					NumberChar += input_code - U'0';
 				}
-				else if (InputSymbol >= U'a' && InputSymbol <= U'f')
+				else if (input_code >= U'a' && input_code <= U'f')
 				{
 					NumberChar *= 16;
-					NumberChar += InputSymbol - U'a' + 10;
+					NumberChar += input_code - U'a' + 10;
 				}
-				else if (InputSymbol >= U'A' && InputSymbol <= U'F')
+				else if (input_code >= U'A' && input_code <= U'F')
 				{
 					NumberChar *= 16;
-					NumberChar += InputSymbol - U'A' + 10;
+					NumberChar += input_code - U'A' + 10;
 				}
 				else {
 					return false;
@@ -326,12 +362,12 @@ namespace Potato::Reg
 				if ((Number == 4 && !NumberIsBig) || (NumberIsBig && Number == 6))
 				{
 					CurrentState = StateT::Normal;
-					return InsertSymbol(*T::SingleChar, NumberChar, TokenIndex);
+					return InsertSymbol(*T::SingleChar, NumberChar, token_index);
 				}
 				break;
 			}
 			case StateT::Raw:
-				return InsertSymbol(*T::SingleChar, InputSymbol, TokenIndex);
+				return InsertSymbol(*T::SingleChar, input_code, token_index);
 			default:
 				assert(false);
 			}
@@ -2796,27 +2832,9 @@ namespace Potato::Reg
 			return "PotatoRegException::UnaccaptableRegexTokenIndex";
 		}
 
-		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u8string_view Str, Misc::IndexSpan<> BadIndex)
-		
-			: UnaccaptableRegexTokenIndex(Type, BadIndex)
+		UnaccaptableRegex::UnaccaptableRegex(TypeT type, std::u8string str, Misc::IndexSpan<> bad_index)
+			: UnaccaptableRegexTokenIndex(type, bad_index), error_reg(std::move(str))
 		{
-			Encode::UnicodeEncoder<char8_t, wchar_t>::EncodeTo(Str, std::back_inserter(TotalString));
-		}
-
-		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::wstring_view Str, Misc::IndexSpan<> BadIndex)
-			: UnaccaptableRegexTokenIndex(Type, BadIndex), TotalString(Str)
-		{
-		}
-
-		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u16string_view Str, Misc::IndexSpan<> BadIndex)
-			: UnaccaptableRegexTokenIndex(Type, BadIndex)
-		{
-			Encode::UnicodeEncoder<char16_t, wchar_t>::EncodeTo(Str, std::back_inserter(TotalString));
-		}
-		UnaccaptableRegex::UnaccaptableRegex(TypeT Type, std::u32string_view Str, Misc::IndexSpan<> BadIndex)
-			: UnaccaptableRegexTokenIndex(Type, BadIndex)
-		{
-			Encode::UnicodeEncoder<char32_t, wchar_t>::EncodeTo(Str, std::back_inserter(TotalString));
 		}
 
 		char const* UnaccaptableRegex::what() const

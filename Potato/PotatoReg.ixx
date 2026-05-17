@@ -115,7 +115,9 @@ export namespace Potato::Reg
 			static auto Create(std::basic_string_view<CharT, CharTraiT> Str, bool IsRaw = false, std::size_t Mask = 0)
 				->std::vector<NodeT>;
 
-			bool Consume(char32_t InputSymbol, Misc::IndexSpan<> TokenIndex);
+			static auto Create(std::span<Encode::Unicode::CodePointT const> string, bool is_raw = false, std::size_t mask = 0) -> std::vector<NodeT>;
+
+			bool Consume(Encode::Unicode::CodePointT input_code_point, Misc::IndexSpan<> TokenIndex);
 			bool EndOfFile();
 
 			std::any HandleSymbol(SLRX::SymbolInfo Value, Interval Chars);
@@ -127,7 +129,7 @@ export namespace Potato::Reg
 			void AddConsume(NodeSetT Set, Interval Chars, Misc::IndexSpan<> TokenIndex);
 			NodeSetT AddCapture(NodeSetT Inside, Misc::IndexSpan<> TokenIndex, std::size_t CaptureIndex);
 			NodeSetT AddCounter(NodeSetT Inside, std::optional<std::size_t> Min, std::optional<std::size_t> Max, bool Greedy, Misc::IndexSpan<> TokenIndex, std::size_t CaptureIndex);
-			bool InsertSymbol(SLRX::Symbol SymbolValue, char32_t CharValue, Misc::IndexSpan<> TokenIndex) {
+			bool InsertSymbol(SLRX::Symbol SymbolValue, Encode::Unicode::CodePointT CharValue, Misc::IndexSpan<> TokenIndex) {
 				return InsertSymbol(SymbolValue, Interval{ CharValue }, TokenIndex);
 			}
 			bool InsertSymbol(SLRX::Symbol SymbolValue, Interval CharsValue, Misc::IndexSpan<> TokenIndex);
@@ -145,9 +147,9 @@ export namespace Potato::Reg
 			StateT CurrentState;
 			std::size_t Number = 0;
 			std::size_t Mask = 0;
-			char32_t NumberChar = 0;
+			Encode::Unicode::CodePointT NumberChar = 0;
 			bool NumberIsBig = false;
-			char32_t RecordSymbol = 0;
+			Encode::Unicode::CodePointT RecordSymbol = 0;
 			std::size_t RecordTokenIndex = 0;
 			std::size_t TokenIndexIte = 0;
 			std::vector<NodeT> Nodes;
@@ -705,12 +707,31 @@ export namespace Potato::Reg
 		struct UnaccaptableRegex : protected UnaccaptableRegexTokenIndex
 		{
 			using TypeT = UnaccaptableRegexTokenIndex::TypeT;
-			std::wstring TotalString;
-			std::wstring_view GetErrorRegex() const { return BadIndex.Slice(std::wstring_view(TotalString)); }
-			UnaccaptableRegex(TypeT Type, std::u8string_view Str, Misc::IndexSpan<> BadIndex);
-			UnaccaptableRegex(TypeT Type, std::wstring_view Str, Misc::IndexSpan<> BadIndex);
-			UnaccaptableRegex(TypeT Type, std::u16string_view Str, Misc::IndexSpan<> BadIndex);
-			UnaccaptableRegex(TypeT Type, std::u32string_view Str, Misc::IndexSpan<> BadIndex);
+			std::u8string error_reg;
+			template<std::output_iterator<char8_t> OutIterator>
+			OutIterator GetForamtedErrorReg(OutIterator iterator)
+			{
+				auto pre_string = error_reg.substr(0, BadIndex.Begin());
+				auto sub_string2 = error_reg.substr(BadIndex.Begin());
+				iterator = std::copy_n(
+					pre_string.begin(),
+					pre_string.end(),
+					iterator
+				);
+				auto str = std::u8string_view{u8"<-|"};
+				iterator = std::copy_n(
+					str.begin(),
+					str.end(),
+					iterator
+				);
+				iterator = std::copy_n(
+					sub_string2.begin(),
+					sub_string2.end(),
+					iterator
+				);
+				return iterator;
+			}
+			UnaccaptableRegex(TypeT type, std::u8string str, Misc::IndexSpan<> BadIndex);
 			UnaccaptableRegex(UnaccaptableRegex const&) = default;
 			virtual char const* what() const override;
 		};
@@ -751,26 +772,12 @@ export namespace Potato::Reg
 		-> std::vector<NodeT>
 	{
 		using namespace Exception;
-
-		BuilderT Lex(Mask, IsRaw);
-
-		auto IteSpan = std::span(Str);
-
-		char32_t TemBuffer = 0;
-
-		std::span<char32_t> OutputSpan = { &TemBuffer, 1 };
-
-		while (!IteSpan.empty())
-		{
-			auto StartIndex = Str.size() - IteSpan.size();
-			auto EncodeRe = Encode::UnicodeEncoder<CharT, char32_t>::EncodeTo(IteSpan, OutputSpan);
-			if (!Lex.Consume(TemBuffer, { StartIndex, StartIndex + EncodeRe.source_space }))
-				throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {StartIndex, Str.size()} };
-			IteSpan = IteSpan.subspan(EncodeRe.source_space);
-		}
-		if (!Lex.EndOfFile())
-			throw Exception::UnaccaptableRegex{ UnaccaptableRegex::TypeT::BadRegex, Str, {Str.size(), Str.size()} };
-		return Lex.Nodes;
+		std::array<Encode::Unicode::CodePointT, Encode::Unicode::temporary_cache_buffer_size * 2> cache_buffer;
+		std::pmr::monotonic_buffer_resource resource(cache_buffer.data(), cache_buffer.size() * sizeof(Encode::Unicode::CodePointT));
+		std::pmr::vector<Encode::Unicode::CodePointT> buffer;
+		buffer.reserve(cache_buffer.size());
+		Encode::UnicodeEncoder<CharT, Encode::Unicode::CodePointT>::EncodeTo(Str, std::back_insert_iterator(buffer));
+		return Create(std::span(buffer.data(), buffer.size()), IsRaw, Mask);
 	}
 
 	template<typename CharT, typename CharTraiT>
@@ -778,7 +785,9 @@ export namespace Potato::Reg
 		try : Nodes(BuilderT::Create(Str, IsRaw, Mask)) {}
 	catch (Exception::UnaccaptableRegexTokenIndex const& EIndex)
 	{
-		throw Exception::UnaccaptableRegex{ EIndex.Type, Str, EIndex.BadIndex };
+		std::u8string bad_reg;
+		Encode::UnicodeEncoder<CharT, char8_t>::EncodeTo(Str, std::back_insert_iterator(bad_reg));
+		throw Exception::UnaccaptableRegex{ EIndex.Type, std::move(bad_reg), EIndex.BadIndex};
 	}
 
 	template<typename CharT, typename CharTraisT>
@@ -786,7 +795,9 @@ export namespace Potato::Reg
 		try : Dfa(Format, Nfa{ Str, IsRaw, Mask }) {}
 	catch (Exception::UnaccaptableRegexTokenIndex const& EIndex)
 	{
-		throw Exception::UnaccaptableRegex{ EIndex.Type, Str, EIndex.BadIndex };
+		std::u8string bad_reg;
+		Encode::UnicodeEncoder<CharT, char8_t>::EncodeTo(Str, std::back_insert_iterator(bad_reg));
+		throw Exception::UnaccaptableRegex{ EIndex.Type, std::move(bad_reg), EIndex.BadIndex };
 	}
 
 }

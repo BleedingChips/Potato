@@ -10,6 +10,13 @@ import PotatoTMP;
 
 export namespace Potato::Misc
 {
+	template<typename P>
+	concept IndexSapnAcceptableContainer = requires(P p)
+	{
+		p.data();
+		{ p.size() }-> std::convertible_to<std::size_t>;
+	};
+
 
 	template<typename Type = std::size_t>
 	struct IndexSpan
@@ -70,6 +77,25 @@ export namespace Potato::Misc
 		{
 			return Slice(std::basic_string_view{str});
 		};
+
+		template<IndexSapnAcceptableContainer Container>
+		constexpr auto Slice(Container&& container) const
+		{
+			auto span = std::span(container.data(), container.size());
+			return Slice(span);
+		}
+
+		template<typename ArrayType, std::size_t N>
+		constexpr auto Slice(std::array<ArrayType, N>& array) const
+		{
+			return Slice(std::span(array));
+		}
+
+		template<typename ArrayType, std::size_t N>
+		constexpr auto Slice(std::array<ArrayType, N> const& array) const
+		{
+			return std::span(array);
+		}
 
 		constexpr IndexSpan SubIndex(Type Offset, Type Size = std::numeric_limits<Type>::max()) const {
 			auto CurSize = this->Size();

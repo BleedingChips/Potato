@@ -239,7 +239,7 @@ namespace Potato::SLRX
 	{
 		auto Find = TrackedAcceptableNoTerminalSymbol.find(Input);
 		if(Find != TrackedAcceptableNoTerminalSymbol.end())
-			return Find->second;
+			return std::span(Find->second.data(), Find->second.size());
 		return {};
 	}
 
@@ -250,7 +250,8 @@ namespace Potato::SLRX
 			auto& ProRef = ProductionDescs[ProductionIndex];
 			if (ElementIndex < ProRef.Elements.size())
 			{
-				return ProRef.Elements[ElementIndex].AcceptableProductionIndex;
+				auto& ref = ProRef.Elements[ElementIndex].AcceptableProductionIndex;
+				return std::span(ref.data(), ref.size());
 			}
 		}
 		return {};
@@ -278,7 +279,7 @@ namespace Potato::SLRX
 		{
 			auto CurrentSearch = InoutElements[Index];
 			auto& Pro = ProductionDescs[CurrentSearch.ProductionIndex];
-			auto CurElements = std::span(Pro.Elements);
+			auto CurElements = std::span(Pro.Elements.data(), Pro.Elements.size());
 			if (CurrentSearch.ElementIndex < CurElements.size())
 			{
 				auto CurSymbol = CurElements[CurrentSearch.ElementIndex].Symbol;
@@ -382,7 +383,7 @@ namespace Potato::SLRX
 
 		for (std::size_t SearchIte = 0; SearchIte < PreNode.size(); ++SearchIte)
 		{
-			auto CurrentState = PreNode[SearchIte].Slice(std::span(Status));
+			auto CurrentState = PreNode[SearchIte].Slice(std::span(Status.data(), Status.size()));
 			SearchPropertyTemporary.clear();
 			AccepatbelProductionIndexs.clear();
 			Mappings.clear();
@@ -418,8 +419,8 @@ namespace Potato::SLRX
 							auto& Ite = Mappings[Index2];
 							if (Ite.Symbol == Cur.Symbol)
 							{
-								auto S1 = Ite.AcceptableProductionIndex.Slice(std::span(AccepatbelProductionIndexs));
-								auto S2 = Cur.AcceptableProductionIndex.Slice(std::span(AccepatbelProductionIndexs));
+								auto S1 = Ite.AcceptableProductionIndex.Slice(AccepatbelProductionIndexs);
+								auto S2 = Cur.AcceptableProductionIndex.Slice(AccepatbelProductionIndexs);
 								auto [S1s, S2s] = ProductionInfo::IntersectionSet(S1, S2);
 								if (S1s == 0)
 									//CFH::InsertSortedUniquedVectorElement(Status, CurrentState[Index]);
@@ -475,7 +476,7 @@ namespace Potato::SLRX
 					{
 						auto OldStateSize = AccepatbelProductionIndexs.size();
 						AccepatbelProductionIndexs.insert(AccepatbelProductionIndexs.end(), FullIndexCount.begin(), FullIndexCount.end());
-						auto OldState = Ite.AcceptableProductionIndex.Slice(std::span(AccepatbelProductionIndexs));
+						auto OldState = Ite.AcceptableProductionIndex.Slice(AccepatbelProductionIndexs);
 						auto Result = std::remove_if(AccepatbelProductionIndexs.begin() + OldStateSize, AccepatbelProductionIndexs.end(), [=](std::size_t const Input) {
 							return std::find(OldState.begin(), OldState.end(), Input) != OldState.end();
 							});
@@ -504,10 +505,10 @@ namespace Potato::SLRX
 			for (auto& Ite : Mappings)
 			{
 				std::optional<std::size_t> FindState;
-				std::span<ProductionInfo::SearchElement> Ref = Ite.Status;
+				std::span<ProductionInfo::SearchElement> Ref = std::span(Ite.Status.data(), Ite.Status.size());
 				for (std::size_t Index = 0; Index < PreNode.size(); ++Index)
 				{
-					auto Cur = PreNode[Index].Slice(std::span(Status));
+					auto Cur = PreNode[Index].Slice(Status);
 					if (Ref.size() == Cur.size() && std::equal(Cur.begin(), Cur.end(), Ref.begin(), Ref.end(), [](auto const& I1, auto const I2) { return I1 == I2; }))
 					{
 						FindState = Index;
@@ -521,13 +522,13 @@ namespace Potato::SLRX
 					FindState = PreNode.size();
 					PreNode.push_back(NewIndex);
 				}
-				auto AcceptablPISpan = Ite.AcceptableProductionIndex.Slice(std::span(AccepatbelProductionIndexs));
+				auto AcceptablPISpan = Ite.AcceptableProductionIndex.Slice(AccepatbelProductionIndexs);
 				std::vector<std::size_t> TempAcce(AcceptablPISpan.begin(), AcceptablPISpan.end());
 				TemporaryNode.Shifts.push_back(
 					ShiftEdge{ Ite.Symbol, *FindState, Ite.ReserveStorage, std::move(TempAcce) }
 				);
 			}
-			auto CurStatusElementSpan = PreNode[SearchIte].Slice(std::span(Status));
+			auto CurStatusElementSpan = PreNode[SearchIte].Slice(Status);
 
 			for (auto& Ite : CurStatusElementSpan)
 			{
@@ -707,7 +708,7 @@ namespace Potato::SLRX
 
 							assert(Fined);
 
-							auto LastSpan = std::span(FFRef).subspan(OldFFRefSize);
+							auto LastSpan = std::span(FFRef.data(), FFRef.size()).subspan(OldFFRefSize);
 
 							if (std::find_if(LastSpan.begin(), LastSpan.end(), [=](FastReduce const& Element) -> bool {
 								return Element.ToNode == Top.Node && Element.LastState == LastState;
@@ -907,13 +908,13 @@ namespace Potato::SLRX
 									if (FindIte.Reduce <= Reduce)
 									{
 										ElementIte.History.push_back({ ReduceIte.ToNode, Reduce });
-										auto OldSpan = std::span(ElementIte.History).subspan(0, FindedIndex + 1);
+										auto OldSpan = Misc::IndexSpan<>{0, FindedIndex + 1 }.Slice(ElementIte.History);
 										throw IllegalSLRXProduction{
 											IllegalSLRXProduction::Category::EndlessReduce,
 											MaxForwardDetect,
 											TopSet.DetectedTerminalSymbol.size() + 1,
-											CollectSteps(TempNode, OldSpan),
-											CollectSteps(TempNode, ElementIte.History),
+											CollectSteps(std::span(TempNode.data(), TempNode.size()), OldSpan),
+											CollectSteps(std::span(TempNode.data(), TempNode.size()), std::span(ElementIte.History.data(), ElementIte.History.size())),
 											Nodes[ElementIte.Node].MappedProduction
 										};
 									}

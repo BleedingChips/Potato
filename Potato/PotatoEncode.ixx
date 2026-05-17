@@ -571,7 +571,7 @@ export namespace Potato::Encode
 	
 		template<typename OutIterator>
 			requires std::output_iterator<OutIterator, CharT>
-		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<NativeStorageT const> source, OutIterator iterator, EncodeCutOffSetting cutoff = {})
+		static constexpr std::tuple<EncodeInfo, OutIterator> EncodeTo(std::span<Unicode::CodePointT const> source, OutIterator iterator, EncodeCutOffSetting cutoff = {})
 		{
 			std::array<CharT, Unicode::temporary_cache_buffer_size * WrapperT::max_storage_size> temporary_buffer;
 			EncodeInfo info;

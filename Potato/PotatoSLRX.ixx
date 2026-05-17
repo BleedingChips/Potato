@@ -463,7 +463,7 @@ export namespace Potato::SLRX
 	};
 
 
-	 struct LRXProcessor
+	struct LRXProcessor
 	{
 
 		bool Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, std::any AppendInfo);
