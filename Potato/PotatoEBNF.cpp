@@ -658,7 +658,9 @@ namespace Potato::EBNF
 					if (!Builder.Consume(InputValue, TokenIndex.End()))
 					{
 						auto error_string = TokenIndex.Slice(EbnfStr);
-						throw Exception::UnacceptableRegex(error_string);
+						Potato::Misc::IndexSpan<> sub_error_string = { TokenIndex.Begin() > 10 ? TokenIndex.Begin() - 10 : 0, TokenIndex.End() };
+						auto str = sub_error_string.Slice(EbnfStr);
+						throw Exception::UnacceptableRegex(str);
 					}
 				}
 				else if (RequireSize == EbnfStr.size())
