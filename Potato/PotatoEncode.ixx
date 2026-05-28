@@ -808,4 +808,50 @@ export namespace Potato::Encode
 			return EncodeTo(std::span(source.data(), source.size()), std::move(iterator), cutoff);
 		}
 	};
+
+	template<typename IteratorType>
+	struct FormatterOutputIteratorWrapper
+	{
+		using OriginalType = std::remove_cvref_t<decltype(*std::declval<IteratorType>())>;
+		using WrapperType = std::conditional_t<
+			std::is_same_v<OriginalType, char8_t>,
+			char,
+			std::conditional_t<
+				(std::is_same_v<OriginalType, char16_t> && sizeof(char16_t) == sizeof(wchar_t))
+				|| (std::is_same_v<OriginalType, char32_t> && sizeof(char32_t) == sizeof(wchar_t))
+				,
+				wchar_t,
+				OriginalType
+			>
+		>;
+
+		using iterator_category = std::output_iterator_tag;
+		using value_type = void;
+		using pointer = void;
+		using reference = void;
+
+		using container_type = typename IteratorType::container_type;
+
+		using difference_type = ptrdiff_t;
+
+		FormatterOutputIteratorWrapper(IteratorType iterator) : iterator(std::move(iterator)) {}
+		FormatterOutputIteratorWrapper(FormatterOutputIteratorWrapper const&) = default;
+		FormatterOutputIteratorWrapper(FormatterOutputIteratorWrapper&&) = default;
+		FormatterOutputIteratorWrapper operator++(int) { return FormatterOutputIteratorWrapper{ iterator++ }; }
+		FormatterOutputIteratorWrapper& operator++() { ++iterator; return *this; }
+		FormatterOutputIteratorWrapper& operator=(FormatterOutputIteratorWrapper const&) = default;
+		FormatterOutputIteratorWrapper& operator=(FormatterOutputIteratorWrapper&&) = default;
+		auto operator*() -> WrapperType&
+		
+		{
+			return *reinterpret_cast<WrapperType*>(&*iterator);
+		}
+	protected:
+		IteratorType iterator;
+	};
+
+	template<typename IteratorType>
+	FormatterOutputIteratorWrapper(IteratorType&& out_iterator) -> FormatterOutputIteratorWrapper<std::remove_cvref_t<IteratorType>>;
+
+	
 }
