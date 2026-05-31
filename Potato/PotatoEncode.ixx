@@ -2,6 +2,12 @@ module;
 
 #include <cassert>
 
+#if _WIN32
+#include <Windows.h>
+#undef max
+#undef min
+#endif
+
 export module PotatoEncode;
 
 import std;
@@ -806,6 +812,36 @@ export namespace Potato::Encode
 		static constexpr auto EncodeTo(std::basic_string_view<FromCharT const> source, OutIterator iterator, EncodeCutOffSetting cutoff = {})
 		{
 			return EncodeTo(std::span(source.data(), source.size()), std::move(iterator), cutoff);
+		}
+	};
+
+	template<class ToCharT>
+	struct STDInputEncoder
+	{
+		template<std::output_iterator<ToCharT> IteratorT>
+		static bool EncodeTo(std::span<char const> source, IteratorT iterator)
+		{
+#ifdef _WIN32
+			std::wstring temporary_string;
+			UINT inputCP = GetConsoleCP();
+			int wideSize = MultiByteToWideChar(inputCP, 0, source.data(), source.size(), nullptr, 0);
+			temporary_string.resize(wideSize);
+			auto result = MultiByteToWideChar(inputCP, 0, source.data(), source.size(), temporary_string.data(), temporary_string.size());
+
+			return std::get<0>(Encode::UnicodeEncoder<wchar_t, ToCharT>::EncodeTo(std::span(temporary_string), std::move(iterator))).is_good_string;
+#else
+			return std::get<0>(Encode::UnicodeEncoder<wchar_t, ToCharT>::EncodeTo(source, std::move(iterator))).is_good_string;
+#endif
+		}
+		template<std::output_iterator<ToCharT> IteratorT>
+		static bool EncodeTo(std::string_view string, IteratorT iterator)
+		{
+			return EncodeTo(std::span(string), std::move(iterator));
+		}
+		template<std::output_iterator<ToCharT> IteratorT>
+		static bool EncodeTo(char const* string, IteratorT iterator)
+		{
+			return EncodeTo(std::string_view(string), std::move(iterator));
 		}
 	};
 
