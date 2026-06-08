@@ -106,7 +106,7 @@ export namespace Potato::Reg
 
 		static Misc::IndexSpan<> CollectTokenIndexFromNodePath(std::span<NodeT const> NodeView, Misc::IndexSpan<> Default, std::span<std::size_t const> NodeStateView);
 
-		struct BuilderT : public SLRX::ProcessorOperator
+		struct BuilderT
 		{
 
 			BuilderT(std::size_t Mask = 0, bool IsRaw = false);

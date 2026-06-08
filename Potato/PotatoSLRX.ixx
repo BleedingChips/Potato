@@ -2,6 +2,7 @@ export module PotatoSLRX;
 
 import std;
 import PotatoMisc;
+import PotatoTMP;
 
 import PotatoPointer;
 
@@ -252,12 +253,14 @@ export namespace Potato::SLRX
 		std::size_t Size() const { return Elements.size(); }
 	};
 
+	/*
 	struct ProcessorOperator
 	{
 		bool EnableSuggestSymbol = false;
 		virtual std::any HandleReduce(SymbolInfo Value, ReduceProduction Desc) = 0;
 		virtual void GetSuggestSymbol(Symbol Value) {};
 	};
+	*/
 
 	struct TableConsumeResult
 	{
@@ -281,7 +284,9 @@ export namespace Potato::SLRX
 
 	struct LRX
 	{
-
+		using SuggestSymbolFunctionT = TMP::FunctionRef<void(std::span<Symbol const>)>;
+		using ReduceSymbolFunctionT = TMP::FunctionRef<std::any(SymbolInfo Value, ReduceProduction Desc)>;
+		
 		struct ReduceTuple
 		{
 			std::size_t LastState;
@@ -341,7 +346,7 @@ export namespace Potato::SLRX
 
 	private:
 
-		std::optional<TableConsumeResult> TableConsume(Symbol Value, LRXProcessor const& Info, ProcessorOperator& Ope) const;
+		std::optional<TableConsumeResult> TableConsume(Symbol Value, LRXProcessor const& Info, SuggestSymbolFunctionT suggest_symbol) const;
 		std::optional<TableReduceResult> TableReduce(LRXProcessor const& Info) const;
 
 		LRX(std::vector<Node> Nodes) : Nodes(std::move(Nodes)) {}
@@ -412,7 +417,7 @@ export namespace Potato::SLRX
 		LRXBinaryTableWrapper() = default;
 		LRXBinaryTableWrapper& operator=(LRXBinaryTableWrapper const&) = default;
 
-		std::optional<TableConsumeResult> TableConsume(Symbol Value, LRXProcessor const& Info, ProcessorOperator& Ope) const;
+		std::optional<TableConsumeResult> TableConsume(Symbol Value, LRXProcessor const& Info, LRX::SuggestSymbolFunctionT suggest_symbol) const;
 		std::optional<TableReduceResult> TableReduce(LRXProcessor const& Info) const;
 
 		Misc::StructedSerilizerReader<StandardT const> GetReader() const { return Misc::StructedSerilizerReader<StandardT const>(Buffer); }
@@ -465,13 +470,18 @@ export namespace Potato::SLRX
 
 	struct LRXProcessor
 	{
+		struct AppendedSymbolInfo
+		{
+			std::size_t identity;
+			std::any data;
+		};
 
 		bool Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, std::any AppendInfo);
 		bool EndOfFile();
 
-		void SetObserverTable(LRX const& Table, Pointer::ObserverPtr<ProcessorOperator> Ope);
+		void SetObserverTable(LRX const& Table, LRX::ReduceSymbolFunctionT reduce_function, LRX::SuggestSymbolFunctionT suggest_function = {});
 
-		void SetObserverTable(LRXBinaryTableWrapper Table, Pointer::ObserverPtr<ProcessorOperator> Ope);
+		void SetObserverTable(LRXBinaryTableWrapper Table, LRX::ReduceSymbolFunctionT reduce_function, LRX::SuggestSymbolFunctionT suggest_function = {});
 
 		std::any& GetDataRaw();
 
@@ -493,7 +503,8 @@ export namespace Potato::SLRX
 			LRXBinaryTableWrapper
 		> TableWrapper;
 
-		Pointer::ObserverPtr<ProcessorOperator> Operator;
+		LRX::ReduceSymbolFunctionT reduce_function;
+		LRX::SuggestSymbolFunctionT suggest_function;
 
 		void TryReduce();
 

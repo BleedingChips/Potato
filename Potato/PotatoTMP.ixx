@@ -693,13 +693,25 @@ export namespace Potato::TMP
 	template<typename ReturnT, typename ...ParameterT>
 	struct FunctionRef<ReturnT(ParameterT...)>
 	{
+		using WrapperFunction = ReturnT(*)(void* ptr, void const* function, ParameterT...);
+		static constexpr std::size_t max_function_size = sizeof(std::nullptr_t) * 2;
+
 		using FunctionT = ReturnT(*)(ParameterT...);
 		using CallableObjectFunctionT = ReturnT(*)(void*, ParameterT...);
+		
 		constexpr operator bool() const {
-			return function_ptr.normal != nullptr;
+			return wrapper != nullptr;
 		}
-		constexpr FunctionRef() { function_ptr.normal = nullptr; }
-		constexpr FunctionRef(FunctionT function) { function_ptr.normal = function; }
+		constexpr FunctionRef() {}
+		constexpr FunctionRef(FunctionT function)
+			requires(sizeof(FunctionT) <= max_function_size)
+		{ 
+			wrapper = [](void* object, void const* function, ParameterT... parameter) {
+				return (*reinterpret_cast<FunctionT>(function))
+					(std::forward<ParameterT>(parameter)...);
+			};
+			(*reinterpret_cast<FunctionT*>(member_function.data())) = function;
+		}
 		template<typename CallableObjectT>
 		constexpr FunctionRef(CallableObjectT&& object) requires(
 			std::is_convertible_v<CallableObjectT, FunctionT>
@@ -711,49 +723,51 @@ export namespace Potato::TMP
 			!std::is_convertible_v<CallableObjectT, FunctionT> 
 			&& std::is_invocable_r_v<ReturnT, CallableObjectT, ParameterT...>
 			&& !std::is_same_v<std::remove_cvref_t<CallableObjectT>, FunctionRef>
+			&& sizeof(FunctionT) <= max_function_size
 			)
 		{
-			function_ptr.callable_object = [](void* pointer, ParameterT... parameter) -> ReturnT {
+			wrapper = [](void* pointer, void const* function, ParameterT... parameter) -> ReturnT {
 				return (*static_cast<std::remove_reference_t<CallableObjectT>*>(pointer))(std::forward<ParameterT>(parameter)...);
 				};
-			callable_object = static_cast<void*>(&object);
+			this->object = static_cast<void*>(&object);
 		}
 		constexpr FunctionRef(FunctionRef const&) = default;
 		constexpr FunctionRef(FunctionRef&& other)
 		{
-			callable_object = other.callable_object;
-			function_ptr.normal = other.function_ptr.normal;
-			other.function_ptr.normal = nullptr;
-			other.callable_object = nullptr;
+			object = other.object;
+			wrapper = other.wrapper;
+			member_function = other.member_function;
+			other.object = nullptr;
+			other.wrapper.normal = nullptr;
 		}
 		template<typename ...OtherParameterT>
 		constexpr ReturnT operator()(OtherParameterT&&... pars) const
 		{
-			if (callable_object != nullptr)
-			{
-				return (*function_ptr.callable_object)(callable_object, std::forward<OtherParameterT>(pars)...);
-			}
-			else
-			{
-				return (*function_ptr.normal)(std::forward<OtherParameterT>(pars)...);
-			}
+			return wrapper(object, reinterpret_cast<void const*>(member_function.data()), std::forward<OtherParameterT>(pars)...);
 		}
 		constexpr FunctionRef& operator=(FunctionRef const&) = default;
 		constexpr FunctionRef& operator=(FunctionRef&& other)
 		{
-			callable_object = other.callable_object;
-			function_ptr = other.function_ptr;
-			other.callable_object = nullptr;
-			other.function_ptr.normal = nullptr;
+			new (this) FunctionRef(std::move(other));
 			return *this;
 		}
-	protected:
-		void* callable_object = nullptr;
-		union FunctionPointerT
+		template<typename MemberType, typename DeviceMemberType>
+		FunctionRef(ReturnT(MemberType::* func)(ParameterT...), DeviceMemberType* object)
+			requires(
+				std::is_convertible_v<DeviceMemberType*, MemberType*>
+				&& sizeof(FunctionT) <= max_function_size
+			)
 		{
-			FunctionT normal;
-			CallableObjectFunctionT callable_object;
-		}function_ptr;
+			this->object = static_cast<MemberType*>(object);
+			wrapper = [](void* pointer, void const* function, ParameterT... parameter) -> ReturnT {
+				return (static_cast<std::remove_reference_t<MemberType>*>(pointer)->**reinterpret_cast<ReturnT(MemberType::* const*)(ParameterT...)>(function))(std::forward<ParameterT>(parameter)...);
+			};
+			*reinterpret_cast<ReturnT(MemberType::**)(ParameterT...)>(member_function.data()) = func;
+		}
+	protected:
+		void* object = nullptr;
+		WrapperFunction wrapper = nullptr;
+		std::array<std::byte, max_function_size> member_function;
 	};
 
 	template<typename ValueT, typename OValueT>

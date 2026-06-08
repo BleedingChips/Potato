@@ -493,7 +493,7 @@ namespace Potato::EBNF
 		: RequireTokenIndex(StartupTokenIndex), LastSymbolToken(StartupTokenIndex)
 	{
 		Processor.SetObserverTable(GetRegTable());
-		LRXProcessor.SetObserverTable(EbnfStep1SLRX(), this);
+		LRXProcessor.SetObserverTable(EbnfStep1SLRX(), {&EbnfBuilder::HandleReduce, this});
 	}
 
 	bool EbnfBuilder::Consume(char32_t InputValue, std::size_t NextTokenIndex)
@@ -602,7 +602,7 @@ namespace Potato::EBNF
 				if(!LRXProcessor.EndOfFile())
 					return false;
 				State = StateE::Step2;
-				LRXProcessor.SetObserverTable(EbnfStep2SLRX(), this);
+				LRXProcessor.SetObserverTable(EbnfStep2SLRX(), { &EbnfBuilder::HandleReduce, this });
 				return true;
 			}
 			else {
@@ -616,7 +616,7 @@ namespace Potato::EBNF
 				if (!LRXProcessor.EndOfFile())
 					return false;
 				State = StateE::Step3;
-				LRXProcessor.SetObserverTable(EbnfStep3SLRX(), this);
+				LRXProcessor.SetObserverTable(EbnfStep3SLRX(), { &EbnfBuilder::HandleReduce, this });
 				return true;
 			}
 			else {
@@ -1065,7 +1065,7 @@ namespace Potato::EBNF
 		HandleReduceFunc = HandleReduce;
 		TableWrapper = &Table;
 		LexicalProcessor.SetObserverTable(Table.Lexical);
-		SyntaxProcessor.SetObserverTable(Table.Syntax, this);
+		SyntaxProcessor.SetObserverTable(Table.Syntax, {&EbnfProcessor::HandleReduce, this });
 		LastSymbolTokenIndex = StartupTokenIndex;
 		RequireTokenIndex = StartupTokenIndex;
 	}
@@ -1076,7 +1076,7 @@ namespace Potato::EBNF
 		HandleReduceFunc = HandleReduce;
 		TableWrapper = Table;
 		LexicalProcessor.SetObserverTable(Table.GetLexicalTable());
-		SyntaxProcessor.SetObserverTable(Table.GetSyntaxTable(), this);
+		SyntaxProcessor.SetObserverTable(Table.GetSyntaxTable(), { &EbnfProcessor::HandleReduce, this });
 		StartupTokenIndex = StartupTokenIndex;
 		RequireTokenIndex = StartupTokenIndex;
 	}

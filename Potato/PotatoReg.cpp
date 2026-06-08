@@ -197,7 +197,7 @@ namespace Potato::Reg
 	{
 		auto Top = AddNode();
 		assert(Top == 0);
-		Processor.SetObserverTable(RexSLRXWrapper(), this);
+		Processor.SetObserverTable(RexSLRXWrapper(), { &BuilderT::HandleReduce, this });
 	}
 
 	bool Nfa::BuilderT::InsertSymbol(SLRX::Symbol SymbolValue, Interval CharsValue, Misc::IndexSpan<> TokenIndex)

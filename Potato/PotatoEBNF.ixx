@@ -18,7 +18,7 @@ export namespace Potato::EBNF
 
 	struct Ebnf;
 
-	struct EbnfBuilder : protected SLRX::ProcessorOperator
+	struct EbnfBuilder
 	{
 
 		EbnfBuilder(std::size_t StartupTokenIndex);
@@ -263,7 +263,7 @@ export namespace Potato::EBNF
 
 	std::vector<EbnfBinaryTableWrapper::StandardT> CreateEbnfBinaryTable(Ebnf const& Table);
 
-	struct EbnfProcessor : protected SLRX::ProcessorOperator
+	struct EbnfProcessor
 	{
 
 		void Clear(std::size_t Startup = 0);

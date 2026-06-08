@@ -1337,40 +1337,43 @@ namespace Potato::SLRX
 		Serilize(Predict, Le);
 		std::vector<StandardT> Re;
 		Re.resize(Predict.GetWritedSize());
-		auto Span = std::span(Re);
+		auto Span = std::span(Re.data(), Re.size());
 		Misc::StructedSerilizerWritter<StandardT> Writter{Span};
 		Serilize(Writter, Le);
 
 		return Re;
 	}
 
-	void LRXProcessor::SetObserverTable(LRX const& Table, Pointer::ObserverPtr<ProcessorOperator> Ope) {
-		assert(Ope);
+	void LRXProcessor::SetObserverTable(LRX const& Table, LRX::ReduceSymbolFunctionT reduce_function, LRX::SuggestSymbolFunctionT suggest_function) 
+	{
+		assert(reduce_function);
 		TableWrapper = std::reference_wrapper<LRX const>{Table};
-		Operator = std::move(Ope);
+		this->reduce_function = reduce_function;
+		this->suggest_function = suggest_function;
 		Clear();
 	}
 
-	void LRXProcessor::SetObserverTable(LRXBinaryTableWrapper Table, Pointer::ObserverPtr<ProcessorOperator> Ope) {
-		assert(Ope);
+	void LRXProcessor::SetObserverTable(LRXBinaryTableWrapper Table, LRX::ReduceSymbolFunctionT reduce_function, LRX::SuggestSymbolFunctionT suggest_function) {
+		assert(reduce_function);
 		TableWrapper = Table;
-		Operator = std::move(Ope);
+		this->reduce_function = reduce_function;
+		this->suggest_function = suggest_function;
 		Clear();
 	}
 
 	bool LRXProcessor::Consume(Symbol Value, Misc::IndexSpan<> TokenIndex, std::any AppendData)
 	{
 		assert(!std::holds_alternative<std::monostate>(TableWrapper));
-		assert(Operator);
+		assert(reduce_function);
 		assert(Value.IsTerminal());
 		assert(States.rbegin()->TableState == CurrentTopState);
 
 		std::optional<TableConsumeResult> Result;
 		
 		if(std::holds_alternative<std::reference_wrapper<LRX const>>(TableWrapper))
-			Result = std::get<std::reference_wrapper<LRX const>>(TableWrapper).get().TableConsume(Value, *this, *Operator);
+			Result = std::get<std::reference_wrapper<LRX const>>(TableWrapper).get().TableConsume(Value, *this, suggest_function);
 		else
-			Result = std::get<LRXBinaryTableWrapper>(TableWrapper).TableConsume(Value, *this, *Operator);
+			Result = std::get<LRXBinaryTableWrapper>(TableWrapper).TableConsume(Value, *this, suggest_function);
 
 		if (Result.has_value())
 		{
@@ -1381,7 +1384,7 @@ namespace Potato::SLRX
 				if (Result->Reduce.has_value())
 				{
 					Misc::IndexSpan<> Cur;
-					auto Productions = std::span(States).subspan(States.size() - Result->Reduce->Reduce.ElementCount);
+					auto Productions = std::span(States.data(), States.size()).subspan(States.size() - Result->Reduce->Reduce.ElementCount);
 					for (auto& Ite : Productions)
 					{
 						if (Ite.Value.TokenIndex.Size() != 0)
@@ -1412,7 +1415,7 @@ namespace Potato::SLRX
 						Productions
 					};
 
-					auto AppendData = Operator->HandleReduce(SElement, Pro);
+					auto AppendData = reduce_function(SElement, Pro);
 
 					States.resize(States.size() - Result->Reduce->Reduce.ElementCount);
 					States.push_back(
@@ -1456,9 +1459,9 @@ namespace Potato::SLRX
 				if (!CacheSymbols.empty())
 				{
 					if (std::holds_alternative<std::reference_wrapper<LRX const>>(TableWrapper))
-						Result = std::get<std::reference_wrapper<LRX const>>(TableWrapper).get().TableConsume(CacheSymbols[SymbolsIndex].Value.Value, *this, *Operator);
+						Result = std::get<std::reference_wrapper<LRX const>>(TableWrapper).get().TableConsume(CacheSymbols[SymbolsIndex].Value.Value, *this, suggest_function);
 					else
-						Result = std::get<LRXBinaryTableWrapper>(TableWrapper).TableConsume(CacheSymbols[SymbolsIndex].Value.Value, *this, *Operator);
+						Result = std::get<LRXBinaryTableWrapper>(TableWrapper).TableConsume(CacheSymbols[SymbolsIndex].Value.Value, *this, suggest_function);
 					++SymbolsIndex;
 					assert(Result.has_value());
 				}
@@ -1476,7 +1479,7 @@ namespace Potato::SLRX
 	void LRXProcessor::Clear()
 	{
 		assert(!std::holds_alternative<std::monostate>(TableWrapper));
-		assert(Operator);
+		assert(reduce_function);
 		CacheSymbols.clear();
 		States.clear();
 		std::size_t StartupIndex = 0;
@@ -1510,7 +1513,7 @@ namespace Potato::SLRX
 	void LRXProcessor::TryReduce()
 	{
 		assert(!std::holds_alternative<std::monostate>(TableWrapper));
-		assert(Operator);
+		assert(reduce_function);
 		if (RequireNode == 0)
 		{
 			while (true)
@@ -1523,7 +1526,7 @@ namespace Potato::SLRX
 				if (Result.has_value())
 				{
 					Misc::IndexSpan<> Cur;
-					auto Productions = std::span(States).subspan(States.size() - Result->Reduce.Reduce.ElementCount);
+					auto Productions = std::span(States.data(), States.size()).subspan(States.size() - Result->Reduce.Reduce.ElementCount);
 					for (auto& Ite : Productions)
 					{
 						if (Ite.Value.TokenIndex.Size() != 0)
@@ -1554,7 +1557,7 @@ namespace Potato::SLRX
 						Productions
 					};
 
-					auto AppendData = Operator->HandleReduce(SElement, Pro);
+					auto AppendData = reduce_function(SElement, Pro);
 
 					States.resize(States.size() - Result->Reduce.Reduce.ElementCount);
 					States.push_back(
@@ -1575,7 +1578,7 @@ namespace Potato::SLRX
 	}
 
 
-	std::optional<TableConsumeResult> LRX::TableConsume(Symbol Value, LRXProcessor const& Info, ProcessorOperator& Ope) const
+	std::optional<TableConsumeResult> LRX::TableConsume(Symbol Value, LRXProcessor const& Info, SuggestSymbolFunctionT suggest) const
 	{
 		assert(Value.IsTerminal());
 		assert(Nodes.size() > Info.CurrentTopState);
@@ -1630,10 +1633,12 @@ namespace Potato::SLRX
 			}
 		}
 
-		if (Ope.EnableSuggestSymbol)
+		if (suggest)
 		{
+			std::pmr::vector<Symbol> suggest_symbols;
 			for (auto Ite : NodeRequireArray)
-				Ope.GetSuggestSymbol(Ite.RequireSymbol);
+				suggest_symbols.emplace_back(Ite.RequireSymbol);
+			suggest(std::span(suggest_symbols.data(), suggest_symbols.size()));
 		}
 
 		return {};
@@ -1664,7 +1669,7 @@ namespace Potato::SLRX
 		return {};
 	}
 
-	auto LRXBinaryTableWrapper::TableConsume(Symbol Value, LRXProcessor const& Info, ProcessorOperator& Ope) const ->std::optional<TableConsumeResult>
+	auto LRXBinaryTableWrapper::TableConsume(Symbol Value, LRXProcessor const& Info, LRX::SuggestSymbolFunctionT suggest) const ->std::optional<TableConsumeResult>
 	{
 		assert(TotalBufferSize() > Info.CurrentTopState);
 		assert(Info.States.rbegin()->TableState == Info.CurrentTopState);
@@ -1735,20 +1740,21 @@ namespace Potato::SLRX
 			}
 		}
 
-		if (Ope.EnableSuggestSymbol)
+		if (suggest)
 		{
+			std::pmr::vector<Symbol> suggest_symbols;
 			for (auto Ite : RequireNodes)
 			{
 				if (Ite.IsEndOfFile)
 				{
-					Ope.GetSuggestSymbol(Symbol::EndOfFile());
+					suggest_symbols.emplace_back(Symbol::EndOfFile());
 				}
 				else {
-					Ope.GetSuggestSymbol(Symbol::AsTerminal(Ite.Value));
+					suggest_symbols.emplace_back(Symbol::AsTerminal(Ite.Value));
 				}
 			}
+			suggest(std::span(suggest_symbols.data(), suggest_symbols.size()));
 		}
-
 		return {};
 	}
 
