@@ -707,7 +707,7 @@ export namespace Potato::TMP
 			requires(sizeof(FunctionT) <= max_function_size)
 		{ 
 			wrapper = [](void* object, void const* function, ParameterT... parameter) {
-				return (*reinterpret_cast<FunctionT>(function))
+				return (**reinterpret_cast<FunctionT const*>(function))
 					(std::forward<ParameterT>(parameter)...);
 			};
 			(*reinterpret_cast<FunctionT*>(member_function.data())) = function;
@@ -738,7 +738,7 @@ export namespace Potato::TMP
 			wrapper = other.wrapper;
 			member_function = other.member_function;
 			other.object = nullptr;
-			other.wrapper.normal = nullptr;
+			other.wrapper = nullptr;
 		}
 		template<typename ...OtherParameterT>
 		constexpr ReturnT operator()(OtherParameterT&&... pars) const
