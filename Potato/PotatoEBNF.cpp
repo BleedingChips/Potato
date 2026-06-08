@@ -1445,23 +1445,23 @@ namespace Potato::EBNF::Exception
 			if (Ite.IsTerminal())
 			{
 				
-				if (Ite.Value.IsEndOfFile())
+				if (Ite.value.IsEndOfFile())
 				{
 					Result.push_back({ TMap{UR"($EndOfFile)"}});
 				}
 				else {
-					assert(Ite.Value.symbol < TMapping.size());
-					Result.push_back({ TMap{TMapping[Ite.Value.symbol]} });
+					assert(Ite.value.symbol < TMapping.size());
+					Result.push_back({ TMap{TMapping[Ite.value.symbol]} });
 				}
 			}
 			else if(Ite.IsNoTerminal()) 
 			{
-				if (Ite.Value.symbol < NTMapping.size())
+				if (Ite.value.symbol < NTMapping.size())
 				{
-					Result.push_back({ NTMap{NTMapping[Ite.Value.symbol], Ite.Reduce.ElementCount, Ite.Reduce.Mask} });
+					Result.push_back({ NTMap{NTMapping[Ite.value.symbol], Ite.reduce.element_count, Ite.reduce.mask} });
 				}
 				else {
-					switch (Ite.Reduce.Mask)
+					switch (Ite.reduce.mask)
 					{
 					case SmallBrace:
 						Result.push_back({ NTMap{UR"((...))", 0, 0}});

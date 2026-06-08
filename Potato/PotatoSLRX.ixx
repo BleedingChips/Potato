@@ -35,13 +35,13 @@ export namespace Potato::SLRX
 
 	struct ParsingStep
 	{
-		Symbol Value;
+		Symbol value;
 
 		struct ReduceT
 		{
-			std::size_t ProductionIndex = 0;
-			std::size_t ElementCount = 0;
-			std::size_t Mask = 0;
+			std::size_t production_index = 0;
+			std::size_t element_count = 0;
+			std::size_t mask = 0;
 		};
 
 		struct ShiftT
@@ -49,11 +49,11 @@ export namespace Potato::SLRX
 			std::size_t TokenIndex = 0;
 		};
 
-		ReduceT Reduce;
-		ShiftT Shift;
+		ReduceT reduce;
+		ShiftT shift;
 
-		constexpr bool IsTerminal() const { return Value.IsTerminal(); }
-		constexpr bool IsNoTerminal() const { return Value.IsNoTerminal(); }
+		constexpr bool IsTerminal() const { return value.IsTerminal(); }
+		constexpr bool IsNoTerminal() const { return value.IsNoTerminal(); }
 		constexpr bool IsShift() const { return IsTerminal(); }
 		constexpr bool IsReduce() const { return IsNoTerminal(); }
 	};
@@ -164,8 +164,8 @@ export namespace Potato::SLRX
 			ParsingStep::ReduceT Reduce;
 			operator ParsingStep () const {
 				ParsingStep New;
-				New.Value = ReduceSymbol;
-				New.Reduce = Reduce;
+				New.value = ReduceSymbol;
+				New.reduce = Reduce;
 				return New;
 			}
 		};

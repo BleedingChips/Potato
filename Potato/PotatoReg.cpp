@@ -132,10 +132,10 @@ namespace Potato::Reg
 			{
 				if (Ite.IsTerminal())
 				{
-					Symbols.push_back(Ter{ static_cast<T>(Ite.Value.symbol) });
+					Symbols.push_back(Ter{ static_cast<T>(Ite.value.symbol) });
 				}
 				else {
-					Symbols.push_back(NTer{ static_cast<NT>(Ite.Value.symbol), Ite.Reduce.ElementCount, Ite.Reduce.Mask });
+					Symbols.push_back(NTer{ static_cast<NT>(Ite.value.symbol), Ite.reduce.element_count, Ite.reduce.mask });
 				}
 			}
 
@@ -143,10 +143,10 @@ namespace Potato::Reg
 			{
 				if (Ite.IsTerminal())
 				{
-					Symbols2.push_back(Ter{ static_cast<T>(Ite.Value.symbol) });
+					Symbols2.push_back(Ter{ static_cast<T>(Ite.value.symbol) });
 				}
 				else {
-					Symbols2.push_back(NTer{ static_cast<NT>(Ite.Value.symbol), Ite.Reduce.ElementCount, Ite.Reduce.Mask });
+					Symbols2.push_back(NTer{ static_cast<NT>(Ite.value.symbol), Ite.reduce.element_count, Ite.reduce.mask });
 				}
 			}
 
