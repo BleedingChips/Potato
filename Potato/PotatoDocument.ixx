@@ -76,7 +76,7 @@ export namespace Potato::Document
 		DocumentReader(DocumentReader&& reader);
 		operator bool() const;
 		std::size_t Read(std::span<std::byte> output);
-		virtual std::size_t StreamRead(std::span<std::byte> out_byte) override;
+		virtual std::size_t StreamRead(std::byte* out, std::size_t byte) override;
 		std::size_t GetStreamSize() const;
 		bool Open(std::filesystem::path const& path);
 		void Close();

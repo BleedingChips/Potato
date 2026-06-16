@@ -277,39 +277,46 @@ export namespace Potato::Log
 	};
 
 	template<TMP::TypeString category, LogLevel level, TMP::TypeString formatter, typename ...Parameters>
-	constexpr void Log(Parameters&& ...parameters)
+	constexpr void LogTo(LogPrinter& printer, Parameters&& ...parameters)
 	{
 		static constexpr auto formatterw = TMP::TypeStringEncoder<formatter, wchar_t>::EncodeTo();
 		static constexpr auto name = TMP::TypeStringEncoder<category, wchar_t>::EncodeTo();
 
+		LogLine line;
+
+		std::array<std::byte, sizeof(wchar_t) * 256> log_output;
+		std::pmr::monotonic_buffer_resource buffer_resource{ log_output.data(), log_output.size() };
+		std::pmr::wstring message(&buffer_resource);
+
+		LogCategoryFormatter<category, level>{}(
+			std::back_inserter(message),
+			formatterw.GetStringView(),
+			AddLogStringWrapper(std::forward<Parameters>(parameters))...
+			);
+
+		auto end_line = printer.EndLineString();
+
+		std::copy_n(
+			end_line.data(),
+			end_line.size(),
+			std::back_inserter(message)
+		);
+
+		line.category = name.GetStringView();
+		line.level = level;
+		line.log_message = message;
+		printer.Print(line);
+	}
+
+	template<TMP::TypeString category, LogLevel level, TMP::TypeString formatter, typename ...Parameters>
+	constexpr void Log(Parameters&& ...parameters)
+	{
 		if (LogCategoryProperty<category>::IsLogEnable(level))
 		{
-			LogLine line;
 			auto printer = GetLogPrinter();
 			if (printer)
 			{
-				std::array<std::byte, sizeof(wchar_t) * 256> log_output;
-				std::pmr::monotonic_buffer_resource buffer_resource{ log_output.data(), log_output.size()};
-				std::pmr::wstring message(&buffer_resource);
-				
-				LogCategoryFormatter<category, level>{}(
-					std::back_inserter(message),
-					formatterw.GetStringView(),
-					AddLogStringWrapper(std::forward<Parameters>(parameters))...
-					);
-
-				auto end_line = printer->EndLineString();
-
-				std::copy_n(
-					end_line.data(),
-					end_line.size(),
-					std::back_inserter(message)
-				);
-
-				line.category = name.GetStringView();
-				line.level = level;
-				line.log_message = message;
-				printer->Print(line);
+				LogTo<category, level, formatter, Parameters...>(*printer, std::forward<Parameters>(parameters)...);
 			}
 		}
 	}

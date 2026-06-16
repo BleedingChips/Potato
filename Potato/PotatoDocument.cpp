@@ -53,11 +53,11 @@ namespace Potato::Document
 #endif
 	}
 
-	std::size_t DocumentReader::StreamRead(std::span<std::byte> out_byte)
+	std::size_t DocumentReader::StreamRead(std::byte* out, std::size_t byte)
 	{
 		if (*this)
 		{
-			auto readed_byte = Read(out_byte);
+			auto readed_byte = Read(std::span(out, byte));
 			if (readed_byte == 0)
 			{
 				state = Streamer::StreamState::Depletion;
