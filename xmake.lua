@@ -1,5 +1,8 @@
-add_rules("mode.debug", "mode.release", "mode.releasedbg", "mode.profile")
-set_languages("cxxlatest")
+
+if os.scriptdir() == os.projectdir() then
+    add_rules("mode.debug", "mode.release", "mode.releasedbg", "mode.profile")
+    set_languages("cxxlatest")
+end
 
 
 target("Potato")
