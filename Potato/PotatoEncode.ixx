@@ -144,14 +144,14 @@ export namespace Potato::Encode
 
 			static constexpr std::optional<std::size_t> DetectStorageSize(StorageT char_1, StorageT char_2 = placemenet_character)
 			{
-				if (char_1 < 0x10000)
+				if ((char_1 & 0xFC00) == 0xD800)
 				{
-					return 1;
-				}else if (char_1 >= 0xD800 && char_1 < 0xE00 && char_2 >= 0xDC00 && char_2 < 0xE000)
-				{
-					return 2;
+					if ((char_2 & 0xFC00) == 0xDC00)
+						return 2;
+					else
+						return std::nullopt;
 				}
-				return std::nullopt;
+				return 1;
 			}
 
 			static constexpr CodePointT DecodeToUnicodePoint(StorageT char_1)

@@ -17,7 +17,7 @@ namespace Potato::Document
 	constexpr unsigned char utf16_le_bom[] = { 0xFF, 0xFE };
 	constexpr unsigned char utf16_be_bom[] = { 0xFE, 0xFF };
 	constexpr unsigned char utf32_le_bom[] = { 0x00, 0x00, 0xFE, 0xFF };
-	constexpr unsigned char utf32_be_bom[] = { 0xFF, 0xFe, 0x00, 0x00 };
+	constexpr unsigned char utf32_be_bom[] = { 0xFF, 0xFE, 0x00, 0x00 };
 
 	std::size_t DocumentReader::Read(std::span<std::byte> output)
 	{
@@ -480,54 +480,175 @@ namespace Potato::Document
 		return std::nullopt;
 	}
 
-	PlainTextWritter::PlainTextWritter(DocumentWriter& writer, Config config)
-		: writer(writer), bom(config.bom), cache_buffer_size(std::max(config.cache_buffer_size, std::size_t{ 1024 })), cache_buffer(config.resource)
+	PlainTextWriter::PlainTextWriter(DocumentWriter& writer, Config config)
+		: writer(writer), bom(config.bom), cache_buffer(config.resource)
 	{
+		std::size_t cache_buffer_size = std::max(config.cache_buffer_size, std::size_t{ 1024 });
 		cache_buffer.resize(cache_buffer_size);
 		if (config.need_bom)
 		{
 			auto span = PlainTextReader::GetBomByteSpan(bom);
-			std::memcpy(cache_buffer.data(), span.data(), span.size());
-			cache_buffer_used += span.size();
+			writer.Write(span.data(), span.size());
 		}
 	}
 
-	std::size_t PlainTextWritter::Flush()
+	std::size_t PlainTextWriter::ByteswapUTF16(std::span<std::byte> data)
 	{
-		writer.Write(
-			std::span(cache_buffer.data(), cache_buffer_used)
+		auto* ptr = reinterpret_cast<char16_t*>(data.data());
+		std::size_t count = data.size() / sizeof(char16_t);
+		for (std::size_t i = 0; i < count; ++i)
+			ptr[i] = static_cast<char16_t>(((ptr[i] & 0xFF) << 8) | ((ptr[i] >> 8) & 0xFF));
+		return count * sizeof(char16_t);
+	}
+
+	std::size_t PlainTextWriter::ByteswapUTF32(std::span<std::byte> data)
+	{
+		auto* ptr = reinterpret_cast<char32_t*>(data.data());
+		std::size_t count = data.size() / sizeof(char32_t);
+		for (std::size_t i = 0; i < count; ++i)
+		{
+			auto v = ptr[i];
+			ptr[i] = ((v & 0xFF) << 24) | ((v & 0xFF00) << 8) | ((v >> 8) & 0xFF00) | ((v >> 24) & 0xFF);
+		}
+		return count * sizeof(char32_t);
+	}
+
+	template<typename SourceT, typename TargetT>
+	std::tuple<std::size_t, std::size_t> EncodeBuffer(std::span<std::byte const> source, std::span<std::byte> target)
+	{
+		auto decode_info = Encode::UnicodeEncoder<SourceT, TargetT>::EncodeTo(
+			std::span(reinterpret_cast<const SourceT*>(source.data()), source.size() / sizeof(SourceT)),
+			std::span(reinterpret_cast<TargetT*>(target.data()), target.size() / sizeof(TargetT))
 		);
-		auto flushed = cache_buffer_used;
-		cache_buffer_used = 0;
-		return flushed;
+		return {
+			decode_info.source_space * sizeof(SourceT),
+			decode_info.target_space * sizeof(TargetT)
+		};
 	}
 
-	PlainTextWritter::~PlainTextWritter()
-	{
-		Flush();
-	}
-
-	std::size_t PlainTextWritter::Write(std::u8string_view str)
+	template<typename SourceT>
+	std::tuple<std::size_t, std::size_t> EncodeBufferWithBom(BomT bom, std::span<std::byte const> source, std::span<std::byte> target)
 	{
 		switch (bom)
 		{
 		case BomT::NoBom:
 		case BomT::UTF8:
-			while (!str.empty())
-			{
-				auto size = std::min(str.size(), cache_buffer_size - cache_buffer_used);
-				std::memcpy(
-					cache_buffer.data() + cache_buffer_used, str.data(), size
-				);
-				cache_buffer_used += size;
-				str = str.substr(size);
-				if (cache_buffer_used == cache_buffer_size)
-				{
-					Flush();
-				}
-			}
-			break;
+		{
+			return EncodeBuffer<SourceT, char8_t>(source, target);
 		}
-		return 0;
+		case BomT::UTF16BE:
+		case BomT::UTF16LE:
+		{
+			return EncodeBuffer<SourceT, char16_t>(source, target);
+		}
+		case BomT::UTF32BE:
+		case BomT::UTF32LE:
+		{
+			return EncodeBuffer<SourceT, char32_t>(source, target);
+		}
+		default:
+			assert(false);
+			return {0, 0};
+		}
+	};
+
+	std::size_t PlainTextWriter::Flush()
+	{
+		using namespace Encode;
+
+		if (cache_buffer_used == 0)
+			return 0;
+
+		bool bom_native = IsNativeEndian(bom);
+
+		auto target_span = std::span(cache_buffer.data(), cache_buffer_used);
+
+		if (!bom_native)
+		{
+			if (bom == BomT::UTF16BE || bom == BomT::UTF16LE)
+			{
+				auto writed = ByteswapUTF16(target_span);
+				assert(writed == cache_buffer_used);
+			}
+			else if (bom == BomT::UTF32LE || bom == BomT::UTF32BE)
+			{
+				auto writed = ByteswapUTF32(target_span);
+				assert(writed == cache_buffer_used);
+			}	
+		}
+
+		auto Test = std::u8string_view(reinterpret_cast<char8_t*>(cache_buffer.data()), cache_buffer_used);
+
+		writer.Write(
+			std::span(cache_buffer.data(), cache_buffer_used)
+		);
+
+		auto flushed_byte = cache_buffer_used;
+		cache_buffer_used = 0;
+		return flushed_byte;
+	}
+
+	PlainTextWriter::~PlainTextWriter()
+	{
+		Flush();
+	}
+
+	std::size_t PlainTextWriter::Write(Encoding encode, std::byte const* string, std::size_t size_in_byte)
+	{
+		std::size_t total_writed = 0;
+		auto target_string = std::span(string, size_in_byte);
+		while (!target_string.empty())
+		{
+			std::size_t writed_size = 0;
+			std::size_t target_size = 0;
+			switch (encode)
+			{
+			case Encoding::UTF8:
+				std::tie(
+					writed_size,
+					target_size
+				) = EncodeBufferWithBom<char8_t>(bom, target_string, std::span(
+					cache_buffer.data() + cache_buffer_used,
+					cache_buffer.size() - cache_buffer_used
+				));
+				break;
+			case Encoding::UTF16:
+				std::tie(
+					writed_size,
+					target_size
+				) = EncodeBufferWithBom<char16_t>(bom, target_string, std::span(
+					cache_buffer.data() + cache_buffer_used,
+					cache_buffer.size() - cache_buffer_used
+				));
+				break;
+			case Encoding::UTF32:
+				std::tie(
+					writed_size,
+					target_size
+				) = EncodeBufferWithBom<char32_t>(bom, target_string, std::span(
+					cache_buffer.data() + cache_buffer_used,
+					cache_buffer.size() - cache_buffer_used
+				));
+				break;
+			default:
+				assert(false);
+				writed_size = 0;
+				target_size = 0;
+				break;
+			}
+
+			target_string = target_string.subspan(writed_size);
+			cache_buffer_used += target_size;
+			total_writed += writed_size;
+
+			if (!target_string.empty())
+			{
+				if (cache_buffer_used != 0)
+					Flush();
+				else
+					return total_writed;
+			}
+		}
+		return total_writed;
 	}
 }
