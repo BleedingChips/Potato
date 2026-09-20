@@ -64,7 +64,7 @@ void TestingStrEncode()
 
 int main()
 {
-
+	
 	auto p = std::format("sdad {}", "sdaasd");
 
 	try {

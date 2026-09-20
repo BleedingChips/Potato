@@ -596,6 +596,10 @@ export namespace Potato::Encode
 				{
 					(*iterator++) = temporary_buffer[i];
 				}
+				if (!curret_info.is_good_string && temporary_buffer.size() - curret_info.target_space < UnicodeWrapper<CharT>::WrapperT::max_storage_size)
+				{
+					info.is_good_string = true;
+				}
 			}
 			return { info, iterator };
 		}
@@ -677,6 +681,7 @@ export namespace Potato::Encode
 			std::array<ToCharT, Unicode::temporary_cache_buffer_size * UnicodeWrapper<ToCharT>::WrapperT::max_storage_size> temporary_buffer;
 			EncodeInfo info;
 			auto iterator_string = source;
+			bool need_continue = true;
 			while (info.is_good_string && !iterator_string.empty() && !info.reach_cutoff_character && info.character_count < cutoff.max_character_count)
 			{
 				auto curret_info = EncodeTo(iterator_string, std::span(temporary_buffer), cutoff);
@@ -690,6 +695,10 @@ export namespace Potato::Encode
 				for (std::size_t i = 0; i < curret_info.target_space; ++i)
 				{
 					(*iterator++) = temporary_buffer[i];
+				}
+				if (!curret_info.is_good_string && temporary_buffer.size() - curret_info.target_space < UnicodeWrapper<ToCharT>::WrapperT::max_storage_size)
+				{
+					info.is_good_string = true;
 				}
 			}
 			return { info, iterator };
