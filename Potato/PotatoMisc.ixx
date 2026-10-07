@@ -35,6 +35,7 @@ export namespace Potato::Misc
 		protected:
 			Iterator(Type value) : value(value) {};
 			Type value;
+			friend struct IndexSpan;
 		};
 
 
