@@ -17,6 +17,19 @@ export namespace Potato::Misc
 		{ p.size() }-> std::convertible_to<std::size_t>;
 	};
 
+	// Relation between the left operand [Begin, End) and the right operand [Begin, End).
+	enum class IndexSpanOrdering
+	{
+		LeftDisjoint,		// Entirely left of the right operand, with a gap
+		LeftAdjacent,		// Entirely left of the right operand, End == right.Begin
+		LeftOverlapBegin,	// Starts left of the right operand, but covers its Begin
+		RightOverlapEnd,	// Starts inside the right operand, but covers its End
+		RightAdjacent,		// Entirely right of the right operand, Begin == right.End
+		RightDisjoint,		// Entirely right of the right operand, with a gap
+		Contained,			// Contained by the right operand
+		Contains,			// Contains the right operand
+		Equal,				// Same Begin and same End
+	};
 
 	template<typename Type = std::size_t>
 	struct IndexSpan
@@ -46,6 +59,25 @@ export namespace Potato::Misc
 		constexpr IndexSpan(IndexSpan const&) = default;
 		constexpr IndexSpan& operator=(IndexSpan const&) = default;
 		constexpr bool operator==(IndexSpan const&) const = default;
+
+		constexpr IndexSpanOrdering operator<=>(IndexSpan const& other) const
+		{
+			auto begin_order = Begin() <=> other.Begin();
+			auto end_order = End() <=> other.End();
+			if (std::is_eq(begin_order) && std::is_eq(end_order))
+				return IndexSpanOrdering::Equal;
+			auto end_begin_order = End() <=> other.Begin();
+			if (std::is_lteq(end_begin_order))
+				return std::is_eq(end_begin_order) ? IndexSpanOrdering::LeftAdjacent : IndexSpanOrdering::LeftDisjoint;
+			auto begin_end_order = Begin() <=> other.End();
+			if (std::is_gteq(begin_end_order))
+				return std::is_eq(begin_end_order) ? IndexSpanOrdering::RightAdjacent : IndexSpanOrdering::RightDisjoint;
+			if (std::is_lt(begin_order))
+				return std::is_lt(end_order) ? IndexSpanOrdering::LeftOverlapBegin : IndexSpanOrdering::Contains;
+			if (std::is_gt(begin_order))
+				return std::is_gt(end_order) ? IndexSpanOrdering::RightOverlapEnd : IndexSpanOrdering::Contained;
+			return std::is_lt(end_order) ? IndexSpanOrdering::Contained : IndexSpanOrdering::Contains;
+		}
 
 		constexpr Type Begin() const { return StartPoint; }
 		constexpr Type End() const { return EndPoint; }
@@ -321,6 +353,37 @@ export namespace Potato::Misc
 		WritedSize += TargetObject;
 		return OldWriteSize - Mark;
 	}
+
+	template<typename ValueT>
+	struct FunctionOutputIterator
+	{
+		using iterator_category = std::output_iterator_tag;
+		using value_type = void;
+		using pointer = void;
+		using reference = void;
+		using difference_type = std::ptrdiff_t;
+
+		using FunctionT = TMP::FunctionRef<void(ValueT)>;
+
+		constexpr FunctionOutputIterator(FunctionT function) : function(std::move(function)) {}
+		constexpr FunctionOutputIterator(FunctionOutputIterator const&) = default;
+
+		constexpr FunctionOutputIterator& operator=(ValueT value)
+		{
+			function(std::move(value));
+			return *this;
+		}
+
+		constexpr FunctionOutputIterator& operator*() { return *this; }
+		constexpr FunctionOutputIterator& operator++() { return *this; }
+		constexpr FunctionOutputIterator operator++(int) { return *this; }
+
+	protected:
+		FunctionT function;
+	};
+
+	template<typename ValueT>
+	FunctionOutputIterator(TMP::FunctionRef<void(ValueT)>) -> FunctionOutputIterator<ValueT>;
 
 	struct LineRecorder
 	{

@@ -4,6 +4,7 @@ import PotatoTMP;
 import PotatoEncode;
 import PotatoPointer;
 import PotatoFormat;
+import PotatoMisc;
 
 export namespace Potato::Log
 {
@@ -25,14 +26,6 @@ export namespace Potato::Log
 			:current_time(current_time)
 		{
 		}
-	};
-
-	struct LogLine
-	{
-		FormatedSystemTime current_time;
-		std::wstring_view category;
-		LogLevel level;
-		std::wstring_view log_message;
 	};
 
 	template<Potato::TMP::TypeString type_string>
@@ -95,16 +88,32 @@ export namespace Potato::Log
 			return std::forward<Input>(input);
 		}
 	}
+
+	/*
+	template<TMP::TypeString category>
+	struct LogCategory
+	{
+		static constexpr bool need_time_catgeory_level_prefix = false;
+	};
+
+	template<typename Category>
+	concept IsAcceableLogCatgory = requires(Category category)
+	{
+		{ Category::need_time_catgeory_level_prefix } -> std::same_as<bool>;
+		std::formatter<decltype(Category::category_name), char>{};
+	};
+	*/
 }
 
 export namespace std
 {
+
 	template<>
 	struct formatter<Potato::Log::LogLevel, wchar_t>
 	{
 		constexpr auto parse(std::basic_format_parse_context<wchar_t>& parse_context)
 		{
-			if(*parse_context.begin() == '}')
+			if (*parse_context.begin() == L'}')
 				return parse_context.begin();
 			else
 				throw "LogLevel do not support any parameter";
@@ -156,7 +165,7 @@ export namespace std
 	{
 		constexpr auto parse(std::basic_format_parse_context<wchar_t>& parse_context)
 		{
-			if (*parse_context.begin() == static_cast<wchar_t>('}'))
+			if (*parse_context.begin() == L'}')
 				return parse_context.begin();
 			else
 				throw "std::formatter<LogLevel> do not support any parameter";
@@ -238,36 +247,175 @@ export namespace Potato::Log
 			void AddRef(LogPrinter const* ptr) { ptr->AddLogPrinterRef(); }
 			void SubRef(LogPrinter const* ptr) { ptr->SubLogPrinterRef(); }
 		};
-		virtual void Print(LogLine const& log_lone) = 0;
-		virtual std::wstring_view EndLineString() const { return {}; };
+		virtual std::pmr::memory_resource* GetSynchronizedPoolResource() { return std::pmr::get_default_resource(); };
+		virtual void Print(FormatedSystemTime time, LogLevel level, std::pmr::wstring const& message) = 0;
+		virtual void ExceptionRecover(FormatedSystemTime time, LogLevel level) { }
+		virtual std::wstring_view EndLineString() const { return L"\n"; };
 		using Ptr = Pointer::IntrusivePtr<LogPrinter, Wrapper>;
 	protected:
 		virtual void AddLogPrinterRef() const = 0;
 		virtual void SubLogPrinterRef() const = 0;
 	};
 
-	LogPrinter::Ptr GetLogPrinter();
+	//std::true_type
 
-	struct DefaultLogFormatter;
-
-	template<TMP::TypeString category>
-	struct LogCategoryProperty
+	struct DefaultLogFormatter
 	{
-		static bool IsLogEnable(LogLevel level) { return true; }
+		template<typename OutIterator, typename ...Parameters>
+		static OutIterator LogFormat(OutIterator iterator, FormatedSystemTime time, std::basic_format_string<wchar_t, std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
+		{
+			return std::format_to(
+				std::move(iterator),
+				pattern,
+				std::forward<Parameters>(parameters)...
+			);
+		}
+		static constexpr LogLevel value = LogLevel::Log;
 	};
 
-	template<TMP::TypeString category, LogLevel level>
-	struct LogCategoryFormatter
+	template<TMP::TypeString pattern>
+	struct AcceptableLogPattern
 	{
-		template<typename OutputIterator, typename ...Parameters>
-		OutputIterator operator()(OutputIterator iterator, std::basic_format_string<wchar_t, std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
+		static constexpr decltype(auto) GetPattern() { return pattern.GetStringView(); }
+	};
+
+	template<TMP::TypeString log_name, LogLevel level>
+	struct NamedPropertyLogFormatter
+	{
+
+		using LogNameT = AcceptableLogPattern<TMP::TypeStringEncoder<log_name, wchar_t>::EncodeTo()>;
+
+		template<typename OutIterator, typename ...Parameters>
+		static OutIterator LogFormat(OutIterator iterator, FormatedSystemTime time, std::basic_format_string<wchar_t, std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
 		{
-			FormatedSystemTime time;
+
 			iterator = std::format_to(
 				std::move(iterator),
 				L"[{}]{}<{}>:",
-				time, category, level
+				time,
+				LogNameT::GetPattern(),
+				level
 			);
+
+			return std::format_to(
+				std::move(iterator),
+				pattern,
+				std::forward<Parameters>(parameters)...
+			);
+
+		}
+		static constexpr LogLevel value = level;
+	};
+
+	LogPrinter::Ptr GetSTDOutPrinter();
+
+	
+
+
+	template<typename LogType, TMP::TypeString pattern, typename ...Parameters>
+	constexpr void LogTo(LogPrinter& printer, Parameters&& ...parameters)
+	{
+		FormatedSystemTime system_time;
+		std::array<wchar_t, 512> cachue_buffer;
+
+		std::pmr::monotonic_buffer_resource buffer_resource{
+			static_cast<void*>(cachue_buffer.data()),
+			cachue_buffer.size() * sizeof(decltype(cachue_buffer)::value_type),
+			printer.GetSynchronizedPoolResource()
+		};
+
+		std::pmr::wstring message{&buffer_resource };
+
+		using PatternT = AcceptableLogPattern<TMP::TypeStringEncoder<pattern, wchar_t>::EncodeTo()>;
+
+		//consteval auto char_pattern = TMP::TypeStringEncoder<pattern, char>::EncodeTo();
+
+		auto str = PatternT::GetPattern();
+
+		try {
+			LogType::LogFormat(std::back_insert_iterator{message}, system_time, PatternT::GetPattern(), AddLogStringWrapper(std::forward<Parameters>(parameters))...);
+			std::format_to(
+				std::back_insert_iterator{ message },
+				L"{}",
+				printer.EndLineString()
+			);
+			printer.Print(system_time, LogType::value, message);
+		}
+		catch (...)
+		{
+			printer.ExceptionRecover(system_time, LogType::value);
+			throw ;
+		}
+	}
+
+	template<TMP::TypeString pattern, typename ...Parameters>
+	constexpr void LogTo(LogPrinter& printer, Parameters&& ...parameters)
+	{
+		return LogTo<DefaultLogFormatter, pattern>(printer, std::forward<Parameters>(parameters)...);
+	}
+
+	template<TMP::TypeString pattern, typename ...Parameters>
+	constexpr void Log(Parameters&& ...parameters)
+	{
+		return LogTo<pattern>(*GetSTDOutPrinter(), std::forward<Parameters>(parameters)...);
+	}
+
+
+	template<TMP::TypeString log_name, LogLevel level, TMP::TypeString pattern, typename ...Parameters>
+	constexpr void LogTo(LogPrinter& printer, Parameters&& ...parameters)
+	{
+		return LogTo<NamedPropertyLogFormatter<log_name, level>, pattern>(printer, std::forward<Parameters>(parameters)...);
+	}
+
+	template<TMP::TypeString log_name, LogLevel level, TMP::TypeString pattern, typename ...Parameters>
+	constexpr void Log(Parameters&& ...parameters)
+	{
+		return LogTo<log_name, level, pattern>(*GetSTDOutPrinter(), std::forward<Parameters>(parameters)...);
+	}
+
+
+	/*
+	template<typename LogType, typename ...Parameters>
+	constexpr void LogTo(LogPrinter& printer, std::basic_format_string<char, std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
+	{
+		return LogTo<LogType>(printer, Log::LogLevel::Log, pattern, std::forward<Parameters>(parameters)...);
+	}
+
+	template<typename LogType, typename ...Parameters>
+	constexpr void Log(LogLevel level, std::basic_format_string<char, std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
+	{
+		return LogTo<LogType>(*GetSTDOutPrinter(), level, pattern, std::forward<Parameters>(parameters)...);
+	}
+
+	template<typename LogType, typename ...Parameters>
+	constexpr void Log(std::basic_format_string<char, std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
+	{
+		return LogTo<LogType>(*GetSTDOutPrinter(), pattern, std::forward<Parameters>(parameters)...);
+	}
+	*/
+
+
+	/*
+	LogTo<Category>(Log::LogLevel::Log, "")([]() {return });
+	
+
+	template<IsAcceableLogCatgory Category, LogLevel level>
+	struct LogCategoryFormatter
+	{
+		template<typename OutputIterator, typename ...Parameters>
+		OutputIterator operator()(OutputIterator iterator, std::basic_format_string<char, std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
+		{
+
+			if constexpr (Category::need_time_catgeory_level_prefix)
+			{
+				FormatedSystemTime time;
+				iterator = std::format_to(
+					std::move(iterator),
+					"[{}]{}<{}>:",
+					time, category, level
+				);
+			}
+			
 			return std::format_to(
 				std::move(iterator),
 				pattern,
@@ -277,30 +425,27 @@ export namespace Potato::Log
 	};
 
 	template<TMP::TypeString category, LogLevel level, TMP::TypeString formatter, typename ...Parameters>
-	constexpr void LogTo(LogPrinter& printer, Parameters&& ...parameters)
+	constexpr void LogTo(LogPrinter& printer, std::basic_format_string<char, std::type_identity_t<Parameters>...> const& pattern, Parameters&& ...parameters)
 	{
-		static constexpr auto formatterw = TMP::TypeStringEncoder<formatter, wchar_t>::EncodeTo();
-		static constexpr auto name = TMP::TypeStringEncoder<category, wchar_t>::EncodeTo();
+
+		static constexpr auto name = TMP::TypeStringEncoder<category, char>::EncodeTo();
 
 		LogLine line;
 
-		std::array<std::byte, sizeof(wchar_t) * 256> log_output;
-		std::pmr::monotonic_buffer_resource buffer_resource{ log_output.data(), log_output.size() };
-		std::pmr::wstring message(&buffer_resource);
+		auto iterator = printer.GetUniqueOutIterator();
 
 		LogCategoryFormatter<category, level>{}(
-			std::back_inserter(message),
-			formatterw.GetStringView(),
+			iterator,
+			pattern,
 			AddLogStringWrapper(std::forward<Parameters>(parameters))...
 			);
 
 		auto end_line = printer.EndLineString();
 
-		std::copy_n(
-			end_line.data(),
-			end_line.size(),
-			std::back_inserter(message)
-		);
+		for (auto ite : end_line)
+		{
+			*(iterator++) = ite;
+		}
 
 		line.category = name.GetStringView();
 		line.level = level;
@@ -320,5 +465,6 @@ export namespace Potato::Log
 			}
 		}
 	}
+	*/
 }
 

@@ -4,7 +4,6 @@ if os.scriptdir() == os.projectdir() then
     set_languages("cxxlatest")
 end
 
-
 target("Potato")
     set_kind("static")
     add_files("Potato/*.cpp")

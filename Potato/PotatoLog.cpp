@@ -12,13 +12,12 @@ namespace Potato::Log
 {
 	struct ConsleLogPrinter : public LogPrinter
 	{
-		void Print(LogLine const& log_line) override
+		void Print(FormatedSystemTime time, LogLevel level, std::pmr::wstring const& message) override
 		{
-			std::wcout << log_line.log_message;
+			std::wcout << message;
 		}
 		virtual void AddLogPrinterRef() const {}
 		virtual void SubLogPrinterRef() const {}
-		std::wstring_view EndLineString() const { return L"\n"; };
 		ConsleLogPrinter()
 		{
 			std::setlocale(LC_ALL, ".UTF8");
@@ -30,7 +29,7 @@ namespace Potato::Log
 		}
 	}printer;
 
-	LogPrinter::Ptr GetLogPrinter()
+	LogPrinter::Ptr GetSTDOutPrinter()
 	{
 		return &printer;
 	}
