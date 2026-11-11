@@ -31,6 +31,29 @@ export namespace Potato::Misc
 		Equal,				// Same Begin and same End
 	};
 
+	// Whether the two half-open ranges [Begin, End) in this relation share at least one index.
+	// Adjacent ranges count as disjoint, since an End index is not part of a half-open range.
+	// An empty range (Begin == End) holds no index at all, so an IndexSpan must additionally check
+	// its own emptiness before trusting this relation, see IndexSpan::IsOverlap.
+	constexpr bool IsOverlap(IndexSpanOrdering Ordering)
+	{
+		switch (Ordering)
+		{
+		case IndexSpanOrdering::LeftOverlapBegin:	// Covers the right operand's Begin
+		case IndexSpanOrdering::RightOverlapEnd:	// Covers the last index of the right operand
+		case IndexSpanOrdering::Contained:
+		case IndexSpanOrdering::Contains:
+		case IndexSpanOrdering::Equal:
+			return true;
+		case IndexSpanOrdering::LeftDisjoint:
+		case IndexSpanOrdering::LeftAdjacent:
+		case IndexSpanOrdering::RightDisjoint:
+		case IndexSpanOrdering::RightAdjacent:
+		default:
+			return false;
+		}
+	}
+
 	template<typename Type = std::size_t>
 	struct IndexSpan
 	{
@@ -54,7 +77,7 @@ export namespace Potato::Misc
 
 		constexpr IndexSpan(Type Start, Type End) : StartPoint(Start), EndPoint(End) { }
 		constexpr IndexSpan(Type Start) requires(std::is_convertible_v<decltype(std::declval<Type>() + 1), Type>)
-			: StartPoint(Start), EndPoint(End + 1) {}
+			: StartPoint(Start), EndPoint(Start + 1) {}
 		constexpr IndexSpan() : StartPoint(0), EndPoint(0) {   }
 		constexpr IndexSpan(IndexSpan const&) = default;
 		constexpr IndexSpan& operator=(IndexSpan const&) = default;
@@ -78,6 +101,22 @@ export namespace Potato::Misc
 				return std::is_gt(end_order) ? IndexSpanOrdering::RightOverlapEnd : IndexSpanOrdering::Contained;
 			return std::is_lt(end_order) ? IndexSpanOrdering::Contained : IndexSpanOrdering::Contains;
 		}
+
+		// Whether this half-open range [Begin, End) and other share at least one index, decided by IndexSpanOrdering.
+		// Adjacent ranges (End == other.Begin, or Begin == other.End) do not overlap.
+		// An empty range (Begin == End) never overlaps anything, even though its relation may read as Contained, Contains or Equal.
+		constexpr bool IsOverlap(IndexSpan const& other) const
+		{
+			if (Begin() == End() || other.Begin() == other.End())
+				return false;
+			return Potato::Misc::IsOverlap(*this <=> other);
+		}
+
+		// Whether this half-open range and other share no index at all. An empty range is always disjoint.
+		constexpr bool IsDisjoint(IndexSpan const& other) const { return !IsOverlap(other); }
+
+		// Whether this half-open range holds no index, i.e. Begin == End.
+		constexpr bool IsEmpty() const { return Begin() == End(); }
 
 		constexpr Type Begin() const { return StartPoint; }
 		constexpr Type End() const { return EndPoint; }
