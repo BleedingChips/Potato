@@ -197,6 +197,17 @@ namespace Potato::Document
 			FILE_ATTRIBUTE_NORMAL,
 			NULL
 		);
+
+		// The append modes keep the content of the file which they open and write after it, while the file pointer of
+		// a file which CreateFileW opens is at its beginning, so it is moved to the end here. Without it the first
+		// bytes of the file are overwritten by the new content, which is neither what APPEND nor what APPEND_OR_CREATE
+		// means.
+		if (file != INVALID_HANDLE_VALUE && (mode == OpenMode::APPEND || mode == OpenMode::APPEND_OR_CREATE))
+		{
+			LARGE_INTEGER offset{};
+			::SetFilePointerEx(file, offset, nullptr, FILE_END);
+		}
+
 		return file != INVALID_HANDLE_VALUE;
 #endif
 	}
