@@ -54,6 +54,28 @@ export namespace Potato::Misc
 		}
 	}
 
+	// Whether the left operand of this relation contains the right operand or is equal to it, i.e. every
+	// index of the right operand is also an index of the left one, see IndexSpan::IsContainsOrEqual.
+	// Adjacent ranges do not contain each other, since an End index is not part of a half-open range.
+	constexpr bool IsContainsOrEqual(IndexSpanOrdering Ordering)
+	{
+		switch (Ordering)
+		{
+		case IndexSpanOrdering::Contains:	// Starts at or before the right operand and covers it entirely
+		case IndexSpanOrdering::Equal:
+			return true;
+		case IndexSpanOrdering::Contained:	// The right operand is the wider one
+		case IndexSpanOrdering::LeftDisjoint:
+		case IndexSpanOrdering::LeftAdjacent:
+		case IndexSpanOrdering::LeftOverlapBegin:
+		case IndexSpanOrdering::RightOverlapEnd:
+		case IndexSpanOrdering::RightAdjacent:
+		case IndexSpanOrdering::RightDisjoint:
+		default:
+			return false;
+		}
+	}
+
 	template<typename Type = std::size_t>
 	struct IndexSpan
 	{
@@ -114,6 +136,15 @@ export namespace Potato::Misc
 
 		// Whether this half-open range and other share no index at all. An empty range is always disjoint.
 		constexpr bool IsDisjoint(IndexSpan const& other) const { return !IsOverlap(other); }
+
+		// Whether this half-open range contains the other one or is equal to it: every index of the other range is an
+		// index of this range, so [1, 5) contains [2, 4) and [1, 4), and it equals [1, 5). The relation is decided by
+		// IndexSpanOrdering, so two ranges which only touch each other are neither contained nor equal, ex: [1, 2) does
+		// not contain [2, 3).
+		constexpr bool IsContainsOrEqual(IndexSpan const& other) const
+		{
+			return Potato::Misc::IsContainsOrEqual(*this <=> other);
+		}
 
 		// Whether this half-open range holds no index, i.e. Begin == End.
 		constexpr bool IsEmpty() const { return Begin() == End(); }
